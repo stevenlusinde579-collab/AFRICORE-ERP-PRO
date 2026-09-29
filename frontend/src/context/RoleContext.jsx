@@ -9,31 +9,108 @@ import React, {
 import { supabase } from "../services/supabase";
 import { useAuth } from "./AuthContext";
 
+
+// =====================================================
+// ROLE CONTEXT
+// =====================================================
+//
+// GLOBAL SOURCE FOR CURRENT USER ROLES.
+//
+// Important:
+//
+// profile_roles is the primary source.
+//
+// Each role contains:
+//
+// - profileRoleId
+// - profileId
+// - roleId
+// - schoolId
+// - isPrimary
+// - isActive
+// - roleName
+//
+// The selected profile role is persisted in localStorage.
+//
+// When the selected role changes, a custom event is
+// dispatched so SchoolContext can immediately reload
+// the corresponding school and academic year.
+//
+// =====================================================
+
+
 const RoleContext = createContext(null);
 
-const STORAGE_KEY = "africore_selected_role";
+
+// =====================================================
+// STORAGE
+// =====================================================
+
+const STORAGE_KEY =
+    "africore_selected_role";
+
+
+// =====================================================
+// ROLE CHANGE EVENT
+// =====================================================
+
+const ROLE_CHANGED_EVENT =
+    "africore-role-changed";
+
+
+// =====================================================
+// ROLE NORMALIZER
+// =====================================================
+
+const normalizeRoleName = (
+    roleName
+) => {
+
+    if (!roleName) {
+        return "";
+    }
+
+    return String(
+        roleName
+    )
+        .trim()
+        .toLowerCase()
+        .replace(
+            /\s+/g,
+            " "
+        );
+
+};
 
 
 // =====================================================
 // ROLE PROVIDER
 // =====================================================
 
-export function RoleProvider({ children }) {
+export function RoleProvider({
+    children
+}) {
 
-    const { user } = useAuth();
+    const {
+        user
+    } = useAuth();
 
-    const [roles, setRoles] = useState([]);
+
+    const [roles, setRoles] =
+        useState([]);
+
 
     const [selectedRole, setSelectedRole] =
         useState(null);
+
 
     const [loadingRoles, setLoadingRoles] =
         useState(true);
 
 
-    // =====================================================
-    // LOAD ALL ACTIVE ROLES FOR CURRENT USER
-    // =====================================================
+    // =================================================
+    // LOAD ROLES
+    // =================================================
 
     useEffect(() => {
 
@@ -42,9 +119,9 @@ export function RoleProvider({ children }) {
 
         const loadRoles = async () => {
 
-            // -------------------------------------------------
+            // -----------------------------------------
             // NO USER
-            // -------------------------------------------------
+            // -----------------------------------------
 
             if (!user?.id) {
 
@@ -74,7 +151,7 @@ export function RoleProvider({ children }) {
 
                 // =================================================
                 // STEP 1
-                // READ PROFILE ROLES
+                // LOAD ACTIVE PROFILE ROLES
                 // =================================================
 
                 const {
@@ -114,27 +191,13 @@ export function RoleProvider({ children }) {
 
                 if (profileRolesError) {
 
-                    console.error(
-                        "ROLE CONTEXT - PROFILE ROLES ERROR:",
-                        profileRolesError
-                    );
-
-
-                    if (!cancelled) {
-
-                        setRoles([]);
-
-                        setSelectedRole(null);
-
-                    }
-
-                    return;
+                    throw profileRolesError;
 
                 }
 
 
                 // =================================================
-                // NO PROFILE ROLE RECORDS
+                // FALLBACK TO LEGACY PROFILE ROLE
                 // =================================================
 
                 if (
@@ -145,15 +208,9 @@ export function RoleProvider({ children }) {
                 ) {
 
                     console.warn(
-                        "ROLE CONTEXT - NO ACTIVE PROFILE ROLES FOUND FOR USER:",
-                        user.id
+                        "ROLE CONTEXT - NO ACTIVE PROFILE ROLES FOUND"
                     );
 
-
-                    // ------------------------------------------------
-                    // FALLBACK:
-                    // READ LEGACY profiles.role_id
-                    // ------------------------------------------------
 
                     const {
                         data: profile,
@@ -173,12 +230,11 @@ export function RoleProvider({ children }) {
 
 
                     if (profileError) {
+                        throw profileError;
+                    }
 
-                        console.error(
-                            "ROLE CONTEXT - PROFILE FALLBACK ERROR:",
-                            profileError
-                        );
 
+                    if (!profile?.role_id) {
 
                         if (!cancelled) {
 
@@ -192,27 +248,6 @@ export function RoleProvider({ children }) {
 
                     }
 
-
-                    if (
-                        !profile?.role_id
-                    ) {
-
-                        if (!cancelled) {
-
-                            setRoles([]);
-
-                            setSelectedRole(null);
-
-                        }
-
-                        return;
-
-                    }
-
-
-                    // =================================================
-                    // GET LEGACY ROLE
-                    // =================================================
 
                     const {
                         data: legacyRole,
@@ -231,29 +266,11 @@ export function RoleProvider({ children }) {
 
 
                     if (legacyRoleError) {
-
-                        console.error(
-                            "ROLE CONTEXT - LEGACY ROLE ERROR:",
-                            legacyRoleError
-                        );
-
-
-                        if (!cancelled) {
-
-                            setRoles([]);
-
-                            setSelectedRole(null);
-
-                        }
-
-                        return;
-
+                        throw legacyRoleError;
                     }
 
 
-                    if (
-                        !legacyRole
-                    ) {
+                    if (!legacyRole) {
 
                         if (!cancelled) {
 
@@ -271,18 +288,21 @@ export function RoleProvider({ children }) {
                     const fallbackRole = {
 
                         profileRoleId:
-                            `legacy-${profile.role_id}`,
+                            `legacy-${legacyRole.id}`,
 
                         profileId:
                             user.id,
 
                         roleId:
-                            profile.role_id,
+                            legacyRole.id,
 
                         schoolId:
                             profile.school_id,
 
                         isPrimary:
+                            true,
+
+                        isActive:
                             true,
 
                         roleName:
@@ -301,17 +321,18 @@ export function RoleProvider({ children }) {
                     };
 
 
-                    if (!cancelled) {
-
-                        setRoles([
-                            fallbackRole,
-                        ]);
-
-                        setSelectedRole(
-                            fallbackRole
-                        );
-
+                    if (cancelled) {
+                        return;
                     }
+
+
+                    setRoles([
+                        fallbackRole
+                    ]);
+
+                    setSelectedRole(
+                        fallbackRole
+                    );
 
 
                     localStorage.setItem(
@@ -319,9 +340,17 @@ export function RoleProvider({ children }) {
                         JSON.stringify({
                             roleId:
                                 fallbackRole.roleId,
+
                             profileRoleId:
                                 fallbackRole.profileRoleId,
                         })
+                    );
+
+
+                    window.dispatchEvent(
+                        new Event(
+                            ROLE_CHANGED_EVENT
+                        )
                     );
 
 
@@ -332,7 +361,7 @@ export function RoleProvider({ children }) {
 
                 // =================================================
                 // STEP 2
-                // GET UNIQUE ROLE IDS
+                // UNIQUE ROLE IDS
                 // =================================================
 
                 const roleIds = [
@@ -391,29 +420,21 @@ export function RoleProvider({ children }) {
 
 
                 if (rolesError) {
-
-                    console.error(
-                        "ROLE CONTEXT - ROLES ERROR:",
-                        rolesError
-                    );
-
-
-                    if (!cancelled) {
-
-                        setRoles([]);
-
-                        setSelectedRole(null);
-
-                    }
-
-                    return;
-
+                    throw rolesError;
                 }
+
+
+                const normalizedRoleRows =
+                    Array.isArray(
+                        roleRows
+                    )
+                        ? roleRows
+                        : [];
 
 
                 // =================================================
                 // STEP 4
-                // COMBINE profile_roles + roles
+                // COMBINE PROFILE ROLES + ROLE NAMES
                 // =================================================
 
                 const loadedRoles =
@@ -424,18 +445,12 @@ export function RoleProvider({ children }) {
                             ) => {
 
                                 const role =
-                                    (
-                                        Array.isArray(
-                                            roleRows
-                                        )
-                                            ? roleRows
-                                            : []
-                                    ).find(
+                                    normalizedRoleRows.find(
                                         (
-                                            item
+                                            roleRow
                                         ) =>
                                             String(
-                                                item.id
+                                                roleRow.id
                                             ) ===
                                             String(
                                                 profileRole.role_id
@@ -460,6 +475,11 @@ export function RoleProvider({ children }) {
                                     isPrimary:
                                         Boolean(
                                             profileRole.is_primary
+                                        ),
+
+                                    isActive:
+                                        Boolean(
+                                            profileRole.is_active
                                         ),
 
                                     roleName:
@@ -493,19 +513,52 @@ export function RoleProvider({ children }) {
                         );
 
 
-                // =================================================
-                // DEBUG
-                // =================================================
+                console.log(
+                    "========================================"
+                );
 
                 console.log(
                     "ROLE CONTEXT - LOADED ROLES:",
                     loadedRoles
                 );
 
-
                 console.log(
                     "ROLE CONTEXT - ROLE COUNT:",
                     loadedRoles.length
+                );
+
+                console.log(
+                    "ROLE CONTEXT - PRIMARY ROLES:",
+                    loadedRoles.filter(
+                        (item) =>
+                            item.isPrimary
+                    )
+                );
+
+                console.log(
+                    "ROLE CONTEXT - ROLE SCHOOLS:",
+                    loadedRoles.map(
+                        (item) => ({
+                            roleId:
+                                item.roleId,
+
+                            profileRoleId:
+                                item.profileRoleId,
+
+                            roleName:
+                                item.roleName,
+
+                            schoolId:
+                                item.schoolId,
+
+                            isPrimary:
+                                item.isPrimary,
+                        })
+                    )
+                );
+
+                console.log(
+                    "========================================"
                 );
 
 
@@ -532,7 +585,6 @@ export function RoleProvider({ children }) {
 
 
                 // =================================================
-                // STEP 5
                 // SAVE ROLES
                 // =================================================
 
@@ -542,8 +594,7 @@ export function RoleProvider({ children }) {
 
 
                 // =================================================
-                // STEP 6
-                // RESTORE SAVED ROLE
+                // READ SAVED ROLE
                 // =================================================
 
                 let savedRole = null;
@@ -566,9 +617,7 @@ export function RoleProvider({ children }) {
 
                     }
 
-                } catch (
-                    error
-                ) {
+                } catch (error) {
 
                     console.warn(
                         "ROLE CONTEXT - INVALID SAVED ROLE:",
@@ -586,9 +635,9 @@ export function RoleProvider({ children }) {
                 let nextRole = null;
 
 
-                // -------------------------------------------------
-                // MATCH BY PROFILE ROLE ID FIRST
-                // -------------------------------------------------
+                // =================================================
+                // MATCH SAVED PROFILE ROLE
+                // =================================================
 
                 if (
                     savedRole?.profileRoleId
@@ -610,9 +659,9 @@ export function RoleProvider({ children }) {
                 }
 
 
-                // -------------------------------------------------
-                // MATCH BY ROLE ID
-                // -------------------------------------------------
+                // =================================================
+                // MATCH SAVED ROLE ID
+                // =================================================
 
                 if (
                     !nextRole &&
@@ -635,9 +684,9 @@ export function RoleProvider({ children }) {
                 }
 
 
-                // -------------------------------------------------
+                // =================================================
                 // PRIMARY ROLE
-                // -------------------------------------------------
+                // =================================================
 
                 if (!nextRole) {
 
@@ -646,15 +695,16 @@ export function RoleProvider({ children }) {
                             (
                                 item
                             ) =>
-                                item.isPrimary
+                                item.isPrimary ===
+                                true
                         );
 
                 }
 
 
-                // -------------------------------------------------
-                // FIRST ROLE
-                // -------------------------------------------------
+                // =================================================
+                // FIRST ACTIVE ROLE
+                // =================================================
 
                 if (!nextRole) {
 
@@ -665,16 +715,16 @@ export function RoleProvider({ children }) {
                 }
 
 
-                setSelectedRole(
-                    nextRole
-                );
-
-
                 // =================================================
-                // SAVE CURRENT SELECTION
+                // SAVE SELECTED ROLE
                 // =================================================
 
                 if (nextRole) {
+
+                    setSelectedRole(
+                        nextRole
+                    );
+
 
                     localStorage.setItem(
                         STORAGE_KEY,
@@ -687,15 +737,33 @@ export function RoleProvider({ children }) {
                         })
                     );
 
+
+                    console.log(
+                        "ROLE CONTEXT - SELECTED ROLE:",
+                        nextRole
+                    );
+
+                } else {
+
+                    setSelectedRole(
+                        null
+                    );
+
                 }
 
-            } catch (
-                error
-            ) {
+            } catch (error) {
 
                 console.error(
-                    "ROLE CONTEXT - UNEXPECTED ERROR:",
+                    "========================================"
+                );
+
+                console.error(
+                    "ROLE CONTEXT - LOAD ERROR:",
                     error
+                );
+
+                console.error(
+                    "========================================"
                 );
 
 
@@ -731,7 +799,9 @@ export function RoleProvider({ children }) {
 
         };
 
-    }, [user?.id]);
+    }, [
+        user?.id,
+    ]);
 
 
     // =====================================================
@@ -742,6 +812,12 @@ export function RoleProvider({ children }) {
         roleIdOrProfileRoleId
     ) => {
 
+        const value =
+            String(
+                roleIdOrProfileRoleId
+            );
+
+
         const nextRole =
             roles.find(
                 (
@@ -750,15 +826,11 @@ export function RoleProvider({ children }) {
                     String(
                         item.roleId
                     ) ===
-                        String(
-                            roleIdOrProfileRoleId
-                        ) ||
+                        value ||
                     String(
                         item.profileRoleId
                     ) ===
-                        String(
-                            roleIdOrProfileRoleId
-                        )
+                        value
             );
 
 
@@ -769,15 +841,41 @@ export function RoleProvider({ children }) {
                 roleIdOrProfileRoleId
             );
 
-            return;
+            return false;
 
         }
 
+
+        // -----------------------------------------
+        // ONLY ACTIVE ROLE
+        // -----------------------------------------
+
+        if (
+            nextRole.isActive === false
+        ) {
+
+            console.warn(
+                "ROLE CONTEXT - ROLE IS NOT ACTIVE:",
+                nextRole
+            );
+
+            return false;
+
+        }
+
+
+        // -----------------------------------------
+        // SET ROLE
+        // -----------------------------------------
 
         setSelectedRole(
             nextRole
         );
 
+
+        // -----------------------------------------
+        // SAVE ROLE
+        // -----------------------------------------
 
         localStorage.setItem(
             STORAGE_KEY,
@@ -791,10 +889,52 @@ export function RoleProvider({ children }) {
         );
 
 
-        console.log(
-            "ROLE CONTEXT - SELECTED ROLE:",
-            nextRole
+        // -----------------------------------------
+        // IMPORTANT:
+        // NOTIFY SCHOOL CONTEXT
+        // -----------------------------------------
+
+        window.dispatchEvent(
+            new Event(
+                ROLE_CHANGED_EVENT
+            )
         );
+
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "ROLE CONTEXT - ROLE CHANGED"
+        );
+
+        console.log(
+            "ROLE:",
+            nextRole.roleName
+        );
+
+        console.log(
+            "ROLE ID:",
+            nextRole.roleId
+        );
+
+        console.log(
+            "PROFILE ROLE ID:",
+            nextRole.profileRoleId
+        );
+
+        console.log(
+            "SCHOOL ID:",
+            nextRole.schoolId
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        return true;
 
     };
 
@@ -803,18 +943,25 @@ export function RoleProvider({ children }) {
     // CLEAR SELECTED ROLE
     // =====================================================
 
-    const clearSelectedRole =
-        () => {
+    const clearSelectedRole = () => {
 
-            setSelectedRole(
-                null
-            );
+        setSelectedRole(
+            null
+        );
 
-            localStorage.removeItem(
-                STORAGE_KEY
-            );
 
-        };
+        localStorage.removeItem(
+            STORAGE_KEY
+        );
+
+
+        window.dispatchEvent(
+            new Event(
+                ROLE_CHANGED_EVENT
+            )
+        );
+
+    };
 
 
     // =====================================================
@@ -831,6 +978,11 @@ export function RoleProvider({ children }) {
         null;
 
 
+    const selectedSchoolId =
+        selectedRole?.schoolId ??
+        null;
+
+
     const selectedRoleName =
         selectedRole?.roleName ||
         selectedRole?.role?.name ||
@@ -842,7 +994,7 @@ export function RoleProvider({ children }) {
 
 
     // =====================================================
-    // CHECK WHETHER USER HAS A ROLE
+    // HAS ROLE
     // =====================================================
 
     const hasRole = (
@@ -855,23 +1007,18 @@ export function RoleProvider({ children }) {
 
 
         const target =
-            String(
+            normalizeRoleName(
                 roleName
-            )
-                .trim()
-                .toLowerCase();
+            );
 
 
         return roles.some(
             (
                 item
             ) =>
-                String(
-                    item.roleName ||
-                    ""
-                )
-                    .trim()
-                    .toLowerCase() ===
+                normalizeRoleName(
+                    item.roleName
+                ) ===
                 target
         );
 
@@ -879,7 +1026,7 @@ export function RoleProvider({ children }) {
 
 
     // =====================================================
-    // CHECK CURRENT SELECTED ROLE
+    // SELECTED ROLE IS
     // =====================================================
 
     const selectedRoleIs = (
@@ -897,16 +1044,12 @@ export function RoleProvider({ children }) {
 
 
         return (
-            String(
+            normalizeRoleName(
                 selectedRoleName
-            )
-                .trim()
-                .toLowerCase() ===
-            String(
+            ) ===
+            normalizeRoleName(
                 roleName
             )
-                .trim()
-                .toLowerCase()
         );
 
     };
@@ -919,7 +1062,16 @@ export function RoleProvider({ children }) {
     const value = useMemo(
         () => ({
 
+            // -----------------------------------------
+            // ALL ROLES
+            // -----------------------------------------
+
             roles,
+
+
+            // -----------------------------------------
+            // SELECTED ROLE
+            // -----------------------------------------
 
             selectedRole,
 
@@ -927,15 +1079,37 @@ export function RoleProvider({ children }) {
 
             selectedProfileRoleId,
 
+            selectedSchoolId,
+
             selectedRoleName,
+
+
+            // -----------------------------------------
+            // LOADING
+            // -----------------------------------------
 
             loadingRoles,
 
+
+            // -----------------------------------------
+            // MULTI ROLE
+            // -----------------------------------------
+
             hasMultipleRoles,
+
+
+            // -----------------------------------------
+            // ACTIONS
+            // -----------------------------------------
 
             selectRole,
 
             clearSelectedRole,
+
+
+            // -----------------------------------------
+            // HELPERS
+            // -----------------------------------------
 
             hasRole,
 
@@ -950,6 +1124,8 @@ export function RoleProvider({ children }) {
             selectedRoleId,
 
             selectedProfileRoleId,
+
+            selectedSchoolId,
 
             selectedRoleName,
 
@@ -969,7 +1145,9 @@ export function RoleProvider({ children }) {
         <RoleContext.Provider
             value={value}
         >
+
             {children}
+
         </RoleContext.Provider>
 
     );
@@ -1002,5 +1180,9 @@ export function useRole() {
 
 }
 
+
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
 
 export default RoleContext;

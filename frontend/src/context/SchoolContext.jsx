@@ -14,26 +14,37 @@ import { supabase } from "../services/supabase";
 // SCHOOL CONTEXT
 // =====================================================
 //
-// Hii ndiyo GLOBAL source ya taarifa za shule
-// pamoja na CURRENT ACADEMIC YEAR.
+// GLOBAL SOURCE OF TRUTH FOR:
 //
-// Modules zote zitatumia current school na current
-// academic year kutoka hapa.
+// - Current School
+// - Academic Years
+// - Active Academic Year
 //
-// Mfano:
+// IMPORTANT:
+// School is resolved from the user's ACTIVE profile_role
+// first, because profile_roles.school_id is the school
+// associated with the selected system role.
 //
-// const {
-//     school,
-//     schoolId,
-//     schoolName,
-//     activeAcademicYear,
-//     activeAcademicYearId,
-// } = useSchool();
+// profiles.school_id is used only as a fallback.
+//
+// This prevents:
+//
+// profile.school_id !== profile_roles.school_id
+//
+// from causing modules to read different schools.
 //
 // =====================================================
 
 
 const SchoolContext = createContext(null);
+
+
+// =====================================================
+// STORAGE KEY
+// =====================================================
+
+const ROLE_STORAGE_KEY =
+    "africore_selected_role";
 
 
 // =====================================================
@@ -64,13 +75,17 @@ const SCHOOL_COLUMNS = `
 
 export const SchoolProvider = ({ children }) => {
 
-    const [school, setSchool] = useState(null);
+    const [school, setSchool] =
+        useState(null);
 
-    const [schoolId, setSchoolId] = useState(null);
+    const [schoolId, setSchoolId] =
+        useState(null);
 
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] =
+        useState(true);
 
-    const [error, setError] = useState(null);
+    const [error, setError] =
+        useState(null);
 
 
     // =================================================
@@ -88,6 +103,388 @@ export const SchoolProvider = ({ children }) => {
 
     const [academicYearError, setAcademicYearError] =
         useState(null);
+
+
+    // =================================================
+    // GET SAVED ROLE
+    // =================================================
+
+    const getSavedRole = useCallback(() => {
+
+        try {
+
+            const saved =
+                localStorage.getItem(
+                    ROLE_STORAGE_KEY
+                );
+
+            if (!saved) {
+                return null;
+            }
+
+            const parsed =
+                JSON.parse(saved);
+
+            if (!parsed || typeof parsed !== "object") {
+                return null;
+            }
+
+            return parsed;
+
+        } catch (err) {
+
+            console.warn(
+                "SCHOOL CONTEXT - INVALID SAVED ROLE:",
+                err
+            );
+
+            try {
+                localStorage.removeItem(
+                    ROLE_STORAGE_KEY
+                );
+            } catch {
+                // Ignore localStorage errors
+            }
+
+            return null;
+        }
+
+    }, []);
+
+
+    // =================================================
+    // RESOLVE USER SCHOOL
+    // =================================================
+    //
+    // Priority:
+    //
+    // 1. Saved selected profile role
+    // 2. Primary active profile role
+    // 3. Any active profile role
+    // 4. profiles.school_id fallback
+    //
+    // This keeps RoleContext and SchoolContext aligned.
+    //
+    // =================================================
+
+    const resolveUserSchoolId = useCallback(
+        async (userId, profileSchoolId) => {
+
+            if (!userId) {
+                return null;
+            }
+
+
+            // =================================================
+            // STEP 1
+            // TRY SAVED SELECTED ROLE
+            // =================================================
+
+            const savedRole =
+                getSavedRole();
+
+
+            if (savedRole?.profileRoleId) {
+
+                const {
+                    data: selectedProfileRole,
+                    error: selectedRoleError,
+                } = await supabase
+                    .from("profile_roles")
+                    .select(`
+                        id,
+                        school_id,
+                        role_id,
+                        is_primary,
+                        is_active
+                    `)
+                    .eq(
+                        "id",
+                        savedRole.profileRoleId
+                    )
+                    .eq(
+                        "profile_id",
+                        userId
+                    )
+                    .eq(
+                        "is_active",
+                        true
+                    )
+                    .maybeSingle();
+
+
+                if (selectedRoleError) {
+
+                    console.warn(
+                        "SCHOOL CONTEXT - SELECTED PROFILE ROLE ERROR:",
+                        selectedRoleError
+                    );
+
+                }
+
+
+                if (
+                    selectedProfileRole?.school_id
+                ) {
+
+                    console.log(
+                        "SCHOOL CONTEXT - SCHOOL FROM SELECTED ROLE:",
+                        selectedProfileRole.school_id
+                    );
+
+                    return selectedProfileRole.school_id;
+
+                }
+
+            }
+
+
+            // =================================================
+            // STEP 2
+            // TRY SAVED ROLE ID
+            // =================================================
+
+            if (savedRole?.roleId) {
+
+                const {
+                    data: savedRoleRows,
+                    error: savedRoleError,
+                } = await supabase
+                    .from("profile_roles")
+                    .select(`
+                        id,
+                        school_id,
+                        role_id,
+                        is_primary,
+                        is_active
+                    `)
+                    .eq(
+                        "profile_id",
+                        userId
+                    )
+                    .eq(
+                        "role_id",
+                        savedRole.roleId
+                    )
+                    .eq(
+                        "is_active",
+                        true
+                    )
+                    .order(
+                        "is_primary",
+                        {
+                            ascending: false,
+                        }
+                    )
+                    .order(
+                        "id",
+                        {
+                            ascending: true,
+                        }
+                    )
+                    .limit(1);
+
+
+                if (savedRoleError) {
+
+                    console.warn(
+                        "SCHOOL CONTEXT - SAVED ROLE ID ERROR:",
+                        savedRoleError
+                    );
+
+                }
+
+
+                const savedRoleRow =
+                    Array.isArray(
+                        savedRoleRows
+                    )
+                        ? savedRoleRows[0]
+                        : null;
+
+
+                if (
+                    savedRoleRow?.school_id
+                ) {
+
+                    console.log(
+                        "SCHOOL CONTEXT - SCHOOL FROM SAVED ROLE ID:",
+                        savedRoleRow.school_id
+                    );
+
+                    return savedRoleRow.school_id;
+
+                }
+
+            }
+
+
+            // =================================================
+            // STEP 3
+            // PRIMARY ACTIVE PROFILE ROLE
+            // =================================================
+
+            const {
+                data: primaryRoles,
+                error: primaryRoleError,
+            } = await supabase
+                .from("profile_roles")
+                .select(`
+                    id,
+                    school_id,
+                    role_id,
+                    is_primary,
+                    is_active
+                `)
+                .eq(
+                    "profile_id",
+                    userId
+                )
+                .eq(
+                    "is_active",
+                    true
+                )
+                .eq(
+                    "is_primary",
+                    true
+                )
+                .order(
+                    "id",
+                    {
+                        ascending: true,
+                    }
+                )
+                .limit(1);
+
+
+            if (primaryRoleError) {
+
+                console.warn(
+                    "SCHOOL CONTEXT - PRIMARY ROLE ERROR:",
+                    primaryRoleError
+                );
+
+            }
+
+
+            const primaryRole =
+                Array.isArray(
+                    primaryRoles
+                )
+                    ? primaryRoles[0]
+                    : null;
+
+
+            if (
+                primaryRole?.school_id
+            ) {
+
+                console.log(
+                    "SCHOOL CONTEXT - SCHOOL FROM PRIMARY ROLE:",
+                    primaryRole.school_id
+                );
+
+                return primaryRole.school_id;
+
+            }
+
+
+            // =================================================
+            // STEP 4
+            // ANY ACTIVE PROFILE ROLE
+            // =================================================
+
+            const {
+                data: activeRoles,
+                error: activeRolesError,
+            } = await supabase
+                .from("profile_roles")
+                .select(`
+                    id,
+                    school_id,
+                    role_id,
+                    is_primary,
+                    is_active
+                `)
+                .eq(
+                    "profile_id",
+                    userId
+                )
+                .eq(
+                    "is_active",
+                    true
+                )
+                .order(
+                    "is_primary",
+                    {
+                        ascending: false,
+                    }
+                )
+                .order(
+                    "id",
+                    {
+                        ascending: true,
+                    }
+                )
+                .limit(1);
+
+
+            if (activeRolesError) {
+
+                console.warn(
+                    "SCHOOL CONTEXT - ACTIVE ROLE ERROR:",
+                    activeRolesError
+                );
+
+            }
+
+
+            const activeRole =
+                Array.isArray(
+                    activeRoles
+                )
+                    ? activeRoles[0]
+                    : null;
+
+
+            if (
+                activeRole?.school_id
+            ) {
+
+                console.log(
+                    "SCHOOL CONTEXT - SCHOOL FROM ACTIVE ROLE:",
+                    activeRole.school_id
+                );
+
+                return activeRole.school_id;
+
+            }
+
+
+            // =================================================
+            // STEP 5
+            // LEGACY PROFILE FALLBACK
+            // =================================================
+
+            if (profileSchoolId) {
+
+                console.warn(
+                    "SCHOOL CONTEXT - USING LEGACY profiles.school_id FALLBACK:",
+                    profileSchoolId
+                );
+
+                return profileSchoolId;
+
+            }
+
+
+            return null;
+
+        },
+        [
+            getSavedRole,
+        ]
+    );
 
 
     // =================================================
@@ -131,11 +528,11 @@ export const SchoolProvider = ({ children }) => {
 
                 setAcademicYears([]);
                 setActiveAcademicYear(null);
+
                 setAcademicYearError(null);
 
-                setLoading(false);
-
                 return null;
+
             }
 
 
@@ -153,7 +550,10 @@ export const SchoolProvider = ({ children }) => {
                     school_id,
                     role_id
                 `)
-                .eq("id", user.id)
+                .eq(
+                    "id",
+                    user.id
+                )
                 .maybeSingle();
 
 
@@ -173,19 +573,26 @@ export const SchoolProvider = ({ children }) => {
 
                 setAcademicYears([]);
                 setActiveAcademicYear(null);
+
                 setAcademicYearError(null);
 
-                setLoading(false);
-
                 return null;
+
             }
 
 
-            // -----------------------------------------
-            // PROFILE WITHOUT SCHOOL
-            // -----------------------------------------
+            // =================================================
+            // RESOLVE SCHOOL FROM PROFILE ROLE
+            // =================================================
 
-            if (!profile.school_id) {
+            const resolvedSchoolId =
+                await resolveUserSchoolId(
+                    user.id,
+                    profile.school_id
+                );
+
+
+            if (!resolvedSchoolId) {
 
                 setSchool(null);
                 setSchoolId(null);
@@ -194,13 +601,31 @@ export const SchoolProvider = ({ children }) => {
                 setActiveAcademicYear(null);
 
                 setAcademicYearError(
-                    "Your profile is not assigned to a school."
+                    "Your account is not assigned to a school."
                 );
 
-                setLoading(false);
-
                 return null;
+
             }
+
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "SCHOOL CONTEXT - RESOLVED SCHOOL ID:",
+                resolvedSchoolId
+            );
+
+            console.log(
+                "SCHOOL CONTEXT - PROFILE SCHOOL ID:",
+                profile.school_id
+            );
+
+            console.log(
+                "========================================"
+            );
 
 
             // -----------------------------------------
@@ -212,8 +637,13 @@ export const SchoolProvider = ({ children }) => {
                 error: schoolError
             } = await supabase
                 .from("schools")
-                .select(SCHOOL_COLUMNS)
-                .eq("id", profile.school_id)
+                .select(
+                    SCHOOL_COLUMNS
+                )
+                .eq(
+                    "id",
+                    resolvedSchoolId
+                )
                 .maybeSingle();
 
 
@@ -238,9 +668,8 @@ export const SchoolProvider = ({ children }) => {
                     "Current school could not be found."
                 );
 
-                setLoading(false);
-
                 return null;
+
             }
 
 
@@ -248,9 +677,13 @@ export const SchoolProvider = ({ children }) => {
             // SAVE GLOBAL SCHOOL
             // -----------------------------------------
 
-            setSchool(schoolData);
+            setSchool(
+                schoolData
+            );
 
-            setSchoolId(schoolData.id);
+            setSchoolId(
+                schoolData.id
+            );
 
 
             return schoolData;
@@ -298,23 +731,13 @@ export const SchoolProvider = ({ children }) => {
 
         }
 
-    }, []);
+    }, [
+        resolveUserSchoolId,
+    ]);
 
 
     // =================================================
     // LOAD ACADEMIC YEARS
-    // =================================================
-    //
-    // IMPORTANT:
-    //
-    // Hapa hatutengenezi academic year mpya.
-    //
-    // Tunasoma academic_years ambazo tayari zipo.
-    //
-    // is_active = true ndiyo CURRENT year.
-    //
-    // Historical years zinaendelea kubaki.
-    //
     // =================================================
 
     const loadAcademicYears = useCallback(
@@ -334,6 +757,8 @@ export const SchoolProvider = ({ children }) => {
                     "No current school is available."
                 );
 
+                setAcademicYearLoading(false);
+
                 return [];
 
             }
@@ -341,9 +766,13 @@ export const SchoolProvider = ({ children }) => {
 
             try {
 
-                setAcademicYearLoading(true);
+                setAcademicYearLoading(
+                    true
+                );
 
-                setAcademicYearError(null);
+                setAcademicYearError(
+                    null
+                );
 
 
                 const {
@@ -373,8 +802,12 @@ export const SchoolProvider = ({ children }) => {
                     );
 
 
-                if (academicYearQueryError) {
+                if (
+                    academicYearQueryError
+                ) {
+
                     throw academicYearQueryError;
+
                 }
 
 
@@ -384,18 +817,14 @@ export const SchoolProvider = ({ children }) => {
                         : [];
 
 
-                // -------------------------------------
-                // SAVE ALL YEARS
-                // -------------------------------------
-
                 setAcademicYears(
                     normalizedYears
                 );
 
 
-                // -------------------------------------
+                // -----------------------------------------
                 // FIND ACTIVE YEAR
-                // -------------------------------------
+                // -----------------------------------------
 
                 const currentYear =
                     normalizedYears.find(
@@ -418,7 +847,9 @@ export const SchoolProvider = ({ children }) => {
 
                 } else {
 
-                    setAcademicYearError(null);
+                    setAcademicYearError(
+                        null
+                    );
 
                 }
 
@@ -447,8 +878,9 @@ export const SchoolProvider = ({ children }) => {
 
                 setAcademicYears([]);
 
-                setActiveAcademicYear(null);
-
+                setActiveAcademicYear(
+                    null
+                );
 
                 setAcademicYearError(
                     err?.message ||
@@ -460,12 +892,16 @@ export const SchoolProvider = ({ children }) => {
 
             } finally {
 
-                setAcademicYearLoading(false);
+                setAcademicYearLoading(
+                    false
+                );
 
             }
 
         },
-        [schoolId]
+        [
+            schoolId,
+        ]
     );
 
 
@@ -478,31 +914,39 @@ export const SchoolProvider = ({ children }) => {
         let mounted = true;
 
 
-        const initializeContext = async () => {
+        const initializeContext =
+            async () => {
 
-            const schoolData =
-                await loadSchool();
-
-
-            if (!mounted) return;
+                const schoolData =
+                    await loadSchool();
 
 
-            if (schoolData?.id) {
+                if (!mounted) {
+                    return;
+                }
 
-                await loadAcademicYears(
-                    schoolData.id
-                );
 
-            } else {
+                if (schoolData?.id) {
 
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
+                    await loadAcademicYears(
+                        schoolData.id
+                    );
 
-                setAcademicYearLoading(false);
+                } else {
 
-            }
+                    setAcademicYears([]);
 
-        };
+                    setActiveAcademicYear(
+                        null
+                    );
+
+                    setAcademicYearLoading(
+                        false
+                    );
+
+                }
+
+            };
 
 
         initializeContext();
@@ -521,12 +965,77 @@ export const SchoolProvider = ({ children }) => {
 
 
     // =================================================
-    // AUTH STATE LISTENER
+    // REFRESH WHEN ROLE SELECTION CHANGES
     // =================================================
     //
-    // User akilogin/logout/change session,
-    // current school na academic year vina-refresh.
+    // RoleContext writes africore_selected_role to
+    // localStorage.
     //
+    // This listener allows another browser tab/window
+    // to refresh the school automatically.
+    //
+    // The custom event below is also supported for
+    // future RoleContext integration.
+    //
+    // =================================================
+
+    useEffect(() => {
+
+        const handleRoleStorageChange = (
+            event
+        ) => {
+
+            if (
+                event.key ===
+                    ROLE_STORAGE_KEY
+            ) {
+
+                refreshSchool();
+
+            }
+
+        };
+
+
+        const handleRoleChanged = () => {
+
+            refreshSchool();
+
+        };
+
+
+        window.addEventListener(
+            "storage",
+            handleRoleStorageChange
+        );
+
+        window.addEventListener(
+            "africore-role-changed",
+            handleRoleChanged
+        );
+
+
+        return () => {
+
+            window.removeEventListener(
+                "storage",
+                handleRoleStorageChange
+            );
+
+            window.removeEventListener(
+                "africore-role-changed",
+                handleRoleChanged
+            );
+
+        };
+
+    }, [
+        refreshSchool,
+    ]);
+
+
+    // =================================================
+    // AUTH STATE LISTENER
     // =================================================
 
     useEffect(() => {
@@ -552,22 +1061,31 @@ export const SchoolProvider = ({ children }) => {
                 ) {
 
                     loadSchool()
-                        .then((schoolData) => {
+                        .then(
+                            (
+                                schoolData
+                            ) => {
 
-                            if (schoolData?.id) {
+                                if (
+                                    schoolData?.id
+                                ) {
 
-                                loadAcademicYears(
-                                    schoolData.id
-                                );
+                                    loadAcademicYears(
+                                        schoolData.id
+                                    );
 
-                            } else {
+                                } else {
 
-                                setAcademicYears([]);
-                                setActiveAcademicYear(null);
+                                    setAcademicYears([]);
+
+                                    setActiveAcademicYear(
+                                        null
+                                    );
+
+                                }
 
                             }
-
-                        });
+                        );
 
                 }
 
@@ -591,86 +1109,84 @@ export const SchoolProvider = ({ children }) => {
     // REFRESH SCHOOL
     // =================================================
 
-    const refreshSchool = useCallback(
-        async () => {
+    const refreshSchool =
+        useCallback(
+            async () => {
 
-            const schoolData =
-                await loadSchool();
-
-
-            if (schoolData?.id) {
-
-                await loadAcademicYears(
-                    schoolData.id
-                );
-
-            } else {
-
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
-
-            }
+                const schoolData =
+                    await loadSchool();
 
 
-            return schoolData;
+                if (
+                    schoolData?.id
+                ) {
 
-        },
-        [
-            loadSchool,
-            loadAcademicYears,
-        ]
-    );
+                    await loadAcademicYears(
+                        schoolData.id
+                    );
+
+                } else {
+
+                    setAcademicYears([]);
+
+                    setActiveAcademicYear(
+                        null
+                    );
+
+                }
+
+
+                return schoolData;
+
+            },
+            [
+                loadSchool,
+                loadAcademicYears,
+            ]
+        );
 
 
     // =================================================
     // REFRESH ACADEMIC YEAR
     // =================================================
-    //
-    // Hii ndiyo function ambayo Settings itatumia
-    // baada ya activate_academic_year().
-    //
-    // Mfano:
-    //
-    // await refreshAcademicYear();
-    //
-    // Baada ya hapo modules zote zinazotumia
-    // useSchool() zitapata current year mpya.
-    //
-    // =================================================
 
-    const refreshAcademicYear = useCallback(
-        async () => {
+    const refreshAcademicYear =
+        useCallback(
+            async () => {
 
-            const targetSchoolId =
-                schoolId ||
-                school?.id;
+                const targetSchoolId =
+                    schoolId ||
+                    school?.id;
 
 
-            if (!targetSchoolId) {
+                if (!targetSchoolId) {
 
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
+                    setAcademicYears([]);
 
-                setAcademicYearError(
-                    "No current school is available."
+                    setActiveAcademicYear(
+                        null
+                    );
+
+                    setAcademicYearError(
+                        "No current school is available."
+                    );
+
+                    return [];
+
+                }
+
+
+                return await loadAcademicYears(
+                    targetSchoolId
                 );
 
-                return [];
-
-            }
-
-
-            return await loadAcademicYears(
-                targetSchoolId
-            );
-
-        },
-        [
-            schoolId,
-            school,
-            loadAcademicYears,
-        ]
-    );
+            },
+            [
+                schoolId,
+                school,
+                loadAcademicYears,
+            ]
+        );
 
 
     // =================================================
@@ -755,195 +1271,180 @@ export const SchoolProvider = ({ children }) => {
 
 
     // =================================================
-    // DOCUMENT BRANDING OBJECT
-    // =================================================
-    //
-    // Hii itatumika baadaye na:
-    //
-    // - Print
-    // - PDF
-    // - Reports
-    // - Statements
-    // - Receipts
-    // - Certificates
-    // - Social Welfare documents
-    // - Examination documents
-    //
+    // DOCUMENT BRANDING
     // =================================================
 
-    const documentBranding = useMemo(() => {
+    const documentBranding =
+        useMemo(
+            () => ({
+                schoolId,
 
-        return {
+                schoolName,
 
-            schoolId,
+                registrationNumber,
 
-            schoolName,
+                address,
 
-            registrationNumber,
+                phone,
 
-            address,
+                email,
 
-            phone,
+                logo,
 
-            email,
+                showSchoolName,
 
-            logo,
+                showLogo,
 
-            showSchoolName,
+                showRegistrationNumber,
 
-            showLogo,
+                showAddress,
 
-            showRegistrationNumber,
+                showPhone,
 
-            showAddress,
-
-            showPhone,
-
-            showEmail,
-
-        };
-
-    }, [
-        schoolId,
-        schoolName,
-        registrationNumber,
-        address,
-        phone,
-        email,
-        logo,
-        showSchoolName,
-        showLogo,
-        showRegistrationNumber,
-        showAddress,
-        showPhone,
-        showEmail,
-    ]);
+                showEmail,
+            }),
+            [
+                schoolId,
+                schoolName,
+                registrationNumber,
+                address,
+                phone,
+                email,
+                logo,
+                showSchoolName,
+                showLogo,
+                showRegistrationNumber,
+                showAddress,
+                showPhone,
+                showEmail,
+            ]
+        );
 
 
     // =================================================
     // CONTEXT VALUE
     // =================================================
 
-    const value = useMemo(() => {
+    const value =
+        useMemo(
+            () => ({
 
-        return {
+                // -----------------------------------------
+                // SCHOOL
+                // -----------------------------------------
 
-            // -----------------------------------------
-            // SCHOOL
-            // -----------------------------------------
+                school,
 
-            school,
+                schoolId,
 
-            schoolId,
+                schoolName,
 
-            schoolName,
+                registrationNumber,
 
-            registrationNumber,
+                address,
 
-            address,
+                phone,
 
-            phone,
+                email,
 
-            email,
-
-            logo,
-
-
-            // -----------------------------------------
-            // DOCUMENT SETTINGS
-            // -----------------------------------------
-
-            showSchoolName,
-
-            showLogo,
-
-            showRegistrationNumber,
-
-            showAddress,
-
-            showPhone,
-
-            showEmail,
+                logo,
 
 
-            // -----------------------------------------
-            // COMPLETE DOCUMENT BRANDING
-            // -----------------------------------------
+                // -----------------------------------------
+                // DOCUMENT SETTINGS
+                // -----------------------------------------
 
-            documentBranding,
+                showSchoolName,
 
+                showLogo,
 
-            // -----------------------------------------
-            // STATE
-            // -----------------------------------------
+                showRegistrationNumber,
 
-            loading,
+                showAddress,
 
-            error,
+                showPhone,
 
-
-            // -----------------------------------------
-            // ACADEMIC YEARS
-            // -----------------------------------------
-
-            academicYears,
-
-            activeAcademicYear,
-
-            activeAcademicYearId,
-
-            activeAcademicYearName,
-
-            activeAcademicYearTerm,
-
-            academicYearLoading,
-
-            academicYearError,
+                showEmail,
 
 
-            // -----------------------------------------
-            // ACTIONS
-            // -----------------------------------------
+                // -----------------------------------------
+                // DOCUMENT BRANDING
+                // -----------------------------------------
 
-            refreshSchool,
+                documentBranding,
 
-            refreshAcademicYear,
 
-        };
+                // -----------------------------------------
+                // STATE
+                // -----------------------------------------
 
-    }, [
-        school,
-        schoolId,
-        schoolName,
-        registrationNumber,
-        address,
-        phone,
-        email,
-        logo,
+                loading,
 
-        showSchoolName,
-        showLogo,
-        showRegistrationNumber,
-        showAddress,
-        showPhone,
-        showEmail,
+                error,
 
-        documentBranding,
 
-        loading,
-        error,
+                // -----------------------------------------
+                // ACADEMIC YEARS
+                // -----------------------------------------
 
-        academicYears,
-        activeAcademicYear,
-        activeAcademicYearId,
-        activeAcademicYearName,
-        activeAcademicYearTerm,
-        academicYearLoading,
-        academicYearError,
+                academicYears,
 
-        refreshSchool,
-        refreshAcademicYear,
-    ]);
+                activeAcademicYear,
+
+                activeAcademicYearId,
+
+                activeAcademicYearName,
+
+                activeAcademicYearTerm,
+
+                academicYearLoading,
+
+                academicYearError,
+
+
+                // -----------------------------------------
+                // ACTIONS
+                // -----------------------------------------
+
+                refreshSchool,
+
+                refreshAcademicYear,
+
+            }),
+            [
+                school,
+                schoolId,
+                schoolName,
+                registrationNumber,
+                address,
+                phone,
+                email,
+                logo,
+
+                showSchoolName,
+                showLogo,
+                showRegistrationNumber,
+                showAddress,
+                showPhone,
+                showEmail,
+
+                documentBranding,
+
+                loading,
+                error,
+
+                academicYears,
+                activeAcademicYear,
+                activeAcademicYearId,
+                activeAcademicYearName,
+                activeAcademicYearTerm,
+                academicYearLoading,
+                academicYearError,
+
+                refreshSchool,
+                refreshAcademicYear,
+            ]
+        );
 
 
     // =================================================
@@ -952,7 +1453,9 @@ export const SchoolProvider = ({ children }) => {
 
     return (
 
-        <SchoolContext.Provider value={value}>
+        <SchoolContext.Provider
+            value={value}
+        >
 
             {children}
 
@@ -969,9 +1472,10 @@ export const SchoolProvider = ({ children }) => {
 
 export const useSchool = () => {
 
-    const context = useContext(
-        SchoolContext
-    );
+    const context =
+        useContext(
+            SchoolContext
+        );
 
 
     if (!context) {
