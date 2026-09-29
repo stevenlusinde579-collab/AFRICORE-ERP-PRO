@@ -1,0 +1,13 @@
+@echo off
+
+start "AFRICORE BACKEND" cmd /k "cd /d C:\Users\HomePC\Desktop\AFRICORE EPR PRO\backend && npm run dev"
+
+timeout /t 4 /nobreak >nul
+
+start "AFRICORE FRONTEND" cmd /k "cd /d C:\Users\HomePC\Desktop\AFRICORE EPR PRO\frontend && npm run dev"
+
+timeout /t 7 /nobreak >nul
+
+start "" "http://localhost:5173"
+
+exit
