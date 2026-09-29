@@ -28,7 +28,7 @@ import { useRole } from "../../context/RoleContext";
 import { supabase } from "../../services/supabase";
 
 
-const API_URL = "http://localhost:5000/api/exams";
+const API_URL = "https://africore-erp-pro.onrender.com/api/exams";
 
 const SUBJECT_TEACHER_ROLE_ID = 5;
 
