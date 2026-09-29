@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
@@ -46,7 +46,7 @@ function ExamList() {
 
     const API_BASE_URL =
         import.meta.env.VITE_API_URL ||
-        "http://localhost:5000/api";
+        "https://africore-erp-pro.onrender.com/api";
 
 
     const API_URL = API_BASE_URL.endsWith("/exams")

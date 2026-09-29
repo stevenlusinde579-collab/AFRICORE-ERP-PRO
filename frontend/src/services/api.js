@@ -1,9 +1,9 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { supabase } from "./supabase";
 
 const API_URL =
     import.meta.env.VITE_API_URL ||
-    "http://localhost:5000/api";
+    "https://africore-erp-pro.onrender.com/api";
 
 const api = axios.create({
     baseURL: API_URL,

@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { supabase } from "../../services/supabase";
 
 const API_URL =
     import.meta.env.VITE_API_URL ||
-    "http://localhost:5000/api";
+    "https://africore-erp-pro.onrender.com/api";
 
 function EditStaffNonStaff() {
 
@@ -1297,7 +1297,7 @@ function EditStaffNonStaff() {
 
 
             setMessage(
-                "Photo uploaded successfully ✅"
+                "Photo uploaded successfully âœ…"
             );
 
             setMessageType("success");
@@ -1685,7 +1685,7 @@ function EditStaffNonStaff() {
 
 
             setMessage(
-                "Staff member updated successfully ✅"
+                "Staff member updated successfully âœ…"
             );
 
             setMessageType("success");
@@ -2406,7 +2406,7 @@ function EditStaffNonStaff() {
                                                 {item.class_name}
 
                                                 {item.academic_level
-                                                    ? ` — ${item.academic_level}`
+                                                    ? ` â€” ${item.academic_level}`
                                                     : ""
                                                 }
 
@@ -2514,7 +2514,7 @@ function EditStaffNonStaff() {
                                                 {item.class_name}
 
                                                 {item.academic_level
-                                                    ? ` — ${item.academic_level}`
+                                                    ? ` â€” ${item.academic_level}`
                                                     : ""
                                                 }
 
@@ -2693,7 +2693,7 @@ function EditStaffNonStaff() {
                                                                     ? (
                                                                         <span className="text-gray-400">
 
-                                                                            —
+                                                                            â€”
 
                                                                         </span>
                                                                     )

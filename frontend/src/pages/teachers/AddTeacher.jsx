@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { supabase } from "../../services/supabase";
 
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  import.meta.env.VITE_API_URL || "https://africore-erp-pro.onrender.com/api";
 
 /*
  * VERIFIED SYSTEM ROLE IDS
@@ -1892,11 +1892,11 @@ function AddTeacher() {
                   >
 
                     <option value="subject">
-                      Subject Teacher — Subject + Class
+                      Subject Teacher â€” Subject + Class
                     </option>
 
                     <option value="class">
-                      Class Teacher — Class Only
+                      Class Teacher â€” Class Only
                     </option>
 
                   </select>

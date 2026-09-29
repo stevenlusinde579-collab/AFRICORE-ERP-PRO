@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // src/pages/examination/ResultsAnalysis.jsx
 // Professional, traceable and data-first examination analysis
 // ============================================================
@@ -50,7 +50,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://africore-erp-pro.onrender.com/api";
 
 
 // ============================================================
@@ -225,7 +225,7 @@ const getAdmission = student =>
     student?.admission_number ||
     student?.admission_no ||
     student?.admission ||
-    "—";
+    "â€”";
 
 const getClassName = cls => {
     if (!cls) return "Unknown Class";
@@ -279,9 +279,9 @@ const buildStudentResultMessage = (exam, report) => {
         `Dear ${getParentName(report)},`,
         "",
         `Examination Results for ${report.full_name || "Student"}`,
-        `Admission No: ${report.admission || "—"}`,
+        `Admission No: ${report.admission || "â€”"}`,
         `Examination: ${exam?.name || exam?.exam_name || exam?.title || "Examination"}`,
-        `Class: ${report.class_name || "—"}`,
+        `Class: ${report.class_name || "â€”"}`,
         "",
         "SUBJECT RESULTS:"
     ];
@@ -297,8 +297,8 @@ const buildStudentResultMessage = (exam, report) => {
         "OVERALL RESULT:",
         `Total Marks: ${formatNumber(report.total)}`,
         `Average: ${formatNumber(report.percentage, 1)}%`,
-        `Grade: ${report.grade || "—"}`,
-        `Position: ${report.position || "—"}/${report.rankTotal || "—"}`,
+        `Grade: ${report.grade || "â€”"}`,
+        `Position: ${report.position || "â€”"}/${report.rankTotal || "â€”"}`,
         `Status: ${report.reportStatus || (report.percentage >= 40 ? "Passed" : "Failed")}`,
         "",
         "Thank you.",
@@ -1088,7 +1088,7 @@ export default function ResultsAnalysis() {
             const possible = 700;
             const average = bestSeven.length ? (total / 700) * 100 : 0;
             const percentage = average;
-            const grade = bestSeven.length === 7 ? getGrade(average) : "—";
+            const grade = bestSeven.length === 7 ? getGrade(average) : "â€”";
             const passed = bestSeven.length === 7 ? average >= 40 : false;
             const hasMarks = markedResults.some(result => result.total > 0 || result.marked_questions > 0);
 
@@ -1232,7 +1232,7 @@ export default function ResultsAnalysis() {
                 ? (total / 700) * 100
                 : 0;
             const percentage = average;
-            const grade = bestSeven.length === 7 ? getGrade(average) : (bestSeven.length ? getGrade(average) : "—");
+            const grade = bestSeven.length === 7 ? getGrade(average) : (bestSeven.length ? getGrade(average) : "â€”");
 
             return {
                 id: student.id,
@@ -2021,10 +2021,10 @@ export default function ResultsAnalysis() {
                 subject_id: question.subject_id,
                 subject_name: getSubjectName(subjectMap.get(idValue(question.subject_id))),
                 topic: question.topic || "Unclassified",
-                sub_topic: question.sub_topic || "—",
-                difficulty: question.difficulty_level || "—",
-                bloom: question.bloom_level || "—",
-                question_type: question.question_type || "—",
+                sub_topic: question.sub_topic || "â€”",
+                difficulty: question.difficulty_level || "â€”",
+                bloom: question.bloom_level || "â€”",
+                question_type: question.question_type || "â€”",
                 max_marks: possible,
                 obtained,
                 average,
@@ -2072,7 +2072,7 @@ export default function ResultsAnalysis() {
         else if (subjectRow.average >= 60) recommendations.push("Zingatia mada na maswali yenye ufaulu mdogo ili kuongeza uthabiti wa ufaulu wa somo.");
         else if (subjectRow.average >= 50) recommendations.push("Ongeza mazoezi ya ziada, marudio maalum na ufuatiliaji wa mada zenye changamoto.");
         else recommendations.push("Somo linahitaji mpango wa haraka wa uboreshaji, ukizingatia mada moja baada ya nyingine na ufuatiliaji wa karibu.");
-        if (weakQuestions.length) recommendations.push(`Maeneo ya maswali yanayohitaji kipaumbele: ${weakQuestions.map(q => `${q.label} – ${q.topic} (${formatNumber(q.performance, 1)}%)`).join("; ")}.`);
+        if (weakQuestions.length) recommendations.push(`Maeneo ya maswali yanayohitaji kipaumbele: ${weakQuestions.map(q => `${q.label} â€“ ${q.topic} (${formatNumber(q.performance, 1)}%)`).join("; ")}.`);
         return { ...subjectRow, students: subjectStudents, recommendations, weakQuestions };
     }, [students, calculateStudentSubject, questionAnalysis]);
 
@@ -2734,7 +2734,7 @@ export default function ResultsAnalysis() {
                                 icon={FaCheckCircle}
                                 label="Pass Rate"
                                 value={`${formatNumber(overview.pass_rate, 1)}%`}
-                                sub={`${overview.passed} passed · ${overview.failed} failed`}
+                                sub={`${overview.passed} passed Â· ${overview.failed} failed`}
                                 tone={overview.pass_rate < 50 ? "danger" : overview.pass_rate < 70 ? "warning" : "success"}
                             />
                             <MetricCard
@@ -2781,14 +2781,14 @@ export default function ResultsAnalysis() {
                             <InsightMetric
                                 title="Strongest Subject"
                                 icon={FaArrowUp}
-                                value={bestSubject?.subject_name || "—"}
+                                value={bestSubject?.subject_name || "â€”"}
                                 detail={bestSubject ? `${formatNumber(bestSubject.average, 1)}% average` : "No analysed subject"}
                                 tone="success"
                             />
                             <InsightMetric
                                 title="Weakest Subject"
                                 icon={FaArrowDown}
-                                value={weakestSubject?.subject_name || "—"}
+                                value={weakestSubject?.subject_name || "â€”"}
                                 detail={weakestSubject ? `${formatNumber(weakestSubject.average, 1)}% average` : "No analysed subject"}
                                 tone="danger"
                             />
@@ -2826,7 +2826,7 @@ export default function ResultsAnalysis() {
                                                     <td className="px-3 py-3 text-slate-600">{student.class_name}</td>
                                                     <td className="px-3 py-3">
                                                         <span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${performanceClass(student.percentage)}`}>
-                                                            {formatNumber(student.percentage, 1)}% · {student.grade}
+                                                            {formatNumber(student.percentage, 1)}% Â· {student.grade}
                                                         </span>
                                                     </td>
                                                     <td className="px-3 py-3">
@@ -2866,10 +2866,10 @@ export default function ResultsAnalysis() {
                         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                             <MetricCard icon={FaUserGraduate} label="Students" value={schoolOverall.candidates} sub={`${schoolOverall.studentsAnalysed} analysed`} />
                             <MetricCard icon={FaChartBar} label="School Average" value={`${formatNumber(schoolOverall.average, 1)}%`} sub={performanceLabel(schoolOverall.average)} tone={schoolOverall.average < 40 ? "danger" : schoolOverall.average < 60 ? "warning" : "success"} />
-                            <MetricCard icon={FaGraduationCap} label="GPA" value={schoolOverall.cseeGpa != null ? formatNumber(schoolOverall.cseeGpa, 2) : "—"} sub={`${schoolOverall.cseeEligibleStudents} eligible · Best 7`} tone="info" />
+                            <MetricCard icon={FaGraduationCap} label="GPA" value={schoolOverall.cseeGpa != null ? formatNumber(schoolOverall.cseeGpa, 2) : "â€”"} sub={`${schoolOverall.cseeEligibleStudents} eligible Â· Best 7`} tone="info" />
                             <MetricCard icon={FaTrophy} label="Candidates" value={schoolOverall.cseeEligibleStudents} sub="Best 7 eligible" tone="info" />
-                            <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(schoolOverall.passRate, 1)}%`} sub={`${schoolOverall.studentsPassed} passed · ${schoolOverall.studentsFailed} failed`} tone={schoolOverall.passRate < 50 ? "danger" : schoolOverall.passRate < 70 ? "warning" : "success"} />
-                            <MetricCard icon={FaTrophy} label="Highest Student" value={schoolOverall.topStudents[0]?.full_name || "—"} sub={schoolOverall.topStudents[0] ? `${formatNumber(schoolOverall.topStudents[0].percentage, 1)}%` : "No result"} tone="info" />
+                            <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(schoolOverall.passRate, 1)}%`} sub={`${schoolOverall.studentsPassed} passed Â· ${schoolOverall.studentsFailed} failed`} tone={schoolOverall.passRate < 50 ? "danger" : schoolOverall.passRate < 70 ? "warning" : "success"} />
+                            <MetricCard icon={FaTrophy} label="Highest Student" value={schoolOverall.topStudents[0]?.full_name || "â€”"} sub={schoolOverall.topStudents[0] ? `${formatNumber(schoolOverall.topStudents[0].percentage, 1)}%` : "No result"} tone="info" />
                             <MetricCard icon={FaListOl} label="Exam Subjects" value={examSubjects.length} sub={`${schoolOverall.assignments} subject assignments`} />
                         </div>
 
@@ -2897,7 +2897,7 @@ export default function ResultsAnalysis() {
                                 <div className="space-y-4">
                                     {schoolOverall.studentGradeDistribution.map(row => {
                                         const percent = schoolOverall.studentsAnalysed ? (row.count / schoolOverall.studentsAnalysed) * 100 : 0;
-                                        return <div key={row.grade}><div className="flex justify-between text-sm mb-1"><span className={`w-7 h-7 rounded-lg border flex items-center justify-center font-extrabold ${gradeClass(row.grade)}`}>{row.grade}</span><span className="font-bold">{row.count} · {formatNumber(percent,1)}%</span></div><div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full" style={{width:`${clamp(percent)}%`}} /></div></div>;
+                                        return <div key={row.grade}><div className="flex justify-between text-sm mb-1"><span className={`w-7 h-7 rounded-lg border flex items-center justify-center font-extrabold ${gradeClass(row.grade)}`}>{row.grade}</span><span className="font-bold">{row.count} Â· {formatNumber(percent,1)}%</span></div><div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full" style={{width:`${clamp(percent)}%`}} /></div></div>;
                                     })}
                                 </div>
                             </Panel>
@@ -2919,8 +2919,8 @@ export default function ResultsAnalysis() {
                             </Panel>
                         </div>
 
-                        <Panel title="Top Students — School" icon={FaTrophy}>
-                            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Class</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th></tr></thead><tbody>{schoolOverall.topStudents.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3">{row.class_name}</td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td><td className="px-3 py-3 font-bold">{row.cseeGpa != null ? formatNumber(row.cseeGpa,2) : "—"}</td><td className="px-3 py-3 font-bold">{row.cseeDivision ? `Div ${row.cseeDivision}` : "—"}</td></tr>)}</tbody></table></div>
+                        <Panel title="Top Students â€” School" icon={FaTrophy}>
+                            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Class</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th></tr></thead><tbody>{schoolOverall.topStudents.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3">{row.class_name}</td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td><td className="px-3 py-3 font-bold">{row.cseeGpa != null ? formatNumber(row.cseeGpa,2) : "â€”"}</td><td className="px-3 py-3 font-bold">{row.cseeDivision ? `Div ${row.cseeDivision}` : "â€”"}</td></tr>)}</tbody></table></div>
                         </Panel>
                     </div>
                 )}
@@ -2940,12 +2940,12 @@ export default function ResultsAnalysis() {
                                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                                     <MetricCard icon={FaUserGraduate} label="Students" value={classOverall.studentCount} sub={`${classOverall.subjectCount} subjects`} />
                                     <MetricCard icon={FaChartBar} label="Class Average" value={`${formatNumber(classOverall.average,1)}%`} sub={performanceLabel(classOverall.average)} tone={classOverall.average < 40 ? "danger" : classOverall.average < 60 ? "warning" : "success"} />
-                                    <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(classOverall.passRate,1)}%`} sub={`${classOverall.passedStudents} passed · ${classOverall.failedStudents} failed`} tone={classOverall.passRate < 50 ? "danger" : classOverall.passRate < 70 ? "warning" : "success"} />
-                                    <MetricCard icon={FaTrophy} label="Best Student" value={classOverall.topStudents[0]?.full_name || "—"} sub={classOverall.topStudents[0] ? `${formatNumber(classOverall.topStudents[0].percentage,1)}%` : "No result"} tone="info" />
+                                    <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(classOverall.passRate,1)}%`} sub={`${classOverall.passedStudents} passed Â· ${classOverall.failedStudents} failed`} tone={classOverall.passRate < 50 ? "danger" : classOverall.passRate < 70 ? "warning" : "success"} />
+                                    <MetricCard icon={FaTrophy} label="Best Student" value={classOverall.topStudents[0]?.full_name || "â€”"} sub={classOverall.topStudents[0] ? `${formatNumber(classOverall.topStudents[0].percentage,1)}%` : "No result"} tone="info" />
                                     <MetricCard icon={FaListOl} label="Class Subjects" value={classOverall.subjectCount} sub={classOverall.className} />
                                 </div>
 
-                                <Panel title={`Student Ranking — ${classOverall.className}`} icon={FaTrophy}>
+                                <Panel title={`Student Ranking â€” ${classOverall.className}`} icon={FaTrophy}>
                                     <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Missing</th></tr></thead><tbody>{classOverall.students.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td><td className="px-3 py-3">{row.pass ? <span className="text-emerald-700 font-bold">Passed</span> : <span className="text-red-700 font-bold">Failed</span>}</td><td className="px-3 py-3">{row.missingSubjects}</td></tr>)}</tbody></table></div>
                                 </Panel>
 
@@ -3072,11 +3072,11 @@ export default function ResultsAnalysis() {
                                                 </span>
                                             </td>
                                             <td className="px-3 py-3 text-emerald-700 font-semibold">
-                                                {topic.strongestQuestion?.label || "—"}
+                                                {topic.strongestQuestion?.label || "â€”"}
                                                 {topic.strongestQuestion && ` (${formatNumber(topic.strongestQuestion.performance, 0)}%)`}
                                             </td>
                                             <td className="px-3 py-3 text-red-700 font-semibold">
-                                                {topic.weakestQuestion?.label || "—"}
+                                                {topic.weakestQuestion?.label || "â€”"}
                                                 {topic.weakestQuestion && ` (${formatNumber(topic.weakestQuestion.performance, 0)}%)`}
                                             </td>
                                             <td className="px-3 py-3 text-right">
@@ -3200,7 +3200,7 @@ export default function ResultsAnalysis() {
                                     {filteredStudents.map(student => (
                                         <tr key={student.id} className="border-b last:border-0 border-slate-100 hover:bg-slate-50">
                                             <td className="px-3 py-3 font-extrabold text-slate-700">
-                                                {student.position ? `${student.position}/${student.rankTotal}` : "—"}
+                                                {student.position ? `${student.position}/${student.rankTotal}` : "â€”"}
                                             </td>
                                             <td className="px-3 py-3">
                                                 <div className="font-bold text-slate-800">{student.full_name}</div>
@@ -3220,8 +3220,8 @@ export default function ResultsAnalysis() {
                                                     {student.grade}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"}</td>
-                                            <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "—"}</td>
+                                            <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"}</td>
+                                            <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "â€”"}</td>
                                             <td className="px-3 py-3">
                                                 {student.status === "Complete" ? (
                                                     <span className="text-emerald-700 text-xs font-bold inline-flex items-center gap-1">
@@ -3462,32 +3462,32 @@ function StudentReportPrint({ exam, report }) {
     const divisionLabel = division ? (division === "0" ? "Division 0" : `Division ${division}`) : "Not Calculated";
     const bestSevenTotal = bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0);
     const bestSevenAverage = bestSeven.length ? (bestSevenTotal / 700) * 100 : 0;
-    const finalGrade = bestSeven.length === 7 ? getGrade(bestSevenAverage) : "—";
+    const finalGrade = bestSeven.length === 7 ? getGrade(bestSevenAverage) : "â€”";
     const allSubjects = report?.subjects || [];
 
     return (
         <div className="p-7 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="Student Academic Report" subtitle={`${report.class_name || "Class"} · ${report.stream || ""} · Position ${report.position || "—"}/${report.rankTotal || "—"}`} />
+            <ReportHeader exam={exam} title="Student Academic Report" subtitle={`${report.class_name || "Class"} Â· ${report.stream || ""} Â· Position ${report.position || "â€”"}/${report.rankTotal || "â€”"}`} />
 
             <div className="grid grid-cols-4 gap-2 text-[10px] mb-4">
-                <DetailBox label="Student Name" value={report.full_name || "—"} />
-                <DetailBox label="Admission No." value={report.admission || "—"} />
-                <DetailBox label="Class" value={report.class_name || "—"} />
-                <DetailBox label="Gender" value={report.gender || "—"} />
+                <DetailBox label="Student Name" value={report.full_name || "â€”"} />
+                <DetailBox label="Admission No." value={report.admission || "â€”"} />
+                <DetailBox label="Class" value={report.class_name || "â€”"} />
+                <DetailBox label="Gender" value={report.gender || "â€”"} />
                 <DetailBox label="Best 7 Subjects" value={`${bestSeven.length}/7`} />
                 <DetailBox label="Best 7 Total" value={`${formatNumber(bestSevenTotal, 0)} / 700`} />
-                <DetailBox label="Best 7 Average" value={bestSeven.length ? `${formatNumber(bestSevenAverage, 1)}%` : "—"} />
-                <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "—"} />
-                <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "—"} />
+                <DetailBox label="Best 7 Average" value={bestSeven.length ? `${formatNumber(bestSevenAverage, 1)}%` : "â€”"} />
+                <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "â€”"} />
+                <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "â€”"} />
                 <DetailBox label="Division" value={divisionLabel} />
                 <DetailBox label="Grade" value={finalGrade} />
-                <DetailBox label="Status" value={report.reportStatus || "—"} />
+                <DetailBox label="Status" value={report.reportStatus || "â€”"} />
             </div>
 
             <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />
 
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Best Seven Subjects — Final Calculation</h3>
+                <h3 className="font-extrabold text-sm mb-2">Best Seven Subjects â€” Final Calculation</h3>
                 <table className="w-full border-collapse text-[9px] report-table">
                     <thead><tr>{["#","Subject","Mark","%","Grade","Point","Counted"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>
@@ -3537,7 +3537,7 @@ function StudentReportPrint({ exam, report }) {
 function SubjectReportPrint({ exam, report }) {
     return (
         <div className="p-8 text-slate-900">
-            <ReportHeader exam={exam} title="Subject Analysis Report" subtitle={`${report.subject_name} · ${report.class_name}`} />
+            <ReportHeader exam={exam} title="Subject Analysis Report" subtitle={`${report.subject_name} Â· ${report.class_name}`} />
             <div className="grid grid-cols-4 gap-3 text-sm mb-5">
                 <DetailBox label="Candidates" value={report.candidates} />
                 <DetailBox label="Analysed" value={report.analysed} />
@@ -3598,10 +3598,10 @@ function SubjectSummaryTable({ subjects = [] }) {
                 <thead><tr>{["Subject","A","B","C","D","F","GPA"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                 <tbody>{subjects.map(row => {
                     const gc = row.gradeCounts || {};
-                    const gpa = row.gpa != null ? formatNumber(row.gpa,2) : "—";
+                    const gpa = row.gpa != null ? formatNumber(row.gpa,2) : "â€”";
                     const gpaTone = numberValue(row.gpa) <= 2 ? "bg-emerald-100 text-emerald-900" : numberValue(row.gpa) <= 3 ? "bg-yellow-100 text-yellow-900" : numberValue(row.gpa) <= 4 ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900";
                     return <tr key={row.exam_subject_id}>
-                        <td className="border border-slate-400 p-1 font-bold text-left">{row.subject_name}{row.class_name ? <span className="font-normal text-slate-500"> · {row.class_name}</span> : null}</td>
+                        <td className="border border-slate-400 p-1 font-bold text-left">{row.subject_name}{row.class_name ? <span className="font-normal text-slate-500"> Â· {row.class_name}</span> : null}</td>
                         {["A","B","C","D","F"].map(g => <td key={g} className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(g)}`}>{gc[g] || 0}</td>)}
                         <td className={`border border-slate-400 p-1 text-center font-black ${gpaTone}`}>{gpa}</td>
                     </tr>;
@@ -3630,8 +3630,8 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
                         const mark = result ? numberValue(result.total) : 0;
                         return <td key={subject.exam_subject_id} className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(grade)}`}>{formatNumber(mark,0)} {grade}</td>;
                     })}
-                    <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa,2) : "—"}</td>
-                    <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "—"}</td>
+                    <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa,2) : "â€”"}</td>
+                    <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "â€”"}</td>
                 </tr>)}</tbody>
             </table>
         </div>
@@ -3648,12 +3648,12 @@ function SchoolOverallReportPrint({ exam, data }) {
     const classRows = data.classRows || [];
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle="Whole School Performance · Best Seven Classification" />
+            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle="Whole School Performance Â· Best Seven Classification" />
 
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Candidates" value={data.candidates || 0} />
                 <DetailBox label="School Average" value={`${formatNumber(data.average,1)}%`} />
-                <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "—"} />
+                <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "â€”"} />
                 <DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} />
                 <DetailBox label="Subjects" value={(data.subjectRows || []).length} />
             </div>
@@ -3672,7 +3672,7 @@ function SchoolOverallReportPrint({ exam, data }) {
                 <table className="w-full border-collapse text-[8px] report-table">
                     <thead><tr>{["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{classRows.map(row => <tr key={row.class_id}>
-                        <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td><td className="border border-slate-400 p-1 text-center">{row.students}</td><td className="border border-slate-400 p-1 text-center">{formatNumber(row.average,1)}%</td><td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "—"}</td>
+                        <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td><td className="border border-slate-400 p-1 text-center">{row.students}</td><td className="border border-slate-400 p-1 text-center">{formatNumber(row.average,1)}%</td><td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "â€”"}</td>
                         {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.divisions?.[d] || 0}</td>)}
                         <td className="border border-slate-400 p-1 text-center">{formatNumber(row.passRate,1)}%</td>
                     </tr>)}</tbody>
@@ -3682,12 +3682,12 @@ function SchoolOverallReportPrint({ exam, data }) {
             <SubjectSummaryTable subjects={data.subjectRows || []} />
 
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Students — Final GPA & Division</h3>
+                <h3 className="font-extrabold text-sm mb-2">Students â€” Final GPA & Division</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
                     <thead><tr>{["Pos.","Student","Admission","Class","Best 7 Total","Average","Grade","Aggregate","GPA","Division"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{finalRows.map(student => <tr key={student.id}>
-                        <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.class_name}</td>
-                        <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? getGrade(avg) : "—"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td>
+                        <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.class_name}</td>
+                        <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? getGrade(avg) : "â€”"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "â€”"}</td>
                     </tr>)}</tbody>
                 </table>
             </div>
@@ -3705,9 +3705,9 @@ function ClassOverallReportPrint({ exam, data }) {
     const classGrades = ["A","B","C","D","F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs=row.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,item)=>sum+numberValue(item.total),0)/700)*100:0; return getGrade(avg)===grade; }).length }));
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={`${data.className || "Class"} · Best Seven Classification`} />
+            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={`${data.className || "Class"} Â· Best Seven Classification`} />
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
-                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} /><DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "—"} /><DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
+                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} /><DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "â€”"} /><DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
             <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />
             <div className="mb-5">
@@ -3716,11 +3716,11 @@ function ClassOverallReportPrint({ exam, data }) {
             </div>
             <SubjectSummaryTable subjects={data.subjects || []} />
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Student Final Results — GPA & Division</h3>
+                <h3 className="font-extrabold text-sm mb-2">Student Final Results â€” GPA & Division</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
                     <thead><tr>{["Pos.","Student","Admission","Best 7 Total","Average","Grade","Aggregate","GPA","Division","Status"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{finalRows.map(student => <tr key={student.id}>
-                        <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row)=>sum+numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.percentage),0)/student.cseeBestSeven.length,1)}%` : "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs=student.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,row)=>sum+numberValue(row.total),0)/700)*100:0; return bs.length ? getGrade(avg) : "—"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row)=>sum+numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.percentage),0)/student.cseeBestSeven.length,1)}%` : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs=student.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,row)=>sum+numberValue(row.total),0)/700)*100:0; return bs.length ? getGrade(avg) : "â€”"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "â€”"}</td><td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
                     </tr>)}</tbody>
                 </table>
             </div>
@@ -3736,7 +3736,7 @@ function OverallReportPrint({ exam, data }) {
     return (
         <div className="p-8 text-slate-900">
             <ReportHeader exam={exam} title="Overall Examination Results" subtitle="All examination subjects" />
-            <div className="mb-5 text-sm"><strong>Subjects:</strong> {subjects.map(s => s.subject_name).join(", ") || "—"} · <strong>Candidates:</strong> {students.length}</div>
+            <div className="mb-5 text-sm"><strong>Subjects:</strong> {subjects.map(s => s.subject_name).join(", ") || "â€”"} Â· <strong>Candidates:</strong> {students.length}</div>
             <table className="w-full border-collapse text-[10px]">
                 <thead><tr>
                     <th className="border border-slate-400 p-1">Pos.</th><th className="border border-slate-400 p-1 text-left">Student</th><th className="border border-slate-400 p-1">Admission</th>
@@ -3746,24 +3746,24 @@ function OverallReportPrint({ exam, data }) {
                 <tbody>
                     {students.map(student => (
                         <tr key={student.id}>
-                            <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td>
                             <td className="border border-slate-400 p-1 font-bold">{student.full_name}</td>
                             <td className="border border-slate-400 p-1">{student.admission}</td>
                             {subjects.map(subject => {
                                 const result = (student.subjects || []).find(r => idValue(r.exam_subject_id) === idValue(subject.exam_subject_id));
-                                return <td key={subject.exam_subject_id} className="border border-slate-400 p-1 text-center">{result ? `${formatNumber(result.total)} (${formatNumber(result.percentage, 0)}%)` : "—"}</td>;
+                                return <td key={subject.exam_subject_id} className="border border-slate-400 p-1 text-center">{result ? `${formatNumber(result.total)} (${formatNumber(result.percentage, 0)}%)` : "â€”"}</td>;
                             })}
                             <td className="border border-slate-400 p-1 text-center font-bold">{formatNumber(student.total)}</td>
                             <td className="border border-slate-400 p-1 text-center font-bold">{formatNumber(student.percentage, 1)}%</td>
                             <td className="border border-slate-400 p-1 text-center font-bold">{student.grade}</td>
-                            <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"}</td>
-                            <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeDivision ? `Division ${student.cseeDivision}` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeDivision ? `Division ${student.cseeDivision}` : "â€”"}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
             <div className="mt-5 grid grid-cols-4 gap-3 text-xs">
-                {subjects.map(subject => <DetailBox key={subject.exam_subject_id} label={subject.subject_name} value={`${formatNumber(subject.average, 1)}% avg · ${formatNumber(subject.pass_rate, 1)}% pass`} />)}
+                {subjects.map(subject => <DetailBox key={subject.exam_subject_id} label={subject.subject_name} value={`${formatNumber(subject.average, 1)}% avg Â· ${formatNumber(subject.pass_rate, 1)}% pass`} />)}
             </div>
             <div className="mt-8 grid grid-cols-3 gap-10 text-xs"><div className="border-t border-slate-500 pt-2">Prepared By</div><div className="border-t border-slate-500 pt-2">Academic Officer</div><div className="border-t border-slate-500 pt-2">Headmaster</div></div>
         </div>
@@ -3818,8 +3818,8 @@ function TraceModal({
                         <h2 className="text-lg md:text-xl font-extrabold text-slate-900 mt-1">
                             {detail.type === "student" && data.full_name}
                             {detail.type === "subject" && data.subject_name}
-                            {detail.type === "question" && `${data.label} · ${data.topic}`}
-                            {detail.type === "topic" && `${data.topic} · ${data.subject_name}`}
+                            {detail.type === "question" && `${data.label} Â· ${data.topic}`}
+                            {detail.type === "topic" && `${data.topic} Â· ${data.subject_name}`}
                         </h2>
                     </div>
                     <div className="flex items-center gap-2">
@@ -3960,7 +3960,7 @@ function StudentTrace({
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 text-xs">
                                 <div><div className="text-slate-500">Provider</div><div className="font-bold text-slate-800">{communicationStatus.provider || "eSMS Africa"}</div></div>
                                 <div><div className="text-slate-500">Status</div><div className="font-bold text-slate-800">{communicationStatus.status || "accepted"}</div></div>
-                                <div><div className="text-slate-500">Provider ID</div><div className="font-bold text-slate-800 break-all">{communicationStatus.provider_message_id || "—"}</div></div>
+                                <div><div className="text-slate-500">Provider ID</div><div className="font-bold text-slate-800 break-all">{communicationStatus.provider_message_id || "â€”"}</div></div>
                             </div>
                             {communicationStatus.sent_at && (
                                 <div className="text-[11px] text-slate-500 mt-3">
@@ -3969,7 +3969,7 @@ function StudentTrace({
                             )}
                             {communicationStatus.environment === "test" && (
                                 <div className="text-[11px] text-amber-700 mt-2 font-medium">
-                                    Sandbox response only — ujumbe huu ni wa test na haujafika kwenye mtandao halisi.
+                                    Sandbox response only â€” ujumbe huu ni wa test na haujafika kwenye mtandao halisi.
                                 </div>
                             )}
                         </div>
@@ -3983,9 +3983,9 @@ function StudentTrace({
                 <DetailBox label="Jumla ya Marks" value={formatNumber(student.total)} />
                 <DetailBox label="Percentage" value={`${formatNumber(student.percentage, 1)}%`} />
                 <DetailBox label="Grade" value={student.grade} />
-                <DetailBox label="Aggregate" value={student.cseeAggregate ?? "—"} />
-                <DetailBox label="GPA" value={student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"} />
-                <DetailBox label="Division" value={student.cseeDivision ? `Division ${student.cseeDivision}` : "—"} />
+                <DetailBox label="Aggregate" value={student.cseeAggregate ?? "â€”"} />
+                <DetailBox label="GPA" value={student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"} />
+                <DetailBox label="Division" value={student.cseeDivision ? `Division ${student.cseeDivision}` : "â€”"} />
                 <DetailBox label="Status" value={student.percentage >= 40 ? "Passed" : "Failed"} />
             </div>
 
@@ -4014,7 +4014,7 @@ function StudentTrace({
 
             <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-sm">
-                    Subject → Questions → Marks
+                    Subject â†’ Questions â†’ Marks
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -4271,7 +4271,8 @@ function DetailBox({ label, value }) {
     return (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500">{label}</div>
-            <div className="text-sm font-extrabold text-slate-800 mt-1 break-words">{value ?? "—"}</div>
+            <div className="text-sm font-extrabold text-slate-800 mt-1 break-words">{value ?? "â€”"}</div>
         </div>
     );
 }
+

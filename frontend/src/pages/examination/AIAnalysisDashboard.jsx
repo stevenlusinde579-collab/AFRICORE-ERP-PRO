@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
     useCallback,
     useEffect,
     useMemo,
@@ -38,7 +38,7 @@ import { supabase } from "../../services/supabase";
 // CONFIG
 // ============================================================
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://africore-erp-pro.onrender.com/api";
 
 
 // ============================================================
@@ -1263,7 +1263,7 @@ export default function AIAnalysisDashboard() {
                         !err?.response
                     ) {
                         setError(
-                            "Haiwezi kuwasiliana na backend. Hakikisha backend inaendelea kwenye http://localhost:5000."
+                            "Haiwezi kuwasiliana na backend. Hakikisha backend inaendelea kwenye https://africore-erp-pro.onrender.com."
                         );
 
                         return null;
@@ -3040,7 +3040,7 @@ export default function AIAnalysisDashboard() {
                                 </h2>
 
                                 <p className="mt-1 text-sm text-indigo-700">
-                                    {subjectName} —
+                                    {subjectName} â€”
                                     Gemini AI
                                     inachambua
                                     structure,

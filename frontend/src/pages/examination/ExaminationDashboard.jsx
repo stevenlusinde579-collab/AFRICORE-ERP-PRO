@@ -1,4 +1,4 @@
-// frontend/src/pages/examination/ExaminationDashboard.jsx
+﻿// frontend/src/pages/examination/ExaminationDashboard.jsx
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -28,7 +28,7 @@ import { useSchool } from "../../context/SchoolContext";
 
 const API_URL =
     import.meta.env.VITE_API_URL ||
-    "http://localhost:5000/api";
+    "https://africore-erp-pro.onrender.com/api";
 
 
 function ExaminationDashboard() {
@@ -449,7 +449,7 @@ function ExaminationDashboard() {
             title: "Enter Marks",
 
             description:
-                "Select Class → Subject and enter student marks for the examination.",
+                "Select Class â†’ Subject and enter student marks for the examination.",
 
             icon: <FaPen />,
 

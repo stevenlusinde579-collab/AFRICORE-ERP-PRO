@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -17,7 +17,7 @@ import {
 
 import { supabase } from "../../services/supabase";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://africore-erp-pro.onrender.com/api";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
@@ -1343,7 +1343,7 @@ function SubjectTeacherExamUpload() {
                                                 row.subject
                                                     ?.subject_code ||
                                                 `Subject ${row.subject_id}`}{" "}
-                                            —{" "}
+                                            â€”{" "}
                                             {row.classRow
                                                 ?.class_name ||
                                                 row.classRow
@@ -1459,7 +1459,7 @@ function SubjectTeacherExamUpload() {
                                 </h3>
 
                                 <p className="mt-1 text-sm text-slate-500">
-                                    PDF only • Maximum 20MB
+                                    PDF only â€¢ Maximum 20MB
                                 </p>
 
                                 {selectedFile && (

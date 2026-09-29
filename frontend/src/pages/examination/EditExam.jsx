@@ -1,4 +1,4 @@
-// frontend/src/pages/examination/EditExam.jsx
+﻿// frontend/src/pages/examination/EditExam.jsx
 
 
 import { 
@@ -17,7 +17,7 @@ import {
 
 
 
-const API_URL = "http://localhost:5000/api/exams";
+const API_URL = "https://africore-erp-pro.onrender.com/api/exams";
 
 
 

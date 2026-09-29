@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import {
     useNavigate,
     useParams
@@ -17,7 +17,7 @@ import {
 
 
 const API_URL =
-    "http://localhost:5000/api";
+    "https://africore-erp-pro.onrender.com/api";
 
 
 function ExamUpload() {
@@ -796,7 +796,7 @@ function ExamUpload() {
                                             )
                                         }
 
-                                        {" — "}
+                                        {" â€” "}
 
                                         {
                                             getClassName(
@@ -973,7 +973,7 @@ function ExamUpload() {
 
                             <p className="mt-4 text-xs text-slate-400">
 
-                                PDF only • Maximum size: 20MB
+                                PDF only â€¢ Maximum size: 20MB
 
                             </p>
 
@@ -1084,19 +1084,19 @@ function ExamUpload() {
                         <ul className="mt-2 space-y-1 text-sm text-slate-500">
 
                             <li>
-                                • Chagua Subject + Class kwanza.
+                                â€¢ Chagua Subject + Class kwanza.
                             </li>
 
                             <li>
-                                • File lazima iwe PDF.
+                                â€¢ File lazima iwe PDF.
                             </li>
 
                             <li>
-                                • Maximum size ni 20MB.
+                                â€¢ Maximum size ni 20MB.
                             </li>
 
                             <li>
-                                • Tumia paper yenye maandishi yanayoonekana vizuri.
+                                â€¢ Tumia paper yenye maandishi yanayoonekana vizuri.
                             </li>
 
                         </ul>

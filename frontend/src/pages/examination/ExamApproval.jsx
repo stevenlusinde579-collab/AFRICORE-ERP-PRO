@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
     useEffect,
     useMemo,
     useState
@@ -17,7 +17,7 @@ import {
 
 
 const API_URL =
-    "http://localhost:5000/api";
+    "https://africore-erp-pro.onrender.com/api";
 
 const BUCKET =
     "exam-papers";
@@ -2184,7 +2184,7 @@ const ExamApproval = () => {
                                     margin-bottom:20px;
                                 "
                             >
-                                📄
+                                ðŸ“„
                             </div>
 
                             <div
@@ -3218,7 +3218,7 @@ const ExamApproval = () => {
                                             <div className="flex items-start gap-4 min-w-0">
 
                                                 <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-2xl shrink-0">
-                                                    📄
+                                                    ðŸ“„
                                                 </div>
 
 
@@ -3277,7 +3277,7 @@ const ExamApproval = () => {
                                                         {paper.pdf_url && (
 
                                                             <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
-                                                                ✓ PDF Ready
+                                                                âœ“ PDF Ready
                                                             </span>
 
                                                         )}
@@ -3365,7 +3365,7 @@ const ExamApproval = () => {
                                 <div className="flex items-center gap-3 min-w-0">
 
                                     <div className="w-11 h-11 rounded-xl bg-red-600 flex items-center justify-center text-white text-xl shrink-0">
-                                        📄
+                                        ðŸ“„
                                     </div>
 
 
@@ -3400,7 +3400,7 @@ const ExamApproval = () => {
                                             }
                                             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
                                         >
-                                            ↗ Open New Tab
+                                            â†— Open New Tab
                                         </button>
 
                                     )}
@@ -3411,7 +3411,7 @@ const ExamApproval = () => {
                                         onClick={closePdf}
                                         className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold"
                                     >
-                                        ✕ Close
+                                        âœ• Close
                                     </button>
 
                                 </div>
@@ -3430,7 +3430,7 @@ const ExamApproval = () => {
                                     <div className="text-center">
 
                                         <div className="text-5xl mb-5">
-                                            📄
+                                            ðŸ“„
                                         </div>
 
                                         <p className="text-white font-bold text-lg">
@@ -3455,7 +3455,7 @@ const ExamApproval = () => {
                                     <div className="max-w-xl w-full bg-red-950 border border-red-800 rounded-2xl p-7">
 
                                         <div className="text-4xl mb-4">
-                                            ⚠️
+                                            âš ï¸
                                         </div>
 
 
@@ -3536,7 +3536,7 @@ const ExamApproval = () => {
                                 </p>
 
                                 <p className="text-xs text-gray-500">
-                                    Examination PDF • Supabase Storage
+                                    Examination PDF â€¢ Supabase Storage
                                 </p>
 
                             </div>
@@ -3784,7 +3784,7 @@ const ExamApproval = () => {
                             </h2>
 
                             <p className="text-sm text-gray-500 mt-1">
-                                Academic → Deputy → Headmaster
+                                Academic â†’ Deputy â†’ Headmaster
                             </p>
 
                         </div>
@@ -3872,7 +3872,7 @@ const ExamApproval = () => {
                             {academicApproved ? (
 
                                 <span className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-bold">
-                                    ✓ Approved
+                                    âœ“ Approved
                                 </span>
 
                             ) : (
@@ -3932,7 +3932,7 @@ const ExamApproval = () => {
                             {deputyApproved ? (
 
                                 <span className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-bold">
-                                    ✓ Approved
+                                    âœ“ Approved
                                 </span>
 
                             ) : (
@@ -3992,7 +3992,7 @@ const ExamApproval = () => {
                             {headmasterApproved ? (
 
                                 <span className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-bold">
-                                    ✓ Final Approved
+                                    âœ“ Final Approved
                                 </span>
 
                             ) : (
@@ -4038,7 +4038,7 @@ const ExamApproval = () => {
                                             {exam?.exam_name || exam?.name || "Examination"}
                                         </p>
                                     </div>
-                                    <button type="button" onClick={closeNotificationPanel} disabled={notificationSending} className="text-3xl text-gray-500 disabled:opacity-50">×</button>
+                                    <button type="button" onClick={closeNotificationPanel} disabled={notificationSending} className="text-3xl text-gray-500 disabled:opacity-50">Ã—</button>
                                 </div>
                             </div>
                             <div className="p-6 space-y-5">
@@ -4053,7 +4053,7 @@ const ExamApproval = () => {
                                 <div>
                                     <p className="text-sm font-bold text-gray-700 mb-3">Notification Channels</p>
                                     <div className="grid grid-cols-3 gap-3">
-                                        {[["sms","📱","SMS"],["whatsapp","💬","WhatsApp"],["email","✉️","Email"]].map(([value, icon, label]) => (
+                                        {[["sms","ðŸ“±","SMS"],["whatsapp","ðŸ’¬","WhatsApp"],["email","âœ‰ï¸","Email"]].map(([value, icon, label]) => (
                                             <button key={value} type="button" onClick={() => toggleNotificationChannel(value)} disabled={notificationSending} className={notificationChannels.includes(value) ? "border-2 border-blue-600 bg-blue-50 text-blue-700 rounded-xl p-4 font-bold" : "border-2 border-gray-200 bg-white text-gray-700 rounded-xl p-4 font-semibold"}>
                                                 <div className="text-2xl">{icon}</div>
                                                 <div className="mt-1 text-sm">{label}</div>
@@ -4106,7 +4106,7 @@ const ExamApproval = () => {
                                         onClick={closeRejectModal}
                                         className="text-3xl text-gray-500"
                                     >
-                                        ×
+                                        Ã—
                                     </button>
 
                                 </div>
