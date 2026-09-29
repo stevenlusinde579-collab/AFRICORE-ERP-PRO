@@ -22,7 +22,13 @@ import {
 import { useSchool } from "../../context/SchoolContext";
 
 
-const API_URL = "http://localhost:5000/api";
+// =====================================================
+// API URL
+// =====================================================
+
+const API_URL =
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:5000/api";
 
 
 function ExaminationDashboard() {
@@ -148,19 +154,16 @@ function ExaminationDashboard() {
             // LOAD ONLY CURRENT SCHOOL + ACTIVE YEAR
             // -------------------------------------------------
 
-            const response =
-                await axios.get(
-                    `${API_URL}/exams`,
-                    {
-                        params: {
-                            school_id:
-                                Number(school.id),
-
-                            academic_year_id:
-                                Number(activeAcademicYearId)
-                        }
+            const response = await axios.get(
+                `${API_URL}/exams`,
+                {
+                    params: {
+                        school_id: Number(school.id),
+                        academic_year_id:
+                            Number(activeAcademicYearId)
                     }
-                );
+                }
+            );
 
 
             if (
