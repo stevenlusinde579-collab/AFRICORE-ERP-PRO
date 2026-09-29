@@ -1,5 +1,6 @@
 import React, {
     createContext,
+    useCallback,
     useContext,
     useEffect,
     useMemo,
@@ -7,985 +8,813 @@ import React, {
 } from "react";
 
 import { supabase } from "../services/supabase";
-import { useAuth } from "./AuthContext";
 
 
-// =====================================================
+// ============================================================
 // ROLE CONTEXT
-// =====================================================
-//
-// GLOBAL SOURCE FOR CURRENT USER ROLES.
-//
-// Important:
-//
-// profile_roles is the primary source.
-//
-// Each role contains:
-//
-// - profileRoleId
-// - profileId
-// - roleId
-// - schoolId
-// - isPrimary
-// - isActive
-// - roleName
-//
-// The selected profile role is persisted in localStorage.
-//
-// When the selected role changes, a custom event is
-// dispatched so SchoolContext can immediately reload
-// the corresponding school and academic year.
-//
-// =====================================================
-
+// ============================================================
 
 const RoleContext = createContext(null);
 
-
-// =====================================================
-// STORAGE
-// =====================================================
-
-const STORAGE_KEY =
-    "africore_selected_role";
+const ROLE_STORAGE_KEY = "africore_selected_role";
 
 
-// =====================================================
-// ROLE CHANGE EVENT
-// =====================================================
+// ============================================================
+// HELPERS
+// ============================================================
 
-const ROLE_CHANGED_EVENT =
-    "africore-role-changed";
+const normalizeRole = (row) => {
+    if (!row) return null;
 
+    const role = row.role || row.roles || {};
 
-// =====================================================
-// ROLE NORMALIZER
-// =====================================================
+    return {
+        id:
+            row.role_id ??
+            role.id ??
+            null,
 
-const normalizeRoleName = (
-    roleName
-) => {
+        role_id:
+            row.role_id ??
+            role.id ??
+            null,
 
-    if (!roleName) {
-        return "";
-    }
+        name:
+            role.name ??
+            row.role_name ??
+            "",
 
-    return String(
-        roleName
-    )
-        .trim()
-        .toLowerCase()
-        .replace(
-            /\s+/g,
-            " "
-        );
+        description:
+            role.description ??
+            row.description ??
+            "",
 
+        module:
+            role.module ??
+            row.module ??
+            "",
+
+        profileRoleId:
+            row.id ??
+            row.profile_role_id ??
+            null,
+
+        profile_role_id:
+            row.id ??
+            row.profile_role_id ??
+            null,
+
+        school_id:
+            row.school_id ??
+            null,
+
+        is_primary:
+            row.is_primary === true,
+
+        is_active:
+            row.is_active !== false,
+
+        raw:
+            row,
+    };
 };
 
 
-// =====================================================
+const getStoredRole = () => {
+    try {
+        const raw = localStorage.getItem(
+            ROLE_STORAGE_KEY
+        );
+
+        if (!raw) return null;
+
+        return JSON.parse(raw);
+    } catch (error) {
+        console.warn(
+            "ROLE STORAGE READ ERROR:",
+            error
+        );
+
+        return null;
+    }
+};
+
+
+const saveStoredRole = (role) => {
+    try {
+        if (!role) {
+            localStorage.removeItem(
+                ROLE_STORAGE_KEY
+            );
+
+            return;
+        }
+
+        localStorage.setItem(
+            ROLE_STORAGE_KEY,
+            JSON.stringify({
+                id: role.id ?? null,
+                role_id:
+                    role.role_id ??
+                    role.id ??
+                    null,
+                profileRoleId:
+                    role.profileRoleId ??
+                    role.profile_role_id ??
+                    null,
+                profile_role_id:
+                    role.profile_role_id ??
+                    role.profileRoleId ??
+                    null,
+                school_id:
+                    role.school_id ??
+                    null,
+                name:
+                    role.name ??
+                    "",
+            })
+        );
+    } catch (error) {
+        console.warn(
+            "ROLE STORAGE WRITE ERROR:",
+            error
+        );
+    }
+};
+
+
+// ============================================================
 // ROLE PROVIDER
-// =====================================================
+// ============================================================
 
 export function RoleProvider({
-    children
+    children,
 }) {
 
-    const {
-        user
-    } = useAuth();
-
-
-    const [roles, setRoles] =
-        useState([]);
-
+    const [roles, setRoles] = useState([]);
 
     const [selectedRole, setSelectedRole] =
         useState(null);
-
 
     const [loadingRoles, setLoadingRoles] =
         useState(true);
 
 
-    // =================================================
+    // ========================================================
     // LOAD ROLES
-    // =================================================
+    // ========================================================
 
-    useEffect(() => {
+    const loadRoles = useCallback(
+        async () => {
 
-        let cancelled = false;
+            try {
+
+                setLoadingRoles(true);
 
 
-        const loadRoles = async () => {
+                // ------------------------------------------------
+                // CURRENT AUTH USER
+                // ------------------------------------------------
 
-            // -----------------------------------------
-            // NO USER
-            // -----------------------------------------
+                const {
+                    data: {
+                        user,
+                    },
+                    error: userError,
+                } =
+                    await supabase.auth.getUser();
 
-            if (!user?.id) {
 
-                if (!cancelled) {
+                if (userError) {
+                    throw userError;
+                }
+
+
+                if (!user) {
 
                     setRoles([]);
 
                     setSelectedRole(null);
 
-                    setLoadingRoles(false);
-
+                    return;
                 }
 
-                return;
 
-            }
-
-
-            if (!cancelled) {
-
-                setLoadingRoles(true);
-
-            }
+                console.log(
+                    "ROLE CONTEXT - LOADING ROLES FOR USER:",
+                    user.id
+                );
 
 
-            try {
-
-                // =================================================
-                // STEP 1
-                // LOAD ACTIVE PROFILE ROLES
-                // =================================================
+                // ------------------------------------------------
+                // PROFILE ROLES
+                // ------------------------------------------------
 
                 const {
-                    data: profileRoles,
-                    error: profileRolesError,
-                } = await supabase
-                    .from("profile_roles")
-                    .select(`
-                        id,
-                        profile_id,
-                        role_id,
-                        school_id,
-                        is_primary,
-                        is_active
-                    `)
-                    .eq(
-                        "profile_id",
-                        user.id
-                    )
-                    .eq(
-                        "is_active",
-                        true
-                    )
-                    .order(
-                        "is_primary",
-                        {
-                            ascending: false,
-                        }
-                    )
-                    .order(
-                        "id",
-                        {
-                            ascending: true,
-                        }
-                    );
-
-
-                if (profileRolesError) {
-
-                    throw profileRolesError;
-
-                }
-
-
-                // =================================================
-                // FALLBACK TO LEGACY PROFILE ROLE
-                // =================================================
-
-                if (
-                    !Array.isArray(
-                        profileRoles
-                    ) ||
-                    profileRoles.length === 0
-                ) {
-
-                    console.warn(
-                        "ROLE CONTEXT - NO ACTIVE PROFILE ROLES FOUND"
-                    );
-
-
-                    const {
-                        data: profile,
-                        error: profileError,
-                    } = await supabase
-                        .from("profiles")
+                    data,
+                    error,
+                } =
+                    await supabase
+                        .from("profile_roles")
                         .select(`
                             id,
+                            profile_id,
                             role_id,
-                            school_id
+                            school_id,
+                            is_primary,
+                            is_active,
+                            roles (
+                                id,
+                                name,
+                                description,
+                                module
+                            )
                         `)
                         .eq(
-                            "id",
+                            "profile_id",
                             user.id
                         )
-                        .maybeSingle();
-
-
-                    if (profileError) {
-                        throw profileError;
-                    }
-
-
-                    if (!profile?.role_id) {
-
-                        if (!cancelled) {
-
-                            setRoles([]);
-
-                            setSelectedRole(null);
-
-                        }
-
-                        return;
-
-                    }
-
-
-                    const {
-                        data: legacyRole,
-                        error: legacyRoleError,
-                    } = await supabase
-                        .from("roles")
-                        .select(`
-                            id,
-                            role_name
-                        `)
                         .eq(
-                            "id",
-                            profile.role_id
+                            "is_active",
+                            true
                         )
-                        .maybeSingle();
-
-
-                    if (legacyRoleError) {
-                        throw legacyRoleError;
-                    }
-
-
-                    if (!legacyRole) {
-
-                        if (!cancelled) {
-
-                            setRoles([]);
-
-                            setSelectedRole(null);
-
-                        }
-
-                        return;
-
-                    }
-
-
-                    const fallbackRole = {
-
-                        profileRoleId:
-                            `legacy-${legacyRole.id}`,
-
-                        profileId:
-                            user.id,
-
-                        roleId:
-                            legacyRole.id,
-
-                        schoolId:
-                            profile.school_id,
-
-                        isPrimary:
-                            true,
-
-                        isActive:
-                            true,
-
-                        roleName:
-                            legacyRole.role_name,
-
-                        role: {
-
-                            id:
-                                legacyRole.id,
-
-                            name:
-                                legacyRole.role_name,
-
-                        },
-
-                    };
-
-
-                    if (cancelled) {
-                        return;
-                    }
-
-
-                    setRoles([
-                        fallbackRole
-                    ]);
-
-                    setSelectedRole(
-                        fallbackRole
-                    );
-
-
-                    localStorage.setItem(
-                        STORAGE_KEY,
-                        JSON.stringify({
-                            roleId:
-                                fallbackRole.roleId,
-
-                            profileRoleId:
-                                fallbackRole.profileRoleId,
-                        })
-                    );
-
-
-                    window.dispatchEvent(
-                        new Event(
-                            ROLE_CHANGED_EVENT
-                        )
-                    );
-
-
-                    return;
-
-                }
-
-
-                // =================================================
-                // STEP 2
-                // UNIQUE ROLE IDS
-                // =================================================
-
-                const roleIds = [
-                    ...new Set(
-                        profileRoles
-                            .map(
-                                (item) =>
-                                    item.role_id
-                            )
-                            .filter(
-                                (roleId) =>
-                                    roleId !==
-                                        null &&
-                                    roleId !==
-                                        undefined
-                            )
-                    ),
-                ];
-
-
-                if (
-                    roleIds.length === 0
-                ) {
-
-                    if (!cancelled) {
-
-                        setRoles([]);
-
-                        setSelectedRole(null);
-
-                    }
-
-                    return;
-
-                }
-
-
-                // =================================================
-                // STEP 3
-                // LOAD ROLE NAMES
-                // =================================================
-
-                const {
-                    data: roleRows,
-                    error: rolesError,
-                } = await supabase
-                    .from("roles")
-                    .select(`
-                        id,
-                        role_name
-                    `)
-                    .in(
-                        "id",
-                        roleIds
-                    );
-
-
-                if (rolesError) {
-                    throw rolesError;
-                }
-
-
-                const normalizedRoleRows =
-                    Array.isArray(
-                        roleRows
-                    )
-                        ? roleRows
-                        : [];
-
-
-                // =================================================
-                // STEP 4
-                // COMBINE PROFILE ROLES + ROLE NAMES
-                // =================================================
-
-                const loadedRoles =
-                    profileRoles
-                        .map(
-                            (
-                                profileRole
-                            ) => {
-
-                                const role =
-                                    normalizedRoleRows.find(
-                                        (
-                                            roleRow
-                                        ) =>
-                                            String(
-                                                roleRow.id
-                                            ) ===
-                                            String(
-                                                profileRole.role_id
-                                            )
-                                    );
-
-
-                                return {
-
-                                    profileRoleId:
-                                        profileRole.id,
-
-                                    profileId:
-                                        profileRole.profile_id,
-
-                                    roleId:
-                                        profileRole.role_id,
-
-                                    schoolId:
-                                        profileRole.school_id,
-
-                                    isPrimary:
-                                        Boolean(
-                                            profileRole.is_primary
-                                        ),
-
-                                    isActive:
-                                        Boolean(
-                                            profileRole.is_active
-                                        ),
-
-                                    roleName:
-                                        role?.role_name ||
-                                        "",
-
-                                    role: {
-
-                                        id:
-                                            role?.id ??
-                                            profileRole.role_id,
-
-                                        name:
-                                            role?.role_name ||
-                                            "",
-
-                                    },
-
-                                };
-
+                        .order(
+                            "is_primary",
+                            {
+                                ascending: false,
                             }
-                        )
+                        );
+
+
+                if (error) {
+                    throw error;
+                }
+
+
+                const normalized =
+                    (data || [])
+                        .map(normalizeRole)
                         .filter(
-                            (
-                                item
-                            ) =>
-                                item.roleId !==
-                                    null &&
-                                item.roleId !==
-                                    undefined
+                            (role) =>
+                                role &&
+                                role.id != null
                         );
 
 
                 console.log(
-                    "========================================"
-                );
-
-                console.log(
                     "ROLE CONTEXT - LOADED ROLES:",
-                    loadedRoles
+                    normalized
                 );
 
                 console.log(
                     "ROLE CONTEXT - ROLE COUNT:",
-                    loadedRoles.length
+                    normalized.length
                 );
 
-                console.log(
-                    "ROLE CONTEXT - PRIMARY ROLES:",
-                    loadedRoles.filter(
-                        (item) =>
-                            item.isPrimary
-                    )
-                );
 
-                console.log(
-                    "ROLE CONTEXT - ROLE SCHOOLS:",
-                    loadedRoles.map(
-                        (item) => ({
-                            roleId:
-                                item.roleId,
+                setRoles(normalized);
 
-                            profileRoleId:
-                                item.profileRoleId,
 
-                            roleName:
-                                item.roleName,
-
-                            schoolId:
-                                item.schoolId,
-
-                            isPrimary:
-                                item.isPrimary,
-                        })
-                    )
-                );
-
-                console.log(
-                    "========================================"
-                );
-
+                // ------------------------------------------------
+                // NO ROLES
+                // ------------------------------------------------
 
                 if (
-                    loadedRoles.length === 0
+                    normalized.length ===
+                    0
                 ) {
 
-                    if (!cancelled) {
+                    setSelectedRole(null);
 
-                        setRoles([]);
-
-                        setSelectedRole(null);
-
-                    }
+                    saveStoredRole(null);
 
                     return;
-
                 }
 
 
-                if (cancelled) {
-                    return;
-                }
+                // ------------------------------------------------
+                // STORED ROLE
+                // ------------------------------------------------
 
-
-                // =================================================
-                // SAVE ROLES
-                // =================================================
-
-                setRoles(
-                    loadedRoles
-                );
-
-
-                // =================================================
-                // READ SAVED ROLE
-                // =================================================
-
-                let savedRole = null;
-
-
-                try {
-
-                    const saved =
-                        localStorage.getItem(
-                            STORAGE_KEY
-                        );
-
-
-                    if (saved) {
-
-                        savedRole =
-                            JSON.parse(
-                                saved
-                            );
-
-                    }
-
-                } catch (error) {
-
-                    console.warn(
-                        "ROLE CONTEXT - INVALID SAVED ROLE:",
-                        error
-                    );
-
-
-                    localStorage.removeItem(
-                        STORAGE_KEY
-                    );
-
-                }
+                const stored =
+                    getStoredRole();
 
 
                 let nextRole = null;
 
 
-                // =================================================
-                // MATCH SAVED PROFILE ROLE
-                // =================================================
+                // ------------------------------------------------
+                // 1. MATCH PROFILE ROLE ID
+                // ------------------------------------------------
 
                 if (
-                    savedRole?.profileRoleId
+                    stored?.profileRoleId
                 ) {
 
                     nextRole =
-                        loadedRoles.find(
-                            (
-                                item
-                            ) =>
+                        normalized.find(
+                            (role) =>
                                 String(
-                                    item.profileRoleId
+                                    role.profileRoleId
                                 ) ===
                                 String(
-                                    savedRole.profileRoleId
+                                    stored.profileRoleId
                                 )
-                        );
-
+                        ) || null;
                 }
 
 
-                // =================================================
-                // MATCH SAVED ROLE ID
-                // =================================================
+                // ------------------------------------------------
+                // 2. MATCH ROLE ID
+                // ------------------------------------------------
 
                 if (
                     !nextRole &&
-                    savedRole?.roleId
+                    stored?.role_id
                 ) {
 
                     nextRole =
-                        loadedRoles.find(
-                            (
-                                item
-                            ) =>
+                        normalized.find(
+                            (role) =>
                                 String(
-                                    item.roleId
+                                    role.role_id
                                 ) ===
                                 String(
-                                    savedRole.roleId
+                                    stored.role_id
                                 )
-                        );
-
+                        ) || null;
                 }
 
 
-                // =================================================
-                // PRIMARY ROLE
-                // =================================================
+                // ------------------------------------------------
+                // 3. PRIMARY ROLE
+                // ------------------------------------------------
 
                 if (!nextRole) {
 
                     nextRole =
-                        loadedRoles.find(
-                            (
-                                item
-                            ) =>
-                                item.isPrimary ===
-                                true
-                        );
-
+                        normalized.find(
+                            (role) =>
+                                role.is_primary
+                        ) || null;
                 }
 
 
-                // =================================================
-                // FIRST ACTIVE ROLE
-                // =================================================
+                // ------------------------------------------------
+                // 4. FIRST ACTIVE ROLE
+                // ------------------------------------------------
 
                 if (!nextRole) {
 
                     nextRole =
-                        loadedRoles[0] ||
-                        null;
-
+                        normalized[0];
                 }
 
 
-                // =================================================
-                // SAVE SELECTED ROLE
-                // =================================================
+                setSelectedRole(
+                    nextRole
+                );
 
-                if (nextRole) {
-
-                    setSelectedRole(
-                        nextRole
-                    );
+                saveStoredRole(
+                    nextRole
+                );
 
 
-                    localStorage.setItem(
-                        STORAGE_KEY,
-                        JSON.stringify({
-                            roleId:
-                                nextRole.roleId,
+                // ------------------------------------------------
+                // NOTIFY OTHER CONTEXTS
+                // ------------------------------------------------
 
-                            profileRoleId:
-                                nextRole.profileRoleId,
-                        })
-                    );
-
-
-                    console.log(
-                        "ROLE CONTEXT - SELECTED ROLE:",
-                        nextRole
-                    );
-
-                } else {
-
-                    setSelectedRole(
-                        null
-                    );
-
-                }
+                window.dispatchEvent(
+                    new CustomEvent(
+                        "africore-role-loaded",
+                        {
+                            detail:
+                                nextRole,
+                        }
+                    )
+                );
 
             } catch (error) {
-
-                console.error(
-                    "========================================"
-                );
 
                 console.error(
                     "ROLE CONTEXT - LOAD ERROR:",
                     error
                 );
 
-                console.error(
-                    "========================================"
-                );
+                setRoles([]);
 
-
-                if (!cancelled) {
-
-                    setRoles([]);
-
-                    setSelectedRole(null);
-
-                }
+                setSelectedRole(null);
 
             } finally {
 
-                if (!cancelled) {
-
-                    setLoadingRoles(
-                        false
-                    );
-
-                }
-
+                setLoadingRoles(false);
             }
+        },
+        []
+    );
 
-        };
 
+    // ========================================================
+    // INITIAL LOAD
+    // ========================================================
+
+    useEffect(() => {
 
         loadRoles();
+
+    }, [
+        loadRoles,
+    ]);
+
+
+    // ========================================================
+    // AUTH STATE
+    // ========================================================
+
+    useEffect(() => {
+
+        const {
+            data: {
+                subscription,
+            },
+        } =
+            supabase.auth.onAuthStateChange(
+                async (
+                    event
+                ) => {
+
+                    console.log(
+                        "ROLE CONTEXT AUTH EVENT:",
+                        event
+                    );
+
+
+                    if (
+                        event ===
+                            "SIGNED_IN" ||
+                        event ===
+                            "USER_UPDATED" ||
+                        event ===
+                            "TOKEN_REFRESHED"
+                    ) {
+
+                        await loadRoles();
+
+                    }
+
+
+                    if (
+                        event ===
+                        "SIGNED_OUT"
+                    ) {
+
+                        setRoles([]);
+
+                        setSelectedRole(
+                            null
+                        );
+
+                        saveStoredRole(
+                            null
+                        );
+                    }
+                }
+            );
 
 
         return () => {
 
-            cancelled = true;
+            subscription?.unsubscribe();
 
         };
 
     }, [
-        user?.id,
+        loadRoles,
     ]);
 
 
-    // =====================================================
+    // ========================================================
+    // ROLE CHANGE EVENT
+    // ========================================================
+
+    useEffect(() => {
+
+        const handleRoleChanged =
+            () => {
+
+                loadRoles();
+            };
+
+
+        window.addEventListener(
+            "africore-role-changed",
+            handleRoleChanged
+        );
+
+
+        return () => {
+
+            window.removeEventListener(
+                "africore-role-changed",
+                handleRoleChanged
+            );
+        };
+
+    }, [
+        loadRoles,
+    ]);
+
+
+    // ========================================================
     // SELECT ROLE
-    // =====================================================
+    // ========================================================
 
-    const selectRole = (
-        roleIdOrProfileRoleId
-    ) => {
+    const selectRole =
+        useCallback(
+            (roleOrId) => {
 
-        const value =
-            String(
-                roleIdOrProfileRoleId
-            );
+                let nextRole = null;
 
 
-        const nextRole =
-            roles.find(
-                (
-                    item
-                ) =>
-                    String(
-                        item.roleId
-                    ) ===
-                        value ||
-                    String(
-                        item.profileRoleId
-                    ) ===
-                        value
-            );
+                // ------------------------------------------------
+                // ROLE OBJECT
+                // ------------------------------------------------
+
+                if (
+                    roleOrId &&
+                    typeof roleOrId ===
+                        "object"
+                ) {
+
+                    nextRole =
+                        roles.find(
+                            (role) =>
+                                String(
+                                    role.profileRoleId
+                                ) ===
+                                String(
+                                    roleOrId.profileRoleId ??
+                                    roleOrId.profile_role_id
+                                )
+                        ) ||
+                        roles.find(
+                            (role) =>
+                                String(
+                                    role.id
+                                ) ===
+                                String(
+                                    roleOrId.id ??
+                                    roleOrId.role_id
+                                )
+                        ) ||
+                        null;
+
+                }
+
+                // ------------------------------------------------
+                // ROLE ID
+                // ------------------------------------------------
+
+                else if (
+                    roleOrId != null
+                ) {
+
+                    nextRole =
+                        roles.find(
+                            (role) =>
+                                String(
+                                    role.id
+                                ) ===
+                                String(
+                                    roleOrId
+                                ) ||
+                                String(
+                                    role.role_id
+                                ) ===
+                                String(
+                                    roleOrId
+                                ) ||
+                                String(
+                                    role.profileRoleId
+                                ) ===
+                                String(
+                                    roleOrId
+                                )
+                        ) || null;
+                }
 
 
-        if (!nextRole) {
+                if (!nextRole) {
 
-            console.warn(
-                "ROLE CONTEXT - ROLE NOT FOUND:",
-                roleIdOrProfileRoleId
-            );
+                    console.warn(
+                        "ROLE CONTEXT - ROLE NOT FOUND:",
+                        roleOrId
+                    );
 
-            return false;
-
-        }
-
-
-        // -----------------------------------------
-        // ONLY ACTIVE ROLE
-        // -----------------------------------------
-
-        if (
-            nextRole.isActive === false
-        ) {
-
-            console.warn(
-                "ROLE CONTEXT - ROLE IS NOT ACTIVE:",
-                nextRole
-            );
-
-            return false;
-
-        }
+                    return;
+                }
 
 
-        // -----------------------------------------
-        // SET ROLE
-        // -----------------------------------------
+                setSelectedRole(
+                    nextRole
+                );
 
-        setSelectedRole(
-            nextRole
+
+                saveStoredRole(
+                    nextRole
+                );
+
+
+                console.log(
+                    "ROLE CONTEXT - SELECTED ROLE:",
+                    nextRole
+                );
+
+
+                // ------------------------------------------------
+                // IMPORTANT:
+                // SCHOOL CONTEXT listens to this event.
+                // ------------------------------------------------
+
+                window.dispatchEvent(
+                    new CustomEvent(
+                        "africore-role-changed",
+                        {
+                            detail:
+                                nextRole,
+                        }
+                    )
+                );
+            },
+            [
+                roles,
+            ]
         );
 
 
-        // -----------------------------------------
-        // SAVE ROLE
-        // -----------------------------------------
-
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify({
-                roleId:
-                    nextRole.roleId,
-
-                profileRoleId:
-                    nextRole.profileRoleId,
-            })
-        );
-
-
-        // -----------------------------------------
-        // IMPORTANT:
-        // NOTIFY SCHOOL CONTEXT
-        // -----------------------------------------
-
-        window.dispatchEvent(
-            new Event(
-                ROLE_CHANGED_EVENT
-            )
-        );
-
-
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "ROLE CONTEXT - ROLE CHANGED"
-        );
-
-        console.log(
-            "ROLE:",
-            nextRole.roleName
-        );
-
-        console.log(
-            "ROLE ID:",
-            nextRole.roleId
-        );
-
-        console.log(
-            "PROFILE ROLE ID:",
-            nextRole.profileRoleId
-        );
-
-        console.log(
-            "SCHOOL ID:",
-            nextRole.schoolId
-        );
-
-        console.log(
-            "========================================"
-        );
-
-
-        return true;
-
-    };
-
-
-    // =====================================================
+    // ========================================================
     // CLEAR SELECTED ROLE
-    // =====================================================
+    // ========================================================
 
-    const clearSelectedRole = () => {
+    const clearSelectedRole =
+        useCallback(() => {
 
-        setSelectedRole(
-            null
+            setSelectedRole(
+                null
+            );
+
+            saveStoredRole(
+                null
+            );
+
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "africore-role-changed",
+                    {
+                        detail: null,
+                    }
+                )
+            );
+
+        }, []);
+
+
+    // ========================================================
+    // HAS ROLE
+    // ========================================================
+
+    const hasRole =
+        useCallback(
+            (
+                roleNameOrId
+            ) => {
+
+                if (
+                    roleNameOrId ==
+                    null
+                ) {
+                    return false;
+                }
+
+
+                return roles.some(
+                    (role) => {
+
+                        const target =
+                            String(
+                                roleNameOrId
+                            )
+                                .trim()
+                                .toLowerCase();
+
+
+                        const idMatch =
+                            String(
+                                role.id
+                            ) ===
+                                target ||
+                            String(
+                                role.role_id
+                            ) ===
+                                target;
+
+
+                        const nameMatch =
+                            String(
+                                role.name ||
+                                ""
+                            )
+                                .trim()
+                                .toLowerCase() ===
+                            target;
+
+
+                        return (
+                            idMatch ||
+                            nameMatch
+                        );
+                    }
+                );
+            },
+            [
+                roles,
+            ]
         );
 
 
-        localStorage.removeItem(
-            STORAGE_KEY
+    // ========================================================
+    // SELECTED ROLE CHECK
+    // ========================================================
+
+    const selectedRoleIs =
+        useCallback(
+            (
+                roleNameOrId
+            ) => {
+
+                if (
+                    !selectedRole ||
+                    roleNameOrId ==
+                        null
+                ) {
+                    return false;
+                }
+
+
+                const target =
+                    String(
+                        roleNameOrId
+                    )
+                        .trim()
+                        .toLowerCase();
+
+
+                return (
+                    String(
+                        selectedRole.id
+                    ) === target ||
+                    String(
+                        selectedRole.role_id
+                    ) === target ||
+                    String(
+                        selectedRole.name ||
+                        ""
+                    )
+                        .trim()
+                        .toLowerCase() ===
+                        target
+                );
+            },
+            [
+                selectedRole,
+            ]
         );
 
 
-        window.dispatchEvent(
-            new Event(
-                ROLE_CHANGED_EVENT
-            )
-        );
-
-    };
-
-
-    // =====================================================
+    // ========================================================
     // DERIVED VALUES
-    // =====================================================
+    // ========================================================
 
     const selectedRoleId =
-        selectedRole?.roleId ??
+        selectedRole?.role_id ??
+        selectedRole?.id ??
         null;
 
 
     const selectedProfileRoleId =
         selectedRole?.profileRoleId ??
+        selectedRole?.profile_role_id ??
         null;
 
 
     const selectedSchoolId =
-        selectedRole?.schoolId ??
+        selectedRole?.school_id ??
         null;
 
 
     const selectedRoleName =
-        selectedRole?.roleName ||
-        selectedRole?.role?.name ||
+        selectedRole?.name ??
         "";
 
 
@@ -993,171 +822,74 @@ export function RoleProvider({
         roles.length > 1;
 
 
-    // =====================================================
-    // HAS ROLE
-    // =====================================================
-
-    const hasRole = (
-        roleName
-    ) => {
-
-        if (!roleName) {
-            return false;
-        }
-
-
-        const target =
-            normalizeRoleName(
-                roleName
-            );
-
-
-        return roles.some(
-            (
-                item
-            ) =>
-                normalizeRoleName(
-                    item.roleName
-                ) ===
-                target
-        );
-
-    };
-
-
-    // =====================================================
-    // SELECTED ROLE IS
-    // =====================================================
-
-    const selectedRoleIs = (
-        roleName
-    ) => {
-
-        if (
-            !roleName ||
-            !selectedRoleName
-        ) {
-
-            return false;
-
-        }
-
-
-        return (
-            normalizeRoleName(
-                selectedRoleName
-            ) ===
-            normalizeRoleName(
-                roleName
-            )
-        );
-
-    };
-
-
-    // =====================================================
+    // ========================================================
     // CONTEXT VALUE
-    // =====================================================
+    // ========================================================
 
-    const value = useMemo(
-        () => ({
+    const value =
+        useMemo(
+            () => ({
+                roles,
 
-            // -----------------------------------------
-            // ALL ROLES
-            // -----------------------------------------
+                selectedRole,
 
-            roles,
+                selectedRoleId,
 
+                selectedProfileRoleId,
 
-            // -----------------------------------------
-            // SELECTED ROLE
-            // -----------------------------------------
+                selectedSchoolId,
 
-            selectedRole,
+                selectedRoleName,
 
-            selectedRoleId,
+                loadingRoles,
 
-            selectedProfileRoleId,
+                hasMultipleRoles,
 
-            selectedSchoolId,
+                selectRole,
 
-            selectedRoleName,
+                clearSelectedRole,
 
+                hasRole,
 
-            // -----------------------------------------
-            // LOADING
-            // -----------------------------------------
+                selectedRoleIs,
 
-            loadingRoles,
-
-
-            // -----------------------------------------
-            // MULTI ROLE
-            // -----------------------------------------
-
-            hasMultipleRoles,
-
-
-            // -----------------------------------------
-            // ACTIONS
-            // -----------------------------------------
-
-            selectRole,
-
-            clearSelectedRole,
-
-
-            // -----------------------------------------
-            // HELPERS
-            // -----------------------------------------
-
-            hasRole,
-
-            selectedRoleIs,
-
-        }),
-        [
-            roles,
-
-            selectedRole,
-
-            selectedRoleId,
-
-            selectedProfileRoleId,
-
-            selectedSchoolId,
-
-            selectedRoleName,
-
-            loadingRoles,
-
-            hasMultipleRoles,
-        ]
-    );
+                loadRoles,
+            }),
+            [
+                roles,
+                selectedRole,
+                selectedRoleId,
+                selectedProfileRoleId,
+                selectedSchoolId,
+                selectedRoleName,
+                loadingRoles,
+                hasMultipleRoles,
+                selectRole,
+                clearSelectedRole,
+                hasRole,
+                selectedRoleIs,
+                loadRoles,
+            ]
+        );
 
 
-    // =====================================================
+    // ========================================================
     // PROVIDER
-    // =====================================================
+    // ========================================================
 
     return (
-
         <RoleContext.Provider
             value={value}
         >
-
             {children}
-
         </RoleContext.Provider>
-
     );
-
 }
 
 
-// =====================================================
+// ============================================================
 // USE ROLE
-// =====================================================
+// ============================================================
 
 export function useRole() {
 
@@ -1172,17 +904,15 @@ export function useRole() {
         throw new Error(
             "useRole must be used inside RoleProvider"
         );
-
     }
 
 
     return context;
-
 }
 
 
-// =====================================================
+// ============================================================
 // DEFAULT EXPORT
-// =====================================================
+// ============================================================
 
 export default RoleContext;
