@@ -232,9 +232,17 @@ function SuperAdminOrPermissionRoute({
         return null;
     }
 
+    // =====================================================
+    // SUPER ADMIN BYPASS
+    // =====================================================
+
     if (Number(roleId) === 1) {
         return <Outlet />;
     }
+
+    // =====================================================
+    // NORMAL PERMISSION CHECK
+    // =====================================================
 
     return (
         <PermissionRoute
@@ -318,16 +326,6 @@ export default function AppRoutes() {
 
             {/* =====================================================
                 LANDING PAGE
-                =====================================================
-
-                THIS IS NOW THE REAL HOME PAGE.
-
-                Opening:
-                    /
-
-                will ALWAYS render LandingPage.
-
-                The Dashboard is no longer mounted at "/".
             ===================================================== */}
 
             <Route
@@ -388,7 +386,7 @@ export default function AppRoutes() {
 
             {/* =====================================================
                 MAIN APPLICATION
-                ===================================================== */}
+            ===================================================== */}
 
             <Route
                 element={
@@ -399,13 +397,6 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     DASHBOARD
-
-                    IMPORTANT:
-                    Dashboard is now ONLY available at:
-
-                        /dashboard
-
-                    It is NOT the "/" route anymore.
                 ===================================================== */}
 
                 <Route
@@ -925,6 +916,16 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     EXAMINATION - AI ANALYSIS
+
+                    IMPORTANT:
+                    Subject Teacher = ROLE 5
+
+                    Previously only roles 1,2,3,4 were allowed.
+                    That caused Subject Teacher to be redirected to
+                    Access Denied after uploading a paper.
+
+                    We now allow role 5 and still enforce the
+                    actual examination permissions below.
                 ===================================================== */}
 
                 <Route
@@ -934,7 +935,8 @@ export default function AppRoutes() {
                                 1,
                                 2,
                                 3,
-                                4
+                                4,
+                                5
                             ]}
                         />
                     }
@@ -942,10 +944,11 @@ export default function AppRoutes() {
 
                     <Route
                         element={
-                            <PermissionRoute
+                            <SuperAdminOrPermissionRoute
                                 permissions={[
                                     "EXAM_GENERATE_AI_ANALYSIS",
-                                    "EXAM_VIEW_AI_REPORT"
+                                    "EXAM_VIEW_AI_REPORT",
+                                    "EXAM_VIEW"
                                 ]}
                                 requireAny={
                                     true
@@ -1308,7 +1311,7 @@ export default function AppRoutes() {
 
 
                 {/* =====================================================
-                    COMMUNICATION - MEETINGS
+                    COMMUNICATION - CREATE / MANAGE MEETINGS
                 ===================================================== */}
 
                 <Route
@@ -1330,11 +1333,39 @@ export default function AppRoutes() {
 
 
                 {/* =====================================================
-                    SHARED MEETING ROOM
+                    SHARED LIVE MEETING ROOM
+                    =====================================================
+
+                    IMPORTANT:
+
+                    DO NOT put create_meeting permission here.
+
+                    A Headmaster / Teacher / invited participant may
+                    need to JOIN an existing meeting without having
+                    permission to CREATE a meeting.
+
+                    We support both URL patterns:
+
+                        /communication/meeting/:meetingId
+
+                    and:
+
+                        /communication/meetings/:meetingId
+
+                    The second route prevents React Router from falling
+                    through to the application "*" route and sending
+                    the user back to /dashboard.
                 ===================================================== */}
 
                 <Route
                     path="communication/meeting/:meetingId"
+                    element={
+                        <CommunicationMeeting />
+                    }
+                />
+
+                <Route
+                    path="communication/meetings/:meetingId"
                     element={
                         <CommunicationMeeting />
                     }
@@ -1427,7 +1458,7 @@ export default function AppRoutes() {
 
             {/* =====================================================
                 GLOBAL FALLBACK
-                ===================================================== */}
+            ===================================================== */}
 
             <Route
                 path="*"
