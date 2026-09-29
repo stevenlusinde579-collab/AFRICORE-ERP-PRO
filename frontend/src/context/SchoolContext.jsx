@@ -20,21 +20,15 @@ import { supabase } from "../services/supabase";
 // - Academic Years
 // - Active Academic Year
 //
-// IMPORTANT:
-// School is resolved from the user's ACTIVE profile_role
-// first, because profile_roles.school_id is the school
-// associated with the selected system role.
+// School resolution priority:
 //
-// profiles.school_id is used only as a fallback.
-//
-// This prevents:
-//
-// profile.school_id !== profile_roles.school_id
-//
-// from causing modules to read different schools.
+// 1. Saved selected profile role
+// 2. Saved role ID
+// 3. Primary active profile role
+// 4. Any active profile role
+// 5. profiles.school_id fallback
 //
 // =====================================================
-
 
 const SchoolContext = createContext(null);
 
@@ -43,8 +37,7 @@ const SchoolContext = createContext(null);
 // STORAGE KEY
 // =====================================================
 
-const ROLE_STORAGE_KEY =
-    "africore_selected_role";
+const ROLE_STORAGE_KEY = "africore_selected_role";
 
 
 // =====================================================
@@ -75,25 +68,24 @@ const SCHOOL_COLUMNS = `
 
 export const SchoolProvider = ({ children }) => {
 
-    const [school, setSchool] =
-        useState(null);
+    // =================================================
+    // SCHOOL STATE
+    // =================================================
 
-    const [schoolId, setSchoolId] =
-        useState(null);
+    const [school, setSchool] = useState(null);
 
-    const [loading, setLoading] =
-        useState(true);
+    const [schoolId, setSchoolId] = useState(null);
 
-    const [error, setError] =
-        useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const [error, setError] = useState(null);
 
 
     // =================================================
     // ACADEMIC YEAR STATE
     // =================================================
 
-    const [academicYears, setAcademicYears] =
-        useState([]);
+    const [academicYears, setAcademicYears] = useState([]);
 
     const [activeAcademicYear, setActiveAcademicYear] =
         useState(null);
@@ -125,7 +117,10 @@ export const SchoolProvider = ({ children }) => {
             const parsed =
                 JSON.parse(saved);
 
-            if (!parsed || typeof parsed !== "object") {
+            if (
+                !parsed ||
+                typeof parsed !== "object"
+            ) {
                 return null;
             }
 
@@ -139,9 +134,11 @@ export const SchoolProvider = ({ children }) => {
             );
 
             try {
+
                 localStorage.removeItem(
                     ROLE_STORAGE_KEY
                 );
+
             } catch {
                 // Ignore localStorage errors
             }
@@ -155,36 +152,30 @@ export const SchoolProvider = ({ children }) => {
     // =================================================
     // RESOLVE USER SCHOOL
     // =================================================
-    //
-    // Priority:
-    //
-    // 1. Saved selected profile role
-    // 2. Primary active profile role
-    // 3. Any active profile role
-    // 4. profiles.school_id fallback
-    //
-    // This keeps RoleContext and SchoolContext aligned.
-    //
-    // =================================================
 
     const resolveUserSchoolId = useCallback(
-        async (userId, profileSchoolId) => {
+        async (
+            userId,
+            profileSchoolId
+        ) => {
 
             if (!userId) {
                 return null;
             }
 
 
-            // =================================================
+            // =============================================
             // STEP 1
-            // TRY SAVED SELECTED ROLE
-            // =================================================
+            // SAVED PROFILE ROLE
+            // =============================================
 
             const savedRole =
                 getSavedRole();
 
 
-            if (savedRole?.profileRoleId) {
+            if (
+                savedRole?.profileRoleId
+            ) {
 
                 const {
                     data: selectedProfileRole,
@@ -239,12 +230,20 @@ export const SchoolProvider = ({ children }) => {
             }
 
 
-            // =================================================
+            // =============================================
             // STEP 2
-            // TRY SAVED ROLE ID
-            // =================================================
+            // SAVED ROLE ID
+            // =============================================
 
-            if (savedRole?.roleId) {
+            if (
+                savedRole?.roleId ||
+                savedRole?.role_id
+            ) {
+
+                const savedRoleId =
+                    savedRole.roleId ??
+                    savedRole.role_id;
+
 
                 const {
                     data: savedRoleRows,
@@ -264,7 +263,7 @@ export const SchoolProvider = ({ children }) => {
                     )
                     .eq(
                         "role_id",
-                        savedRole.roleId
+                        savedRoleId
                     )
                     .eq(
                         "is_active",
@@ -319,10 +318,10 @@ export const SchoolProvider = ({ children }) => {
             }
 
 
-            // =================================================
+            // =============================================
             // STEP 3
             // PRIMARY ACTIVE PROFILE ROLE
-            // =================================================
+            // =============================================
 
             const {
                 data: primaryRoles,
@@ -389,10 +388,10 @@ export const SchoolProvider = ({ children }) => {
             }
 
 
-            // =================================================
+            // =============================================
             // STEP 4
             // ANY ACTIVE PROFILE ROLE
-            // =================================================
+            // =============================================
 
             const {
                 data: activeRoles,
@@ -461,10 +460,10 @@ export const SchoolProvider = ({ children }) => {
             }
 
 
-            // =================================================
+            // =============================================
             // STEP 5
             // LEGACY PROFILE FALLBACK
-            // =================================================
+            // =============================================
 
             if (profileSchoolId) {
 
@@ -488,276 +487,38 @@ export const SchoolProvider = ({ children }) => {
 
 
     // =================================================
-    // LOAD CURRENT USER SCHOOL
-    // =================================================
-
-    const loadSchool = useCallback(async () => {
-
-        try {
-
-            setLoading(true);
-
-            setError(null);
-
-
-            // -----------------------------------------
-            // GET CURRENT AUTH USER
-            // -----------------------------------------
-
-            const {
-                data: {
-                    user
-                },
-                error: authError
-            } = await supabase.auth.getUser();
-
-
-            if (authError) {
-                throw authError;
-            }
-
-
-            // -----------------------------------------
-            // NO LOGGED-IN USER
-            // -----------------------------------------
-
-            if (!user) {
-
-                setSchool(null);
-                setSchoolId(null);
-
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
-
-                setAcademicYearError(null);
-
-                return null;
-
-            }
-
-
-            // -----------------------------------------
-            // GET USER PROFILE
-            // -----------------------------------------
-
-            const {
-                data: profile,
-                error: profileError
-            } = await supabase
-                .from("profiles")
-                .select(`
-                    id,
-                    school_id,
-                    role_id
-                `)
-                .eq(
-                    "id",
-                    user.id
-                )
-                .maybeSingle();
-
-
-            if (profileError) {
-                throw profileError;
-            }
-
-
-            // -----------------------------------------
-            // PROFILE NOT FOUND
-            // -----------------------------------------
-
-            if (!profile) {
-
-                setSchool(null);
-                setSchoolId(null);
-
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
-
-                setAcademicYearError(null);
-
-                return null;
-
-            }
-
-
-            // =================================================
-            // RESOLVE SCHOOL FROM PROFILE ROLE
-            // =================================================
-
-            const resolvedSchoolId =
-                await resolveUserSchoolId(
-                    user.id,
-                    profile.school_id
-                );
-
-
-            if (!resolvedSchoolId) {
-
-                setSchool(null);
-                setSchoolId(null);
-
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
-
-                setAcademicYearError(
-                    "Your account is not assigned to a school."
-                );
-
-                return null;
-
-            }
-
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "SCHOOL CONTEXT - RESOLVED SCHOOL ID:",
-                resolvedSchoolId
-            );
-
-            console.log(
-                "SCHOOL CONTEXT - PROFILE SCHOOL ID:",
-                profile.school_id
-            );
-
-            console.log(
-                "========================================"
-            );
-
-
-            // -----------------------------------------
-            // LOAD SCHOOL
-            // -----------------------------------------
-
-            const {
-                data: schoolData,
-                error: schoolError
-            } = await supabase
-                .from("schools")
-                .select(
-                    SCHOOL_COLUMNS
-                )
-                .eq(
-                    "id",
-                    resolvedSchoolId
-                )
-                .maybeSingle();
-
-
-            if (schoolError) {
-                throw schoolError;
-            }
-
-
-            // -----------------------------------------
-            // SCHOOL NOT FOUND
-            // -----------------------------------------
-
-            if (!schoolData) {
-
-                setSchool(null);
-                setSchoolId(null);
-
-                setAcademicYears([]);
-                setActiveAcademicYear(null);
-
-                setAcademicYearError(
-                    "Current school could not be found."
-                );
-
-                return null;
-
-            }
-
-
-            // -----------------------------------------
-            // SAVE GLOBAL SCHOOL
-            // -----------------------------------------
-
-            setSchool(
-                schoolData
-            );
-
-            setSchoolId(
-                schoolData.id
-            );
-
-
-            return schoolData;
-
-        } catch (err) {
-
-            console.error(
-                "========================================"
-            );
-
-            console.error(
-                "SCHOOL CONTEXT LOAD ERROR"
-            );
-
-            console.error(
-                err
-            );
-
-            console.error(
-                "========================================"
-            );
-
-
-            setError(
-                err?.message ||
-                "Failed to load current school."
-            );
-
-            setSchool(null);
-            setSchoolId(null);
-
-            setAcademicYears([]);
-            setActiveAcademicYear(null);
-
-            setAcademicYearError(
-                err?.message ||
-                "Failed to load current academic year."
-            );
-
-            return null;
-
-        } finally {
-
-            setLoading(false);
-
-        }
-
-    }, [
-        resolveUserSchoolId,
-    ]);
-
-
-    // =================================================
     // LOAD ACADEMIC YEARS
+    // =================================================
+    //
+    // IMPORTANT:
+    // This is declared before refreshSchool and before
+    // every effect that uses refreshSchool.
+    //
     // =================================================
 
     const loadAcademicYears = useCallback(
-        async (currentSchoolId = null) => {
+        async (
+            currentSchoolId = null
+        ) => {
 
             const targetSchoolId =
-                currentSchoolId ||
+                currentSchoolId ??
                 schoolId;
 
 
             if (!targetSchoolId) {
 
                 setAcademicYears([]);
+
                 setActiveAcademicYear(null);
 
                 setAcademicYearError(
                     "No current school is available."
                 );
 
-                setAcademicYearLoading(false);
+                setAcademicYearLoading(
+                    false
+                );
 
                 return [];
 
@@ -777,7 +538,7 @@ export const SchoolProvider = ({ children }) => {
 
                 const {
                     data,
-                    error: academicYearQueryError
+                    error: academicYearQueryError,
                 } = await supabase
                     .from("academic_years")
                     .select(`
@@ -797,7 +558,7 @@ export const SchoolProvider = ({ children }) => {
                     .order(
                         "id",
                         {
-                            ascending: false
+                            ascending: false,
                         }
                     );
 
@@ -821,10 +582,6 @@ export const SchoolProvider = ({ children }) => {
                     normalizedYears
                 );
 
-
-                // -----------------------------------------
-                // FIND ACTIVE YEAR
-                // -----------------------------------------
 
                 const currentYear =
                     normalizedYears.find(
@@ -906,6 +663,368 @@ export const SchoolProvider = ({ children }) => {
 
 
     // =================================================
+    // LOAD CURRENT USER SCHOOL
+    // =================================================
+
+    const loadSchool = useCallback(
+        async () => {
+
+            try {
+
+                setLoading(true);
+
+                setError(null);
+
+
+                // =========================================
+                // CURRENT AUTH USER
+                // =========================================
+
+                const {
+                    data: {
+                        user,
+                    },
+                    error: authError,
+                } = await supabase.auth.getUser();
+
+
+                if (authError) {
+                    throw authError;
+                }
+
+
+                // =========================================
+                // NO USER
+                // =========================================
+
+                if (!user) {
+
+                    setSchool(null);
+
+                    setSchoolId(null);
+
+                    setAcademicYears([]);
+
+                    setActiveAcademicYear(null);
+
+                    setAcademicYearError(null);
+
+                    return null;
+
+                }
+
+
+                // =========================================
+                // PROFILE
+                // =========================================
+
+                const {
+                    data: profile,
+                    error: profileError,
+                } = await supabase
+                    .from("profiles")
+                    .select(`
+                        id,
+                        school_id,
+                        role_id
+                    `)
+                    .eq(
+                        "id",
+                        user.id
+                    )
+                    .maybeSingle();
+
+
+                if (profileError) {
+                    throw profileError;
+                }
+
+
+                // =========================================
+                // PROFILE NOT FOUND
+                // =========================================
+
+                if (!profile) {
+
+                    setSchool(null);
+
+                    setSchoolId(null);
+
+                    setAcademicYears([]);
+
+                    setActiveAcademicYear(null);
+
+                    setAcademicYearError(null);
+
+                    return null;
+
+                }
+
+
+                // =========================================
+                // RESOLVE SCHOOL
+                // =========================================
+
+                const resolvedSchoolId =
+                    await resolveUserSchoolId(
+                        user.id,
+                        profile.school_id
+                    );
+
+
+                if (!resolvedSchoolId) {
+
+                    setSchool(null);
+
+                    setSchoolId(null);
+
+                    setAcademicYears([]);
+
+                    setActiveAcademicYear(null);
+
+                    setAcademicYearError(
+                        "Your account is not assigned to a school."
+                    );
+
+                    return null;
+
+                }
+
+
+                console.log(
+                    "========================================"
+                );
+
+                console.log(
+                    "SCHOOL CONTEXT - RESOLVED SCHOOL ID:",
+                    resolvedSchoolId
+                );
+
+                console.log(
+                    "SCHOOL CONTEXT - PROFILE SCHOOL ID:",
+                    profile.school_id
+                );
+
+                console.log(
+                    "========================================"
+                );
+
+
+                // =========================================
+                // LOAD SCHOOL
+                // =========================================
+
+                const {
+                    data: schoolData,
+                    error: schoolError,
+                } = await supabase
+                    .from("schools")
+                    .select(
+                        SCHOOL_COLUMNS
+                    )
+                    .eq(
+                        "id",
+                        resolvedSchoolId
+                    )
+                    .maybeSingle();
+
+
+                if (schoolError) {
+                    throw schoolError;
+                }
+
+
+                // =========================================
+                // SCHOOL NOT FOUND
+                // =========================================
+
+                if (!schoolData) {
+
+                    setSchool(null);
+
+                    setSchoolId(null);
+
+                    setAcademicYears([]);
+
+                    setActiveAcademicYear(null);
+
+                    setAcademicYearError(
+                        "Current school could not be found."
+                    );
+
+                    return null;
+
+                }
+
+
+                // =========================================
+                // SAVE SCHOOL
+                // =========================================
+
+                setSchool(
+                    schoolData
+                );
+
+                setSchoolId(
+                    schoolData.id
+                );
+
+
+                return schoolData;
+
+            } catch (err) {
+
+                console.error(
+                    "========================================"
+                );
+
+                console.error(
+                    "SCHOOL CONTEXT LOAD ERROR"
+                );
+
+                console.error(
+                    err
+                );
+
+                console.error(
+                    "========================================"
+                );
+
+
+                setError(
+                    err?.message ||
+                    "Failed to load current school."
+                );
+
+                setSchool(null);
+
+                setSchoolId(null);
+
+                setAcademicYears([]);
+
+                setActiveAcademicYear(null);
+
+                setAcademicYearError(
+                    err?.message ||
+                    "Failed to load current academic year."
+                );
+
+
+                return null;
+
+            } finally {
+
+                setLoading(false);
+
+            }
+
+        },
+        [
+            resolveUserSchoolId,
+        ]
+    );
+
+
+    // =================================================
+    // REFRESH SCHOOL
+    // =================================================
+    //
+    // IMPORTANT:
+    // This MUST be declared before any useEffect that
+    // references refreshSchool.
+    //
+    // This is the direct fix for:
+    //
+    // Cannot access 'S' before initialization
+    //
+    // =================================================
+
+    const refreshSchool = useCallback(
+        async () => {
+
+            const schoolData =
+                await loadSchool();
+
+
+            if (
+                schoolData?.id
+            ) {
+
+                await loadAcademicYears(
+                    schoolData.id
+                );
+
+            } else {
+
+                setAcademicYears([]);
+
+                setActiveAcademicYear(
+                    null
+                );
+
+                setAcademicYearLoading(
+                    false
+                );
+
+            }
+
+
+            return schoolData;
+
+        },
+        [
+            loadSchool,
+            loadAcademicYears,
+        ]
+    );
+
+
+    // =================================================
+    // REFRESH ACADEMIC YEAR
+    // =================================================
+
+    const refreshAcademicYear = useCallback(
+        async () => {
+
+            const targetSchoolId =
+                schoolId ??
+                school?.id ??
+                null;
+
+
+            if (!targetSchoolId) {
+
+                setAcademicYears([]);
+
+                setActiveAcademicYear(null);
+
+                setAcademicYearError(
+                    "No current school is available."
+                );
+
+                setAcademicYearLoading(
+                    false
+                );
+
+                return [];
+
+            }
+
+
+            return await loadAcademicYears(
+                targetSchoolId
+            );
+
+        },
+        [
+            schoolId,
+            school?.id,
+            loadAcademicYears,
+        ]
+    );
+
+
+    // =================================================
     // INITIAL SCHOOL + ACADEMIC YEAR LOAD
     // =================================================
 
@@ -926,7 +1045,9 @@ export const SchoolProvider = ({ children }) => {
                 }
 
 
-                if (schoolData?.id) {
+                if (
+                    schoolData?.id
+                ) {
 
                     await loadAcademicYears(
                         schoolData.id
@@ -968,14 +1089,7 @@ export const SchoolProvider = ({ children }) => {
     // REFRESH WHEN ROLE SELECTION CHANGES
     // =================================================
     //
-    // RoleContext writes africore_selected_role to
-    // localStorage.
-    //
-    // This listener allows another browser tab/window
-    // to refresh the school automatically.
-    //
-    // The custom event below is also supported for
-    // future RoleContext integration.
+    // refreshSchool is already initialized above.
     //
     // =================================================
 
@@ -987,7 +1101,7 @@ export const SchoolProvider = ({ children }) => {
 
             if (
                 event.key ===
-                    ROLE_STORAGE_KEY
+                ROLE_STORAGE_KEY
             ) {
 
                 refreshSchool();
@@ -1042,8 +1156,8 @@ export const SchoolProvider = ({ children }) => {
 
         const {
             data: {
-                subscription
-            }
+                subscription,
+            },
         } = supabase.auth.onAuthStateChange(
             (event) => {
 
@@ -1060,32 +1174,7 @@ export const SchoolProvider = ({ children }) => {
                     event === "TOKEN_REFRESHED"
                 ) {
 
-                    loadSchool()
-                        .then(
-                            (
-                                schoolData
-                            ) => {
-
-                                if (
-                                    schoolData?.id
-                                ) {
-
-                                    loadAcademicYears(
-                                        schoolData.id
-                                    );
-
-                                } else {
-
-                                    setAcademicYears([]);
-
-                                    setActiveAcademicYear(
-                                        null
-                                    );
-
-                                }
-
-                            }
-                        );
+                    refreshSchool();
 
                 }
 
@@ -1100,93 +1189,8 @@ export const SchoolProvider = ({ children }) => {
         };
 
     }, [
-        loadSchool,
-        loadAcademicYears,
+        refreshSchool,
     ]);
-
-
-    // =================================================
-    // REFRESH SCHOOL
-    // =================================================
-
-    const refreshSchool =
-        useCallback(
-            async () => {
-
-                const schoolData =
-                    await loadSchool();
-
-
-                if (
-                    schoolData?.id
-                ) {
-
-                    await loadAcademicYears(
-                        schoolData.id
-                    );
-
-                } else {
-
-                    setAcademicYears([]);
-
-                    setActiveAcademicYear(
-                        null
-                    );
-
-                }
-
-
-                return schoolData;
-
-            },
-            [
-                loadSchool,
-                loadAcademicYears,
-            ]
-        );
-
-
-    // =================================================
-    // REFRESH ACADEMIC YEAR
-    // =================================================
-
-    const refreshAcademicYear =
-        useCallback(
-            async () => {
-
-                const targetSchoolId =
-                    schoolId ||
-                    school?.id;
-
-
-                if (!targetSchoolId) {
-
-                    setAcademicYears([]);
-
-                    setActiveAcademicYear(
-                        null
-                    );
-
-                    setAcademicYearError(
-                        "No current school is available."
-                    );
-
-                    return [];
-
-                }
-
-
-                return await loadAcademicYears(
-                    targetSchoolId
-                );
-
-            },
-            [
-                schoolId,
-                school,
-                loadAcademicYears,
-            ]
-        );
 
 
     // =================================================
@@ -1194,17 +1198,17 @@ export const SchoolProvider = ({ children }) => {
     // =================================================
 
     const activeAcademicYearId =
-        activeAcademicYear?.id ||
+        activeAcademicYear?.id ??
         null;
 
 
     const activeAcademicYearName =
-        activeAcademicYear?.year_name ||
+        activeAcademicYear?.year_name ??
         "";
 
 
     const activeAcademicYearTerm =
-        activeAcademicYear?.term ||
+        activeAcademicYear?.term ??
         "";
 
 
@@ -1213,32 +1217,32 @@ export const SchoolProvider = ({ children }) => {
     // =================================================
 
     const schoolName =
-        school?.school_name ||
+        school?.school_name ??
         "";
 
 
     const registrationNumber =
-        school?.registration_number ||
+        school?.registration_number ??
         "";
 
 
     const address =
-        school?.address ||
+        school?.address ??
         "";
 
 
     const phone =
-        school?.phone ||
+        school?.phone ??
         "";
 
 
     const email =
-        school?.email ||
+        school?.email ??
         "";
 
 
     const logo =
-        school?.logo ||
+        school?.logo ??
         "";
 
 
@@ -1274,177 +1278,177 @@ export const SchoolProvider = ({ children }) => {
     // DOCUMENT BRANDING
     // =================================================
 
-    const documentBranding =
-        useMemo(
-            () => ({
-                schoolId,
+    const documentBranding = useMemo(
+        () => ({
+            schoolId,
 
-                schoolName,
+            schoolName,
 
-                registrationNumber,
+            registrationNumber,
 
-                address,
+            address,
 
-                phone,
+            phone,
 
-                email,
+            email,
 
-                logo,
+            logo,
 
-                showSchoolName,
+            showSchoolName,
 
-                showLogo,
+            showLogo,
 
-                showRegistrationNumber,
+            showRegistrationNumber,
 
-                showAddress,
+            showAddress,
 
-                showPhone,
+            showPhone,
 
-                showEmail,
-            }),
-            [
-                schoolId,
-                schoolName,
-                registrationNumber,
-                address,
-                phone,
-                email,
-                logo,
-                showSchoolName,
-                showLogo,
-                showRegistrationNumber,
-                showAddress,
-                showPhone,
-                showEmail,
-            ]
-        );
+            showEmail,
+        }),
+        [
+            schoolId,
+            schoolName,
+            registrationNumber,
+            address,
+            phone,
+            email,
+            logo,
+            showSchoolName,
+            showLogo,
+            showRegistrationNumber,
+            showAddress,
+            showPhone,
+            showEmail,
+        ]
+    );
 
 
     // =================================================
     // CONTEXT VALUE
     // =================================================
 
-    const value =
-        useMemo(
-            () => ({
+    const value = useMemo(
+        () => ({
 
-                // -----------------------------------------
-                // SCHOOL
-                // -----------------------------------------
+            // =========================================
+            // SCHOOL
+            // =========================================
 
-                school,
+            school,
 
-                schoolId,
+            schoolId,
 
-                schoolName,
+            schoolName,
 
-                registrationNumber,
+            registrationNumber,
 
-                address,
+            address,
 
-                phone,
+            phone,
 
-                email,
+            email,
 
-                logo,
-
-
-                // -----------------------------------------
-                // DOCUMENT SETTINGS
-                // -----------------------------------------
-
-                showSchoolName,
-
-                showLogo,
-
-                showRegistrationNumber,
-
-                showAddress,
-
-                showPhone,
-
-                showEmail,
+            logo,
 
 
-                // -----------------------------------------
-                // DOCUMENT BRANDING
-                // -----------------------------------------
+            // =========================================
+            // DOCUMENT SETTINGS
+            // =========================================
 
-                documentBranding,
+            showSchoolName,
 
+            showLogo,
 
-                // -----------------------------------------
-                // STATE
-                // -----------------------------------------
+            showRegistrationNumber,
 
-                loading,
+            showAddress,
 
-                error,
+            showPhone,
 
-
-                // -----------------------------------------
-                // ACADEMIC YEARS
-                // -----------------------------------------
-
-                academicYears,
-
-                activeAcademicYear,
-
-                activeAcademicYearId,
-
-                activeAcademicYearName,
-
-                activeAcademicYearTerm,
-
-                academicYearLoading,
-
-                academicYearError,
+            showEmail,
 
 
-                // -----------------------------------------
-                // ACTIONS
-                // -----------------------------------------
+            // =========================================
+            // DOCUMENT BRANDING
+            // =========================================
 
-                refreshSchool,
+            documentBranding,
 
-                refreshAcademicYear,
 
-            }),
-            [
-                school,
-                schoolId,
-                schoolName,
-                registrationNumber,
-                address,
-                phone,
-                email,
-                logo,
+            // =========================================
+            // STATE
+            // =========================================
 
-                showSchoolName,
-                showLogo,
-                showRegistrationNumber,
-                showAddress,
-                showPhone,
-                showEmail,
+            loading,
 
-                documentBranding,
+            error,
 
-                loading,
-                error,
 
-                academicYears,
-                activeAcademicYear,
-                activeAcademicYearId,
-                activeAcademicYearName,
-                activeAcademicYearTerm,
-                academicYearLoading,
-                academicYearError,
+            // =========================================
+            // ACADEMIC YEARS
+            // =========================================
 
-                refreshSchool,
-                refreshAcademicYear,
-            ]
-        );
+            academicYears,
+
+            activeAcademicYear,
+
+            activeAcademicYearId,
+
+            activeAcademicYearName,
+
+            activeAcademicYearTerm,
+
+            academicYearLoading,
+
+            academicYearError,
+
+
+            // =========================================
+            // ACTIONS
+            // =========================================
+
+            refreshSchool,
+
+            refreshAcademicYear,
+
+        }),
+        [
+            school,
+            schoolId,
+            schoolName,
+            registrationNumber,
+            address,
+            phone,
+            email,
+            logo,
+
+            showSchoolName,
+            showLogo,
+            showRegistrationNumber,
+            showAddress,
+            showPhone,
+            showEmail,
+
+            documentBranding,
+
+            loading,
+            error,
+
+            academicYears,
+            activeAcademicYear,
+
+            activeAcademicYearId,
+            activeAcademicYearName,
+            activeAcademicYearTerm,
+
+            academicYearLoading,
+            academicYearError,
+
+            refreshSchool,
+            refreshAcademicYear,
+        ]
+    );
 
 
     // =================================================
@@ -1452,15 +1456,11 @@ export const SchoolProvider = ({ children }) => {
     // =================================================
 
     return (
-
         <SchoolContext.Provider
             value={value}
         >
-
             {children}
-
         </SchoolContext.Provider>
-
     );
 
 };
