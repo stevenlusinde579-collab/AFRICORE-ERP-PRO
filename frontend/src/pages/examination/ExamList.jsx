@@ -45,7 +45,8 @@ function ExamList() {
     // =====================================================
 
     const API_URL =
-        "http://localhost:5000/api/exams";
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:5000/api";
 
 
     // =====================================================
