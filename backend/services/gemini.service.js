@@ -310,9 +310,7 @@ const getGeminiUrl = () => {
 
     return (
         `${GEMINI_BASE_URL}/` +
-        `${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
-            String(apiKey).trim()
-        )}`
+        `${GEMINI_MODEL}:generateContent`
     );
 };
 
@@ -547,21 +545,51 @@ const handleGeminiError = (
 // REQUEST CONFIG
 // ============================================================
 
-const getRequestConfig = () => ({
-    timeout:
-        GEMINI_TIMEOUT_MS,
+const getRequestConfig = () => {
+    const apiKey =
+        process.env.GEMINI_API_KEY;
 
-    headers: {
-        "Content-Type":
-            "application/json"
-    },
+    if (
+        !apiKey ||
+        !String(
+            apiKey
+        ).trim()
+    ) {
+        const error =
+            new Error(
+                "GEMINI_API_KEY haijawekwa kwenye environment variables."
+            );
 
-    maxContentLength:
-        Infinity,
+        error.code =
+            "GEMINI_API_KEY_MISSING";
 
-    maxBodyLength:
-        Infinity
-});
+        error.status =
+            500;
+
+        throw error;
+    }
+
+    return {
+        timeout:
+            GEMINI_TIMEOUT_MS,
+
+        headers: {
+            "Content-Type":
+                "application/json",
+
+            "x-goog-api-key":
+                String(
+                    apiKey
+                ).trim()
+        },
+
+        maxContentLength:
+            Infinity,
+
+        maxBodyLength:
+            Infinity
+    };
+};
 
 // ============================================================
 // INTERNAL GEMINI REQUEST
