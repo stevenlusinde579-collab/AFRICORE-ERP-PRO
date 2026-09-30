@@ -787,6 +787,12 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     EXAMINATION - LIST / VIEW
+
+                    SUBJECT TEACHER = ROLE 5
+
+                    Role 5 is allowed here because Subject Teacher
+                    needs to open the examination workspace and
+                    continue to their assigned subject workflow.
                 ===================================================== */}
 
                 <Route
@@ -796,7 +802,8 @@ export default function AppRoutes() {
                                 1,
                                 2,
                                 3,
-                                4
+                                4,
+                                5
                             ]}
                         />
                     }
@@ -917,15 +924,13 @@ export default function AppRoutes() {
                 {/* =====================================================
                     EXAMINATION - AI ANALYSIS
 
-                    IMPORTANT:
-                    Subject Teacher = ROLE 5
+                    SUBJECT TEACHER = ROLE 5
 
-                    Previously only roles 1,2,3,4 were allowed.
-                    That caused Subject Teacher to be redirected to
-                    Access Denied after uploading a paper.
+                    AI analysis can be accessed by roles 1-5,
+                    subject to the actual AI/examination permissions.
 
-                    We now allow role 5 and still enforce the
-                    actual examination permissions below.
+                    requireAny=true means the user only needs one
+                    of the listed permissions.
                 ===================================================== */}
 
                 <Route
@@ -1050,6 +1055,12 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     EXAMINATION - RESULTS ANALYSIS
+
+                    SUBJECT TEACHER = ROLE 5
+
+                    ResultsAnalysis.jsx performs the additional
+                    Subject Teacher filtering so role 5 only works
+                    with the assigned class and subject.
                 ===================================================== */}
 
                 <Route
@@ -1058,7 +1069,8 @@ export default function AppRoutes() {
                             allowedRoles={[
                                 1,
                                 2,
-                                4
+                                4,
+                                5
                             ]}
                         />
                     }
@@ -1334,27 +1346,13 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     SHARED LIVE MEETING ROOM
-                    =====================================================
-
-                    IMPORTANT:
 
                     DO NOT put create_meeting permission here.
 
-                    A Headmaster / Teacher / invited participant may
-                    need to JOIN an existing meeting without having
-                    permission to CREATE a meeting.
+                    A participant may join an existing meeting without
+                    having permission to create a meeting.
 
-                    We support both URL patterns:
-
-                        /communication/meeting/:meetingId
-
-                    and:
-
-                        /communication/meetings/:meetingId
-
-                    The second route prevents React Router from falling
-                    through to the application "*" route and sending
-                    the user back to /dashboard.
+                    Both URL patterns are supported.
                 ===================================================== */}
 
                 <Route

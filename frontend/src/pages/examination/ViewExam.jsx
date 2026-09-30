@@ -1197,6 +1197,34 @@ function ViewExam() {
 
 
     // =====================================================
+    // SUBJECT TEACHER WORKFLOW STATE
+    // =====================================================
+
+    const subjectTeacherApprovalsComplete =
+        isSubjectTeacher &&
+        Boolean(subjectTeacherApproval?.found) &&
+        Boolean(subjectTeacherApproval?.academicApproved) &&
+        Boolean(subjectTeacherApproval?.deputyApproved) &&
+        Boolean(subjectTeacherApproval?.headmasterApproved);
+
+    const subjectTeacherExamApproved =
+        subjectTeacherApprovalsComplete &&
+        String(exam?.status || "").toLowerCase() === "approved";
+
+    const aiStatus =
+        String(exam?.ai_status || "").toLowerCase();
+
+    const aiAnalysisAvailable =
+        aiStatus === "completed" ||
+        aiStatus === "processing";
+
+    const aiAnalysisCompleted =
+        aiStatus === "completed";
+
+    const subjectTeacherCanEnterMarks =
+        subjectTeacherExamApproved;
+
+    // =====================================================
     // ACTION CARDS
     // =====================================================
 
@@ -1227,7 +1255,14 @@ function ViewExam() {
         path:
             isSubjectTeacher
                 ? `/examination/${exam.id}/subject-upload`
-                : `/examination/${exam.id}/upload`
+                : `/examination/${exam.id}/upload`,
+
+        disabled: false,
+
+        status:
+            isSubjectTeacher
+                ? "Available"
+                : null
 
     });
 
@@ -1254,7 +1289,22 @@ function ViewExam() {
             "hover:bg-purple-100",
 
         path:
-            `/examination/${exam.id}/ai-analysis`
+            `/examination/${exam.id}/ai-analysis`,
+
+        disabled:
+            isSubjectTeacher &&
+            !aiAnalysisAvailable,
+
+        status:
+            isSubjectTeacher
+                ? (
+                    aiAnalysisCompleted
+                        ? "Completed"
+                        : aiStatus === "processing"
+                            ? "Processing"
+                            : "Upload paper first"
+                )
+                : null
 
     });
 
@@ -1310,7 +1360,20 @@ function ViewExam() {
             "hover:bg-orange-100",
 
         path:
-            `/examination/${exam.id}/marks`
+            `/examination/${exam.id}/marks`,
+
+        disabled:
+            isSubjectTeacher &&
+            !subjectTeacherCanEnterMarks,
+
+        status:
+            isSubjectTeacher
+                ? (
+                    subjectTeacherCanEnterMarks
+                        ? "Ready"
+                        : "Locked until full approval"
+                )
+                : null
 
     });
 
@@ -1319,27 +1382,29 @@ function ViewExam() {
     // RESULTS ANALYSIS
     // =====================================================
 
-    actionCards.push({
+    if (!isSubjectTeacher) {
 
-        title: "Results Analysis",
+        actionCards.push({
 
-        description:
-            isSubjectTeacher
-                ? "View results analysis for your assigned class and subject."
-                : "Analyze examination results after marks entry.",
+            title: "Results Analysis",
 
-        icon: <FaChartBar />,
+            description:
+                "Analyze examination results after marks entry.",
 
-        color:
-            "bg-indigo-50 text-indigo-600 border-indigo-100",
+            icon: <FaChartBar />,
 
-        hover:
-            "hover:bg-indigo-100",
+            color:
+                "bg-indigo-50 text-indigo-600 border-indigo-100",
 
-        path:
-            `/examination/${exam.id}/results-analysis`
+            hover:
+                "hover:bg-indigo-100",
 
-    });
+            path:
+                `/examination/${exam.id}/results-analysis`
+
+        });
+
+    }
 
 
     // =====================================================
@@ -1742,6 +1807,227 @@ function ViewExam() {
 
 
             {/* ======================================
+                SUBJECT TEACHER LIVE WORKFLOW
+            ====================================== */}
+
+            {isSubjectTeacher && (
+
+                <div className="
+                    bg-white
+                    border
+                    border-slate-200
+                    rounded-2xl
+                    shadow-sm
+                    p-5
+                ">
+
+                    <div className="
+                        flex
+                        flex-col
+                        lg:flex-row
+                        lg:items-center
+                        lg:justify-between
+                        gap-3
+                    ">
+
+                        <div>
+                            <div className="
+                                flex
+                                items-center
+                                gap-2
+                            ">
+                                <FaClock className="text-blue-600" />
+
+                                <h2 className="
+                                    text-lg
+                                    font-bold
+                                    text-gray-800
+                                ">
+                                    Live Approval Flow
+                                </h2>
+                            </div>
+
+                            <p className="
+                                text-sm
+                                text-gray-500
+                                mt-1
+                            ">
+                                Your examination moves through these stages before marks entry is unlocked.
+                            </p>
+                        </div>
+
+                        <span className={`
+                            inline-flex
+                            items-center
+                            gap-2
+                            px-4
+                            py-2
+                            rounded-full
+                            text-xs
+                            font-bold
+                            ${
+                                subjectTeacherExamApproved
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                            }
+                        `}>
+                            {subjectTeacherExamApproved
+                                ? <FaCheckCircle />
+                                : <FaHourglassHalf />
+                            }
+
+                            {subjectTeacherExamApproved
+                                ? "ENTER MARKS READY"
+                                : "APPROVAL IN PROGRESS"
+                            }
+                        </span>
+
+                    </div>
+
+                    <div className="
+                        mt-5
+                        grid
+                        grid-cols-1
+                        sm:grid-cols-2
+                        lg:grid-cols-6
+                        gap-3
+                    ">
+
+                        {[
+                            {
+                                label: "Upload Paper",
+                                done:
+                                    aiAnalysisAvailable,
+                                active: true,
+                                icon: <FaFileUpload />
+                            },
+                            {
+                                label: "AI Analysis",
+                                done: aiAnalysisCompleted,
+                                active: aiAnalysisAvailable,
+                                icon: <FaRobot />
+                            },
+                            {
+                                label: "Academic Master",
+                                done: Boolean(subjectTeacherApproval?.academicApproved),
+                                active: true,
+                                icon: <FaCheckCircle />
+                            },
+                            {
+                                label: "Deputy Headmaster",
+                                done: Boolean(subjectTeacherApproval?.deputyApproved),
+                                active: Boolean(subjectTeacherApproval?.academicApproved),
+                                icon: <FaCheckCircle />
+                            },
+                            {
+                                label: "Headmaster",
+                                done: Boolean(subjectTeacherApproval?.headmasterApproved),
+                                active: Boolean(subjectTeacherApproval?.deputyApproved),
+                                icon: <FaCheckCircle />
+                            },
+                            {
+                                label: "Enter Marks",
+                                done: subjectTeacherCanEnterMarks,
+                                active: subjectTeacherCanEnterMarks,
+                                icon: <FaPen />
+                            }
+                        ].map((step, index) => (
+
+                            <div
+                                key={step.label}
+                                className={`
+                                    relative
+                                    rounded-xl
+                                    border
+                                    p-4
+                                    ${
+                                        step.done
+                                            ? "border-emerald-200 bg-emerald-50"
+                                            : step.active
+                                                ? "border-blue-200 bg-blue-50"
+                                                : "border-slate-200 bg-slate-50"
+                                    }
+                                `}
+                            >
+
+                                <div className="
+                                    flex
+                                    items-center
+                                    justify-between
+                                    gap-2
+                                ">
+
+                                    <span className={`
+                                        w-9
+                                        h-9
+                                        rounded-lg
+                                        flex
+                                        items-center
+                                        justify-center
+                                        ${
+                                            step.done
+                                                ? "bg-emerald-100 text-emerald-600"
+                                                : step.active
+                                                    ? "bg-blue-100 text-blue-600"
+                                                    : "bg-slate-200 text-slate-400"
+                                        }
+                                    `}>
+                                        {step.done
+                                            ? <FaCheckCircle />
+                                            : step.icon
+                                        }
+                                    </span>
+
+                                    <span className="
+                                        text-xs
+                                        font-bold
+                                        text-gray-400
+                                    ">
+                                        {index + 1}
+                                    </span>
+
+                                </div>
+
+                                <p className="
+                                    mt-3
+                                    text-sm
+                                    font-bold
+                                    text-gray-800
+                                ">
+                                    {step.label}
+                                </p>
+
+                                <p className={`
+                                    mt-1
+                                    text-xs
+                                    font-semibold
+                                    ${
+                                        step.done
+                                            ? "text-emerald-600"
+                                            : step.active
+                                                ? "text-blue-600"
+                                                : "text-gray-400"
+                                    }
+                                `}>
+                                    {step.done
+                                        ? "Completed"
+                                        : step.active
+                                            ? "In progress / Ready"
+                                            : "Waiting"
+                                    }
+                                </p>
+
+                            </div>
+
+                        ))}
+
+                    </div>
+
+                </div>
+
+            )}
+
+            {/* ======================================
                 SUBJECT TEACHER WORKSPACE
             ====================================== */}
 
@@ -1800,9 +2086,9 @@ function ViewExam() {
                                 leading-6
                             ">
 
-                                Choose the examination action below.
-                                Your assigned subject and class will be
-                                verified inside the selected action page.
+                                Work from the three operation cards below:
+                                upload the paper, review AI analysis, and
+                                enter marks after the complete approval chain.
 
                             </p>
 
@@ -2546,12 +2832,17 @@ function ViewExam() {
                                 type="button"
                                 onClick={() => {
 
+                                    if (card.disabled) {
+                                        return;
+                                    }
+
                                     navigate(
                                         card.path
                                     );
 
                                 }}
-                                className="
+                                disabled={Boolean(card.disabled)}
+                                className={`
                                     text-left
                                     bg-white
                                     border
@@ -2560,10 +2851,12 @@ function ViewExam() {
                                     shadow-sm
                                     transition
                                     duration-200
-                                    hover:shadow-md
-                                    hover:-translate-y-0.5
-                                    cursor-pointer
-                                "
+                                    ${
+                                        card.disabled
+                                            ? "opacity-60 cursor-not-allowed bg-slate-50"
+                                            : "hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+                                    }
+                                `}
                             >
 
                                 <div className="
@@ -2614,7 +2907,31 @@ function ViewExam() {
 
                                 </h3>
 
+                                {card.status && (
 
+                                    <span className={`
+                                        inline-flex
+                                        mt-3
+                                        px-3
+                                        py-1
+                                        rounded-full
+                                        text-[11px]
+                                        font-bold
+                                        ${
+                                            card.disabled
+                                                ? "bg-slate-200 text-slate-500"
+                                                : card.status === "Completed" ||
+                                                  card.status === "Ready"
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : card.status === "Processing"
+                                                        ? "bg-blue-100 text-blue-700"
+                                                        : "bg-amber-100 text-amber-700"
+                                        }
+                                    `}>
+                                        {card.status}
+                                    </span>
+
+                                )}
 
                                 <p className="
                                     text-sm
@@ -2638,8 +2955,9 @@ function ViewExam() {
                                         text-indigo-600
                                     ">
 
-                                        Your assigned subject/class will be
-                                        verified on this page.
+                                        {card.disabled
+                                            ? "Complete the required workflow before continuing."
+                                            : "Your assigned subject/class is verified for this operation."}
 
                                     </div>
 

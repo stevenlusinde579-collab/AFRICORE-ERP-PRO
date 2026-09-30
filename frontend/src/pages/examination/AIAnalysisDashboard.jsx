@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
     useCallback,
     useEffect,
     useMemo,
@@ -710,6 +710,9 @@ export default function AIAnalysisDashboard() {
     const [analysisLoaded, setAnalysisLoaded] =
         useState(false);
 
+    const [paperStatus, setPaperStatus] =
+        useState("Pending");
+
     const [error, setError] =
         useState("");
 
@@ -995,306 +998,209 @@ export default function AIAnalysisDashboard() {
                 subjectId,
                 options = {}
             ) => {
-                const normalizedSubjectId =
-                    normalizeId(
-                        subjectId
-                    );
+                const normalizedSubjectId = normalizeId(subjectId);
 
-                if (!examId) {
-                    if (
-                        mountedRef.current
-                    ) {
+                if (!examId || !normalizedSubjectId) {
+                    if (mountedRef.current) {
                         setError(
-                            "Exam ID haijapatikana kwenye URL."
+                            !examId
+                                ? "Exam ID haijapatikana kwenye URL."
+                                : "Exam Subject ID haijapatikana."
                         );
-
-                        setLoading(
-                            false
-                        );
+                        setLoading(false);
                     }
-
                     return null;
                 }
 
-                if (
-                    !normalizedSubjectId
-                ) {
-                    if (
-                        mountedRef.current
-                    ) {
-                        setError(
-                            "Exam Subject ID haijapatikana."
-                        );
+                const requestKey = `${examId}:${normalizedSubjectId}`;
 
-                        setLoading(
-                            false
-                        );
-                    }
-
+                if (analysisRequestRef.current) {
                     return null;
                 }
 
-                const requestKey =
-                    `${examId}:${normalizedSubjectId}`;
-
-                if (
-                    analysisRequestRef.current
-                ) {
-                    return null;
-                }
-
-                analysisRequestRef.current =
-                    true;
-
-                const isRefresh =
-                    Boolean(
-                        options.refresh
-                    );
+                analysisRequestRef.current = true;
 
                 try {
-                    if (
-                        mountedRef.current
-                    ) {
-                        if (
-                            isRefresh
-                        ) {
-                            setRefreshing(
-                                true
-                            );
-                        } else {
-                            setLoading(
-                                true
-                            );
-                        }
-
+                    if (mountedRef.current) {
+                        if (options.refresh) setRefreshing(true);
+                        else setLoading(true);
                         setError("");
                     }
 
-                    const response =
-                        await axios.get(
-                            `${API_URL}/ai/analysis/${examId}/${normalizedSubjectId}`,
-                            {
-                                params: {
-                                    _t: Date.now(),
-                                },
+                    const response = await axios.get(
+                        `${API_URL}/ai/analysis/${examId}/${normalizedSubjectId}`,
+                        {
+                            params: { _t: Date.now() },
+                            timeout: 30000,
+                            headers: {
+                                "Cache-Control": "no-cache",
+                                Pragma: "no-cache",
+                            },
+                        }
+                    );
 
-                                timeout: 30000,
-
-                                headers: {
-                                    "Cache-Control":
-                                        "no-cache",
-                                    Pragma:
-                                        "no-cache",
-                                },
-                            }
-                        );
-
-                    const payload =
-                        response?.data ||
-                        {};
+                    const payload = response?.data || {};
 
                     const receivedAnalysis =
                         payload?.analysis ||
-                        payload?.data
-                            ?.analysis ||
+                        payload?.data?.analysis ||
                         null;
 
-                    const receivedQuestions =
+                    const receivedQuestions = normalizeArray(
                         payload?.questions ||
-                        payload?.data
-                            ?.questions ||
-                        receivedAnalysis
-                            ?.questions ||
-                        [];
+                            payload?.data?.questions ||
+                            receivedAnalysis?.questions ||
+                            []
+                    );
 
-                    if (
-                        !mountedRef.current
-                    ) {
-                        return null;
-                    }
+                    const paper = payload?.paper || payload?.data?.paper || null;
 
-                    if (
-                        receivedAnalysis
-                    ) {
-                        setAnalysis(
-                            receivedAnalysis
-                        );
+                    const backendStatus = normalizeAnalysisStatus(
+                        payload?.status ||
+                            paper?.ai_status ||
+                            paper?.status ||
+                            (payload?.processing ? "Processing" : "")
+                    );
 
-                        setAnalysisLoaded(
-                            true
-                        );
+                    setPaperStatus(backendStatus || "Pending");
 
-                        setProcessingAnalysis(
-                            normalizeAnalysisStatus(
-                                receivedAnalysis
-                                    ?.analysis_status ??
-                                    receivedAnalysis
-                                        ?.status
-                            ) ===
-                                "Processing"
-                        );
+                    const analysisStatus = normalizeAnalysisStatus(
+                        receivedAnalysis?.analysis_status ??
+                            receivedAnalysis?.status
+                    );
 
-                        lastLoadedKeyRef.current =
-                            requestKey;
+                    if (!mountedRef.current) return null;
+
+                    if (receivedAnalysis) {
+                        setAnalysis(receivedAnalysis);
+                        setAnalysisLoaded(true);
+                        lastLoadedKeyRef.current = requestKey;
                     } else {
-                        /*
-                         * IMPORTANT:
-                         *
-                         * Do NOT immediately show
-                         * "Hakuna AI Analysis..."
-                         *
-                         * The backend may still be
-                         * processing and the GET may
-                         * temporarily return 404.
-                         */
-
-                        setAnalysis(
-                            null
-                        );
-
-                        setAnalysisLoaded(
-                            false
-                        );
+                        setAnalysis(null);
+                        setAnalysisLoaded(false);
                     }
 
-                    const normalizedQuestions =
-                        normalizeArray(
-                            receivedQuestions
-                        );
-
-                    setQuestions(
-                        normalizedQuestions
-                    );
-
-                    setExamQuestions(
-                        normalizedQuestions
-                    );
-
-                    return {
-                        analysis:
-                            receivedAnalysis,
-                        questions:
-                            normalizedQuestions,
-                    };
-                } catch (err) {
-                    if (
-                        !mountedRef.current
-                    ) {
-                        return null;
-                    }
-
-                    console.error(
-                        "LOAD AI ANALYSIS ERROR:",
-                        err
-                    );
-
-                    const status =
-                        err?.response
-                            ?.status;
+                    setQuestions(receivedQuestions);
+                    setExamQuestions(receivedQuestions);
 
                     /*
-                     * 404 is NOT displayed
-                     * as a user error.
-                     *
-                     * It can happen while
-                     * AI analysis is still
-                     * being created.
+                     * STATUS ORDER:
+                     * 1. Saved AI analysis
+                     * 2. exam_papers.ai_status/status
+                     * 3. backend processing flag
                      */
-
-                    if (
-                        status ===
-                        404
-                    ) {
-                        setAnalysis(
-                            null
-                        );
-
-                        setQuestions(
-                            []
-                        );
-
-                        setExamQuestions(
-                            []
-                        );
-
-                        setAnalysisLoaded(
-                            false
-                        );
-
-                        setProcessingAnalysis(
-                            true
-                        );
-
-                        lastLoadedKeyRef.current =
-                            requestKey;
-
-                        /*
-                         * VERY IMPORTANT:
-                         *
-                         * Clear visible error.
-                         */
-
+                    if (analysisStatus === "Completed") {
+                        setProcessingAnalysis(false);
+                    } else if (analysisStatus === "Failed") {
+                        setProcessingAnalysis(false);
                         setError(
-                            ""
+                            receivedAnalysis?.error_message ||
+                                receivedAnalysis?.teacher_comments ||
+                                paper?.error_message ||
+                                "AI Analysis imeshindikana."
                         );
+                    } else if (backendStatus === "Failed") {
+                        setProcessingAnalysis(false);
+                        setError(
+                            paper?.error_message ||
+                                payload?.message ||
+                                "AI Analysis imeshindikana."
+                        );
+                    } else if (
+                        backendStatus === "Processing" ||
+                        backendStatus === "Pending"
+                    ) {
+                        setProcessingAnalysis(true);
+                    } else if (payload?.processing === true) {
+                        setProcessingAnalysis(true);
+                    } else if (receivedAnalysis) {
+                        setProcessingAnalysis(false);
+                    } else {
+                        setProcessingAnalysis(false);
+                    }
+
+                    return {
+                        analysis: receivedAnalysis,
+                        questions: receivedQuestions,
+                        paper,
+                        processing:
+                            backendStatus === "Processing" ||
+                            backendStatus === "Pending" ||
+                            payload?.processing === true,
+                        status:
+                            analysisStatus !== "Pending"
+                                ? analysisStatus
+                                : backendStatus,
+                    };
+                } catch (err) {
+                    if (!mountedRef.current) return null;
+
+                    console.error("LOAD AI ANALYSIS ERROR:", err);
+
+                    const status = Number(err?.response?.status);
+
+                    if (status === 404) {
+                        const payload = err?.response?.data || {};
+                        const paper = payload?.paper || null;
+                        const paperStatus = normalizeAnalysisStatus(
+                            payload?.status ||
+                                paper?.ai_status ||
+                                paper?.status ||
+                                (payload?.processing ? "Processing" : "")
+                        );
+
+                        setPaperStatus(paperStatus || "Pending");
+
+                        setAnalysis(null);
+                        setQuestions(normalizeArray(payload?.questions));
+                        setExamQuestions(normalizeArray(payload?.questions));
+                        setAnalysisLoaded(false);
+
+                        if (paperStatus === "Failed") {
+                            setProcessingAnalysis(false);
+                            setError(
+                                paper?.error_message ||
+                                    payload?.message ||
+                                    "AI Analysis imeshindikana."
+                            );
+                        } else {
+                            setProcessingAnalysis(true);
+                            setError("");
+                        }
 
                         return {
-                            analysis:
-                                null,
-                            questions:
-                                [],
-                            notReady:
-                                true,
+                            analysis: null,
+                            questions: normalizeArray(payload?.questions),
+                            paper,
+                            processing: paperStatus !== "Failed",
+                            status: paperStatus || "Processing",
+                            notReady: true,
                         };
                     }
 
-                    if (
-                        err?.code ===
-                        "ECONNABORTED"
-                    ) {
+                    if (err?.code === "ECONNABORTED") {
                         setError(
                             "Backend imechelewa kujibu. Hakikisha Node.js server inaendelea kwenye port 5000."
                         );
-
-                        return null;
-                    }
-
-                    if (
-                        !err?.response
-                    ) {
+                    } else if (!err?.response) {
                         setError(
-                            "Haiwezi kuwasiliana na backend. Hakikisha backend inaendelea kwenye https://africore-erp-pro.onrender.com."
+                            "Haiwezi kuwasiliana na backend. Hakikisha backend inaendelea kwenye port 5000."
                         );
-
-                        return null;
+                    } else {
+                        setError(
+                            err?.response?.data?.message ||
+                                err?.response?.data?.error ||
+                                err?.message ||
+                                "Imeshindikana kupakia AI Analysis."
+                        );
                     }
-
-                    setError(
-                        err?.response
-                            ?.data
-                            ?.message ||
-                        err?.response
-                            ?.data
-                            ?.error ||
-                        err?.message ||
-                        "Imeshindikana kupakia AI Analysis."
-                    );
 
                     return null;
                 } finally {
-                    analysisRequestRef.current =
-                        false;
-
-                    if (
-                        mountedRef.current
-                    ) {
-                        setLoading(
-                            false
-                        );
-
-                        setRefreshing(
-                            false
-                        );
+                    analysisRequestRef.current = false;
+                    if (mountedRef.current) {
+                        setLoading(false);
+                        setRefreshing(false);
                     }
                 }
             },
@@ -1308,160 +1214,91 @@ export default function AIAnalysisDashboard() {
 
     const pollForAnalysis =
         useCallback(
-            async (
-                subjectId
-            ) => {
-                const normalizedSubjectId =
-                    normalizeId(
-                        subjectId
-                    );
+            async (subjectId) => {
+                const normalizedSubjectId = normalizeId(subjectId);
 
-                if (
-                    !normalizedSubjectId ||
-                    !examId
-                ) {
-                    return;
+                if (!normalizedSubjectId || !examId) return;
+
+                if (pollTimerRef.current) {
+                    clearTimeout(pollTimerRef.current);
+                    pollTimerRef.current = null;
                 }
 
-                if (
-                    pollTimerRef.current
-                ) {
-                    clearTimeout(
-                        pollTimerRef.current
-                    );
+                pollCountRef.current = 0;
+
+                if (mountedRef.current) {
+                    setProcessingAnalysis(true);
+                    setError("");
                 }
 
-                pollCountRef.current =
-                    0;
+                const poll = async () => {
+                    if (!mountedRef.current) return;
 
-                if (
-                    mountedRef.current
-                ) {
-                    setProcessingAnalysis(
-                        true
+                    if (pollCountRef.current >= MAX_ANALYSIS_POLLS) {
+                        setProcessingAnalysis(false);
+                        setError(
+                            "AI Analysis imechukua muda mrefu kuliko kawaida. Bonyeza Refresh kuangalia tena."
+                        );
+                        return;
+                    }
+
+                    pollCountRef.current += 1;
+
+                    const result = await loadAnalysis(
+                        normalizedSubjectId,
+                        { refresh: true }
                     );
 
-                    setError(
-                        ""
+                    if (!mountedRef.current) return;
+
+                    if (!result) {
+                        pollTimerRef.current = setTimeout(
+                            poll,
+                            ANALYSIS_POLL_INTERVAL
+                        );
+                        return;
+                    }
+
+                    const status = normalizeAnalysisStatus(
+                        result?.status ||
+                            result?.analysis?.analysis_status ||
+                            result?.analysis?.status ||
+                            result?.paper?.ai_status ||
+                            result?.paper?.status
                     );
-                }
 
-                const poll =
-                    async () => {
-                        if (
-                            !mountedRef.current
-                        ) {
-                            return;
-                        }
+                    if (status === "Completed") {
+                        setProcessingAnalysis(false);
+                        setSuccess("AI Analysis imekamilika kikamilifu.");
+                        return;
+                    }
 
-                        if (
-                            pollCountRef.current >=
-                            MAX_ANALYSIS_POLLS
-                        ) {
-                            setProcessingAnalysis(
-                                false
-                            );
+                    if (status === "Failed") {
+                        setProcessingAnalysis(false);
+                        setError(
+                            result?.paper?.error_message ||
+                                result?.analysis?.error_message ||
+                                "AI Analysis imeshindikana."
+                        );
+                        return;
+                    }
 
-                            setError(
-                                "AI Analysis imechukua muda mrefu kuliko kawaida. Bonyeza Refresh kuangalia tena."
-                            );
+                    if (result?.processing === false && result?.analysis) {
+                        setProcessingAnalysis(false);
+                        return;
+                    }
 
-                            return;
-                        }
+                    setProcessingAnalysis(true);
 
-                        pollCountRef.current +=
-                            1;
-
-                        const result =
-                            await loadAnalysis(
-                                normalizedSubjectId,
-                                {
-                                    refresh:
-                                        true,
-                                }
-                            );
-
-                        if (
-                            !mountedRef.current
-                        ) {
-                            return;
-                        }
-
-                        const returnedAnalysis =
-                            result?.analysis;
-
-                        if (
-                            returnedAnalysis
-                        ) {
-                            const status =
-                                normalizeAnalysisStatus(
-                                    returnedAnalysis
-                                        ?.analysis_status ??
-                                        returnedAnalysis
-                                            ?.status
-                                );
-
-                            if (
-                                status ===
-                                "Completed"
-                            ) {
-                                setProcessingAnalysis(
-                                    false
-                                );
-
-                                setSuccess(
-                                    "AI Analysis imekamilika kikamilifu."
-                                );
-
-                                return;
-                            }
-
-                            if (
-                                status ===
-                                "Failed"
-                            ) {
-                                setProcessingAnalysis(
-                                    false
-                                );
-
-                                setError(
-                                    returnedAnalysis
-                                        ?.teacher_comments ||
-                                    returnedAnalysis
-                                        ?.error_message ||
-                                    "AI Analysis imeshindikana."
-                                );
-
-                                return;
-                            }
-
-                            /*
-                             * Processing / Pending
-                             */
-
-                            setProcessingAnalysis(
-                                true
-                            );
-                        }
-
-                        /*
-                         * No saved analysis yet.
-                         * Continue polling silently.
-                         */
-
-                        pollTimerRef.current =
-                            setTimeout(
-                                poll,
-                                ANALYSIS_POLL_INTERVAL
-                            );
-                    };
+                    pollTimerRef.current = setTimeout(
+                        poll,
+                        ANALYSIS_POLL_INTERVAL
+                    );
+                };
 
                 await poll();
             },
-            [
-                examId,
-                loadAnalysis,
-            ]
+            [examId, loadAnalysis]
         );
 
 
@@ -1582,6 +1419,45 @@ export default function AIAnalysisDashboard() {
                         response?.data ||
                         {};
 
+                    /*
+                     * The backend deliberately returns HTTP 200 when
+                     * the paper has already been stored but Gemini
+                     * cannot complete analysis. This is NOT an upload
+                     * failure and must never be shown as an Axios 500.
+                     */
+                    if (
+                        payload?.ai_failed === true ||
+                        payload?.success === false
+                    ) {
+                        if (mountedRef.current) {
+                            setAnalysis(null);
+                            setQuestions([]);
+                            setExamQuestions([]);
+
+                            setAnalysisLoaded(false);
+                            setProcessingAnalysis(false);
+
+                            setError("");
+
+                            setSuccess(
+                                payload?.user_message ||
+                                "Paper imehifadhiwa kikamilifu. AI analysis haikukamilika; unaweza kuendelea manually au kujaribu tena."
+                            );
+                        }
+
+                        return {
+                            analysis: null,
+                            questions: [],
+                            aiFailed: true,
+                            paperSaved: Boolean(
+                                payload?.exam_paper_id
+                            ),
+                            examPaperId:
+                                payload?.exam_paper_id ||
+                                null,
+                        };
+                    }
+
                     const receivedAnalysis =
                         payload?.analysis ||
                         payload?.data
@@ -1697,16 +1573,59 @@ export default function AIAnalysisDashboard() {
                             false
                         );
 
-                        setError(
+                        const responseStatus =
+                            Number(
+                                err?.response?.status
+                            );
+
+                        const responsePaperId =
                             err?.response
                                 ?.data
-                                ?.message ||
-                            err?.response
-                                ?.data
-                                ?.error ||
-                            err?.message ||
-                            "Imeshindikana kufanya AI Analysis."
-                        );
+                                ?.exam_paper_id;
+
+                        if (
+                            responseStatus === 500 &&
+                            responsePaperId
+                        ) {
+                            setError("");
+                            setProcessingAnalysis(false);
+
+                            setSuccess(
+                                "Paper imehifadhiwa kikamilifu. AI analysis haikukamilika; unaweza kuendelea manually au kujaribu tena."
+                            );
+                        } else {
+                            setError(
+                                responseStatus === 500
+                                    ? "AI analysis haikukamilika. Paper imehifadhiwa; unaweza kuendelea manually au kujaribu tena."
+                                    : (
+                                        err?.response
+                                            ?.data
+                                            ?.message ||
+                                        err?.response
+                                            ?.data
+                                            ?.error ||
+                                        err?.message ||
+                                        "Imeshindikana kufanya AI Analysis."
+                                    )
+                            );
+                        }
+                    }
+
+                    if (
+                        Number(
+                            err?.response?.status
+                        ) === 500 &&
+                        err?.response?.data?.exam_paper_id
+                    ) {
+                        return {
+                            analysis: null,
+                            questions: [],
+                            aiFailed: true,
+                            paperSaved: true,
+                            examPaperId:
+                                err?.response?.data?.exam_paper_id ||
+                                null,
+                        };
                     }
 
                     throw err;
@@ -2693,10 +2612,9 @@ export default function AIAnalysisDashboard() {
                 ?.analysis_status ??
                 analysis
                     ?.status ??
+                paperStatus ??
                 (
-                    analysis
-                        ? "Completed"
-                        : processingAnalysis
+                    processingAnalysis
                         ? "Processing"
                         : "Pending"
                 )
@@ -3040,7 +2958,7 @@ export default function AIAnalysisDashboard() {
                                 </h2>
 
                                 <p className="mt-1 text-sm text-indigo-700">
-                                    {subjectName} â€”
+                                    {subjectName} —
                                     Gemini AI
                                     inachambua
                                     structure,

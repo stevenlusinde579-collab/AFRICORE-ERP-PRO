@@ -1,9 +1,12 @@
 ﻿import { useEffect, useRef, useState } from "react";
+
 import {
     useNavigate,
     useParams
 } from "react-router-dom";
+
 import axios from "axios";
+
 import { supabase } from "../../services/supabase";
 
 import {
@@ -80,6 +83,7 @@ function ExamUpload() {
         try {
 
             setLoadingSubjects(true);
+
             setError("");
 
             const response =
@@ -126,7 +130,6 @@ function ExamUpload() {
             setLoadingSubjects(false);
 
         }
-
     };
 
 
@@ -175,6 +178,7 @@ function ExamUpload() {
                 message:
                     "Chagua PDF ya examination kwanza."
             };
+
         }
 
         if (
@@ -187,6 +191,7 @@ function ExamUpload() {
                 message:
                     "Tafadhali chagua PDF file pekee."
             };
+
         }
 
         if (
@@ -199,6 +204,7 @@ function ExamUpload() {
                 message:
                     "PDF imezidi ukubwa unaoruhusiwa wa 20MB."
             };
+
         }
 
         return {
@@ -219,6 +225,7 @@ function ExamUpload() {
             event.target.files?.[0];
 
         setError("");
+
         setSelectedFile(null);
 
         const validation =
@@ -254,6 +261,7 @@ function ExamUpload() {
             event.dataTransfer.files?.[0];
 
         setError("");
+
         setSelectedFile(null);
 
         const validation =
@@ -306,6 +314,7 @@ function ExamUpload() {
         }
 
         setSelectedFile(null);
+
         setError("");
 
         if (fileInputRef.current) {
@@ -353,33 +362,60 @@ function ExamUpload() {
     // UPLOAD PDF TO SUPABASE STORAGE
     // =====================================================
 
-    const uploadPdfToStorage = async (file) => {
+    const uploadPdfToStorage = async file => {
 
         if (!file) {
-            throw new Error("PDF file haipo.");
+
+            throw new Error(
+                "PDF file haipo."
+            );
+
         }
 
         if (!examId) {
-            throw new Error("Exam ID haipo.");
+
+            throw new Error(
+                "Exam ID haipo."
+            );
+
         }
 
         if (!selectedExamSubjectId) {
-            throw new Error("Exam Subject ID haipo.");
+
+            throw new Error(
+                "Exam Subject ID haipo."
+            );
+
         }
 
-        // Create the FINAL storage path here.
-        // This exact path is passed to AI Analysis so Approval does not
-        // need to guess where the PDF was stored.
-        const originalName = String(
-            file.name || "exam-paper.pdf"
-        ).trim();
 
-        const safeName = originalName
-            .replace(/[^a-zA-Z0-9._-]+/g, "-")
-            .replace(/-+/g, "-");
+        const originalName =
+            String(
+                file.name ||
+                "exam-paper.pdf"
+            ).trim();
 
-        const baseName = safeName
-            .replace(/\.pdf$/i, "") || "exam-paper";
+
+        const safeName =
+            originalName
+                .replace(
+                    /[^a-zA-Z0-9._-]+/g,
+                    "-"
+                )
+                .replace(
+                    /-+/g,
+                    "-"
+                );
+
+
+        const baseName =
+            safeName
+                .replace(
+                    /\.pdf$/i,
+                    ""
+                ) ||
+                "exam-paper";
+
 
         const uniquePart =
             typeof crypto !== "undefined" &&
@@ -387,8 +423,10 @@ function ExamUpload() {
                 ? crypto.randomUUID()
                 : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+
         const storagePath =
             `${examId}/${selectedExamSubjectId}/${uniquePart}-${baseName}.pdf`;
+
 
         console.log(
             "UPLOADING EXAM PDF TO SUPABASE STORAGE:",
@@ -400,6 +438,7 @@ function ExamUpload() {
                 fileType: file.type
             }
         );
+
 
         const {
             data,
@@ -417,7 +456,9 @@ function ExamUpload() {
                 }
             );
 
+
         if (error) {
+
             console.error(
                 "SUPABASE STORAGE UPLOAD ERROR:",
                 {
@@ -430,16 +471,23 @@ function ExamUpload() {
                 error.message ||
                 "PDF imeshindwa kupakiwa kwenye exam-papers Storage."
             );
+
         }
 
+
         const actualPath =
-            data?.path || storagePath;
+            data?.path ||
+            storagePath;
+
 
         if (!actualPath) {
+
             throw new Error(
                 "Storage upload imefanikiwa lakini actual storage path haikurudi."
             );
+
         }
+
 
         console.log(
             "EXAM PDF UPLOAD SUCCESS:",
@@ -449,17 +497,27 @@ function ExamUpload() {
             }
         );
 
-        // Verify that the object is actually visible in Storage.
-        const lastSlash = actualPath.lastIndexOf("/");
+
+        const lastSlash =
+            actualPath.lastIndexOf("/");
+
+
         const folder =
             lastSlash >= 0
-                ? actualPath.slice(0, lastSlash)
+                ? actualPath.slice(
+                    0,
+                    lastSlash
+                )
                 : "";
+
 
         const uploadedFileName =
             lastSlash >= 0
-                ? actualPath.slice(lastSlash + 1)
+                ? actualPath.slice(
+                    lastSlash + 1
+                )
                 : actualPath;
+
 
         const {
             data: storageObjects,
@@ -475,7 +533,9 @@ function ExamUpload() {
                 }
             );
 
+
         if (verifyError) {
+
             console.warn(
                 "STORAGE VERIFICATION WARNING:",
                 {
@@ -483,23 +543,84 @@ function ExamUpload() {
                     verifyError
                 }
             );
+
         } else {
+
             const found =
                 Array.isArray(storageObjects) &&
                 storageObjects.some(
                     object =>
-                        String(object?.name || "").trim() ===
+                        String(
+                            object?.name ||
+                            ""
+                        ).trim() ===
                         uploadedFileName
                 );
 
+
             if (!found) {
+
                 throw new Error(
                     `PDF upload haijathibitishwa kwenye exam-papers Storage: ${actualPath}`
                 );
+
             }
+
         }
 
+
         return actualPath;
+
+    };
+
+
+    // =====================================================
+    // EXTRACT SERVER ERROR
+    // =====================================================
+
+    const getServerErrorMessage = err => {
+
+        const responseData =
+            err?.response?.data;
+
+
+        if (
+            responseData &&
+            typeof responseData === "object"
+        ) {
+
+            return (
+                responseData.message ||
+                responseData.error ||
+                responseData.details ||
+                responseData.error_message ||
+                `AI server ilirudisha HTTP ${err?.response?.status || "error"}.`
+            );
+
+        }
+
+
+        if (
+            typeof responseData === "string" &&
+            responseData.trim()
+        ) {
+
+            return responseData;
+
+        }
+
+
+        if (err?.message) {
+
+            return err.message;
+
+        }
+
+
+        return (
+            "AI Analysis imeshindwa. Tafadhali jaribu tena."
+        );
+
     };
 
 
@@ -511,6 +632,7 @@ function ExamUpload() {
 
         setError("");
 
+
         if (!examId) {
 
             setError(
@@ -518,7 +640,9 @@ function ExamUpload() {
             );
 
             return;
+
         }
+
 
         if (!selectedExamSubjectId) {
 
@@ -527,7 +651,9 @@ function ExamUpload() {
             );
 
             return;
+
         }
+
 
         if (!selectedFile) {
 
@@ -536,22 +662,34 @@ function ExamUpload() {
             );
 
             return;
+
         }
+
 
         try {
 
             setProcessing(true);
 
-            // FIRST: physically upload the PDF to Storage.
+
+            // =================================================
+            // FIRST:
+            // UPLOAD PDF TO STORAGE
+            // =================================================
+
             const storagePath =
                 await uploadPdfToStorage(
                     selectedFile
                 );
 
-            // SECOND: send THE SAME PDF to the AI analysis service.
-            // The exact Storage path is also sent so the AI/backend can
-            // associate the analysis with the physical Storage object.
-            const formData = new FormData();
+
+            // =================================================
+            // SECOND:
+            // SEND SAME PDF TO AI
+            // =================================================
+
+            const formData =
+                new FormData();
+
 
             formData.append(
                 "paper",
@@ -559,85 +697,128 @@ function ExamUpload() {
                 selectedFile.name
             );
 
+
             formData.append(
                 "exam_id",
                 String(examId)
             );
 
+
             formData.append(
                 "exam_subject_id",
-                String(selectedExamSubjectId)
+                String(
+                    selectedExamSubjectId
+                )
             );
+
 
             formData.append(
                 "storage_bucket",
                 "exam-papers"
             );
 
+
             formData.append(
                 "storage_path",
                 storagePath
             );
 
+
             console.log(
                 "SENDING SAME PDF TO AI ANALYSIS:",
                 {
                     examId,
-                    examSubjectId: selectedExamSubjectId,
-                    storageBucket: "exam-papers",
+                    examSubjectId:
+                        selectedExamSubjectId,
+                    storageBucket:
+                        "exam-papers",
                     storagePath,
-                    fileName: selectedFile.name,
-                    fileSize: selectedFile.size
+                    fileName:
+                        selectedFile.name,
+                    fileSize:
+                        selectedFile.size,
+                    fileType:
+                        selectedFile.type
                 }
             );
+
+
+            // IMPORTANT:
+            // DO NOT SET Content-Type MANUALLY.
+            // Browser/Axios will create the multipart boundary.
 
             const aiResponse =
                 await axios.post(
                     `${API_URL}/ai/analyze-paper`,
                     formData,
                     {
-                        headers: {
-                            "Content-Type":
-                                "multipart/form-data"
-                        },
-                        maxContentLength: Infinity,
-                        maxBodyLength: Infinity
+                        maxContentLength:
+                            Infinity,
+
+                        maxBodyLength:
+                            Infinity,
+
+                        timeout:
+                            180000
                     }
                 );
 
+
+            console.log(
+                "AI ANALYSIS RAW RESPONSE:",
+                aiResponse
+            );
+
+
             if (!aiResponse.data?.success) {
+
                 throw new Error(
                     aiResponse.data?.message ||
                     "PDF imehifadhiwa Storage lakini AI Analysis imeshindwa kuichambua."
                 );
+
             }
+
 
             console.log(
                 "AI ANALYSIS UPLOAD SUCCESS:",
                 aiResponse.data
             );
 
-            // THIRD: open AI Analysis dashboard with the exact Storage
-            // location and the AI response already available in state.
+
+            // =================================================
+            // THIRD:
+            // OPEN AI ANALYSIS
+            // =================================================
+
             navigate(
                 `/examination/${examId}/ai-analysis`,
                 {
                     state: {
+
                         selectedFile,
+
                         examSubjectId:
                             selectedExamSubjectId,
+
                         storageBucket:
                             "exam-papers",
+
                         storagePath,
+
                         fileName:
                             selectedFile.name,
+
                         fileType:
                             "application/pdf",
+
                         aiAnalysisResponse:
                             aiResponse.data
+
                     }
                 }
             );
+
 
         } catch (err) {
 
@@ -646,11 +827,30 @@ function ExamUpload() {
                 err
             );
 
+
+            console.error(
+                "AI SERVER RESPONSE:",
+                {
+                    status:
+                        err?.response?.status,
+
+                    statusText:
+                        err?.response?.statusText,
+
+                    data:
+                        err?.response?.data,
+
+                    headers:
+                        err?.response?.headers
+                }
+            );
+
+
             setProcessing(false);
 
+
             setError(
-                err?.message ||
-                "Imeshindikana kupakia PDF kwenye Storage."
+                getServerErrorMessage(err)
             );
 
         }
@@ -705,9 +905,7 @@ function ExamUpload() {
                         )
                     }
                     disabled={processing}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl
-                    bg-white text-slate-600 shadow-sm ring-1 ring-slate-200
-                    transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:opacity-50"
                 >
 
                     <FaArrowLeft />
@@ -723,11 +921,13 @@ function ExamUpload() {
 
                     </p>
 
+
                     <h1 className="mt-1 text-2xl font-bold text-slate-900">
 
                         Upload Examination Paper
 
                     </h1>
+
 
                     <p className="mt-1 text-sm text-slate-500">
 
@@ -745,19 +945,18 @@ function ExamUpload() {
 
             <div className="mx-auto max-w-4xl">
 
-                <div className="rounded-2xl bg-white p-5 shadow-sm ring-1
-                ring-slate-200 md:p-8">
-
+                <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 md:p-8">
 
                     {/* SUBJECT + CLASS */}
 
                     <div className="mb-7">
 
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        <label className="mb-2 block text-sm font-semibold text-slate-700">
 
                             Examination Subject
 
                         </label>
+
 
                         <select
                             value={
@@ -769,7 +968,7 @@ function ExamUpload() {
                                 )
                             }
                             disabled={processing}
-                            className="w-full border border-slate-300 rounded-xl px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                         >
 
                             <option value="">
@@ -777,6 +976,7 @@ function ExamUpload() {
                                 Select Subject + Class
 
                             </option>
+
 
                             {examSubjects.map(
                                 item => (
@@ -796,7 +996,7 @@ function ExamUpload() {
                                             )
                                         }
 
-                                        {" â€” "}
+                                        {" — "}
 
                                         {
                                             getClassName(
@@ -831,7 +1031,7 @@ function ExamUpload() {
 
                     {selectedExamSubjectId && (
 
-                        <div className="mb-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="mb-7 grid grid-cols-1 gap-4 md:grid-cols-2">
 
                             {(() => {
 
@@ -846,11 +1046,14 @@ function ExamUpload() {
                                             )
                                     );
 
+
                                 if (!selected) {
                                     return null;
                                 }
 
+
                                 return (
+
                                     <>
 
                                         <div className="rounded-xl bg-blue-50 p-4">
@@ -860,6 +1063,7 @@ function ExamUpload() {
                                                 SUBJECT
 
                                             </p>
+
 
                                             <p className="mt-1 font-bold text-slate-900">
 
@@ -882,6 +1086,7 @@ function ExamUpload() {
 
                                             </p>
 
+
                                             <p className="mt-1 font-bold text-slate-900">
 
                                                 {
@@ -895,6 +1100,7 @@ function ExamUpload() {
                                         </div>
 
                                     </>
+
                                 );
 
                             })()}
@@ -936,11 +1142,7 @@ function ExamUpload() {
                                 processing ||
                                 !selectedExamSubjectId
                             }
-                            className="flex min-h-[300px] w-full flex-col items-center
-                            justify-center rounded-2xl border-2 border-dashed
-                            border-slate-300 bg-slate-50 px-6 text-center
-                            transition hover:border-blue-400 hover:bg-blue-50
-                            disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex min-h-[300px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
 
                             <div className="rounded-2xl bg-blue-100 p-5 text-blue-600">
@@ -951,11 +1153,13 @@ function ExamUpload() {
 
                             </div>
 
+
                             <h3 className="mt-5 text-lg font-bold text-slate-800">
 
                                 Upload Examination Paper
 
                             </h3>
+
 
                             <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
 
@@ -964,16 +1168,17 @@ function ExamUpload() {
 
                             </p>
 
-                            <span className="mt-5 rounded-xl bg-blue-600 px-5 py-3
-                            text-sm font-semibold text-white">
+
+                            <span className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white">
 
                                 Choose PDF File
 
                             </span>
 
+
                             <p className="mt-4 text-xs text-slate-400">
 
-                                PDF only â€¢ Maximum size: 20MB
+                                PDF only • Maximum size: 20MB
 
                             </p>
 
@@ -1000,15 +1205,17 @@ function ExamUpload() {
 
                                     </div>
 
+
                                     <div className="min-w-0">
 
-                                        <p className="font-bold text-slate-800 break-all">
+                                        <p className="break-all font-bold text-slate-800">
 
                                             {
                                                 selectedFile.name
                                             }
 
                                         </p>
+
 
                                         <p className="mt-1 text-sm text-slate-500">
 
@@ -1024,6 +1231,7 @@ function ExamUpload() {
 
                                 </div>
 
+
                                 <div className="flex items-center gap-2">
 
                                     <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700">
@@ -1033,6 +1241,7 @@ function ExamUpload() {
                                         PDF Selected
 
                                     </div>
+
 
                                     <button
                                         type="button"
@@ -1081,22 +1290,23 @@ function ExamUpload() {
 
                         </h3>
 
+
                         <ul className="mt-2 space-y-1 text-sm text-slate-500">
 
                             <li>
-                                â€¢ Chagua Subject + Class kwanza.
+                                • Chagua Subject + Class kwanza.
                             </li>
 
                             <li>
-                                â€¢ File lazima iwe PDF.
+                                • File lazima iwe PDF.
                             </li>
 
                             <li>
-                                â€¢ Maximum size ni 20MB.
+                                • Maximum size ni 20MB.
                             </li>
 
                             <li>
-                                â€¢ Tumia paper yenye maandishi yanayoonekana vizuri.
+                                • Tumia paper yenye maandishi yanayoonekana vizuri.
                             </li>
 
                         </ul>
@@ -1123,6 +1333,7 @@ function ExamUpload() {
 
                         </button>
 
+
                         <button
                             type="button"
                             disabled={
@@ -1133,20 +1344,25 @@ function ExamUpload() {
                             onClick={
                                 handleContinue
                             }
-                            className={`rounded-xl px-5 py-3 text-sm font-semibold text-white flex items-center justify-center gap-2 ${
+                            className={`flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white ${
                                 selectedFile &&
                                 selectedExamSubjectId &&
                                 !processing
                                     ? "bg-blue-600 hover:bg-blue-700"
-                                    : "bg-slate-300 cursor-not-allowed"
+                                    : "cursor-not-allowed bg-slate-300"
                             }`}
                         >
 
                             {processing ? (
 
                                 <>
-                                    <FaSpinner className="animate-spin" />
+
+                                    <FaSpinner
+                                        className="animate-spin"
+                                    />
+
                                     Continuing...
+
                                 </>
 
                             ) : (
@@ -1164,7 +1380,9 @@ function ExamUpload() {
             </div>
 
         </div>
+
     );
+
 }
 
 

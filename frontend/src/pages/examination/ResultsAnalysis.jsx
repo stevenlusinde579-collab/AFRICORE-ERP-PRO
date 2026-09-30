@@ -15,7 +15,8 @@ import axios from "axios";
 
 import {
     useNavigate,
-    useParams
+    useParams,
+    useSearchParams
 } from "react-router-dom";
 
 import {
@@ -49,6 +50,7 @@ import {
 
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import { useRole } from "../../context/RoleContext";
 
 const API_URL = "https://africore-erp-pro.onrender.com/api";
 
@@ -326,7 +328,28 @@ export default function ResultsAnalysis() {
     const navigate = useNavigate();
     const { showSchoolName, schoolName } = useSchool();
     const documentBrandName = showSchoolName && schoolName ? schoolName : "AfriCore ERP";
+    const { selectedRoleId } = useRole();
+    const isSubjectTeacher = Number(selectedRoleId) === 5;
     const { examId } = useParams();
+    const [searchParams] = useSearchParams();
+
+    // Subject Teacher context comes from the same URL contract used by
+    // examination navigation: exam_subject_id + subject_id + class_id.
+    const urlExamSubjectId =
+        searchParams.get("exam_subject_id") ||
+        searchParams.get("examSubjectId") ||
+        "";
+
+    const urlSubjectId =
+        searchParams.get("subject_id") ||
+        searchParams.get("subjectId") ||
+        "";
+
+    const urlClassId =
+        searchParams.get("class_id") ||
+        searchParams.get("classId") ||
+        "";
+
 
     // --------------------------------------------------------
     // DATA STATE
@@ -350,8 +373,8 @@ export default function ResultsAnalysis() {
     // UI STATE
     // --------------------------------------------------------
 
-    const [selectedClassId, setSelectedClassId] = useState("ALL");
-    const [selectedSubjectId, setSelectedSubjectId] = useState("ALL");
+    const [selectedClassId, setSelectedClassId] = useState(urlClassId || "ALL");
+    const [selectedSubjectId, setSelectedSubjectId] = useState(urlSubjectId || "ALL");
     const [activeTab, setActiveTab] = useState("overview");
     const [studentSearch, setStudentSearch] = useState("");
     const [subjectSearch, setSubjectSearch] = useState("");
@@ -453,7 +476,77 @@ export default function ResultsAnalysis() {
 
             if (examSubjectError) throw examSubjectError;
 
-            const safeExamSubjects = examSubjectData || [];
+            const allExamSubjects = examSubjectData || [];
+
+            // Subject Teacher can see ONLY the exact Subject + Class assignment.
+            // We additionally honor exam_subject_id from the URL when supplied,
+            // so the teacher cannot accidentally switch to another class/subject.
+            let safeExamSubjects = allExamSubjects;
+
+            if (isSubjectTeacher) {
+                let assignments = [];
+                let currentProfile = null;
+
+                try {
+                    const {
+                        data: { user }
+                    } = await supabase.auth.getUser();
+
+                    if (user?.id) {
+                        const { data: profileData, error: profileError } = await supabase
+                            .from("profiles")
+                            .select("id, school_id, teacher_id")
+                            .eq("id", user.id)
+                            .maybeSingle();
+
+                        if (!profileError) currentProfile = profileData;
+                    }
+                } catch (profileLoadError) {
+                    console.warn("RESULT ANALYSIS PROFILE SCOPE WARNING:", profileLoadError);
+                }
+
+                if (currentProfile?.teacher_id && currentProfile?.school_id) {
+                    const { data: assignmentData, error: assignmentError } = await supabase
+                        .from("teacher_assignments")
+                        .select("id, school_id, teacher_id, subject_id, class_id")
+                        .eq("teacher_id", Number(currentProfile.teacher_id))
+                        .eq("school_id", Number(currentProfile.school_id));
+
+                    if (assignmentError) {
+                        console.warn("RESULT ANALYSIS TEACHER ASSIGNMENT WARNING:", assignmentError);
+                    } else {
+                        assignments = assignmentData || [];
+                    }
+                }
+
+                const assignedPairs = new Set(
+                    assignments.map(row => `${idValue(row.subject_id)}::${idValue(row.class_id)}`)
+                );
+
+                safeExamSubjects = allExamSubjects.filter(row => {
+                    const exactAssignment = assignedPairs.has(
+                        `${idValue(row.subject_id)}::${idValue(row.class_id)}`
+                    );
+
+                    const examSubjectMatch = !urlExamSubjectId ||
+                        idValue(row.id) === idValue(urlExamSubjectId);
+
+                    const urlSubjectMatch = !urlSubjectId ||
+                        idValue(row.subject_id) === idValue(urlSubjectId);
+
+                    const urlClassMatch = !urlClassId ||
+                        idValue(row.class_id) === idValue(urlClassId);
+
+                    return exactAssignment && examSubjectMatch && urlSubjectMatch && urlClassMatch;
+                });
+
+                // If the URL contains an exam_subject_id but it is not assigned
+                // to this teacher, do not expose another subject as a fallback.
+                if (urlExamSubjectId && safeExamSubjects.length === 0) {
+                    console.warn("SUBJECT TEACHER RESULT ANALYSIS: URL subject is not assigned to teacher.");
+                }
+            }
+
             setExamSubjects(safeExamSubjects);
 
             // 3. SUBJECTS
@@ -579,8 +672,17 @@ export default function ResultsAnalysis() {
                 console.error("RESULT ANALYSIS SUBJECT MARKS ERROR:", subjectMarksError);
             }
 
-            const safeQuestionMarks = questionMarksData || [];
-            const safeSubjectMarks = subjectMarksData || [];
+            const scopedExamSubjectIds = new Set(
+                safeExamSubjects.map(row => idValue(row.id))
+            );
+
+            const safeQuestionMarks = (questionMarksData || []).filter(mark =>
+                !isSubjectTeacher || scopedExamSubjectIds.has(idValue(mark.exam_subject_id))
+            );
+
+            const safeSubjectMarks = (subjectMarksData || []).filter(mark =>
+                !isSubjectTeacher || scopedExamSubjectIds.has(idValue(mark.exam_subject_id))
+            );
 
             // Keep both sources in one analysis collection.
             // source=exam_marks identifies the final subject mark.
@@ -742,12 +844,36 @@ export default function ResultsAnalysis() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [examId]);
+    }, [examId, isSubjectTeacher, urlExamSubjectId, urlSubjectId, urlClassId]);
 
 
     useEffect(() => {
         loadAnalysis();
     }, [loadAnalysis]);
+
+    // Subject Teacher filters are locked to the exact assigned exam subject.
+    // Other roles retain the existing All Classes / All Subjects behavior.
+    useEffect(() => {
+        if (!isSubjectTeacher) return;
+
+        const scopedSubject =
+            examSubjects.find(row =>
+                (!urlExamSubjectId || idValue(row.id) === idValue(urlExamSubjectId)) &&
+                (!urlSubjectId || idValue(row.subject_id) === idValue(urlSubjectId)) &&
+                (!urlClassId || idValue(row.class_id) === idValue(urlClassId))
+            ) || examSubjects[0];
+
+        if (scopedSubject) {
+            setSelectedClassId(idValue(scopedSubject.class_id));
+            setSelectedSubjectId(idValue(scopedSubject.subject_id));
+        }
+    }, [
+        isSubjectTeacher,
+        examSubjects,
+        urlExamSubjectId,
+        urlSubjectId,
+        urlClassId
+    ]);
 
 
     // ========================================================
@@ -2643,31 +2769,47 @@ export default function ResultsAnalysis() {
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                            <select
-                                value={selectedClassId}
-                                onChange={event => setSelectedClassId(event.target.value)}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
-                            >
-                                <option value="ALL">All Classes</option>
-                                {availableClasses.map(cls => (
-                                    <option key={cls.id} value={cls.id}>
-                                        {getClassName(cls)}
-                                    </option>
-                                ))}
-                            </select>
+                            {isSubjectTeacher ? (
+                                <>
+                                    <div className="w-full rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800 font-semibold flex items-center gap-2">
+                                        <FaGraduationCap className="shrink-0" />
+                                        <span className="truncate">{currentClassLabel}</span>
+                                    </div>
 
-                            <select
-                                value={selectedSubjectId}
-                                onChange={event => setSelectedSubjectId(event.target.value)}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
-                            >
-                                <option value="ALL">All Subjects</option>
-                                {availableSubjects.map(subject => (
-                                    <option key={subject.id} value={subject.id}>
-                                        {getSubjectName(subject)}
-                                    </option>
-                                ))}
-                            </select>
+                                    <div className="w-full rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800 font-semibold flex items-center gap-2">
+                                        <FaFileAlt className="shrink-0" />
+                                        <span className="truncate">{getSubjectName(subjectMap.get(idValue(selectedSubjectId)))}</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <select
+                                        value={selectedClassId}
+                                        onChange={event => setSelectedClassId(event.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                                    >
+                                        <option value="ALL">All Classes</option>
+                                        {availableClasses.map(cls => (
+                                            <option key={cls.id} value={cls.id}>
+                                                {getClassName(cls)}
+                                            </option>
+                                        ))}
+                                    </select>
+
+                                    <select
+                                        value={selectedSubjectId}
+                                        onChange={event => setSelectedSubjectId(event.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                                    >
+                                        <option value="ALL">All Subjects</option>
+                                        {availableSubjects.map(subject => (
+                                            <option key={subject.id} value={subject.id}>
+                                                {getSubjectName(subject)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </>
+                            )}
 
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 flex items-center gap-2">
                                 <FaGraduationCap className="text-blue-600" />
