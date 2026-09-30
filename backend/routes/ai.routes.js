@@ -2,9 +2,9 @@ import express from "express";
 
 import {
     analyzePaper,
-    getAIAnalysis,
-    getAIAnalysisByExamSubject,
-    aiHealthCheck,
+    getAnalysis,
+    getAnalysisByExam,
+    healthCheck,
 } from "../controllers/ai.controller.js";
 
 import upload from "../middleware/upload.js";
@@ -13,37 +13,37 @@ const router = express.Router();
 
 
 // ============================================================
-// AI HEALTH CHECK
+// AI HEALTH
 // ============================================================
 
 router.get(
     "/health",
-    aiHealthCheck
+    healthCheck
 );
 
 
 // ============================================================
-// GET AI ANALYSIS BY EXAM + SUBJECT
+// AI ANALYSIS — EXAM SUBJECT
 // ============================================================
 
 router.get(
     "/analysis/:examId/:examSubjectId",
-    getAIAnalysisByExamSubject
+    getAnalysis
 );
 
 
 // ============================================================
-// GET AI ANALYSIS BY EXAM
+// AI ANALYSIS — WHOLE EXAM
 // ============================================================
 
 router.get(
     "/analysis/:examId",
-    getAIAnalysis
+    getAnalysisByExam
 );
 
 
 // ============================================================
-// UPLOAD EXAMINATION PAPER FOR AI ANALYSIS
+// UPLOAD EXAMINATION PAPER
 // ============================================================
 
 router.post(
