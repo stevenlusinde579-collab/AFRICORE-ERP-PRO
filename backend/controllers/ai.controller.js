@@ -1155,7 +1155,7 @@ const analyzePaper = async (
             file_name:
                 file.originalname ||
                 "examination-paper.pdf",
-            mime_type:
+            file_type:
                 file.mimetype ||
                 "application/pdf",
             file_hash:
