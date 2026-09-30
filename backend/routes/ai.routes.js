@@ -1,4 +1,5 @@
 import express from "express";
+import multer from "multer";
 
 import {
     analyzePaper,
@@ -7,9 +8,21 @@ import {
     healthCheck,
 } from "../controllers/ai.controller.js";
 
-import upload from "../middleware/upload.js";
-
 const router = express.Router();
+
+
+// ============================================================
+// MULTER — MEMORY STORAGE
+// ============================================================
+// ai.controller.js expects req.file.buffer
+// Therefore the uploaded PDF must remain in memory.
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 25 * 1024 * 1024, // 25 MB
+    },
+});
 
 
 // ============================================================
