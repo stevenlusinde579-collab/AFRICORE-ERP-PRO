@@ -3,9 +3,9 @@ import multer from "multer";
 
 import {
     analyzePaper,
-    getAnalysis,
-    getAnalysisByExam,
-    healthCheck,
+    getAIAnalysisByExamSubject,
+    getAIAnalysis,
+    aiHealthCheck,
 } from "../controllers/ai.controller.js";
 
 const router = express.Router();
@@ -31,7 +31,7 @@ const upload = multer({
 
 router.get(
     "/health",
-    healthCheck
+    aiHealthCheck
 );
 
 
@@ -41,7 +41,7 @@ router.get(
 
 router.get(
     "/analysis/:examId/:examSubjectId",
-    getAnalysis
+    getAIAnalysisByExamSubject
 );
 
 
@@ -51,7 +51,7 @@ router.get(
 
 router.get(
     "/analysis/:examId",
-    getAnalysisByExam
+    getAIAnalysis
 );
 
 
