@@ -7,17 +7,52 @@ import { askGemini } from "../services/gemini.service.js";
 // AI ANALYSIS QUEUE
 // ============================================================
 //
-// Muhimu:
-//
-// 1. Hakuna lock ya exam + subject tena.
-// 2. Papers nyingi za subject moja zinaweza kuingia queue.
-// 3. Queue inazichakata moja baada ya nyingine.
-// 4. Kila upload mpya inapata exam_papers record mpya.
-// 5. Same PDF ikiwa bado Processing haitaanzishwa mara mbili.
+// - Hakuna lock ya exam + subject.
+// - Papers nyingi za subject moja zinaruhusiwa.
+// - Queue inachakata paper moja baada ya nyingine.
+// - Kila upload mpya inapata exam_papers record mpya.
+// - Same PDF ikiwa tayari Processing, request duplicate
+//   inazuiwa ndani ya instance hii ya backend.
 // ============================================================
 
 const analysisQueue = [];
-let analysisWorkerRunning = false;
+
+let analysisWorkerRunning =
+    false;
+
+// ============================================================
+// ACTIVE REQUEST HASHES
+// ============================================================
+//
+// Hii inalinda dhidi ya frontend kutuma request ile ile mara
+// mbili kwa wakati mmoja.
+//
+// Key:
+// examId:examSubjectId:fileHash
+//
+// HAIJAFUNGI subject nzima.
+// Paper mpya yenye hash tofauti bado inaruhusiwa.
+// ============================================================
+
+const activeAnalysisHashes =
+    new Set();
+
+
+// ============================================================
+// BUILD ANALYSIS HASH KEY
+// ============================================================
+
+const getAnalysisHashKey = (
+    examId,
+    examSubjectId,
+    fileHash
+) => {
+    return `${Number(
+        examId
+    )}:${Number(
+        examSubjectId
+    )}:${fileHash}`;
+};
 
 
 // ============================================================
@@ -397,15 +432,15 @@ const getExamSubject =
                     "exam_subjects"
                 )
                 .select(`
-                id,
-                exam_id,
-                subject_id,
-                class_id,
-                full_marks,
-                pass_marks,
-                question_selection_type,
-                questions_to_answer
-            `)
+                    id,
+                    exam_id,
+                    subject_id,
+                    class_id,
+                    full_marks,
+                    pass_marks,
+                    question_selection_type,
+                    questions_to_answer
+                `)
                 .eq(
                     "id",
                     examSubjectId
@@ -529,20 +564,7 @@ const findExistingPaper =
 
 
 // ============================================================
-// FIND PAPER BY EXACT FILE HASH
-// ============================================================
-//
-// Hii inatumika kwa duplicate protection.
-// Haitoi block kwa subject nzima.
-//
-// Same exact PDF + Processing:
-//     return existing paper.
-//
-// Same exact PDF + Completed:
-//     allow re-analysis.
-//
-// Different PDF:
-//     always allow.
+// FIND PAPER BY EXACT HASH
 // ============================================================
 
 const findPaperByHash =
@@ -635,8 +657,18 @@ const updatePaperStatus =
 // DELETE PREVIOUS AI DATA
 // ============================================================
 //
-// Hii inaacha latest analysis ikiwa ndiyo active analysis
-// ya exam subject.
+// Production schema confirmation:
+//
+// exam_ai_analysis:
+// - id
+// - exam_id
+// - exam_subject_id
+// - exam_paper_id
+//
+// exam_question_analysis DOES NOT have analysis_id.
+//
+// Therefore question analysis is deleted using:
+// exam_id + exam_subject_id
 // ============================================================
 
 const deleteExistingAiData =
@@ -644,6 +676,10 @@ const deleteExistingAiData =
         examId,
         examSubjectId
     ) => {
+        // ====================================================
+        // FIND PREVIOUS AI ANALYSES
+        // ====================================================
+
         const {
             data: analyses,
             error: analysisError,
@@ -652,7 +688,9 @@ const deleteExistingAiData =
                 .from(
                     "exam_ai_analysis"
                 )
-                .select("id")
+                .select(
+                    "id"
+                )
                 .eq(
                     "exam_id",
                     examId
@@ -675,29 +713,41 @@ const deleteExistingAiData =
                     item.id
             );
 
+        // ====================================================
+        // DELETE PREVIOUS QUESTION ANALYSIS
+        // ====================================================
+
+        const {
+            error:
+                questionAnalysisError,
+        } =
+            await supabase
+                .from(
+                    "exam_question_analysis"
+                )
+                .delete()
+                .eq(
+                    "exam_id",
+                    examId
+                )
+                .eq(
+                    "exam_subject_id",
+                    examSubjectId
+                );
+
+        throwSupabaseError(
+            questionAnalysisError,
+            "Failed to delete previous question analysis"
+        );
+
+        // ====================================================
+        // DELETE PREVIOUS MAIN ANALYSIS
+        // ====================================================
+
         if (
             analysisIds.length >
             0
         ) {
-            const {
-                error:
-                    questionAnalysisError,
-            } =
-                await supabase
-                    .from(
-                        "exam_question_analysis"
-                    )
-                    .delete()
-                    .in(
-                        "analysis_id",
-                        analysisIds
-                    );
-
-            throwSupabaseError(
-                questionAnalysisError,
-                "Failed to delete previous question analysis"
-            );
-
             const {
                 error:
                     analysisDeleteError,
@@ -717,6 +767,10 @@ const deleteExistingAiData =
                 "Failed to delete previous AI analysis"
             );
         }
+
+        // ====================================================
+        // DELETE PREVIOUS EXAM QUESTIONS
+        // ====================================================
 
         const {
             error:
@@ -854,6 +908,21 @@ const validateQuestions = (
                         ""
                 );
 
+            const expectedAnswer =
+                normalizeText(
+                    question.expected_answer ||
+                        question.answer ||
+                        question.answer_expected ||
+                        ""
+                );
+
+            const explanation =
+                normalizeText(
+                    question.explanation ||
+                        question.ai_explanation ||
+                        ""
+                );
+
             if (!questionText) {
                 return;
             }
@@ -884,20 +953,11 @@ const validateQuestions = (
 
                 instruction,
 
-                // Preserve expected answer if Gemini returns it.
                 expected_answer:
-                    normalizeText(
-                        question.expected_answer ||
-                            question.answer ||
-                            ""
-                    ),
+                    expectedAnswer,
 
-                // Preserve explanation if Gemini returns it.
                 explanation:
-                    normalizeText(
-                        question.explanation ||
-                            ""
-                    ),
+                    explanation,
             });
         }
     );
@@ -1039,6 +1099,28 @@ ${pdfText}
 // ============================================================
 // SAVE AI ANALYSIS
 // ============================================================
+//
+// Production schema verified:
+//
+// exam_ai_analysis:
+// - ai_summary
+// - analysis_status
+// - instructions TEXT
+//
+// exam_question_analysis:
+// - exam_id
+// - exam_subject_id
+// - exam_paper_id
+// - question_number INTEGER
+// - question_text
+// - answer_expected
+// - ai_explanation
+// - marks
+// - max_marks
+// - etc.
+//
+// There is NO analysis_id column.
+// ============================================================
 
 const saveAiAnalysis = async ({
     examId,
@@ -1066,13 +1148,6 @@ const saveAiAnalysis = async ({
 
     // ========================================================
     // PREPARE INSTRUCTIONS
-    // ========================================================
-    //
-    // Production schema:
-    // instructions = TEXT
-    //
-    // Kwa hiyo hatuhifadhi array moja kwa moja.
-    // Tunaibadilisha kuwa text.
     // ========================================================
 
     let instructionsText =
@@ -1122,19 +1197,7 @@ const saveAiAnalysis = async ({
         );
 
     // ========================================================
-    // SAVE AI ANALYSIS
-    // ========================================================
-    //
-    // Production schema uses:
-    //
-    // ai_summary
-    // analysis_status
-    // instructions TEXT
-    //
-    // NOT:
-    //
-    // summary
-    // status
+    // SAVE MAIN AI ANALYSIS
     // ========================================================
 
     const {
@@ -1191,7 +1254,7 @@ const saveAiAnalysis = async ({
     );
 
     // ========================================================
-    // SAVE AI QUESTION ANALYSIS
+    // SAVE QUESTION ANALYSIS
     // ========================================================
 
     const questionAnalysisRows =
@@ -1199,44 +1262,136 @@ const saveAiAnalysis = async ({
             (
                 question,
                 index
-            ) => ({
-                analysis_id:
-                    analysis.id,
+            ) => {
+                const parsedNumber =
+                    Number.parseInt(
+                        String(
+                            question.question_number ||
+                                ""
+                        ).match(
+                            /^\d+/
+                        )?.[0] ||
+                            "",
+                        10
+                    );
 
-                exam_id:
-                    examId,
+                const questionNumber =
+                    Number.isFinite(
+                        parsedNumber
+                    )
+                        ? parsedNumber
+                        : index + 1;
 
-                exam_subject_id:
-                    examSubjectId,
+                return {
+                    exam_id:
+                        examId,
 
-                question_number:
-                    question.question_number ||
-                    String(
-                        index + 1
-                    ),
+                    exam_subject_id:
+                        examSubjectId,
 
-                question_text:
-                    question.question_text,
+                    exam_paper_id:
+                        paperId,
 
-                expected_answer:
-                    normalizeText(
-                        question.expected_answer ||
-                            ""
-                    ),
+                    question_number:
+                        questionNumber,
 
-                explanation:
-                    normalizeText(
-                        question.explanation ||
-                            ""
-                    ),
+                    question_text:
+                        question.question_text,
 
-                max_marks:
-                    question.max_marks,
+                    topic:
+                        null,
 
-                raw_question:
-                    question,
-            })
+                    subtopic:
+                        null,
+
+                    sub_topic:
+                        null,
+
+                    difficulty:
+                        null,
+
+                    difficulty_level:
+                        null,
+
+                    blooms_level:
+                        null,
+
+                    bloom_level:
+                        null,
+
+                    question_type:
+                        null,
+
+                    ai_confidence:
+                        null,
+
+                    ai_explanation:
+                        normalizeText(
+                            question.explanation ||
+                                ""
+                        ),
+
+                    answer_expected:
+                        normalizeText(
+                            question.expected_answer ||
+                                ""
+                        ),
+
+                    marks:
+                        Math.trunc(
+                            Number(
+                                question.max_marks
+                            ) || 0
+                        ),
+
+                    max_marks:
+                        Number(
+                            question.max_marks
+                        ) || 0,
+
+                    section:
+                        normalizeText(
+                            question.group ||
+                                ""
+                        ),
+
+                    section_type:
+                        null,
+
+                    is_selective:
+                        Boolean(
+                            question.is_selective
+                        ),
+
+                    selection_required:
+                        Boolean(
+                            question.is_selective
+                        ),
+
+                    selection_count:
+                        question.selection_count,
+
+                    selection_total:
+                        question.total_group_questions,
+
+                    selection_group:
+                        normalizeText(
+                            question.group ||
+                                ""
+                        ),
+
+                    selection_instruction:
+                        normalizeText(
+                            question.instruction ||
+                                ""
+                        ),
+                };
+            }
         );
+
+    // ========================================================
+    // INSERT QUESTION ANALYSIS
+    // ========================================================
 
     if (
         questionAnalysisRows.length >
@@ -1307,6 +1462,10 @@ const saveAiAnalysis = async ({
             })
         );
 
+    // ========================================================
+    // INSERT EXAM QUESTIONS
+    // ========================================================
+
     if (
         questionRows.length >
         0
@@ -1353,6 +1512,7 @@ const processAnalyzePaper =
         paperId,
         fileBuffer,
         fileName,
+        hashKey,
     }) => {
         try {
             // ====================================================
@@ -1609,7 +1769,7 @@ const processAnalyzePaper =
             );
 
             // ====================================================
-            // MARK ONLY THIS PAPER AS FAILED
+            // MARK PAPER FAILED
             // ====================================================
 
             try {
@@ -1642,6 +1802,16 @@ const processAnalyzePaper =
             }
 
             return null;
+        } finally {
+            // ====================================================
+            // RELEASE EXACT REQUEST HASH
+            // ====================================================
+
+            if (hashKey) {
+                activeAnalysisHashes.delete(
+                    hashKey
+                );
+            }
         }
     };
 
@@ -1689,7 +1859,7 @@ const analyzePaper = async (
     }
 
     // ========================================================
-    // VALIDATE PDF
+    // VALIDATE FILE
     // ========================================================
 
     const file =
@@ -1740,6 +1910,8 @@ const analyzePaper = async (
 
     let paper = null;
 
+    let hashKey = null;
+
     try {
         // ====================================================
         // CREATE FILE HASH
@@ -1755,18 +1927,45 @@ const analyzePaper = async (
                 )
                 .digest("hex");
 
+        hashKey =
+            getAnalysisHashKey(
+                examId,
+                examSubjectId,
+                fileHash
+            );
+
         // ====================================================
-        // SAME EXACT PDF CHECK
+        // SAME EXACT REQUEST ALREADY ACTIVE
         // ====================================================
-        //
-        // Hii inazuia ONLY duplicate request ya paper ambayo
-        // tayari iko Processing.
-        //
-        // Paper hiyo hiyo ikiwa Completed:
-        //     upload nyingine inaruhusiwa.
-        //
-        // Paper tofauti:
-        //     inaruhusiwa.
+
+        if (
+            activeAnalysisHashes.has(
+                hashKey
+            )
+        ) {
+            const samePaper =
+                await findPaperByHash(
+                    examId,
+                    examSubjectId,
+                    fileHash
+                );
+
+            return res.status(200).json({
+                success: true,
+
+                message:
+                    "Examination paper is already queued for AI analysis",
+
+                processing:
+                    true,
+
+                paper:
+                    samePaper || null,
+            });
+        }
+
+        // ====================================================
+        // CHECK EXISTING PAPER WITH SAME HASH
         // ====================================================
 
         const samePaper =
@@ -1775,6 +1974,10 @@ const analyzePaper = async (
                 examSubjectId,
                 fileHash
             );
+
+        // ====================================================
+        // EXACT SAME PAPER IS ALREADY PROCESSING
+        // ====================================================
 
         if (
             samePaper &&
@@ -1785,17 +1988,6 @@ const analyzePaper = async (
                     "Processing"
             )
         ) {
-            console.log(
-                "DUPLICATE AI PAPER REQUEST IGNORED:",
-                {
-                    examId,
-                    examSubjectId,
-                    paperId:
-                        samePaper.id,
-                    fileHash,
-                }
-            );
-
             return res.status(200).json({
                 success: true,
 
@@ -1809,6 +2001,14 @@ const analyzePaper = async (
                     samePaper,
             });
         }
+
+        // ====================================================
+        // MARK THIS EXACT REQUEST AS ACTIVE
+        // ====================================================
+
+        activeAnalysisHashes.add(
+            hashKey
+        );
 
         // ====================================================
         // NEW PAPER PAYLOAD
@@ -1843,12 +2043,7 @@ const analyzePaper = async (
         };
 
         // ====================================================
-        // ALWAYS INSERT NEW PAPER
-        // ====================================================
-        //
-        // Hatufanyi UPDATE ya paper ya zamani.
-        //
-        // Kila upload mpya inapata ID mpya.
+        // ALWAYS CREATE NEW PAPER
         // ====================================================
 
         const {
@@ -1886,7 +2081,7 @@ const analyzePaper = async (
             );
 
         // ====================================================
-        // QUEUE BACKGROUND AI ANALYSIS
+        // QUEUE BACKGROUND ANALYSIS
         // ====================================================
 
         const queuePosition =
@@ -1901,6 +2096,7 @@ const analyzePaper = async (
                         fileName:
                             file.originalname ||
                             "examination-paper.pdf",
+                        hashKey,
                     })
             );
 
@@ -1917,12 +2113,13 @@ const analyzePaper = async (
                 fileName:
                     file.originalname ||
                     "examination-paper.pdf",
+                fileHash,
                 queuePosition,
             }
         );
 
         // ====================================================
-        // SUCCESS
+        // SUCCESS RESPONSE
         // ====================================================
 
         return res.status(200).json({
@@ -1964,7 +2161,20 @@ const analyzePaper = async (
         );
 
         // ====================================================
-        // PAPER WAS SAVED BUT QUEUE/PROCESSING FAILED
+        // RELEASE ACTIVE HASH IF QUEUE NEVER STARTED
+        // ====================================================
+
+        if (
+            hashKey &&
+            !paper?.id
+        ) {
+            activeAnalysisHashes.delete(
+                hashKey
+            );
+        }
+
+        // ====================================================
+        // PAPER WAS SAVED BUT PROCESSING FAILED
         // ====================================================
 
         if (paper?.id) {
@@ -1996,6 +2206,11 @@ const analyzePaper = async (
                     statusError
                 );
             }
+
+            // ==================================================
+            // PAPER IS SAVED.
+            // RETURN 200.
+            // ==================================================
 
             return res.status(200).json({
                 success: true,
@@ -2134,25 +2349,45 @@ const getAnalysis = async (
         );
 
         // ====================================================
-        // QUESTION ANALYSIS
+        // NORMALIZE MAIN ANALYSIS
+        // ====================================================
+
+        const normalizedAnalysis =
+            analysis
+                ? {
+                    ...analysis,
+
+                    status:
+                        analysis.analysis_status,
+
+                    summary:
+                        analysis.ai_summary,
+                }
+                : null;
+
+        // ====================================================
+        // GET QUESTION ANALYSIS
         // ====================================================
 
         let questionAnalysis =
             [];
 
-        if (analysis?.id) {
-            const {
-                data,
-                error,
-            } =
-                await supabase
+        if (
+            normalizedAnalysis?.id
+        ) {
+            let query =
+                supabase
                     .from(
                         "exam_question_analysis"
                     )
                     .select("*")
                     .eq(
-                        "analysis_id",
-                        analysis.id
+                        "exam_id",
+                        examId
+                    )
+                    .eq(
+                        "exam_subject_id",
+                        examSubjectId
                     )
                     .order(
                         "question_number",
@@ -2162,17 +2397,58 @@ const getAnalysis = async (
                         }
                     );
 
+            // ==================================================
+            // Latest paper filter
+            // ==================================================
+
+            if (
+                normalizedAnalysis.exam_paper_id
+            ) {
+                query =
+                    query.eq(
+                        "exam_paper_id",
+                        normalizedAnalysis.exam_paper_id
+                    );
+            }
+
+            const {
+                data,
+                error,
+            } =
+                await query;
+
             throwSupabaseError(
                 error,
                 "Failed to load AI question analysis"
             );
 
             questionAnalysis =
-                data || [];
+                (
+                    data || []
+                ).map(
+                    (
+                        question
+                    ) => ({
+                        ...question,
+
+                        expected_answer:
+                            question.answer_expected ||
+                            "",
+
+                        explanation:
+                            question.ai_explanation ||
+                            "",
+
+                        max_marks:
+                            question.max_marks ??
+                            question.marks ??
+                            0,
+                    })
+                );
         }
 
         // ====================================================
-        // EXAM QUESTIONS
+        // GET EXAM QUESTIONS
         // ====================================================
 
         const {
@@ -2222,7 +2498,7 @@ const getAnalysis = async (
                 paper || null,
 
             analysis:
-                analysis || null,
+                normalizedAnalysis,
 
             question_analysis:
                 questionAnalysis,
@@ -2335,6 +2611,27 @@ const getAnalysisByExam =
             );
 
             // ====================================================
+            // NORMALIZE ANALYSES FOR FRONTEND
+            // ====================================================
+
+            const normalizedAnalyses =
+                (
+                    analyses || []
+                ).map(
+                    (
+                        analysis
+                    ) => ({
+                        ...analysis,
+
+                        status:
+                            analysis.analysis_status,
+
+                        summary:
+                            analysis.ai_summary,
+                    })
+                );
+
+            // ====================================================
             // GET QUESTIONS
             // ====================================================
 
@@ -2365,6 +2662,63 @@ const getAnalysisByExam =
             );
 
             // ====================================================
+            // GET QUESTION ANALYSIS
+            // ====================================================
+
+            const {
+                data:
+                    questionAnalysis,
+                error:
+                    questionAnalysisError,
+            } =
+                await supabase
+                    .from(
+                        "exam_question_analysis"
+                    )
+                    .select("*")
+                    .eq(
+                        "exam_id",
+                        examId
+                    )
+                    .order(
+                        "question_number",
+                        {
+                            ascending:
+                                true,
+                        }
+                    );
+
+            throwSupabaseError(
+                questionAnalysisError,
+                "Failed to load examination question analysis"
+            );
+
+            const normalizedQuestionAnalysis =
+                (
+                    questionAnalysis ||
+                    []
+                ).map(
+                    (
+                        question
+                    ) => ({
+                        ...question,
+
+                        expected_answer:
+                            question.answer_expected ||
+                            "",
+
+                        explanation:
+                            question.ai_explanation ||
+                            "",
+
+                        max_marks:
+                            question.max_marks ??
+                            question.marks ??
+                            0,
+                    })
+                );
+
+            // ====================================================
             // RESPONSE
             // ====================================================
 
@@ -2375,10 +2729,13 @@ const getAnalysisByExam =
                     papers || [],
 
                 analyses:
-                    analyses || [],
+                    normalizedAnalyses,
 
                 questions:
                     questions || [],
+
+                question_analysis:
+                    normalizedQuestionAnalysis,
             });
         } catch (error) {
             console.error(
@@ -2422,6 +2779,9 @@ const healthCheck = async (
 
         active_locks:
             0,
+
+        active_requests:
+            activeAnalysisHashes.size,
 
         timestamp:
             new Date().toISOString(),
