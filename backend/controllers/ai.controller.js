@@ -1,10 +1,11 @@
 ﻿import crypto from "crypto";
+
 import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGemini } from "../services/gemini.service.js";
 
 const CONTROLLER_VERSION =
-    "MAIN-QUESTION-GROUPING-V6";
+    "MAIN-QUESTION-GROUPING-V7";
 
 const queue = [];
 
@@ -107,10 +108,6 @@ const normalizeConfidence = (
         return 0;
     }
 
-    /*
-     * Gemini mara nyingi hurudisha
-     * 0.95 badala ya 95.
-     */
     if (
         n > 0 &&
         n <= 1
@@ -212,7 +209,6 @@ const withTimeout = (
                         timer
                     )
             ),
-
             timeoutPromise,
         ]
     );
@@ -466,16 +462,40 @@ const mainNumber = (
 const subLabel = (
     value
 ) => {
-    const match =
+    const raw =
         text(
             value
-        ).match(
-            /^(?:question\s*)?\d{1,3}\s*(?:[.)\-:]\s*)?\(?\s*([a-z]|[ivxlcdm]+)\s*\)?/i
         );
 
-    return match
-        ? match[1].toLowerCase()
-        : "";
+    /*
+     * Supports:
+     * Q1(i)
+     * 1(i)
+     * 1(ii)
+     * 1(a)
+     * 1(b)
+     * 1. a
+     * 1) a
+     */
+
+    let match =
+        raw.match(
+            /^(?:question\s*)?\d{1,3}\s*(?:\(\s*([a-z]+|[ivxlcdm]+|\d+)\s*\)|[.)\-:]\s*([a-z]+|[ivxlcdm]+|\d+))/i
+        );
+
+    if (
+        match
+    ) {
+        return (
+            match[1] ||
+            match[2] ||
+            ""
+        )
+            .toLowerCase()
+            .trim();
+    }
+
+    return "";
 };
 
 const roman = (
@@ -542,9 +562,31 @@ const topLevelNumbersFromPdf = (
                 "\n"
             )
     ) {
+        const trimmed =
+            text(
+                line
+            );
+
+        /*
+         * Top-level question:
+         *
+         * 1.
+         * 1)
+         * 1:
+         * 1-
+         * Question 1.
+         *
+         * Do NOT treat:
+         * 1(i)
+         * 1(ii)
+         * 1(a)
+         *
+         * as a separate top-level question.
+         */
+
         const match =
-            line.match(
-                /^\s*(?:question\s*)?(\d{1,3})\s*[.)\-:]/i
+            trimmed.match(
+                /^(?:question\s*)?(\d{1,3})\s*[.)\-:](?!\s*(?:\([a-zivxlcdm0-9]+\)|[a-zivxlcdm]+\b))/i
             );
 
         if (
@@ -553,6 +595,38 @@ const topLevelNumbersFromPdf = (
             const value =
                 integer(
                     match[1]
+                );
+
+            if (
+                value > 0 &&
+                value < 200
+            ) {
+                numbers.add(
+                    value
+                );
+            }
+        }
+
+        /*
+         * Also support:
+         *
+         * 1 Question text
+         *
+         * but only if the line starts with a number followed
+         * by meaningful spacing and not a sub-question pattern.
+         */
+
+        const plainMatch =
+            trimmed.match(
+                /^(?:question\s+)?(\d{1,3})\s{2,}(.+)/i
+            );
+
+        if (
+            plainMatch
+        ) {
+            const value =
+                integer(
+                    plainMatch[1]
                 );
 
             if (
@@ -886,29 +960,157 @@ const normalizeQuestion = (
 };
 
 /* ============================================================
+   NORMALIZE SUB ITEM
+============================================================ */
+
+const normalizeSubItem = (
+    question,
+    index
+) => {
+    let label =
+        text(
+            question?.label ??
+                question?.sub_question_label ??
+                question?.subQuestionLabel
+        );
+
+    if (
+        !label
+    ) {
+        const raw =
+            text(
+                question?.question_number ??
+                    question?.number
+            );
+
+        label =
+            subLabel(
+                raw
+            );
+    }
+
+    if (
+        !label
+    ) {
+        label =
+            roman(
+                index + 1
+            );
+    }
+
+    return {
+        label:
+            label.toLowerCase(),
+
+        question_text:
+            text(
+                question?.question_text ??
+                    question?.questionText ??
+                    question?.text ??
+                    question?.question
+            ) ||
+            null,
+
+        answer_expected:
+            nullable(
+                question?.answer_expected ??
+                    question?.expected_answer ??
+                    question?.answer
+            ),
+
+        topic:
+            nullable(
+                question?.topic ??
+                    question?.main_topic
+            ),
+
+        sub_topic:
+            nullable(
+                question?.sub_topic ??
+                    question?.subtopic ??
+                    question?.subTopic
+            ),
+
+        difficulty_level:
+            nullable(
+                question?.difficulty_level ??
+                    question?.difficulty
+            ),
+
+        bloom_level:
+            nullable(
+                question?.bloom_level ??
+                    question?.blooms_level ??
+                    question?.bloomsLevel
+            ),
+
+        question_type:
+            nullable(
+                question?.question_type ??
+                    question?.type
+            ),
+
+        ai_confidence:
+            normalizeConfidence(
+                question?.ai_confidence ??
+                    question?.confidence
+            ),
+
+        ai_explanation:
+            nullable(
+                question?.ai_explanation ??
+                    question?.explanation
+            ),
+
+        max_marks:
+            marks(
+                question?.max_marks ??
+                    question?.marks ??
+                    question?.total_marks
+            ),
+
+        is_selective:
+            Boolean(
+                question?.is_selective ??
+                    question?.selective
+            ),
+
+        selection_required:
+            Boolean(
+                question?.selection_required ??
+                    question?.selectionRequired
+            ),
+
+        selection_count:
+            integer(
+                question?.selection_count ??
+                    question?.selectionCount
+            ),
+
+        selection_total:
+            integer(
+                question?.selection_total ??
+                    question?.selectionTotal
+            ),
+
+        selection_group:
+            nullable(
+                question?.selection_group ??
+                    question?.selectionGroup ??
+                    question?.group
+            ),
+
+        selection_instruction:
+            nullable(
+                question?.selection_instruction ??
+                    question?.selectionInstruction ??
+                    question?.instruction
+            ),
+    };
+};
+
+/* ============================================================
    AUTHORITATIVE MAIN QUESTION GROUPING
-   ------------------------------------------------------------
-   IMPORTANT:
-
-   Q1(i), Q1(ii), Q1(iii) => ONE Q1
-
-   Q4(a), Q4(b), Q4(c)    => ONE Q4
-
-   If Gemini gives:
-
-   Q1 {
-      sub_items: [...]
-   }
-
-   the parent Q1 itself is NOT duplicated as a child.
-
-   If Gemini gives only:
-
-   Q1(i)
-   Q1(ii)
-   Q1(iii)
-
-   they are merged into ONE Q1 with 3 sub_items.
 ============================================================ */
 
 const groupMainQuestions = (
@@ -998,14 +1200,19 @@ const groupMainQuestions = (
                 }
 
                 /*
-                 * ------------------------------------------------
-                 * FIND REAL PARENT ROW
-                 * ------------------------------------------------
+                 * A true parent is:
                  *
-                 * A parent is Q1.
+                 * Q1
                  *
-                 * A child is Q1(i), Q1(ii), Q1(a), etc.
+                 * while:
+                 *
+                 * Q1(i)
+                 * Q1(ii)
+                 * Q1(a)
+                 *
+                 * are children.
                  */
+
                 const parentItems =
                     items.filter(
                         (
@@ -1021,14 +1228,14 @@ const groupMainQuestions = (
                                     item.sub_question_label
                                 );
 
-                            const hasSubNumber =
-                                /^\s*(?:question\s*)?\d{1,3}\s*(?:\(\s*[a-zivxlcdm0-9]+\s*\)|[.)]\s*[a-zivxlcdm]+)\s*$/i.test(
+                            const parsedLabel =
+                                subLabel(
                                     raw
                                 );
 
                             return (
                                 !label &&
-                                !hasSubNumber
+                                !parsedLabel
                             );
                         }
                     );
@@ -1038,10 +1245,9 @@ const groupMainQuestions = (
                     null;
 
                 /*
-                 * ------------------------------------------------
-                 * CHILD ROWS
-                 * ------------------------------------------------
+                 * Explicit child rows.
                  */
+
                 const explicitChildren =
                     items.filter(
                         (
@@ -1057,8 +1263,8 @@ const groupMainQuestions = (
                                     item.sub_question_label
                                 );
 
-                            const hasSubNumber =
-                                /^\s*(?:question\s*)?\d{1,3}\s*(?:\(\s*[a-zivxlcdm0-9]+\s*\)|[.)]\s*[a-zivxlcdm]+)\s*$/i.test(
+                            const parsedLabel =
+                                subLabel(
                                     raw
                                 );
 
@@ -1066,23 +1272,30 @@ const groupMainQuestions = (
                                 Boolean(
                                     label
                                 ) ||
-                                hasSubNumber
+                                Boolean(
+                                    parsedLabel
+                                )
                             );
                         }
                     );
 
                 /*
-                 * If there is a real parent AND children,
-                 * use children only as sub_items.
+                 * If Gemini gave:
                  *
-                 * This prevents:
-                 *
-                 * Q1 parent
+                 * Q1
                  * Q1(i)
                  * Q1(ii)
                  *
-                 * from becoming 3 sub-items.
+                 * use only Q1(i), Q1(ii) as children.
+                 *
+                 * If Gemini gave only:
+                 *
+                 * Q1(i)
+                 * Q1(ii)
+                 *
+                 * use those rows as children.
                  */
+
                 const childRows =
                     explicitChildren.length
                         ? explicitChildren
@@ -1118,161 +1331,32 @@ const groupMainQuestions = (
                             question,
                             index
                         ) => {
-                            let label =
-                                text(
-                                    question.sub_question_label
+                            const child =
+                                normalizeSubItem(
+                                    question,
+                                    index
                                 );
 
                             if (
-                                !label
-                            ) {
-                                const raw =
-                                    text(
-                                        question.raw_question_number
-                                    );
-
-                                const match =
-                                    raw.match(
-                                        /\(\s*([a-z]+|[ivxlcdm]+|\d+)\s*\)/i
-                                    );
-
-                                if (
-                                    match
-                                ) {
-                                    label =
-                                        match[1].toLowerCase();
-                                }
-                            }
-
-                            if (
-                                !label
-                            ) {
-                                const raw =
-                                    text(
-                                        question.raw_question_number
-                                    );
-
-                                const match =
-                                    raw.match(
-                                        /^\s*\d{1,3}\s*[.)]\s*([a-z]+|[ivxlcdm]+|\d+)\b/i
-                                    );
-
-                                if (
-                                    match
-                                ) {
-                                    label =
-                                        match[1].toLowerCase();
-                                }
-                            }
-
-                            if (
-                                !label &&
+                                !child.label &&
                                 isMCQ &&
                                 multiple
                             ) {
-                                label =
+                                child.label =
                                     roman(
                                         index +
                                             1
                                     );
                             }
 
-                            if (
-                                !label &&
-                                multiple
-                            ) {
-                                label =
-                                    String(
-                                        index +
-                                            1
-                                    );
-                            }
-
-                            return {
-                                label:
-                                    label ||
-                                    null,
-
-                                question_text:
-                                    text(
-                                        question.question_text
-                                    ) ||
-                                    null,
-
-                                answer_expected:
-                                    question.answer_expected ??
-                                    null,
-
-                                topic:
-                                    question.topic ??
-                                    null,
-
-                                sub_topic:
-                                    question.sub_topic ??
-                                    null,
-
-                                difficulty_level:
-                                    question.difficulty_level ??
-                                    null,
-
-                                bloom_level:
-                                    question.bloom_level ??
-                                    null,
-
-                                question_type:
-                                    question.question_type ??
-                                    null,
-
-                                ai_confidence:
-                                    normalizeConfidence(
-                                        question.ai_confidence
-                                    ),
-
-                                ai_explanation:
-                                    question.ai_explanation ??
-                                    null,
-
-                                max_marks:
-                                    marks(
-                                        question.max_marks
-                                    ),
-
-                                is_selective:
-                                    Boolean(
-                                        question.is_selective
-                                    ),
-
-                                selection_required:
-                                    Boolean(
-                                        question.selection_required
-                                    ),
-
-                                selection_count:
-                                    integer(
-                                        question.selection_count
-                                    ),
-
-                                selection_total:
-                                    integer(
-                                        question.selection_total
-                                    ),
-
-                                selection_group:
-                                    question.selection_group ??
-                                    null,
-
-                                selection_instruction:
-                                    question.selection_instruction ??
-                                    null,
-                            };
+                            return child;
                         }
                     );
 
                 /*
-                 * ------------------------------------------------
                  * MAIN QUESTION MARKS
-                 * ------------------------------------------------
                  */
+
                 let maxMarks =
                     multiple &&
                     subItems.length
@@ -1292,12 +1376,15 @@ const groupMainQuestions = (
                           );
 
                 /*
-                 * MCQ STRUCTURE:
+                 * MCQ correction.
                  *
-                 * If Gemini incorrectly gives 1.6 marks
-                 * for each of 10 MCQs, use section total
-                 * where available.
+                 * Example:
+                 * 10 MCQs accidentally returned as 1.6 marks
+                 * each.
+                 *
+                 * Prefer printed section total where reasonable.
                  */
+
                 if (
                     isMCQ &&
                     subItems.length
@@ -1315,8 +1402,6 @@ const groupMainQuestions = (
                         ) || 0;
 
                     const allFractional =
-                        subItems.length >
-                            0 &&
                         subItems.every(
                             (
                                 item
@@ -1357,10 +1442,30 @@ const groupMainQuestions = (
                 }
 
                 /*
-                 * ------------------------------------------------
-                 * CONFIDENCE
-                 * ------------------------------------------------
+                 * If a main question has children but Gemini
+                 * omitted marks on them, retain the parent marks
+                 * when available.
                  */
+
+                if (
+                    subItems.length &&
+                    maxMarks <=
+                        0 &&
+                    marks(
+                        first.max_marks
+                    ) >
+                        0
+                ) {
+                    maxMarks =
+                        marks(
+                            first.max_marks
+                        );
+                }
+
+                /*
+                 * CONFIDENCE
+                 */
+
                 const confidenceValues =
                     (
                         subItems.length
@@ -1405,99 +1510,85 @@ const groupMainQuestions = (
                         : 0;
 
                 /*
-                 * ------------------------------------------------
                  * METADATA MERGING
-                 * ------------------------------------------------
                  */
+
                 const topics =
                     unique(
-                        items
-                            .map(
-                                (
-                                    item
-                                ) =>
-                                    text(
-                                        item.topic
-                                    )
-                            )
-                            .filter(Boolean)
+                        items.map(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.topic
+                                )
+                        )
                     );
 
                 const subTopics =
                     unique(
-                        items
-                            .map(
-                                (
-                                    item
-                                ) =>
-                                    text(
-                                        item.sub_topic
-                                    )
-                            )
-                            .filter(Boolean)
+                        items.map(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.sub_topic
+                                )
+                        )
                     );
 
                 const difficulties =
                     unique(
-                        items
-                            .map(
-                                (
-                                    item
-                                ) =>
-                                    text(
-                                        item.difficulty_level
-                                    )
-                            )
-                            .filter(Boolean)
+                        items.map(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.difficulty_level
+                                )
+                        )
                     );
 
                 const blooms =
                     unique(
-                        items
-                            .map(
-                                (
-                                    item
-                                ) =>
-                                    text(
-                                        item.bloom_level
-                                    )
-                            )
-                            .filter(Boolean)
+                        items.map(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.bloom_level
+                                )
+                        )
                     );
 
                 const questionTypes =
                     unique(
-                        items
-                            .map(
-                                (
-                                    item
-                                ) =>
-                                    text(
-                                        item.question_type
-                                    )
-                            )
-                            .filter(Boolean)
+                        items.map(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.question_type
+                                )
+                        )
                     );
 
                 const explanations =
                     unique(
-                        items
-                            .map(
-                                (
-                                    item
-                                ) =>
-                                    text(
-                                        item.ai_explanation
-                                    )
-                            )
-                            .filter(Boolean)
+                        items.map(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.ai_explanation
+                                )
+                        )
                     );
 
                 /*
-                 * ------------------------------------------------
                  * QUESTION TEXT
-                 * ------------------------------------------------
                  */
+
                 let combinedQuestionText =
                     text(
                         first.question_text
@@ -1522,13 +1613,39 @@ const groupMainQuestions = (
                             .join(
                                 " "
                             );
+
+                    /*
+                     * If the parent itself had meaningful
+                     * introductory text, preserve it.
+                     */
+
+                    if (
+                        text(
+                            first.question_text
+                        ) &&
+                        !subItems.some(
+                            (
+                                item
+                            ) =>
+                                text(
+                                    item.question_text
+                                ) ===
+                                text(
+                                    first.question_text
+                                )
+                        )
+                    ) {
+                        combinedQuestionText =
+                            `${text(
+                                first.question_text
+                            )} ${combinedQuestionText}`.trim();
+                    }
                 }
 
                 /*
-                 * ------------------------------------------------
                  * EXPECTED ANSWERS
-                 * ------------------------------------------------
                  */
+
                 let combinedAnswers =
                     first.answer_expected ??
                     null;
@@ -1536,7 +1653,7 @@ const groupMainQuestions = (
                 if (
                     subItems.length
                 ) {
-                    combinedAnswers =
+                    const childAnswers =
                         subItems
                             .map(
                                 (
@@ -1548,18 +1665,20 @@ const groupMainQuestions = (
                             )
                             .filter(
                                 Boolean
-                            )
-                            .join(
-                                " | "
-                            ) ||
+                            );
+
+                    combinedAnswers =
+                        childAnswers.join(
+                            " | "
+                        ) ||
+                        first.answer_expected ||
                         null;
                 }
 
                 /*
-                 * ------------------------------------------------
                  * RETURN ONE MAIN QUESTION
-                 * ------------------------------------------------
                  */
+
                 return {
                     ...first,
 
@@ -1682,18 +1801,14 @@ const groupMainQuestions = (
 
                     selection_group:
                         unique(
-                            items
-                                .map(
-                                    (
-                                        question
-                                    ) =>
-                                        text(
-                                            question.selection_group
-                                        )
-                                )
-                                .filter(
-                                    Boolean
-                                )
+                            items.map(
+                                (
+                                    question
+                                ) =>
+                                    text(
+                                        question.selection_group
+                                    )
+                            )
                         ).join(
                             ", "
                         ) ||
@@ -1702,18 +1817,14 @@ const groupMainQuestions = (
 
                     selection_instruction:
                         unique(
-                            items
-                                .map(
-                                    (
-                                        question
-                                    ) =>
-                                        text(
-                                            question.selection_instruction
-                                        )
-                                )
-                                .filter(
-                                    Boolean
-                                )
+                            items.map(
+                                (
+                                    question
+                                ) =>
+                                    text(
+                                        question.selection_instruction
+                                    )
+                            )
                         ).join(
                             " "
                         ) ||
@@ -1942,6 +2053,76 @@ const deriveQuality = (
 };
 
 /* ============================================================
+   DETERMINISTIC SYLLABUS COVERAGE
+============================================================ */
+
+const deriveSyllabusCoverage = (
+    questions
+) => {
+    if (
+        !questions.length
+    ) {
+        return 0;
+    }
+
+    const questionsWithTopics =
+        questions.filter(
+            (
+                question
+            ) =>
+                Boolean(
+                    text(
+                        question.topic
+                    )
+                )
+        ).length;
+
+    const subItems =
+        questions.flatMap(
+            (
+                question
+            ) =>
+                Array.isArray(
+                    question.sub_items
+                )
+                    ? question.sub_items
+                    : []
+        );
+
+    const subItemsWithTopics =
+        subItems.filter(
+            (
+                item
+            ) =>
+                Boolean(
+                    text(
+                        item.topic
+                    )
+                )
+        ).length;
+
+    const totalItems =
+        questions.length +
+        subItems.length;
+
+    const coveredItems =
+        questionsWithTopics +
+        subItemsWithTopics;
+
+    return clamp100(
+        totalItems
+            ? Math.round(
+                  (
+                      coveredItems /
+                      totalItems
+                  ) *
+                      100
+              )
+            : 0
+    );
+};
+
+/* ============================================================
    GEMINI PRIMARY PROMPT
 ============================================================ */
 
@@ -1956,7 +2137,9 @@ const buildPrimaryPrompt = ({
 }) => `
 You are an expert Tanzanian secondary-school examination analyst.
 
-READ THE ENTIRE PAPER.
+READ THE ENTIRE PAPER CAREFULLY.
+
+Do not guess the paper structure.
 
 ============================================================
 MANDATORY MAIN QUESTION RULES
@@ -1965,9 +2148,11 @@ MANDATORY MAIN QUESTION RULES
 The paper's TOP-LEVEL question number is authoritative.
 
 1(i), 1(ii), 1(iii), 1(iv) ... 1(x)
+
 are ONE main Question 1.
 
 4(a), 4(b), 4(c)
+
 are ONE main Question 4.
 
 DO NOT count Roman-numeral or lettered sub-items as new
@@ -1992,7 +2177,7 @@ DO NOT return ten separate top-level questions.
 
 Only a NEW top-level number begins a new main question.
 
-For example:
+Example:
 
 1(i)
 1(ii)
@@ -2020,10 +2205,28 @@ Question 3
 Question 4
 
 ============================================================
+QUESTION NUMBER ACCURACY
+============================================================
+
+The PDF-detected top-level numbers supplied below are evidence
+from the actual paper.
+
+TOP LEVEL NUMBERS:
+
+${JSON.stringify(
+    mainNumbers
+)}
+
+Do not invent missing top-level numbers.
+
+Do not create a new main question merely because a sub-item
+has a Roman numeral or letter.
+
+============================================================
 MARKING RULES
 ============================================================
 
-Use the actual paper structure.
+Use the actual printed examination structure.
 
 If Question 1 has ten one-mark multiple-choice items:
 
@@ -2042,8 +2245,31 @@ each optional question = 15 marks;
 
 effective contribution = 30 marks.
 
+Do not confuse:
+- number of questions printed
+- number of questions candidates must answer
+- effective marks
+
 ============================================================
-ANALYSIS REQUIRED
+EXPECTED ANSWERS
+============================================================
+
+Read the actual question and determine the expected answer.
+
+For MCQs:
+return the correct option and, where possible, the answer text.
+
+For structured questions:
+return a concise expected answer or marking-point summary.
+
+For calculation questions:
+return the expected final answer and important working/result
+where the paper provides enough information.
+
+Never invent an answer when the question text is unreadable.
+
+============================================================
+QUESTION METADATA
 ============================================================
 
 For every MAIN question determine:
@@ -2056,22 +2282,34 @@ For every MAIN question determine:
 - expected answer
 - AI confidence 0-100
 - AI explanation
+- maximum marks
+- mark evidence
 
-For sub-items, place their individual analysis inside
-sub_items.
+For sub-items, place their individual analysis inside sub_items.
 
-For the WHOLE paper determine:
+============================================================
+WHOLE PAPER ANALYSIS
+============================================================
+
+Determine:
 
 - summary
 - quality_score 0-100
 - quality_explanation
 - syllabus_coverage 0-100
+- difficulty
 - topics_found
 - weak_topics
 - strong_topics
 - blooms_distribution
 - recommendations
 - teacher_comments
+- instructions
+
+Quality must reflect the actual extracted paper data.
+
+Syllabus coverage must reflect how completely the paper's
+questions can be mapped to identifiable topics from the paper.
 
 ============================================================
 EXAMINATION
@@ -2085,11 +2323,6 @@ ${subject}
 
 LEVEL:
 ${level}
-
-TOP LEVEL NUMBERS DETECTED FROM PDF:
-${JSON.stringify(
-    mainNumbers
-)}
 
 SECTION TOTALS:
 ${JSON.stringify(
@@ -2903,15 +3136,6 @@ const processJob =
 
         /* ========================================================
            PDF READING FIX
-           --------------------------------------------------------
-           readPDF() expects a Buffer.
-
-           DO NOT pass:
-           {
-              buffer: job.buffer
-           }
-
-           Pass the Buffer directly.
         ======================================================== */
 
         if (
@@ -2943,6 +3167,15 @@ const processJob =
             "AI PDF HEADER:",
             pdfHeader
         );
+
+        if (
+            pdfHeader !==
+            "%PDF-"
+        ) {
+            console.warn(
+                "WARNING: Uploaded buffer does not begin with %PDF-."
+            );
+        }
 
         let pdf =
             await withTimeout(
@@ -3065,13 +3298,17 @@ const processJob =
                     );
 
                 /*
-                 * If Gemini returns a proper parent with sub_items,
-                 * keep the parent AND add its children as temporary
-                 * Q1(i), Q1(ii), etc.
+                 * Gemini may return:
                  *
-                 * groupMainQuestions() will then detect the parent
-                 * and use ONLY the children as sub_items.
+                 * Q1 {
+                 *   sub_items: [...]
+                 * }
+                 *
+                 * Convert children into temporary Q1(i),
+                 * Q1(ii), etc., then grouping will consolidate
+                 * them back into ONE main Q1.
                  */
+
                 if (
                     Array.isArray(
                         question?.sub_items
@@ -3147,17 +3384,6 @@ const processJob =
                     return;
                 }
 
-                /*
-                 * Flat Gemini question.
-                 *
-                 * Examples:
-                 *
-                 * Q1(i)
-                 * Q1(ii)
-                 * Q1(iii)
-                 *
-                 * These will be merged later.
-                 */
                 normalizedRows.push(
                     parent
                 );
@@ -3184,9 +3410,6 @@ const processJob =
 
         /* ========================================================
            PDF QUESTION NUMBER AUTHORITY
-           --------------------------------------------------------
-           If the PDF clearly contains top-level numbers, only
-           those numbers are allowed.
         ======================================================== */
 
         if (
@@ -3263,6 +3486,7 @@ const processJob =
         /*
          * Metadata is NEVER allowed to create or split questions.
          */
+
         if (
             Array.isArray(
                 metadata?.questions
@@ -3384,6 +3608,27 @@ const processJob =
                         deriveConfidence(
                             question
                         ),
+
+                    sub_items:
+                        Array.isArray(
+                            question.sub_items
+                        )
+                            ? question.sub_items.map(
+                                  (
+                                      item
+                                  ) => ({
+                                      ...item,
+
+                                      ai_confidence:
+                                          normalizeConfidence(
+                                              item.ai_confidence
+                                          ) ||
+                                          deriveConfidence(
+                                              item
+                                          ),
+                                  })
+                              )
+                            : [],
                 })
             );
 
@@ -3440,10 +3685,6 @@ const processJob =
                 continue;
             }
 
-            /*
-             * If a duplicate somehow survives, merge only
-             * its sub-items into the existing main question.
-             */
             const existing =
                 finalQuestionMap.get(
                     numberValue
@@ -3559,6 +3800,13 @@ const processJob =
 
                         question_type:
                             question.question_type,
+
+                        expected_answer:
+                            Boolean(
+                                text(
+                                    question.answer_expected
+                                )
+                            ),
                     })
                 ),
                 null,
@@ -3575,10 +3823,6 @@ const processJob =
             "============================================================"
         );
 
-        /*
-         * If PDF gave authoritative top-level numbers and the
-         * counts differ, log it but do not manufacture questions.
-         */
         if (
             mainNumbers.length &&
             questions.length !==
@@ -3626,140 +3870,143 @@ const processJob =
                 ...questions.flatMap(
                     (
                         question
-                    ) =>
-                        String(
+                    ) => [
+                        ...String(
                             question.topic ||
                                 ""
                         ).split(
                             /[,;|]/
-                        )
+                        ),
+
+                        ...(
+                            Array.isArray(
+                                question.sub_items
+                            )
+                                ? question.sub_items.flatMap(
+                                      (
+                                          item
+                                      ) =>
+                                          String(
+                                              item.topic ||
+                                                  ""
+                                          ).split(
+                                              /[,;|]/
+                                          )
+                                  )
+                                : []
+                        ),
+                    ]
                 ),
             ]);
 
         /* ========================================================
            QUALITY SCORE
            --------------------------------------------------------
-           Never save NULL.
+           Deterministic quality is authoritative.
+
+           Gemini's score is retained only as supporting information
+           in logs, not as the sole source of truth.
         ======================================================== */
 
-        const quality =
-            (() => {
-                const derived =
-                    deriveQuality(
-                        questions
-                    );
+        const derivedQuality =
+            deriveQuality(
+                questions
+            );
 
-                const metadataScore =
-                    number(
-                        metadata?.quality_score,
-                        NaN
-                    );
+        const geminiMetadataScore =
+            Number.isFinite(
+                Number(
+                    metadata?.quality_score
+                )
+            )
+                ? clamp100(
+                      metadata.quality_score
+                  )
+                : null;
 
-                const primaryScore =
-                    number(
-                        primary?.quality_score,
-                        NaN
-                    );
+        const geminiPrimaryScore =
+            Number.isFinite(
+                Number(
+                    primary?.quality_score
+                )
+            )
+                ? clamp100(
+                      primary.quality_score
+                  )
+                : null;
 
-                let finalScore =
-                    Number.isFinite(
-                        metadataScore
-                    )
-                        ? metadataScore
-                        : Number.isFinite(
-                              primaryScore
-                          )
-                        ? primaryScore
-                        : derived.score;
+        const quality = {
+            score:
+                derivedQuality.score,
 
-                finalScore =
-                    clamp100(
-                        finalScore
-                    );
+            explanation:
+                derivedQuality.explanation,
+        };
 
-                /*
-                 * If Gemini returned zero while our actual
-                 * question data allows a calculated score,
-                 * use the deterministic calculated score.
-                 */
-                if (
-                    finalScore ===
-                        0 &&
-                    derived.score >
-                        0
-                ) {
-                    finalScore =
-                        derived.score;
-                }
+        console.log(
+            "GEMINI PRIMARY QUALITY SCORE:",
+            geminiPrimaryScore
+        );
 
-                const explanation =
-                    text(
-                        metadata?.quality_explanation
-                    ) ||
-                    text(
-                        primary?.quality_explanation
-                    ) ||
-                    derived.explanation;
+        console.log(
+            "GEMINI METADATA QUALITY SCORE:",
+            geminiMetadataScore
+        );
 
-                return {
-                    score:
-                        finalScore,
-
-                    explanation:
-                        explanation,
-                };
-            })();
+        console.log(
+            "DETERMINISTIC QUALITY SCORE:",
+            quality.score
+        );
 
         /* ========================================================
            SYLLABUS COVERAGE
-           --------------------------------------------------------
-           Never save NULL.
         ======================================================== */
 
         const calculatedSyllabusCoverage =
-            questions.length
-                ? Math.round(
-                      (
-                          questions.filter(
-                              (
-                                  question
-                              ) =>
-                                  Boolean(
-                                      text(
-                                          question.topic
-                                      )
-                                  )
-                          ).length /
-                          questions.length
-                      ) *
-                          100
+            deriveSyllabusCoverage(
+                questions
+            );
+
+        const geminiSyllabus =
+            Number.isFinite(
+                Number(
+                    metadata?.syllabus_coverage
+                )
+            )
+                ? clamp100(
+                      metadata.syllabus_coverage
                   )
-                : 0;
+                : Number.isFinite(
+                      Number(
+                          primary?.syllabus_coverage
+                      )
+                  )
+                ? clamp100(
+                      primary.syllabus_coverage
+                  )
+                : null;
 
-        const metadataSyllabus =
-            number(
-                metadata?.syllabus_coverage,
-                NaN
-            );
-
-        const primarySyllabus =
-            number(
-                primary?.syllabus_coverage,
-                NaN
-            );
+        /*
+         * Prefer deterministic coverage because it is based on
+         * the actual saved question metadata.
+         */
 
         const syllabusCoverage =
-            clamp100(
-                Number.isFinite(
-                    metadataSyllabus
-                )
-                    ? metadataSyllabus
-                    : Number.isFinite(
-                          primarySyllabus
-                      )
-                    ? primarySyllabus
-                    : calculatedSyllabusCoverage
-            );
+            calculatedSyllabusCoverage >
+                0 ||
+            questions.length
+                ? calculatedSyllabusCoverage
+                : geminiSyllabus || 0;
+
+        console.log(
+            "GEMINI SYLLABUS COVERAGE:",
+            geminiSyllabus
+        );
+
+        console.log(
+            "DETERMINISTIC SYLLABUS COVERAGE:",
+            calculatedSyllabusCoverage
+        );
 
         /* ========================================================
            DIFFICULTY
@@ -3792,16 +4039,50 @@ const processJob =
                   )
                 : 0;
 
-        const totalMarks =
+        let totalMarks =
+            totalMarksFromStructure;
+
+        /*
+         * If the printed total is reasonably close to the
+         * reconstructed structure, trust the printed total.
+         *
+         * This prevents a wildly wrong Gemini mark calculation
+         * from silently replacing the paper's printed total.
+         */
+
+        if (
             printedTotalMarks >
                 0 &&
-            Math.abs(
-                printedTotalMarks -
-                    totalMarksFromStructure
-            ) <=
-                10
-                ? printedTotalMarks
-                : totalMarksFromStructure;
+            totalMarksFromStructure >
+                0
+        ) {
+            const difference =
+                Math.abs(
+                    printedTotalMarks -
+                        totalMarksFromStructure
+                );
+
+            const tolerance =
+                Math.max(
+                    10,
+                    printedTotalMarks *
+                        0.15
+                );
+
+            if (
+                difference <=
+                tolerance
+            ) {
+                totalMarks =
+                    printedTotalMarks;
+            }
+        } else if (
+            printedTotalMarks >
+            0
+        ) {
+            totalMarks =
+                printedTotalMarks;
+        }
 
         if (
             totalMarks <=
@@ -4428,6 +4709,18 @@ export const analyzePaper =
                     });
             }
 
+            /*
+             * IMPORTANT:
+             *
+             * The paper is created BEFORE AI processing.
+             *
+             * Once the paper exists, the HTTP request returns
+             * 202 immediately.
+             *
+             * Gemini/PDF analysis therefore cannot turn the
+             * upload itself into a 500 response.
+             */
+
             const hash =
                 fileHash(
                     req.file.buffer
@@ -4448,6 +4741,12 @@ export const analyzePaper =
 
                 paperId:
                     paper.id,
+
+                /*
+                 * Keep the real Buffer.
+                 *
+                 * readPDF(job.buffer)
+                 */
 
                 buffer:
                     req.file.buffer,
@@ -4926,6 +5225,18 @@ export const getAIAnalysisByExamSubject =
                       }
                     : null;
 
+            /*
+             * question_analysis stored inside exam_ai_analysis
+             * contains the authoritative sub_items structure.
+             */
+
+            const structuredQuestions =
+                Array.isArray(
+                    analysis?.question_analysis
+                )
+                    ? analysis.question_analysis
+                    : [];
+
             return res
                 .status(
                     200
@@ -4957,11 +5268,14 @@ export const getAIAnalysisByExamSubject =
                     questions,
 
                     question_analysis:
-                        questionAnalysis,
+                        structuredQuestions.length
+                            ? structuredQuestions
+                            : questionAnalysis,
 
                     paper,
 
                     total_questions:
+                        structuredQuestions.length ||
                         questions.length,
 
                     total_marks:
@@ -4969,7 +5283,9 @@ export const getAIAnalysisByExamSubject =
                             normalizedAnalysis?.total_marks
                         ) ||
                         effectiveMarks(
-                            questions
+                            structuredQuestions.length
+                                ? structuredQuestions
+                                : questions
                         ),
                 });
         } catch (
