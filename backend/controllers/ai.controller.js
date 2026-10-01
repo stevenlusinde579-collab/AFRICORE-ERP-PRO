@@ -4,66 +4,30 @@ import { readPDF } from "../services/pdfReader.js";
 import { askGemini } from "../services/gemini.service.js";
 
 // ============================================================
-// AfriCore ERP - FULL AI EXAMINATION ANALYSIS CONTROLLER
-// ============================================================
-// Key rules:
-// 1) Re-analysis is allowed for the same subject and same PDF.
-// 2) 1(i), 1(ii), ... belong to MAIN Question 1.
-// 3) 4(a), 4(b), ... belong to MAIN Question 4.
-// 4) AI must determine topic, quality, confidence, difficulty,
-//    Bloom level, question type and expected answer.
-// 5) AI analysis is marked Completed only after exam_questions
-//    and exam_question_analysis have been saved and verified.
+// AFRICORE ERP - AI EXAMINATION ANALYSIS
+// Main rules:
+// 1(i)..1(x) = ONE main Question 1
+// 4(a)..4(c) = ONE main Question 4
+// Q1 MCQ items are preserved inside sub_items.
 // ============================================================
 
-const jobs = [];
+const queue = [];
 let workerRunning = false;
+const AI_TIMEOUT = 180000;
+const META_TIMEOUT = 120000;
 
-const withTimeout = (promise, ms, message) => {
-  let timer;
+const t = (v) => v == null ? "" : String(v).trim();
+const tn = (v) => t(v) || null;
+const n = (v, d = 0) => Number.isFinite(Number(v)) ? Number(v) : d;
+const i = (v, d = 0) => Math.round(n(v, d));
+const marks = (v) => Math.max(0, n(v, 0));
+const pct = (v, d = 0) => Math.max(0, Math.min(100, n(v, d)));
+const uniq = (a = []) => [...new Set(a.map(t).filter(Boolean))];
 
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      const error = new Error(message);
-      error.status = 504;
-      error.code = "OPERATION_TIMEOUT";
-      reject(error);
-    }, ms);
-  });
+const bool = (v, d = false) => {
+  if (typeof v === "boolean") return v;
 
-  return Promise.race([
-    Promise.resolve(promise).finally(() => clearTimeout(timer)),
-    timeout,
-  ]);
-};
-
-const text = (value) => {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-};
-
-const nullableText = (value) => text(value) || null;
-
-const num = (value, fallback = 0) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const int = (value, fallback = 0) => {
-  const n = Number(value);
-  return Number.isFinite(n)
-    ? Math.max(0, Math.round(n))
-    : fallback;
-};
-
-const bool = (value, fallback = false) => {
-  if (typeof value === "boolean") return value;
-
-  if (typeof value === "number") {
-    return value === 1;
-  }
-
-  const s = text(value).toLowerCase();
+  const s = t(v).toLowerCase();
 
   if (
     [
@@ -72,7 +36,6 @@ const bool = (value, fallback = false) => {
       "yes",
       "required",
       "selective",
-      "optional",
     ].includes(s)
   ) {
     return true;
@@ -85,53 +48,63 @@ const bool = (value, fallback = false) => {
       "no",
       "none",
       "compulsory",
-      "mandatory",
     ].includes(s)
   ) {
     return false;
   }
 
-  return fallback;
+  return d;
 };
 
-const marks = (value) => {
-  const n = Number(
-    String(value ?? "").replace(/,/g, "")
-  );
+const timeout = (
+  promise,
+  ms,
+  message
+) => {
+  let timer;
 
-  return Number.isFinite(n) && n > 0
-    ? n
-    : 0;
-};
+  const p =
+    new Promise(
+      (
+        _,
+        reject
+      ) => {
+        timer =
+          setTimeout(
+            () => {
+              const e =
+                new Error(
+                  message
+                );
 
-const clamp100 = (
-  value,
-  fallback = 0
-) =>
-  Math.max(
-    0,
-    Math.min(
-      100,
-      num(value, fallback)
-    )
-  );
+              e.status =
+                504;
 
-const unique = (values) =>
-  [
-    ...new Set(
-      (values || [])
-        .map(text)
-        .filter(Boolean)
+              e.code =
+                "OPERATION_TIMEOUT";
+
+              reject(e);
+            },
+            ms
+          );
+      }
+    );
+
+  return Promise.race([
+    Promise.resolve(
+      promise
+    ).finally(
+      () =>
+        clearTimeout(
+          timer
+        )
     ),
-  ];
 
-const sha256 = (buffer) =>
-  crypto
-    .createHash("sha256")
-    .update(buffer)
-    .digest("hex");
+    p,
+  ]);
+};
 
-const supabaseError = (
+const dbError = (
   error,
   context
 ) => {
@@ -146,251 +119,40 @@ const supabaseError = (
     );
 
   e.code =
-    error.code || null;
+    error.code ||
+    null;
 
   e.details =
-    error.details || null;
+    error.details ||
+    null;
 
   e.hint =
-    error.hint || null;
+    error.hint ||
+    null;
 
   e.status =
-    error.status || 500;
+    error.status ||
+    500;
 
   throw e;
 };
 
-// ============================================================
-// JSON PARSING
-// ============================================================
-
-const cleanJson = (
-  value
+const hashFile = (
+  buffer
 ) =>
-  String(value || "")
-    .replace(
-      /^\uFEFF/,
-      ""
+  crypto
+    .createHash(
+      "sha256"
     )
-    .replace(
-      /```json/gi,
-      ""
-    )
-    .replace(
-      /```/g,
-      ""
-    )
-    .replace(
-      /[“”]/g,
-      '"'
-    )
-    .replace(
-      /[‘’]/g,
-      "'"
-    )
-    .trim();
-
-const extractJson = (
-  value
-) => {
-  const s =
-    cleanJson(value);
-
-  const indexes = [
-    s.indexOf("{"),
-    s.indexOf("["),
-  ].filter(
-    (x) => x >= 0
-  );
-
-  const start =
-    indexes.length
-      ? Math.min(...indexes)
-      : -1;
-
-  if (
-    !Number.isFinite(start) ||
-    start < 0
-  ) {
-    return s;
-  }
-
-  let depth = 0;
-  let quote = false;
-  let escape = false;
-
-  for (
-    let i = start;
-    i < s.length;
-    i++
-  ) {
-    const c =
-      s[i];
-
-    if (quote) {
-      if (escape) {
-        escape = false;
-      } else if (
-        c === "\\"
-      ) {
-        escape = true;
-      } else if (
-        c === '"'
-      ) {
-        quote = false;
-      }
-
-      continue;
-    }
-
-    if (c === '"') {
-      quote = true;
-      continue;
-    }
-
-    if (
-      c === "{" ||
-      c === "["
-    ) {
-      depth++;
-    }
-
-    if (
-      c === "}" ||
-      c === "]"
-    ) {
-      depth--;
-
-      if (depth === 0) {
-        return s.slice(
-          start,
-          i + 1
-        );
-      }
-    }
-  }
-
-  return s.slice(start);
-};
-
-const parseAI = (
-  value
-) => {
-  if (
-    value &&
-    typeof value ===
-      "object"
-  ) {
-    return value;
-  }
-
-  const raw =
-    extractJson(value);
-
-  const candidates = [
-    raw,
-    raw.replace(
-      /,\s*([}\]])/g,
-      "$1"
-    ),
-  ];
-
-  for (
-    const candidate of
-      candidates
-  ) {
-    try {
-      const parsed =
-        JSON.parse(
-          candidate
-        );
-
-      if (
-        parsed &&
-        typeof parsed ===
-          "object"
-      ) {
-        return parsed;
-      }
-    } catch (_) {}
-  }
-
-  const error =
-    new Error(
-      "Gemini returned invalid JSON."
+    .update(buffer)
+    .digest(
+      "hex"
     );
 
-  error.code =
-    "GEMINI_INVALID_JSON";
-
-  throw error;
-};
-
-// ============================================================
-// MAIN QUESTION NUMBERING
-// ============================================================
-
-const rawNumber = (
-  question
+const cleanPdf = (
+  v
 ) =>
-  text(
-    question?.question_number ??
-      question?.questionNumber ??
-      question?.number
-  );
-
-const mainNumber = (
-  value,
-  fallback = 0
-) => {
-  const s =
-    text(value);
-
-  const match =
-    s.match(
-      /^(\d{1,3})\s*(?:[.)\-:]|\(|$)/
-    );
-
-  if (match) {
-    return int(
-      match[1],
-      fallback
-    );
-  }
-
-  const direct =
-    Number(s);
-
-  return Number.isFinite(
-    direct
-  ) &&
-    direct > 0
-    ? Math.round(
-        direct
-      )
-    : fallback;
-};
-
-const subLabel = (
-  value
-) => {
-  const s =
-    text(value);
-
-  const match =
-    s.match(
-      /^\d+\s*[.):-]?\s*\(?\s*([ivxlcdm]+|[a-z])\s*\)?/i
-    );
-
-  return match
-    ? match[1].toLowerCase()
-    : "";
-};
-
-const normalizePdf = (
-  value
-) =>
-  String(value || "")
+  t(v)
     .replace(
       /\r\n/g,
       "\n"
@@ -406,33 +168,233 @@ const normalizePdf = (
     .replace(
       /\n{3,}/g,
       "\n\n"
-    )
-    .trim();
+    );
 
-const extractQuestionNumbers = (
-  pdfText
+// ============================================================
+// JSON RECOVERY
+// ============================================================
+
+const parseAI = (
+  value
 ) => {
-  const lines =
-    normalizePdf(
-      pdfText
-    ).split("\n");
+  if (
+    value &&
+    typeof value ===
+      "object"
+  ) {
+    return value;
+  }
 
+  let s =
+    String(value || "")
+      .replace(
+        /^\uFEFF/,
+        ""
+      )
+      .replace(
+        /```json/gi,
+        ""
+      )
+      .replace(
+        /```/g,
+        ""
+      )
+      .replace(
+        /[“”]/g,
+        '"'
+      )
+      .trim();
+
+  const positions = [
+    s.indexOf("{"),
+    s.indexOf("["),
+  ].filter(
+    (x) => x >= 0
+  );
+
+  if (!positions.length) {
+    throw new Error(
+      "Gemini returned empty JSON."
+    );
+  }
+
+  const start =
+    Math.min(
+      ...positions
+    );
+
+  s =
+    s.slice(
+      start
+    );
+
+  let depth = 0;
+  let quote = false;
+  let escape = false;
+  let end =
+    s.length;
+
+  for (
+    let k = 0;
+    k < s.length;
+    k++
+  ) {
+    const c =
+      s[k];
+
+    if (quote) {
+      if (escape) {
+        escape =
+          false;
+      } else if (
+        c === "\\"
+      ) {
+        escape =
+          true;
+      } else if (
+        c === '"'
+      ) {
+        quote =
+          false;
+      }
+
+      continue;
+    }
+
+    if (c === '"') {
+      quote =
+        true;
+    } else if (
+      c === "{" ||
+      c === "["
+    ) {
+      depth++;
+    } else if (
+      c === "}" ||
+      c === "]"
+    ) {
+      depth--;
+
+      if (
+        depth ===
+        0
+      ) {
+        end =
+          k + 1;
+
+        break;
+      }
+    }
+  }
+
+  const candidates = [
+    s.slice(
+      0,
+      end
+    ),
+
+    s
+      .slice(
+        0,
+        end
+      )
+      .replace(
+        /,\s*([}\]])/g,
+        "$1"
+      ),
+  ];
+
+  for (
+    const candidate of
+      candidates
+  ) {
+    try {
+      return JSON.parse(
+        candidate
+      );
+    } catch (_) {}
+  }
+
+  throw new Error(
+    "Gemini returned invalid JSON."
+  );
+};
+
+// ============================================================
+// MAIN QUESTION GROUPING
+// ============================================================
+
+const mainNo = (
+  value,
+  fallback = 0
+) => {
+  const match =
+    t(value).match(
+      /^\s*(\d{1,3})\b/
+    );
+
+  if (match) {
+    return Math.max(
+      0,
+      i(
+        match[1],
+        fallback
+      )
+    );
+  }
+
+  return Math.max(
+    0,
+    i(
+      value,
+      fallback
+    )
+  );
+};
+
+const subNo = (
+  value
+) => {
+  const match =
+    t(value).match(
+      /^\s*\d{1,3}\s*[.)\-:]?\s*\(?\s*([a-z]|[ivxlcdm]+)\s*\)?/i
+    );
+
+  return match
+    ? match[1].toLowerCase()
+    : "";
+};
+
+const mainNumbersFromPdf = (
+  pdf
+) => {
   const set =
     new Set();
 
   for (
-    const line of
-      lines
+    const line of cleanPdf(
+      pdf
+    ).split("\n")
   ) {
-    const m =
+    const match =
       line.match(
-        /^\s*(?:question\s*)?(\d{1,3})\s*[.)\-:]/i
+        /^\s*(?:QUESTION\s*)?(\d{1,3})\s*[.)\-:]/i
       );
 
-    if (m) {
-      set.add(
-        int(m[1])
-      );
+    if (match) {
+      const number =
+        i(
+          match[1]
+        );
+
+      if (
+        number > 0 &&
+        number < 100
+      ) {
+        set.add(
+          number
+        );
+      }
     }
   }
 
@@ -444,86 +406,90 @@ const extractQuestionNumbers = (
   );
 };
 
-// ============================================================
-// MARK / SELECTION EVIDENCE
-// ============================================================
-
-const extractSectionTotals = (
-  pdfText
-) => {
-  const result = {};
-
-  const s =
-    normalizePdf(
-      pdfText
-    );
-
-  for (
-    const section of
-      ["A", "B", "C", "D", "E"]
-  ) {
-    const re =
-      new RegExp(
-        `SECTION\\s*${section}[\\s\\S]{0,250}?(\\d+(?:\\.\\d+)?)\\s*MARKS?`,
-        "i"
-      );
-
-    const m =
-      s.match(re);
-
-    if (m) {
-      result[
-        section
-      ] =
-        marks(
-          m[1]
-        );
-    }
-  }
-
-  return result;
-};
-
-const extractSelection = (
-  pdfText
+const pdfTotal = (
+  pdf
 ) => {
   const s =
-    normalizePdf(
-      pdfText
+    cleanPdf(
+      pdf
     ).replace(
       /\s+/g,
       " "
     );
 
   const patterns = [
-    /(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(\d+)\s+(?:questions?|items?)\s+(?:from|out of)\s+(?:the\s+)?(\d+)/i,
-
-    /(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(\d+)\s+(?:questions?|items?)/i,
+    /TOTAL\s+MARKS?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
+    /MAXIMUM\s+MARKS?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
+    /TOTAL\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
   ];
 
   for (
-    const re of
+    const pattern of
       patterns
   ) {
-    const m =
-      s.match(re);
+    const match =
+      s.match(
+        pattern
+      );
 
-    if (m) {
+    if (
+      match &&
+      marks(
+        match[1]
+      ) > 0
+    ) {
+      return marks(
+        match[1]
+      );
+    }
+  }
+
+  return 0;
+};
+
+const selectionEvidence = (
+  pdf
+) => {
+  const s =
+    cleanPdf(
+      pdf
+    ).replace(
+      /\s+/g,
+      " "
+    );
+
+  const patterns = [
+    /SECTION\s+([A-Z])[\s\S]{0,250}?(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(\d+)\s*\(\s*\d+\s*\)\s+(?:questions?|items?)[\s\S]{0,80}?(?:from|out of)\s+(?:the\s+)?(\d+)/i,
+
+    /SECTION\s+([A-Z])[\s\S]{0,250}?(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(\d+)\s+(?:questions?|items?)[\s\S]{0,80}?(?:from|out of)\s+(?:the\s+)?(\d+)/i,
+  ];
+
+  for (
+    const pattern of
+      patterns
+  ) {
+    const match =
+      s.match(
+        pattern
+      );
+
+    if (match) {
       return {
+        section:
+          match[1].toUpperCase(),
+
         count:
-          int(m[1]),
+          i(
+            match[2]
+          ),
 
         total:
-          int(m[2]),
-
-        section:
-          m[0].match(
-            /section\s+([A-Z])/i
-          )?.[1] ||
-          null,
+          i(
+            match[3]
+          ),
 
         instruction:
-          m[0],
+          match[0],
       };
     }
   }
@@ -531,239 +497,43 @@ const extractSelection = (
   return null;
 };
 
-// ============================================================
-// AI PROMPT
-// ============================================================
-
-const buildPrompt = ({
-  pdfText,
-  subjectName,
-  level,
-  examName,
-}) => `
-You are an expert Tanzanian secondary-school examination analyst.
-Read the ENTIRE examination paper before answering.
-
-CRITICAL QUESTION COUNTING RULE:
-- 1(i), 1(ii), 1(iii), ... 1(x) are SUB-ITEMS of MAIN Question 1.
-- 4(a), 4(b), 4(c) are SUB-PARTS of MAIN Question 4.
-- Do NOT count these sub-items as separate main questions.
-- Keep all sub-items inside the parent main question.
-- Only a new top-level number such as 2, 3, 4 starts another main question.
-- For multiple-choice Question 1, preserve every item and expected answer inside Question 1.
-
-ANALYSIS REQUIRED:
-1. Correct main-question number and grouping.
-2. Actual marks for each main question.
-3. Topic.
-4. Sub-topic.
-5. Difficulty.
-6. Bloom taxonomy level.
-7. Question type.
-8. Expected answer.
-9. Evidence-based AI confidence 0-100.
-10. Detailed explanation of the AI reasoning / answer.
-11. Selective-question information.
-12. Paper-level topics_found.
-13. Paper-level weak_topics.
-14. Paper-level strong_topics.
-15. Paper-level syllabus_coverage 0-100.
-16. Paper-level quality_score 0-100.
-17. quality_explanation describing WHY the score was assigned.
-18. teacher_comments.
-19. recommendations.
-20. blooms_distribution.
-
-QUALITY SCORE:
-Evaluate structure, clarity, topic coverage, cognitive coverage, mark consistency,
-question quality, balance and completeness. Do not invent a score without evidence.
-
-AI CONFIDENCE:
-0-100 confidence in your own classification of the question based on the paper.
-Use high confidence when topic/marks/type/answer are explicit and lower confidence
-when the PDF evidence is ambiguous.
-
-EXPECTED ANSWERS:
-For MCQ, give the correct option letter AND a concise answer where possible.
-For matching questions, preserve the matching response.
-For structured questions, summarize the expected answer points.
-
-RETURN ONLY VALID JSON.
-
-Schema:
-{
-  "summary": "",
-  "quality_score": 0,
-  "quality_explanation": "",
-  "syllabus_coverage": 0,
-  "difficulty": "",
-  "topics_found": [],
-  "weak_topics": [],
-  "strong_topics": [],
-  "recommendations": [],
-  "teacher_comments": "",
-  "blooms_distribution": {},
-  "instructions": [],
-  "questions": [
-    {
-      "question_number": "1",
-      "question_text": "",
-      "section": "A",
-      "section_type": "compulsory",
-      "max_marks": 10,
-      "mark_source": "printed_on_paper|inferred_from_exam_structure|derived_from_section_total",
-      "mark_evidence": "",
-      "topic": "",
-      "sub_topic": "",
-      "difficulty_level": "",
-      "bloom_level": "",
-      "question_type": "Multiple Choice|Matching|Short Answer|Structured|Essay|Calculation|Practical|Other",
-      "answer_expected": "",
-      "ai_confidence": 0,
-      "ai_explanation": "",
-      "is_selective": false,
-      "selection_required": false,
-      "selection_count": 0,
-      "selection_total": 0,
-      "selection_group": "",
-      "selection_instruction": ""
-    }
-  ]
-}
-
-EXAMINATION: ${examName || "Unknown"}
-SUBJECT: ${subjectName || "Unknown"}
-LEVEL: ${level || "Unknown"}
-
-SECTION TOTAL EVIDENCE:
-${JSON.stringify(
-  extractSectionTotals(
-    pdfText
-  )
-)}
-
-SELECTION EVIDENCE:
-${JSON.stringify(
-  extractSelection(
-    pdfText
-  )
-)}
-
-TOP-LEVEL QUESTION NUMBERS DETECTED BY PDF TEXT:
-${JSON.stringify(
-  extractQuestionNumbers(
-    pdfText
-  )
-)}
-
-FULL PAPER:
-${pdfText}
-`;
-
-const metadataPrompt = ({
-  pdfText,
-  subjectName,
-  level,
-  questions,
-}) => `
-Audit the following examination analysis.
-Do NOT renumber sub-items as main questions.
-1(i), 1(ii), ... are all Question 1. 4(a), 4(b) are Question 4.
-
-Return ONLY valid JSON:
-{
-  "quality_score": 0,
-  "quality_explanation": "",
-  "syllabus_coverage": 0,
-  "topics_found": [],
-  "weak_topics": [],
-  "strong_topics": [],
-  "teacher_comments": "",
-  "questions": [
-    {
-      "question_number": 1,
-      "topic": "",
-      "sub_topic": "",
-      "difficulty_level": "",
-      "bloom_level": "",
-      "question_type": "",
-      "ai_confidence": 0,
-      "ai_explanation": "",
-      "answer_expected": ""
-    }
-  ]
-}
-
-SUBJECT: ${subjectName || "Unknown"}
-LEVEL: ${level || "Unknown"}
-
-CURRENT MAIN QUESTIONS:
-${questions
-  .map(
-    (q) =>
-      `Q${q.question_number}: ${q.question_text}`
-  )
-  .join("\n")}
-
-FULL PAPER:
-${pdfText}
-`;
-
-// ============================================================
-// QUESTION NORMALIZATION AND GROUPING
-// ============================================================
-
-const normalizeAIQuestion = (
-  q,
+const normalizeQ = (
+  question,
   index
 ) => {
   const raw =
-    rawNumber(q) ||
-    String(index + 1);
+    t(
+      question?.question_number ??
+        question?.questionNumber ??
+        question?.number
+    ) ||
+    String(
+      index + 1
+    );
 
   const number =
-    mainNumber(
+    mainNo(
       raw,
       index + 1
     );
 
-  const child =
-    subLabel(
-      raw
-    );
-
   const instruction =
-    nullableText(
-      q.selection_instruction ??
-        q.instruction
+    tn(
+      question?.selection_instruction ??
+        question?.selectionInstruction ??
+        question?.instruction
     );
 
-  let selective =
+  const selective =
     bool(
-      q.is_selective ??
-        q.selective,
-      false
+      question?.is_selective ??
+        question?.selective,
+
+      !!instruction &&
+        /(?:answer|attempt|choose|select)\s+(?:any|only)\s+\d+/i.test(
+          instruction
+        )
     );
-
-  let required =
-    bool(
-      q.selection_required ??
-        q.selectionRequired,
-      false
-    );
-
-  if (
-    instruction &&
-    /(?:answer|attempt|choose|select)\s+(?:any|only)\s+\d+/i.test(
-      instruction
-    )
-  ) {
-    selective =
-      true;
-
-    required =
-      true;
-  }
 
   return {
     question_number:
@@ -772,121 +542,130 @@ const normalizeAIQuestion = (
     raw_question_number:
       raw,
 
-    sub_question_label:
-      child,
+    sub_part:
+      subNo(
+        raw
+      ),
 
     question_text:
-      text(
-        q.question_text ??
-          q.questionText ??
-          q.text ??
-          q.question
+      t(
+        question?.question_text ??
+          question?.questionText ??
+          question?.text ??
+          question?.question
       ) ||
       `Question ${number}`,
 
     topic:
-      nullableText(
-        q.topic ??
-          q.main_topic
+      tn(
+        question?.topic ??
+          question?.main_topic
       ),
 
     sub_topic:
-      nullableText(
-        q.sub_topic ??
-          q.subtopic ??
-          q.subTopic
+      tn(
+        question?.sub_topic ??
+          question?.subtopic ??
+          question?.subTopic
       ),
 
     difficulty_level:
-      nullableText(
-        q.difficulty_level ??
-          q.difficulty
+      tn(
+        question?.difficulty_level ??
+          question?.difficulty
       ),
 
     bloom_level:
-      nullableText(
-        q.bloom_level ??
-          q.blooms_level ??
-          q.bloomsLevel
+      tn(
+        question?.bloom_level ??
+          question?.blooms_level ??
+          question?.bloomsLevel
       ),
 
     question_type:
-      nullableText(
-        q.question_type ??
-          q.type
+      tn(
+        question?.question_type ??
+          question?.type
       ),
 
     answer_expected:
-      nullableText(
-        q.answer_expected ??
-          q.expected_answer ??
-          q.answer
+      tn(
+        question?.answer_expected ??
+          question?.expected_answer ??
+          question?.answer
       ),
 
     ai_confidence:
-      clamp100(
-        q.ai_confidence ??
-          q.confidence,
+      pct(
+        question?.ai_confidence ??
+          question?.confidence,
         0
       ),
 
     ai_explanation:
-      nullableText(
-        q.ai_explanation ??
-          q.explanation
+      tn(
+        question?.ai_explanation ??
+          question?.explanation
       ),
 
     max_marks:
       marks(
-        q.max_marks ??
-          q.marks
+        question?.max_marks ??
+          question?.marks ??
+          question?.total_marks
       ),
 
     mark_source:
-      nullableText(
-        q.mark_source
+      tn(
+        question?.mark_source
       ) ||
-      "inferred_from_exam_structure",
+      "ai_detected",
 
     mark_evidence:
-      nullableText(
-        q.mark_evidence
+      tn(
+        question?.mark_evidence
       ),
 
     section:
-      nullableText(
-        q.section
+      tn(
+        question?.section
       ),
 
     section_type:
-      nullableText(
-        q.section_type ??
-          q.sectionType
+      tn(
+        question?.section_type ??
+          question?.sectionType
       ),
 
     is_selective:
       selective,
 
     selection_required:
-      required,
+      bool(
+        question?.selection_required ??
+          question?.selectionRequired,
+        selective
+      ),
 
     selection_count:
-      int(
-        q.selection_count ??
-          q.selectionCount
+      i(
+        question?.selection_count ??
+          question?.selectionCount ??
+          question?.questions_to_answer
       ),
 
     selection_total:
-      int(
-        q.selection_total ??
-          q.selectionTotal
+      i(
+        question?.selection_total ??
+          question?.selectionTotal ??
+          question?.total_group_questions
       ),
 
     selection_group:
-      nullableText(
-        q.selection_group ??
-          q.selectionGroup ??
-          q.group
+      tn(
+        question?.selection_group ??
+          question?.selectionGroup ??
+          question?.group
       ),
 
     selection_instruction:
@@ -894,549 +673,902 @@ const normalizeAIQuestion = (
   };
 };
 
+const combineGroup = (
+  items
+) => {
+  const first =
+    items[0];
+
+  const children =
+    items.map(
+      (q) => ({
+        label:
+          q.sub_part ||
+          q.raw_question_number,
+
+        raw_question_number:
+          q.raw_question_number,
+
+        question_text:
+          q.question_text,
+
+        answer_expected:
+          q.answer_expected,
+
+        topic:
+          q.topic,
+
+        sub_topic:
+          q.sub_topic,
+
+        difficulty_level:
+          q.difficulty_level,
+
+        bloom_level:
+          q.bloom_level,
+
+        question_type:
+          q.question_type,
+
+        ai_confidence:
+          q.ai_confidence,
+
+        ai_explanation:
+          q.ai_explanation,
+
+        max_marks:
+          q.max_marks,
+      })
+    );
+
+  const confidence =
+    items
+      .map(
+        (q) =>
+          q.ai_confidence
+      )
+      .filter(
+        (x) =>
+          x > 0
+      );
+
+  return {
+    ...first,
+
+    question_number:
+      first.question_number,
+
+    question_text:
+      items.length > 1
+        ? items
+            .map(
+              (q) =>
+                `${
+                  q.sub_part
+                    ? `(${q.sub_part}) `
+                    : ""
+                }${q.question_text}`
+            )
+            .join(
+              " | "
+            )
+        : first.question_text,
+
+    answer_expected:
+      items.length > 1
+        ? items
+            .map(
+              (q) =>
+                q.answer_expected
+                  ? `${
+                      q.sub_part
+                        ? `(${q.sub_part}) `
+                        : ""
+                    }${q.answer_expected}`
+                  : ""
+            )
+            .filter(Boolean)
+            .join(
+              " | "
+            ) ||
+          null
+        : first.answer_expected,
+
+    topic:
+      uniq(
+        items.map(
+          (q) =>
+            q.topic
+        )
+      ).join(
+        "; "
+      ) ||
+      null,
+
+    sub_topic:
+      uniq(
+        items.map(
+          (q) =>
+            q.sub_topic
+        )
+      ).join(
+        "; "
+      ) ||
+      null,
+
+    difficulty_level:
+      uniq(
+        items.map(
+          (q) =>
+            q.difficulty_level
+        )
+      ).join(
+        "; "
+      ) ||
+      null,
+
+    bloom_level:
+      uniq(
+        items.map(
+          (q) =>
+            q.bloom_level
+        )
+      ).join(
+        "; "
+      ) ||
+      null,
+
+    question_type:
+      uniq(
+        items.map(
+          (q) =>
+            q.question_type
+        )
+      ).join(
+        "; "
+      ) ||
+      first.question_type,
+
+    ai_confidence:
+      confidence.length
+        ? Math.round(
+            confidence.reduce(
+              (
+                a,
+                b
+              ) =>
+                a + b,
+              0
+            ) /
+              confidence.length
+          )
+        : 0,
+
+    ai_explanation:
+      uniq(
+        items.map(
+          (q) =>
+            q.ai_explanation
+        )
+      ).join(
+        " "
+      ) ||
+      null,
+
+    max_marks:
+      items.reduce(
+        (
+          sum,
+          q
+        ) =>
+          sum +
+          marks(
+            q.max_marks
+          ),
+        0
+      ),
+
+    is_selective:
+      items.some(
+        (q) =>
+          q.is_selective
+      ),
+
+    selection_required:
+      items.some(
+        (q) =>
+          q.selection_required
+      ),
+
+    selection_count:
+      Math.max(
+        0,
+        ...items.map(
+          (q) =>
+            i(
+              q.selection_count
+            )
+        )
+      ),
+
+    selection_total:
+      Math.max(
+        0,
+        ...items.map(
+          (q) =>
+            i(
+              q.selection_total
+            )
+        )
+      ),
+
+    selection_group:
+      uniq(
+        items.map(
+          (q) =>
+            q.selection_group
+        )
+      ).join(
+        ", "
+      ) ||
+      null,
+
+    selection_instruction:
+      uniq(
+        items.map(
+          (q) =>
+            q.selection_instruction
+        )
+      ).join(
+        " "
+      ) ||
+      null,
+
+    sub_items:
+      items.length > 1
+        ? children
+        : [],
+  };
+};
+
 const groupMainQuestions = (
   rawQuestions
 ) => {
-  const map =
+  const groups =
     new Map();
 
   for (
-    const q of
-      rawQuestions || []
+    let index = 0;
+    index <
+    rawQuestions.length;
+    index += 1
   ) {
-    const normalized =
-      normalizeAIQuestion(
-        q,
-        map.size
+    const raw =
+      rawQuestions[
+        index
+      ] || {};
+
+    const parent =
+      normalizeQ(
+        raw,
+        index
       );
 
+    const flat = [];
+
     if (
-      !map.has(
-        normalized.question_number
-      )
+      Array.isArray(
+        raw.sub_items
+      ) &&
+      raw.sub_items.length
     ) {
-      map.set(
-        normalized.question_number,
-        []
+      for (
+        let k = 0;
+        k <
+        raw.sub_items.length;
+        k += 1
+      ) {
+        const child =
+          raw.sub_items[
+            k
+          ] || {};
+
+        flat.push(
+          normalizeQ(
+            {
+              ...child,
+
+              question_number:
+                `${parent.question_number}(${
+                  child.label ||
+                  child.question_number ||
+                  k + 1
+                })`,
+            },
+            k
+          )
+        );
+      }
+
+      if (
+        parent.max_marks >
+        0
+      ) {
+        flat.push(
+          parent
+        );
+      }
+    } else {
+      flat.push(
+        parent
       );
     }
 
-    map
-      .get(
-        normalized.question_number
-      )
-      .push(
-        normalized
-      );
+    for (
+      const item of
+        flat
+    ) {
+      if (
+        !groups.has(
+          item.question_number
+        )
+      ) {
+        groups.set(
+          item.question_number,
+          []
+        );
+      }
+
+      groups
+        .get(
+          item.question_number
+        )
+        .push(
+          item
+        );
+    }
   }
 
   return [
-    ...map.entries(),
+    ...groups.entries(),
   ]
     .sort(
-      (a, b) =>
-        a[0] - b[0]
+      (
+        a,
+        b
+      ) =>
+        a[0] -
+        b[0]
     )
     .map(
       ([
-        number,
+        ,
         items,
       ]) => {
-        const first =
-          items[0];
+        const parent =
+          items.find(
+            (q) =>
+              !q.sub_part &&
+              q.raw_question_number ===
+                String(
+                  q.question_number
+                ) &&
+              q.max_marks >
+                0
+          );
 
-        const labels =
+        if (
+          !parent ||
+          items.length ===
+            1
+        ) {
+          return combineGroup(
+            items
+          );
+        }
+
+        const childItems =
           items.filter(
             (q) =>
-              q.sub_question_label ||
-              q.raw_question_number !==
-                String(
-                  number
-                )
+              q !==
+              parent
           );
 
-        const parts =
-          items.map(
-            (q) => {
-              const label =
-                q.sub_question_label
-                  ? `(${q.sub_question_label}) `
-                  : "";
-
-              return `${label}${q.question_text}`;
-            }
-          );
-
-        const answers =
-          items
-            .map(
-              (q) => {
-                if (
-                  !q.answer_expected
-                ) {
-                  return "";
-                }
-
-                const label =
-                  q.sub_question_label
-                    ? `(${q.sub_question_label}) `
-                    : "";
-
-                return `${label}${q.answer_expected}`;
-              }
-            )
-            .filter(Boolean);
-
-        const topicList =
-          unique(
-            items.flatMap(
-              (q) =>
-                String(
-                  q.topic || ""
-                ).split(
-                  /[,;|]/
-                )
-            )
-          );
-
-        const subTopicList =
-          unique(
-            items.flatMap(
-              (q) =>
-                String(
-                  q.sub_topic ||
-                    ""
-                ).split(
-                  /[,;|]/
-                )
-            )
-          );
-
-        const difficultyList =
-          unique(
-            items.map(
-              (q) =>
-                q.difficulty_level
-            )
-          );
-
-        const bloomList =
-          unique(
-            items.map(
-              (q) =>
-                q.bloom_level
-            )
-          );
-
-        const typeList =
-          unique(
-            items.map(
-              (q) =>
-                q.question_type
-            )
-          );
-
-        const confidenceValues =
-          items
-            .map(
-              (q) =>
-                q.ai_confidence
-            )
-            .filter(
-              (v) =>
-                v > 0
-            );
-
-        const averageConfidence =
-          confidenceValues.length
-            ? Math.round(
-                confidenceValues.reduce(
-                  (a, b) =>
-                    a + b,
-                  0
-                ) /
-                  confidenceValues.length
-              )
-            : 0;
-
-        const markTotal =
-          items.reduce(
-            (
-              sum,
-              q
-            ) =>
-              sum +
-              marks(
-                q.max_marks
-              ),
-            0
+        const grouped =
+          combineGroup(
+            childItems
           );
 
         return {
-          ...first,
+          ...grouped,
+          ...parent,
 
           question_number:
-            number,
+            parent.question_number,
 
           question_text:
-            labels.length > 0
-              ? parts.join(
-                  " | "
-                )
-              : first.question_text,
+            grouped.question_text,
 
           answer_expected:
-            labels.length > 0
-              ? answers.join(
-                  " | "
-                )
-              : first.answer_expected,
+            grouped.answer_expected,
 
           topic:
-            topicList.join(
-              "; "
-            ) ||
-            null,
+            grouped.topic ||
+            parent.topic,
 
           sub_topic:
-            subTopicList.join(
-              "; "
-            ) ||
-            null,
+            grouped.sub_topic ||
+            parent.sub_topic,
 
           difficulty_level:
-            difficultyList.join(
-              "; "
-            ) ||
-            null,
+            grouped.difficulty_level ||
+            parent.difficulty_level,
 
           bloom_level:
-            bloomList.join(
-              "; "
-            ) ||
-            null,
+            grouped.bloom_level ||
+            parent.bloom_level,
 
           question_type:
-            typeList.join(
-              "; "
-            ) ||
-            first.question_type,
+            grouped.question_type ||
+            parent.question_type,
 
           ai_confidence:
-            averageConfidence ||
-            first.ai_confidence,
+            grouped.ai_confidence ||
+            parent.ai_confidence,
 
           ai_explanation:
-            unique(
-              items.map(
-                (q) =>
-                  q.ai_explanation
-              )
-            ).join(
-              " "
-            ) ||
-            null,
+            grouped.ai_explanation ||
+            parent.ai_explanation,
 
           max_marks:
-            markTotal ||
-            first.max_marks,
-
-          is_selective:
-            items.some(
-              (q) =>
-                q.is_selective
-            ),
-
-          selection_required:
-            items.some(
-              (q) =>
-                q.selection_required
-            ),
-
-          selection_count:
-            Math.max(
-              ...items.map(
-                (q) =>
-                  int(
-                    q.selection_count
-                  )
-              ),
-              0
-            ),
-
-          selection_total:
-            Math.max(
-              ...items.map(
-                (q) =>
-                  int(
-                    q.selection_total
-                  )
-              ),
-              0
-            ),
-
-          selection_group:
-            unique(
-              items.map(
-                (q) =>
-                  q.selection_group
-              )
-            ).join(
-              ", "
-            ) ||
-            null,
-
-          selection_instruction:
-            unique(
-              items.map(
-                (q) =>
-                  q.selection_instruction
-              )
-            ).join(
-              " "
-            ) ||
-            null,
+            parent.max_marks,
 
           sub_items:
-            labels.length > 0
-              ? items
-              : undefined,
+            grouped.sub_items,
         };
       }
     );
 };
 
-const deriveConfidence = (
-  q
+const repairMarks = (
+  questions,
+  pdf
 ) => {
-  const checks = [
-    !!q.topic,
-    !!q.sub_topic,
-    !!q.difficulty_level,
-    !!q.bloom_level,
-    !!q.question_type,
-    q.max_marks > 0,
-    !!q.answer_expected,
-    !!q.ai_explanation,
-  ];
+  const total =
+    pdfTotal(
+      pdf
+    );
 
-  return Math.min(
-    98,
-    50 +
-      Math.round(
-        (
-          checks.filter(
-            Boolean
-          ).length /
-          checks.length
-        ) *
-          48
+  const q1 =
+    questions.find(
+      (q) =>
+        q.question_number ===
+        1
+    );
+
+  if (
+    q1 &&
+    q1.sub_items?.length ===
+      10 &&
+    /multiple\s*choice|mcq/i.test(
+      q1.question_type ||
+        ""
+    )
+  ) {
+    q1.max_marks =
+      total >= 10
+        ? 10
+        : q1.sub_items.reduce(
+            (
+              s,
+              x
+            ) =>
+              s +
+              marks(
+                x.max_marks
+              ),
+            0
+          );
+
+    q1.mark_source =
+      "derived_from_mcq_structure";
+
+    q1.mark_evidence =
+      "Question 1 contains ten multiple-choice items and is treated as one main question.";
+  }
+
+  for (
+    const q of
+      questions
+  ) {
+    if (
+      q.max_marks <=
+        0 &&
+      q.sub_items?.length
+    ) {
+      q.max_marks =
+        q.sub_items.reduce(
+          (
+            s,
+            x
+          ) =>
+            s +
+            marks(
+              x.max_marks
+            ),
+          0
+        );
+    }
+  }
+
+  return questions;
+};
+
+const effectiveMarks = (
+  questions
+) => {
+  const normal =
+    questions
+      .filter(
+        (q) =>
+          !q.is_selective
       )
+      .reduce(
+        (
+          s,
+          q
+        ) =>
+          s +
+          marks(
+            q.max_marks
+          ),
+        0
+      );
+
+  const groups =
+    new Map();
+
+  for (
+    const q of
+      questions
+  ) {
+    if (
+      !q.is_selective
+    ) {
+      continue;
+    }
+
+    const key =
+      q.selection_group ||
+      "SELECTIVE_DEFAULT";
+
+    if (
+      !groups.has(
+        key
+      )
+    ) {
+      groups.set(
+        key,
+        {
+          count:
+            i(
+              q.selection_count,
+              1
+            ) ||
+            1,
+
+          marks:
+            [],
+        }
+      );
+    }
+
+    groups
+      .get(key)
+      .marks.push(
+        marks(
+          q.max_marks
+        )
+      );
+  }
+
+  let selected =
+    0;
+
+  for (
+    const group of
+      groups.values()
+  ) {
+    group.marks.sort(
+      (
+        a,
+        b
+      ) =>
+        b - a
+    );
+
+    selected +=
+      group.marks
+        .slice(
+          0,
+          group.count
+        )
+        .reduce(
+          (
+            a,
+            b
+          ) =>
+            a + b,
+          0
+        );
+  }
+
+  return (
+    normal +
+    selected
   );
 };
 
-const deriveQuality = (
-  questions,
-  expectedCount
+const qualityFallback = (
+  questions
 ) => {
   if (
     !questions.length
   ) {
     return {
       score: 0,
+
       explanation:
         "No main questions were identified.",
     };
   }
 
-  const structure =
-    expectedCount > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (questions.length /
-              expectedCount) *
-              100
-          )
-        )
-      : 90;
-
-  const topics =
-    Math.round(
-      (
-        questions.filter(
-          (q) =>
-            q.topic
-        ).length /
-        questions.length
-      ) *
-        100
-    );
-
-  const metadataFields =
-    questions.flatMap(
-      (q) => [
-        q.topic,
-        q.sub_topic,
-        q.difficulty_level,
-        q.bloom_level,
-        q.question_type,
-        q.ai_explanation,
-      ]
-    );
+  const topic =
+    (questions.filter(
+      (q) =>
+        q.topic
+    ).length /
+      questions.length) *
+    100;
 
   const metadata =
-    Math.round(
-      (
-        metadataFields.filter(
-          Boolean
-        ).length /
-        Math.max(
-          1,
-          metadataFields.length
-        )
-      ) *
-        100
-    );
+    (questions.filter(
+      (q) =>
+        q.topic &&
+        q.sub_topic &&
+        q.difficulty_level &&
+        q.bloom_level &&
+        q.question_type
+    ).length /
+      questions.length) *
+    100;
 
   const answers =
-    Math.round(
-      (
-        questions.filter(
-          (q) =>
-            q.answer_expected
-        ).length /
-        questions.length
-      ) *
-        100
-    );
+    (questions.filter(
+      (q) =>
+        q.answer_expected
+    ).length /
+      questions.length) *
+    100;
 
   const marksScore =
-    Math.round(
-      (
-        questions.filter(
-          (q) =>
-            q.max_marks >
-            0
-        ).length /
-        questions.length
-      ) *
-        100
-    );
+    (questions.filter(
+      (q) =>
+        q.max_marks >
+        0
+    ).length /
+      questions.length) *
+    100;
+
+  const confidence =
+    questions
+      .map(
+        (q) =>
+          q.ai_confidence
+      )
+      .filter(
+        (x) =>
+          x > 0
+      );
+
+  const averageConfidence =
+    confidence.length
+      ? confidence.reduce(
+          (
+            a,
+            b
+          ) =>
+            a + b,
+          0
+        ) /
+        confidence.length
+      : 0;
 
   const score =
     Math.round(
-      structure * 0.25 +
-        topics * 0.25 +
-        metadata * 0.2 +
-        answers * 0.15 +
-        marksScore * 0.15
+      topic * 0.25 +
+        metadata *
+          0.25 +
+        answers *
+          0.15 +
+        marksScore *
+          0.15 +
+        averageConfidence *
+          0.2
     );
 
   return {
-    score,
+    score:
+      pct(
+        score
+      ),
 
     explanation:
-      `Paper quality score ${score}/100. ` +
-      `Main-question structure ${structure}%; ` +
-      `topic detection ${topics}%; ` +
-      `metadata completeness ${metadata}%; ` +
-      `expected-answer coverage ${answers}%; ` +
-      `mark identification ${marksScore}%.`,
+      `Quality score ${score}/100: topic coverage ${Math.round(
+        topic
+      )}%, metadata completeness ${Math.round(
+        metadata
+      )}%, expected-answer coverage ${Math.round(
+        answers
+      )}%, marks identified ${Math.round(
+        marksScore
+      )}%, and average AI confidence ${Math.round(
+        averageConfidence
+      )}%.`,
   };
 };
 
-const applySelectionEvidence = (
+// ============================================================
+// PROMPTS
+// ============================================================
+
+const primaryPrompt = ({
+  pdf,
+  examName,
+  subject,
+  level,
+}) => `
+You are an expert Tanzanian examination-paper analyst for AfriCore ERP.
+Read the ENTIRE paper before returning JSON.
+
+CRITICAL MAIN-QUESTION RULE:
+1(i), 1(ii), 1(iii)... are sub-items of ONE main Question 1.
+4(a), 4(b), 4(c)... are sub-parts of ONE main Question 4.
+Never turn sub-items into separate main questions.
+A new top-level integer (2,3,4,5...) starts a new main question.
+
+MULTIPLE CHOICE:
+Question 1 with items 1(i)-1(x) is ONE main Multiple Choice question.
+Keep every item in sub_items with its expected answer.
+
+MARKS:
+Use printed marks, section structure, number of items and instructions.
+For ten one-mark MC items grouped in Q1, main Q1 is 10 marks.
+For sub-parts 3+2+4, main question is 9 marks.
+For selective 2 out of 3 questions worth 15 each, each question is 15 and
+its effective contribution is 30.
+
+ANALYSIS:
+For every MAIN question identify topic, sub-topic, difficulty, Bloom level,
+question type, expected answer, AI confidence 0-100 and AI explanation.
+At paper level identify quality_score, quality_explanation, syllabus_coverage,
+topics_found, weak_topics, strong_topics, blooms_distribution,
+recommendations and teacher_comments.
+
+RETURN ONLY VALID JSON.
+
+{
+  "summary":"",
+  "quality_score":0,
+  "quality_explanation":"",
+  "syllabus_coverage":0,
+  "difficulty":"",
+  "topics_found":[],
+  "weak_topics":[],
+  "strong_topics":[],
+  "recommendations":[],
+  "teacher_comments":"",
+  "blooms_distribution":{},
+  "instructions":[],
+  "questions":[{
+    "question_number":1,
+    "question_text":"",
+    "section":"A",
+    "section_type":"compulsory",
+    "max_marks":10,
+    "mark_source":"printed_on_paper|derived_from_structure|inferred_from_exam_structure",
+    "mark_evidence":"",
+    "topic":"",
+    "sub_topic":"",
+    "difficulty_level":"",
+    "bloom_level":"",
+    "question_type":"Multiple Choice|Matching|Structured|Short Answer|Essay|Calculation|Practical|Other",
+    "answer_expected":"",
+    "ai_confidence":95,
+    "ai_explanation":"",
+    "is_selective":false,
+    "selection_required":false,
+    "selection_count":0,
+    "selection_total":0,
+    "selection_group":"",
+    "selection_instruction":"",
+    "sub_items":[{
+      "label":"i",
+      "question_text":"",
+      "answer_expected":"",
+      "topic":"",
+      "sub_topic":"",
+      "difficulty_level":"",
+      "bloom_level":"",
+      "question_type":"",
+      "max_marks":1,
+      "ai_confidence":95,
+      "ai_explanation":""
+    }]
+  }]
+}
+
+EXAMINATION: ${examName}
+SUBJECT: ${subject}
+LEVEL: ${level}
+
+FULL PAPER:
+${pdf}`;
+
+const metadataPrompt = ({
+  pdf,
   questions,
-  selection
-) => {
-  if (!selection?.count) {
-    return questions;
-  }
+  subject,
+  level,
+}) => `
+Audit this examination analysis. Do not change main question numbering or marks.
+Do not split 1(i)-1(x) or 4(a)-4(c) into new main questions.
+Repair only topics, sub-topics, difficulty, Bloom, question type,
+expected answers, AI confidence and paper-level quality/topic information.
+Return ONLY JSON:
 
-  const targetSection =
-    text(
-      selection.section
-    ).toUpperCase();
+{
+ "quality_score":0,
+ "quality_explanation":"",
+ "syllabus_coverage":0,
+ "topics_found":[],
+ "weak_topics":[],
+ "strong_topics":[],
+ "teacher_comments":"",
+ "questions":[{
+  "question_number":1,
+  "topic":"",
+  "sub_topic":"",
+  "difficulty_level":"",
+  "bloom_level":"",
+  "question_type":"",
+  "answer_expected":"",
+  "ai_confidence":95,
+  "ai_explanation":""
+ }]
+}
 
-  const candidate =
-    questions.filter(
-      (q) =>
-        !targetSection ||
-        text(
-          q.section
-        ).toUpperCase() ===
-          targetSection
-    );
+SUBJECT: ${subject}
+LEVEL: ${level}
 
-  const total =
-    selection.total > 0
-      ? selection.total
-      : candidate.length;
+MAIN QUESTIONS:
+${questions
+  .map(
+    (q) =>
+      `Q${q.question_number}: ${q.question_text}`
+  )
+  .join(
+    "\n"
+  )}
 
-  if (
-    !candidate.length ||
-    total <
-      selection.count
-  ) {
-    return questions;
-  }
-
-  const targetNumbers =
-    new Set(
-      candidate.map(
-        (q) =>
-          q.question_number
-      )
-    );
-
-  return questions.map(
-    (q) => {
-      if (
-        !targetNumbers.has(
-          q.question_number
-        )
-      ) {
-        return q;
-      }
-
-      return {
-        ...q,
-
-        is_selective:
-          true,
-
-        selection_required:
-          true,
-
-        selection_count:
-          q.selection_count ||
-          selection.count,
-
-        selection_total:
-          q.selection_total ||
-          total,
-
-        selection_group:
-          q.selection_group ||
-          `TEXT-${
-            targetSection ||
-            "GLOBAL"
-          }-SELECTION`,
-
-        selection_instruction:
-          q.selection_instruction ||
-          selection.instruction,
-      };
-    }
-  );
-};
+FULL PAPER:
+${pdf}`;
 
 // ============================================================
-// DB HELPERS
+// DB
 // ============================================================
 
-const loadExamSubject =
+const getExamSubject =
   async (
     id
   ) => {
@@ -1448,14 +1580,16 @@ const loadExamSubject =
         .from(
           "exam_subjects"
         )
-        .select("*")
+        .select(
+          "*"
+        )
         .eq(
           "id",
           id
         )
         .maybeSingle();
 
-    supabaseError(
+    dbError(
       error,
       "Failed to load exam subject"
     );
@@ -1469,12 +1603,82 @@ const loadExamSubject =
     return data;
   };
 
+const getExam =
+  async (
+    id
+  ) => {
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from(
+          "exams"
+        )
+        .select(
+          "*"
+        )
+        .eq(
+          "id",
+          id
+        )
+        .maybeSingle();
+
+    dbError(
+      error,
+      "Failed to load examination"
+    );
+
+    if (!data) {
+      throw new Error(
+        `Examination ${id} was not found.`
+      );
+    }
+
+    return data;
+  };
+
+const getSubject =
+  async (
+    id
+  ) => {
+    if (!id) {
+      return null;
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from(
+          "subjects"
+        )
+        .select(
+          "*"
+        )
+        .eq(
+          "id",
+          id
+        )
+        .maybeSingle();
+
+    dbError(
+      error,
+      "Failed to load subject"
+    );
+
+    return (
+      data || null
+    );
+  };
+
 const createPaper =
   async ({
     examId,
     examSubjectId,
     file,
-    hash,
+    fileHash,
   }) => {
     const {
       data,
@@ -1501,7 +1705,7 @@ const createPaper =
             file.mimetype,
 
           file_hash:
-            hash,
+            fileHash,
 
           ai_status:
             "Processing",
@@ -1512,12 +1716,14 @@ const createPaper =
           error_message:
             null,
         })
-        .select("*")
+        .select(
+          "*"
+        )
         .single();
 
-    supabaseError(
+    dbError(
       error,
-      "Failed to create examination paper record"
+      "Failed to create examination paper"
     );
 
     return data;
@@ -1550,88 +1756,88 @@ const updatePaper =
           id
         );
 
-    supabaseError(
+    dbError(
       error,
-      "Failed to update examination paper status"
+      "Failed to update paper status"
     );
   };
 
-const saveMainAnalysis =
-  async ({
+const clearPrevious =
+  async (
     examId,
-    examSubjectId,
-    paperId,
-    data,
-  }) => {
-    const payload = {
-      exam_id:
-        examId,
+    examSubjectId
+  ) => {
+    const [
+      a,
+      b,
+      c,
+    ] =
+      await Promise.all([
+        supabase
+          .from(
+            "exam_question_analysis"
+          )
+          .delete()
+          .eq(
+            "exam_id",
+            examId
+          )
+          .eq(
+            "exam_subject_id",
+            examSubjectId
+          ),
 
-      exam_subject_id:
-        examSubjectId,
+        supabase
+          .from(
+            "exam_questions"
+          )
+          .delete()
+          .eq(
+            "exam_id",
+            examId
+          )
+          .eq(
+            "exam_subject_id",
+            examSubjectId
+          ),
 
-      exam_paper_id:
-        paperId,
+        supabase
+          .from(
+            "exam_ai_analysis"
+          )
+          .delete()
+          .eq(
+            "exam_id",
+            examId
+          )
+          .eq(
+            "exam_subject_id",
+            examSubjectId
+          ),
+      ]);
 
-      analysis_status:
-        "Processing",
+    dbError(
+      a.error,
+      "Failed to delete old question analysis"
+    );
 
-      total_questions:
-        data.questions.length,
+    dbError(
+      b.error,
+      "Failed to delete old exam questions"
+    );
 
-      total_marks:
-        data.total_marks,
+    dbError(
+      c.error,
+      "Failed to delete old AI analysis"
+    );
+  };
 
-      topics_found:
-        data.topics_found,
-
-      syllabus_coverage:
-        data.syllabus_coverage,
-
-      difficulty:
-        data.difficulty,
-
-      quality_score:
-        data.quality_score,
-
-      recommendations:
-        data.recommendations.join(
-          "\n"
-        ),
-
-      subject:
-        data.subject,
-
-      level:
-        data.level,
-
-      question_analysis:
-        data.questions,
-
-      weak_topics:
-        data.weak_topics,
-
-      strong_topics:
-        data.strong_topics,
-
-      blooms_distribution:
-        data.blooms_distribution,
-
-      teacher_comments:
-        data.teacher_comments,
-
-      ai_summary:
-        data.summary,
-
-      instructions:
-        data.instructions,
-
-      raw_response:
-        data.raw_response,
-    };
-
+const saveAnalysis =
+  async (
+    payload
+  ) => {
     const {
-      data: analysis,
+      data,
       error,
     } =
       await supabase
@@ -1641,280 +1847,1101 @@ const saveMainAnalysis =
         .insert(
           payload
         )
-        .select("*")
+        .select(
+          "*"
+        )
         .single();
 
-    supabaseError(
+    dbError(
       error,
       "Failed to save exam AI analysis"
     );
 
-    return analysis;
+    return data;
   };
 
-const buildQuestionRows = ({
-  examId,
-  examSubjectId,
-  paperId,
-  subjectId,
-  questions,
-}) =>
-  questions.map(
-    (q) => ({
-      exam_id:
-        examId,
+const questionRows =
+  ({
+    examId,
+    examSubjectId,
+    subjectId,
+    questions,
+  }) =>
+    questions.map(
+      (
+        q
+      ) => ({
+        exam_id:
+          examId,
 
-      subject_id:
-        subjectId,
+        subject_id:
+          subjectId ||
+          null,
 
-      exam_subject_id:
-        examSubjectId,
+        exam_subject_id:
+          examSubjectId,
 
-      question_number:
-        int(
-          q.question_number
-        ),
+        question_number:
+          i(
+            q.question_number
+          ),
 
-      question_text:
-        q.question_text,
+        question_text:
+          q.question_text,
 
-      topic:
-        q.topic,
+        topic:
+          q.topic,
 
-      sub_topic:
-        q.sub_topic,
+        sub_topic:
+          q.sub_topic,
 
-      difficulty_level:
-        q.difficulty_level,
+        difficulty_level:
+          q.difficulty_level,
 
-      ai_confidence:
-        clamp100(
-          q.ai_confidence ||
-            deriveConfidence(q)
-        ),
+        ai_confidence:
+          pct(
+            q.ai_confidence
+          ),
 
-      bloom_level:
-        q.bloom_level,
+        bloom_level:
+          q.bloom_level,
 
-      question_type:
-        q.question_type,
+        question_type:
+          q.question_type,
 
-      ai_explanation:
-        q.ai_explanation,
+        ai_explanation:
+          q.ai_explanation,
 
-      ai_processed:
-        true,
+        ai_processed:
+          true,
 
-      max_marks:
-        marks(
-          q.max_marks
-        ),
+        max_marks:
+          marks(
+            q.max_marks
+          ),
 
-      section:
-        q.section,
+        section:
+          q.section,
 
-      section_type:
-        q.section_type,
+        section_type:
+          q.section_type,
 
-      is_selective:
-        !!q.is_selective,
+        is_selective:
+          !!q.is_selective,
 
-      selection_required:
-        !!q.selection_required,
+        selection_required:
+          !!q.selection_required,
 
-      selection_count:
-        int(
-          q.selection_count
-        ),
+        selection_count:
+          i(
+            q.selection_count
+          ),
 
-      selection_total:
-        int(
-          q.selection_total
-        ),
+        selection_total:
+          i(
+            q.selection_total
+          ),
 
-      selection_group:
-        q.selection_group,
+        selection_group:
+          q.selection_group,
 
-      selection_instruction:
-        q.selection_instruction,
-    })
-  );
-
-const buildAnalysisRows = ({
-  examId,
-  examSubjectId,
-  paperId,
-  questions,
-}) =>
-  questions.map(
-    (q) => ({
-      exam_id:
-        examId,
-
-      exam_subject_id:
-        examSubjectId,
-
-      exam_paper_id:
-        paperId,
-
-      question_number:
-        int(
-          q.question_number
-        ),
-
-      topic:
-        q.topic,
-
-      subtopic:
-        q.sub_topic,
-
-      difficulty:
-        q.difficulty_level,
-
-      blooms_level:
-        q.bloom_level,
-
-      marks:
-        marks(
-          q.max_marks
-        ),
-
-      question_text:
-        q.question_text,
-
-      answer_expected:
-        q.answer_expected,
-
-      ai_explanation:
-        q.ai_explanation,
-
-      max_marks:
-        marks(
-          q.max_marks
-        ),
-
-      section:
-        q.section,
-
-      section_type:
-        q.section_type,
-
-      is_selective:
-        !!q.is_selective,
-
-      selection_required:
-        !!q.selection_required,
-
-      selection_count:
-        int(
-          q.selection_count
-        ),
-
-      selection_total:
-        int(
-          q.selection_total
-        ),
-
-      selection_group:
-        q.selection_group,
-
-      selection_instruction:
-        q.selection_instruction,
-
-      ai_confidence:
-        clamp100(
-          q.ai_confidence ||
-            deriveConfidence(q)
-        ),
-
-      question_type:
-        q.question_type,
-    })
-  );
-
-const effectiveMarks = (
-  questions
-) => {
-  const groups =
-    new Map();
-
-  let total = 0;
-
-  for (
-    const q of
-      questions
-  ) {
-    if (
-      !q.is_selective
-    ) {
-      total += marks(
-        q.max_marks
-      );
-
-      continue;
-    }
-
-    const key =
-      q.selection_group ||
-      `Q-${q.question_number}`;
-
-    if (
-      !groups.has(
-        key
-      )
-    ) {
-      groups.set(
-        key,
-        {
-          count:
-            int(
-              q.selection_count
-            ) || 1,
-
-          marks: [],
-        }
-      );
-    }
-
-    groups
-      .get(key)
-      .marks.push(
-        marks(
-          q.max_marks
-        )
-      );
-  }
-
-  for (
-    const group of
-      groups.values()
-  ) {
-    group.marks.sort(
-      (a, b) =>
-        b - a
+        selection_instruction:
+          q.selection_instruction,
+      })
     );
 
-    total +=
-      group.marks
-        .slice(
-          0,
-          group.count
-        )
-        .reduce(
-          (a, b) =>
-            a + b,
-          0
+const analysisRows =
+  ({
+    examId,
+    examSubjectId,
+    paperId,
+    questions,
+  }) =>
+    questions.map(
+      (
+        q
+      ) => ({
+        exam_id:
+          examId,
+
+        exam_subject_id:
+          examSubjectId,
+
+        exam_paper_id:
+          paperId,
+
+        question_number:
+          i(
+            q.question_number
+          ),
+
+        topic:
+          q.topic,
+
+        subtopic:
+          q.sub_topic,
+
+        difficulty:
+          q.difficulty_level,
+
+        blooms_level:
+          q.bloom_level,
+
+        marks:
+          i(
+            q.max_marks
+          ),
+
+        question_text:
+          q.question_text,
+
+        answer_expected:
+          q.answer_expected,
+
+        ai_explanation:
+          q.ai_explanation,
+
+        max_marks:
+          marks(
+            q.max_marks
+          ),
+
+        section:
+          q.section,
+
+        section_type:
+          q.section_type,
+
+        is_selective:
+          !!q.is_selective,
+
+        selection_required:
+          !!q.selection_required,
+
+        selection_count:
+          i(
+            q.selection_count
+          ),
+
+        selection_total:
+          i(
+            q.selection_total
+          ),
+
+        selection_group:
+          q.selection_group,
+
+        selection_instruction:
+          q.selection_instruction,
+
+        ai_confidence:
+          pct(
+            q.ai_confidence
+          ),
+
+        question_type:
+          q.question_type,
+      })
+    );
+
+// ============================================================
+// PROCESSOR
+// ============================================================
+
+const processJob =
+  async (
+    job
+  ) => {
+    const examSubject =
+      await getExamSubject(
+        job.examSubjectId
+      );
+
+    if (
+      Number(
+        examSubject.exam_id
+      ) !==
+      Number(
+        job.examId
+      )
+    ) {
+      throw new Error(
+        "Exam subject does not belong to this examination."
+      );
+    }
+
+    const exam =
+      await getExam(
+        job.examId
+      );
+
+    const subject =
+      await getSubject(
+        examSubject.subject_id
+      );
+
+    const subjectName =
+      t(
+        subject?.name ??
+          subject?.subject_name ??
+          subject?.title
+      ) ||
+      "Unknown Subject";
+
+    const level =
+      t(
+        examSubject.level ??
+          examSubject.class_level ??
+          exam.level
+      ) ||
+      "Unknown Level";
+
+    const examName =
+      t(
+        exam.name ??
+          exam.exam_name ??
+          exam.title
+      ) ||
+      `Examination ${job.examId}`;
+
+    let pdf =
+      await timeout(
+        readPDF({
+          buffer:
+            job.buffer,
+
+          originalname:
+            job.fileName,
+        }),
+        AI_TIMEOUT,
+        "PDF reading timed out."
+      );
+
+    pdf =
+      cleanPdf(
+        pdf
+      );
+
+    if (
+      pdf.length <
+      50
+    ) {
+      throw new Error(
+        "The PDF contains little or no readable text."
+      );
+    }
+
+    const primary =
+      await timeout(
+        askGemini(
+          primaryPrompt({
+            pdf,
+
+            examName,
+
+            subject:
+              subjectName,
+
+            level,
+          })
+        ),
+        AI_TIMEOUT,
+        "AI analysis timed out after 180 seconds."
+      );
+
+    const ai =
+      parseAI(
+        primary
+      );
+
+    if (
+      !Array.isArray(
+        ai.questions
+      ) ||
+      !ai.questions.length
+    ) {
+      throw new Error(
+        "AI could not identify examination questions."
+      );
+    }
+
+    let questions =
+      groupMainQuestions(
+        ai.questions
+      );
+
+    questions =
+      repairMarks(
+        questions,
+        pdf
+      );
+
+    const selection =
+      selectionEvidence(
+        pdf
+      );
+
+    if (
+      selection?.section
+    ) {
+      const candidates =
+        questions.filter(
+          (q) =>
+            t(
+              q.section
+            ).toUpperCase() ===
+            selection.section
         );
-  }
 
-  return total;
-};
+      if (
+        candidates.length >=
+        selection.count
+      ) {
+        questions =
+          questions.map(
+            (q) =>
+              candidates.includes(
+                q
+              )
+                ? {
+                    ...q,
+
+                    is_selective:
+                      true,
+
+                    selection_required:
+                      true,
+
+                    selection_count:
+                      q.selection_count ||
+                      selection.count,
+
+                    selection_total:
+                      q.selection_total ||
+                      selection.total ||
+                      candidates.length,
+
+                    selection_group:
+                      q.selection_group ||
+                      `AUTO-${selection.section}`,
+
+                    selection_instruction:
+                      q.selection_instruction ||
+                      selection.instruction,
+                  }
+                : q
+          );
+      }
+    }
+
+    questions =
+      questions.map(
+        (q) => ({
+          ...q,
+
+          ai_confidence:
+            q.ai_confidence ||
+            Math.min(
+              98,
+              55 +
+                (q.topic
+                  ? 10
+                  : 0) +
+                (q.sub_topic
+                  ? 8
+                  : 0) +
+                (q.difficulty_level
+                  ? 5
+                  : 0) +
+                (q.bloom_level
+                  ? 5
+                  : 0) +
+                (q.question_type
+                  ? 5
+                  : 0) +
+                (q.max_marks
+                  ? 7
+                  : 0) +
+                (q.answer_expected
+                  ? 8
+                  : 0)
+            ),
+        })
+      );
+
+    let meta =
+      null;
+
+    try {
+      meta =
+        parseAI(
+          await timeout(
+            askGemini(
+              metadataPrompt({
+                pdf,
+
+                questions,
+
+                subject:
+                  subjectName,
+
+                level,
+              })
+            ),
+
+            META_TIMEOUT,
+
+            "AI metadata audit timed out."
+          )
+        );
+    } catch (
+      error
+    ) {
+      console.warn(
+        "AI metadata audit failed:",
+        error.message
+      );
+    }
+
+    if (
+      Array.isArray(
+        meta?.questions
+      )
+    ) {
+      const metadataMap =
+        new Map(
+          meta.questions.map(
+            (q) => [
+              mainNo(
+                q.question_number
+              ),
+              q,
+            ]
+          )
+        );
+
+      questions =
+        questions.map(
+          (q) => {
+            const metadata =
+              metadataMap.get(
+                q.question_number
+              );
+
+            if (
+              !metadata
+            ) {
+              return q;
+            }
+
+            return {
+              ...q,
+
+              topic:
+                tn(
+                  metadata.topic
+                ) ||
+                q.topic,
+
+              sub_topic:
+                tn(
+                  metadata.sub_topic
+                ) ||
+                q.sub_topic,
+
+              difficulty_level:
+                tn(
+                  metadata.difficulty_level
+                ) ||
+                q.difficulty_level,
+
+              bloom_level:
+                tn(
+                  metadata.bloom_level
+                ) ||
+                q.bloom_level,
+
+              question_type:
+                tn(
+                  metadata.question_type
+                ) ||
+                q.question_type,
+
+              answer_expected:
+                tn(
+                  metadata.answer_expected
+                ) ||
+                q.answer_expected,
+
+              ai_confidence:
+                pct(
+                  metadata.ai_confidence,
+                  q.ai_confidence
+                ),
+
+              ai_explanation:
+                tn(
+                  metadata.ai_explanation
+                ) ||
+                q.ai_explanation,
+            };
+          }
+        );
+    }
+
+    const quality =
+      (() => {
+        const topic =
+          questions.length
+            ? (
+                questions.filter(
+                  (q) =>
+                    q.topic
+                ).length /
+                questions.length
+              ) *
+              100
+            : 0;
+
+        const metadata =
+          questions.length
+            ? (
+                questions.filter(
+                  (q) =>
+                    q.topic &&
+                    q.sub_topic &&
+                    q.difficulty_level &&
+                    q.bloom_level &&
+                    q.question_type
+                ).length /
+                questions.length
+              ) *
+              100
+            : 0;
+
+        const answers =
+          questions.length
+            ? (
+                questions.filter(
+                  (q) =>
+                    q.answer_expected
+                ).length /
+                questions.length
+              ) *
+              100
+            : 0;
+
+        const marksCoverage =
+          questions.length
+            ? (
+                questions.filter(
+                  (q) =>
+                    q.max_marks >
+                    0
+                ).length /
+                questions.length
+              ) *
+              100
+            : 0;
+
+        const confidence =
+          questions
+            .map(
+              (q) =>
+                q.ai_confidence
+            )
+            .filter(
+              (x) =>
+                x > 0
+            );
+
+        const averageConfidence =
+          confidence.length
+            ? confidence.reduce(
+                (
+                  a,
+                  b
+                ) =>
+                  a + b,
+                0
+              ) /
+              confidence.length
+            : 0;
+
+        const fallback =
+          Math.round(
+            topic *
+                0.25 +
+              metadata *
+                0.25 +
+              answers *
+                0.15 +
+              marksCoverage *
+                0.15 +
+              averageConfidence *
+                0.2
+          );
+
+        return {
+          score:
+            pct(
+              meta?.quality_score ??
+                ai.quality_score ??
+                fallback
+            ),
+
+          explanation:
+            t(
+              meta?.quality_explanation ||
+                ai.quality_explanation
+            ) ||
+            `Quality is based on topic coverage ${Math.round(
+              topic
+            )}%, metadata completeness ${Math.round(
+              metadata
+            )}%, expected-answer coverage ${Math.round(
+              answers
+            )}%, mark identification ${Math.round(
+              marksCoverage
+            )}%, and average AI confidence ${Math.round(
+              averageConfidence
+            )}%.`,
+        };
+      })();
+
+    const topics =
+      uniq([
+        ...(Array.isArray(
+          ai.topics_found
+        )
+          ? ai.topics_found
+          : []),
+
+        ...(Array.isArray(
+          meta?.topics_found
+        )
+          ? meta.topics_found
+          : []),
+
+        ...questions.flatMap(
+          (q) =>
+            String(
+              q.topic ||
+                ""
+            ).split(
+              /[;,|]/
+            )
+        ),
+      ]);
+
+    const weak =
+      uniq([
+        ...(Array.isArray(
+          ai.weak_topics
+        )
+          ? ai.weak_topics
+          : []),
+
+        ...(Array.isArray(
+          meta?.weak_topics
+        )
+          ? meta.weak_topics
+          : []),
+      ]);
+
+    const strong =
+      uniq([
+        ...(Array.isArray(
+          ai.strong_topics
+        )
+          ? ai.strong_topics
+          : []),
+
+        ...(Array.isArray(
+          meta?.strong_topics
+        )
+          ? meta.strong_topics
+          : []),
+      ]);
+
+    const blooms =
+      ai.blooms_distribution &&
+      typeof ai.blooms_distribution ===
+        "object"
+        ? ai.blooms_distribution
+        : questions.reduce(
+            (
+              object,
+              q
+            ) => {
+              const key =
+                q.bloom_level ||
+                "Unknown";
+
+              object[key] =
+                (object[key] ||
+                  0) +
+                1;
+
+              return object;
+            },
+            {}
+          );
+
+    const effective =
+      effectiveMarks(
+        questions
+      );
+
+    const totalFromPdf =
+      pdfTotal(
+        pdf
+      );
+
+    const totalMarks =
+      totalFromPdf >
+        0 &&
+      Math.abs(
+        totalFromPdf -
+          effective
+      ) <=
+        5
+        ? totalFromPdf
+        : effective;
+
+    if (
+      totalMarks <=
+      0
+    ) {
+      throw new Error(
+        "Could not determine valid examination total marks."
+      );
+    }
+
+    const summary =
+      t(
+        ai.summary ||
+          ai.ai_summary
+      ) ||
+      `AI analysed ${questions.length} main questions and detected ${topics.length} topics.`;
+
+    const recommendations =
+      Array.isArray(
+        ai.recommendations
+      )
+        ? ai.recommendations
+            .map(t)
+            .filter(Boolean)
+        : [];
+
+    const teacherComments =
+      [
+        t(
+          meta?.teacher_comments
+        ),
+
+        t(
+          ai.teacher_comments
+        ),
+
+        `Average AI confidence: ${Math.round(
+          questions.reduce(
+            (
+              sum,
+              q
+            ) =>
+              sum +
+              q.ai_confidence,
+            0
+          ) /
+            Math.max(
+              1,
+              questions.length
+            )
+        )}%.`,
+
+        `Paper Quality Score: ${Math.round(
+          quality.score
+        )}/100.`,
+
+        quality.explanation,
+      ]
+        .filter(Boolean)
+        .join(
+          "\n\n"
+        );
+
+    const instructions =
+      Array.isArray(
+        ai.instructions
+      )
+        ? ai.instructions
+            .map(t)
+            .filter(Boolean)
+            .join(
+              "\n"
+            )
+        : t(
+            ai.instructions
+          );
+
+    const duplicateNumbers =
+      questions.map(
+        (q) =>
+          q.question_number
+      );
+
+    if (
+      new Set(
+        duplicateNumbers
+      ).size !==
+      duplicateNumbers.length
+    ) {
+      throw new Error(
+        "Duplicate main question numbers remain after grouping."
+      );
+    }
+
+    if (
+      questions.some(
+        (q) =>
+          q.max_marks <=
+          0
+      )
+    ) {
+      throw new Error(
+        "One or more main questions have invalid marks after AI analysis."
+      );
+    }
+
+    await clearPrevious(
+      job.examId,
+      job.examSubjectId
+    );
+
+    const analysis =
+      await saveAnalysis({
+        exam_id:
+          job.examId,
+
+        exam_subject_id:
+          job.examSubjectId,
+
+        exam_paper_id:
+          job.paperId,
+
+        analysis_status:
+          "Processing",
+
+        total_questions:
+          questions.length,
+
+        total_marks:
+          totalMarks,
+
+        topics_found:
+          topics,
+
+        syllabus_coverage:
+          pct(
+            meta?.syllabus_coverage ??
+              ai.syllabus_coverage,
+            0
+          ),
+
+        difficulty:
+          t(
+            ai.difficulty
+          ) ||
+          "Unknown",
+
+        quality_score:
+          quality.score,
+
+        recommendations:
+          recommendations.join(
+            "\n"
+          ),
+
+        subject:
+          subjectName,
+
+        level,
+
+        question_analysis:
+          questions,
+
+        weak_topics:
+          weak,
+
+        strong_topics:
+          strong,
+
+        blooms_distribution:
+          blooms,
+
+        teacher_comments:
+          teacherComments,
+
+        ai_summary:
+          summary,
+
+        instructions,
+
+        raw_response:
+          ai,
+      });
+
+    const qaRows =
+      analysisRows({
+        examId:
+          job.examId,
+
+        examSubjectId:
+          job.examSubjectId,
+
+        paperId:
+          job.paperId,
+
+        questions,
+      });
+
+    const qRows =
+      questionRows({
+        examId:
+          job.examId,
+
+        examSubjectId:
+          job.examSubjectId,
+
+        subjectId:
+          examSubject.subject_id,
+
+        questions,
+      });
+
+    const qaInsert =
+      await supabase
+        .from(
+          "exam_question_analysis"
+        )
+        .insert(
+          qaRows
+        );
+
+    dbError(
+      qaInsert.error,
+      "Failed to save AI question analysis"
+    );
+
+    const qInsert =
+      await supabase
+        .from(
+          "exam_questions"
+        )
+        .insert(
+          qRows
+        );
+
+    dbError(
+      qInsert.error,
+      "Failed to save examination questions"
+    );
+
+    const verified =
+      await supabase
+        .from(
+          "exam_questions"
+        )
+        .select(
+          "id,question_number,max_marks"
+        )
+        .eq(
+          "exam_id",
+          job.examId
+        )
+        .eq(
+          "exam_subject_id",
+          job.examSubjectId
+        )
+        .order(
+          "question_number"
+        );
+
+    dbError(
+      verified.error,
+      "Failed to verify examination questions"
+    );
+
+    if (
+      !verified.data ||
+      verified.data.length !==
+        questions.length
+    ) {
+      throw new Error(
+        `Question verification failed. Expected ${questions.length}, found ${
+          verified.data?.length ||
+          0
+        }.`
+      );
+    }
+
+    const completed =
+      await supabase
+        .from(
+          "exam_ai_analysis"
+        )
+        .update({
+          analysis_status:
+            "Completed",
+        })
+        .eq(
+          "id",
+          analysis.id
+        );
+
+    dbError(
+      completed.error,
+      "Failed to complete AI analysis"
+    );
+
+    await updatePaper(
+      job.paperId,
+      "Completed",
+      null
+    );
+
+    console.log(
+      "AI ANALYSIS COMPLETED",
+      {
+        examId:
+          job.examId,
+
+        examSubjectId:
+          job.examSubjectId,
+
+        paperId:
+          job.paperId,
+
+        mainQuestions:
+          questions.length,
+
+        totalMarks,
+
+        qualityScore:
+          quality.score,
+
+        topics:
+          topics.length,
+      }
+    );
+  };
 
 // ============================================================
-// BACKGROUND WORKER
+// WORKER
 // ============================================================
 
-const runWorker =
+const worker =
   async () => {
     if (
       workerRunning
@@ -1926,10 +2953,10 @@ const runWorker =
       true;
 
     while (
-      jobs.length
+      queue.length
     ) {
       const job =
-        jobs.shift();
+        queue.shift();
 
       try {
         await processJob(
@@ -1939,16 +2966,41 @@ const runWorker =
         error
       ) {
         console.error(
-          "AI JOB FAILED:",
+          "AI ANALYSIS JOB FAILED:",
           error
         );
 
-        await updatePaper(
-          job.paperId,
-          "Failed",
-          error.message ||
-            "AI analysis failed."
-        );
+        try {
+          await updatePaper(
+            job.paperId,
+            "Failed",
+            error.message ||
+              "AI analysis failed."
+          );
+        } catch (
+          statusError
+        ) {
+          console.error(
+            statusError
+          );
+        }
+
+        try {
+          await supabase
+            .from(
+              "exam_ai_analysis"
+            )
+            .update({
+              analysis_status:
+                "Failed",
+            })
+            .eq(
+              "exam_paper_id",
+              job.paperId
+            );
+        } catch (
+          _
+        ) {}
       }
     }
 
@@ -1956,718 +3008,19 @@ const runWorker =
       false;
   };
 
-const enqueue = (
-  job
-) => {
-  jobs.push(
+const enqueue =
+  (
     job
-  );
-
-  void runWorker();
-};
-
-// ============================================================
-// MAIN PROCESSOR
-// ============================================================
-
-const processJob =
-  async ({
-    examId,
-    examSubjectId,
-    paperId,
-    buffer,
-    fileName,
-  }) => {
-    const started =
-      Date.now();
-
-    const examSubject =
-      await loadExamSubject(
-        examSubjectId
-      );
-
-    if (
-      Number(
-        examSubject.exam_id
-      ) !==
-      Number(
-        examId
-      )
-    ) {
-      throw new Error(
-        "Exam subject does not belong to this examination."
-      );
-    }
-
-    const {
-      data: exam,
-      error: examError,
-    } =
-      await supabase
-        .from(
-          "exams"
-        )
-        .select("*")
-        .eq(
-          "id",
-          examId
-        )
-        .maybeSingle();
-
-    supabaseError(
-      examError,
-      "Failed to load examination"
+  ) => {
+    queue.push(
+      job
     );
 
-    if (!exam) {
-      throw new Error(
-        `Examination ${examId} was not found.`
-      );
-    }
-
-    const subjectId =
-      examSubject.subject_id
-        ? Number(
-            examSubject.subject_id
-          )
-        : null;
-
-    let subject =
-      null;
-
-    if (
-      subjectId
-    ) {
-      const {
-        data,
-        error,
-      } =
-        await supabase
-          .from(
-            "subjects"
-          )
-          .select("*")
-          .eq(
-            "id",
-            subjectId
-          )
-          .maybeSingle();
-
-      supabaseError(
-        error,
-        "Failed to load subject"
-      );
-
-      subject =
-        data;
-    }
-
-    const subjectName =
-      text(
-        subject?.name ??
-          subject?.subject_name ??
-          subject?.title ??
-          "Unknown Subject"
-      );
-
-    const level =
-      text(
-        examSubject.level ??
-          examSubject.class_level ??
-          exam.level ??
-          "Unknown Level"
-      );
-
-    const examName =
-      text(
-        exam.name ??
-          exam.exam_name ??
-          `Examination ${examId}`
-      );
-
-    await updatePaper(
-      paperId,
-      "Processing",
-      null
-    );
-
-    const pdfText =
-      normalizePdf(
-        await withTimeout(
-          readPDF({
-            buffer,
-            originalname:
-              fileName,
-          }),
-          120000,
-          "PDF reading timed out."
-        )
-      );
-
-    if (
-      pdfText.length <
-      50
-    ) {
-      throw new Error(
-        "The PDF contains little or no readable text."
-      );
-    }
-
-    const prompt =
-      buildPrompt({
-        pdfText,
-        subjectName,
-        level,
-        examName,
-      });
-
-    const aiRaw =
-      await withTimeout(
-        askGemini(
-          prompt
-        ),
-        150000,
-        "AI analysis timed out after 150 seconds."
-      );
-
-    const aiResult =
-      parseAI(
-        aiRaw
-      );
-
-    let questions =
-      groupMainQuestions(
-        Array.isArray(
-          aiResult.questions
-        )
-          ? aiResult.questions
-          : []
-      );
-
-    if (
-      !questions.length
-    ) {
-      throw new Error(
-        "AI could not identify any main examination questions."
-      );
-    }
-
-    const expectedNumbers =
-      extractQuestionNumbers(
-        pdfText
-      );
-
-    const expectedCount =
-      expectedNumbers.length;
-
-    const selection =
-      extractSelection(
-        pdfText
-      );
-
-    questions =
-      applySelectionEvidence(
-        questions,
-        selection
-      );
-
-    questions =
-      questions.map(
-        (q) => ({
-          ...q,
-
-          ai_confidence:
-            q.ai_confidence >
-            0
-              ? q.ai_confidence
-              : deriveConfidence(
-                  q
-                ),
-        })
-      );
-
-    // ----------------------------------------------------------
-    // SECOND AI PASS: repair topics, quality and confidence
-    // ----------------------------------------------------------
-
-    let audit =
-      null;
-
-    try {
-      audit =
-        parseAI(
-          await withTimeout(
-            askGemini(
-              metadataPrompt({
-                pdfText,
-                subjectName,
-                level,
-                questions,
-              })
-            ),
-            120000,
-            "AI metadata audit timed out."
-          )
-        );
-    } catch (
-      error
-    ) {
-      console.warn(
-        "SECOND-PASS AI METADATA AUDIT FAILED:",
-        error.message
-      );
-    }
-
-    if (
-      audit?.questions &&
-      Array.isArray(
-        audit.questions
-      )
-    ) {
-      const auditMap =
-        new Map(
-          audit.questions.map(
-            (q) => [
-              mainNumber(
-                q.question_number
-              ),
-              q,
-            ]
-          )
-        );
-
-      questions =
-        questions.map(
-          (q) => {
-            const a =
-              auditMap.get(
-                q.question_number
-              );
-
-            if (!a) {
-              return q;
-            }
-
-            return {
-              ...q,
-
-              topic:
-                nullableText(
-                  a.topic
-                ) ||
-                q.topic,
-
-              sub_topic:
-                nullableText(
-                  a.sub_topic
-                ) ||
-                q.sub_topic,
-
-              difficulty_level:
-                nullableText(
-                  a.difficulty_level
-                ) ||
-                q.difficulty_level,
-
-              bloom_level:
-                nullableText(
-                  a.bloom_level
-                ) ||
-                q.bloom_level,
-
-              question_type:
-                nullableText(
-                  a.question_type
-                ) ||
-                q.question_type,
-
-              answer_expected:
-                nullableText(
-                  a.answer_expected
-                ) ||
-                q.answer_expected,
-
-              ai_explanation:
-                nullableText(
-                  a.ai_explanation
-                ) ||
-                q.ai_explanation,
-
-              ai_confidence:
-                clamp100(
-                  a.ai_confidence,
-                  q.ai_confidence
-                ),
-            };
-          }
-        );
-    }
-
-    const derivedQuality =
-      deriveQuality(
-        questions,
-        expectedCount
-      );
-
-    const topicsFound =
-      unique([
-        ...(
-          Array.isArray(
-            aiResult.topics_found
-          )
-            ? aiResult.topics_found
-            : []
-        ),
-
-        ...(
-          Array.isArray(
-            audit?.topics_found
-          )
-            ? audit.topics_found
-            : []
-        ),
-
-        ...questions.flatMap(
-          (q) =>
-            String(
-              q.topic ||
-                ""
-            ).split(
-              /[,;|]/
-            )
-        ),
-      ]);
-
-    const qualityScore =
-      clamp100(
-        audit?.quality_score ||
-          aiResult.quality_score ||
-          derivedQuality.score,
-        derivedQuality.score
-      );
-
-    const qualityExplanation =
-      text(
-        audit?.quality_explanation ||
-          aiResult.quality_explanation ||
-          derivedQuality.explanation
-      );
-
-    const syllabusCoverage =
-      clamp100(
-        audit?.syllabus_coverage ??
-          aiResult.syllabus_coverage,
-        0
-      );
-
-    const summary =
-      text(
-        audit?.summary ||
-          aiResult.summary ||
-          `AI analysis completed. ${qualityExplanation}`
-      );
-
-    const teacherComments = [
-      text(
-        audit?.teacher_comments
-      ),
-      text(
-        aiResult.teacher_comments
-      ),
-      qualityExplanation,
-    ]
-      .filter(Boolean)
-      .join(
-        "\n\n"
-      );
-
-    const recommendations =
-      Array.isArray(
-        aiResult.recommendations
-      )
-        ? aiResult.recommendations
-            .map(text)
-            .filter(Boolean)
-        : [];
-
-    const weakTopics =
-      unique([
-        ...(
-          Array.isArray(
-            audit?.weak_topics
-          )
-            ? audit.weak_topics
-            : []
-        ),
-
-        ...(
-          Array.isArray(
-            aiResult.weak_topics
-          )
-            ? aiResult.weak_topics
-            : []
-        ),
-      ]);
-
-    const strongTopics =
-      unique([
-        ...(
-          Array.isArray(
-            audit?.strong_topics
-          )
-            ? audit.strong_topics
-            : []
-        ),
-
-        ...(
-          Array.isArray(
-            aiResult.strong_topics
-          )
-            ? aiResult.strong_topics
-            : []
-        ),
-      ]);
-
-    const bloomsDistribution =
-      aiResult.blooms_distribution &&
-      typeof aiResult.blooms_distribution ===
-        "object"
-        ? aiResult.blooms_distribution
-        : {};
-
-    const totalMarks =
-      effectiveMarks(
-        questions
-      );
-
-    if (
-      totalMarks <=
-      0
-    ) {
-      throw new Error(
-        "AI could not determine a valid examination total mark."
-      );
-    }
-
-    const analysis =
-      await saveMainAnalysis({
-        examId,
-        examSubjectId,
-        paperId,
-
-        data: {
-          questions,
-
-          total_marks:
-            totalMarks,
-
-          topics_found:
-            topicsFound,
-
-          syllabus_coverage:
-            syllabusCoverage,
-
-          difficulty:
-            text(
-              aiResult.difficulty
-            ) ||
-            "Unknown",
-
-          quality_score:
-            qualityScore,
-
-          recommendations,
-
-          subject:
-            subjectName,
-
-          level,
-
-          weak_topics:
-            weakTopics,
-
-          strong_topics:
-            strongTopics,
-
-          blooms_distribution:
-            bloomsDistribution,
-
-          teacher_comments:
-            teacherComments,
-
-          summary,
-
-          instructions:
-            Array.isArray(
-              aiResult.instructions
-            )
-              ? aiResult.instructions.join(
-                  "\n"
-                )
-              : text(
-                  aiResult.instructions
-                ),
-
-          raw_response:
-            aiResult,
-        },
-      });
-
-    const questionRows =
-      buildQuestionRows({
-        examId,
-        examSubjectId,
-        paperId,
-        subjectId,
-        questions,
-      });
-
-    const analysisRows =
-      buildAnalysisRows({
-        examId,
-        examSubjectId,
-        paperId,
-        questions,
-      });
-
-    try {
-      const {
-        error: qaError,
-      } =
-        await supabase
-          .from(
-            "exam_question_analysis"
-          )
-          .insert(
-            analysisRows
-          );
-
-      supabaseError(
-        qaError,
-        "Failed to save AI question analysis"
-      );
-
-      const {
-        error: qError,
-      } =
-        await supabase
-          .from(
-            "exam_questions"
-          )
-          .insert(
-            questionRows
-          );
-
-      supabaseError(
-        qError,
-        "Failed to save examination questions"
-      );
-
-      const {
-        data: verified,
-        error: verifyError,
-      } =
-        await supabase
-          .from(
-            "exam_questions"
-          )
-          .select("*")
-          .eq(
-            "exam_id",
-            examId
-          )
-          .eq(
-            "exam_subject_id",
-            examSubjectId
-          )
-          .gte(
-            "question_number",
-            1
-          )
-          .order(
-            "question_number"
-          );
-
-      supabaseError(
-        verifyError,
-        "Failed to verify examination questions"
-      );
-
-      if (
-        !verified?.length
-      ) {
-        throw new Error(
-          "No examination questions were saved."
-        );
-      }
-
-      const {
-        error:
-          completeError,
-      } =
-        await supabase
-          .from(
-            "exam_ai_analysis"
-          )
-          .update({
-            analysis_status:
-              "Completed",
-          })
-          .eq(
-            "id",
-            analysis.id
-          );
-
-      supabaseError(
-        completeError,
-        "Failed to complete AI analysis"
-      );
-
-      await updatePaper(
-        paperId,
-        "Completed",
-        null
-      );
-    } catch (
-      error
-    ) {
-      await supabase
-        .from(
-          "exam_ai_analysis"
-        )
-        .update({
-          analysis_status:
-            "Failed",
-        })
-        .eq(
-          "id",
-          analysis.id
-        );
-
-      throw error;
-    }
-
-    console.log(
-      "AI ANALYSIS COMPLETED",
-      {
-        examId,
-        examSubjectId,
-        paperId,
-        questions:
-          questions.length,
-        totalMarks,
-        qualityScore,
-        topics:
-          topicsFound.length,
-        durationMs:
-          Date.now() -
-          started,
-      }
-    );
+    void worker();
   };
 
 // ============================================================
-// UPLOAD ENDPOINT
+// POST /ai/analyze-paper
 // ============================================================
 
 export const analyzePaper =
@@ -2677,13 +3030,13 @@ export const analyzePaper =
   ) => {
     try {
       const examId =
-        int(
+        i(
           req.body?.exam_id ??
             req.query?.exam_id
         );
 
       const examSubjectId =
-        int(
+        i(
           req.body?.exam_subject_id ??
             req.query?.exam_subject_id
         );
@@ -2703,7 +3056,9 @@ export const analyzePaper =
           });
       }
 
-      if (!req.file) {
+      if (
+        !req.file
+      ) {
         return res
           .status(400)
           .json({
@@ -2716,29 +3071,37 @@ export const analyzePaper =
       }
 
       const fileHash =
-        sha256(
+        hashFile(
           req.file.buffer
         );
 
       const paper =
         await createPaper({
           examId,
+
           examSubjectId,
+
           file:
             req.file,
-          hash:
-            fileHash,
+
+          fileHash,
         });
 
       enqueue({
         examId,
+
         examSubjectId,
+
         paperId:
           paper.id,
-        buffer:
-          req.file.buffer,
+
         fileName:
-          req.file.originalname,
+          req.file
+            .originalname,
+
+        buffer:
+          req.file
+            .buffer,
       });
 
       return res
@@ -2754,7 +3117,7 @@ export const analyzePaper =
             "Processing",
 
           message:
-            "Examination paper uploaded. AI analysis is processing in the background.",
+            "Examination paper uploaded. AI analysis is processing.",
 
           exam_id:
             examId,
@@ -2780,7 +3143,12 @@ export const analyzePaper =
         .status(
           Number(
             error.status
-          ) || 500
+          ) >=
+            400
+            ? Number(
+                error.status
+              )
+            : 500
         )
         .json({
           success:
@@ -2798,132 +3166,122 @@ export const analyzePaper =
   };
 
 // ============================================================
-// MERGE SAVED QUESTION + ANALYSIS
+// GET /ai/analysis/:examId/:examSubjectId
 // ============================================================
 
-const mergeQuestionData = (
-  questions,
-  analyses
-) => {
-  const rows =
-    analyses || [];
+const mergeRows =
+  (
+    questions,
+    analysisRows
+  ) =>
+    questions.map(
+      (q) => {
+        const questionText =
+          t(
+            q.question_text
+          )
+            .toLowerCase()
+            .replace(
+              /\s+/g,
+              " "
+            );
 
-  return (
-    questions || []
-  ).map(
-    (q) => {
-      const exactText =
-        text(
-          q.question_text
-        )
-          .toLowerCase()
-          .replace(
-            /\s+/g,
-            " "
-          );
-
-      let a =
-        rows.find(
-          (r) =>
-            int(
-              r.question_number
-            ) ===
-              int(
-                q.question_number
-              ) &&
-            text(
-              r.question_text
-            )
-              .toLowerCase()
-              .replace(
-                /\s+/g,
-                " "
+        let match =
+          analysisRows.find(
+            (row) =>
+              i(
+                row.question_number
               ) ===
-              exactText
-        );
-
-      if (!a) {
-        a =
-          rows.find(
-            (r) =>
-              int(
-                r.question_number
-              ) ===
-              int(
-                q.question_number
+                i(
+                  q.question_number
+                ) &&
+              t(
+                row.question_text
               )
+                .toLowerCase()
+                .replace(
+                  /\s+/g,
+                  " "
+                ) ===
+                questionText
           );
+
+        if (
+          !match
+        ) {
+          match =
+            analysisRows.find(
+              (row) =>
+                i(
+                  row.question_number
+                ) ===
+                i(
+                  q.question_number
+                )
+            );
+        }
+
+        if (
+          !match
+        ) {
+          return q;
+        }
+
+        return {
+          ...q,
+
+          expected_answer:
+            match.answer_expected ||
+            q.expected_answer ||
+            null,
+
+          answer_expected:
+            match.answer_expected ||
+            q.answer_expected ||
+            null,
+
+          topic:
+            match.topic ||
+            q.topic ||
+            null,
+
+          sub_topic:
+            match.subtopic ||
+            q.sub_topic ||
+            null,
+
+          difficulty_level:
+            match.difficulty ||
+            q.difficulty_level ||
+            null,
+
+          bloom_level:
+            match.blooms_level ||
+            q.bloom_level ||
+            null,
+
+          question_type:
+            match.question_type ||
+            q.question_type ||
+            null,
+
+          ai_confidence:
+            n(
+              match.ai_confidence,
+              q.ai_confidence ||
+                0
+            ),
+
+          ai_explanation:
+            match.ai_explanation ||
+            q.ai_explanation ||
+            null,
+
+          question_analysis:
+            match,
+        };
       }
-
-      if (!a) {
-        return q;
-      }
-
-      return {
-        ...q,
-
-        expected_answer:
-          a.answer_expected ||
-          q.expected_answer ||
-          null,
-
-        answer_expected:
-          a.answer_expected ||
-          q.answer_expected ||
-          null,
-
-        topic:
-          a.topic ||
-          q.topic ||
-          null,
-
-        sub_topic:
-          a.subtopic ||
-          a.sub_topic ||
-          q.sub_topic ||
-          null,
-
-        difficulty_level:
-          a.difficulty ||
-          a.difficulty_level ||
-          q.difficulty_level ||
-          null,
-
-        bloom_level:
-          a.blooms_level ||
-          a.bloom_level ||
-          q.bloom_level ||
-          null,
-
-        question_type:
-          a.question_type ||
-          q.question_type ||
-          null,
-
-        ai_confidence:
-          num(
-            a.ai_confidence,
-            num(
-              q.ai_confidence,
-              0
-            )
-          ),
-
-        ai_explanation:
-          a.ai_explanation ||
-          q.ai_explanation ||
-          null,
-
-        question_analysis:
-          a,
-      };
-    }
-  );
-};
-
-// ============================================================
-// GET BY EXAM + SUBJECT
-// ============================================================
+    );
 
 export const getAIAnalysisByExamSubject =
   async (
@@ -2932,12 +3290,12 @@ export const getAIAnalysisByExamSubject =
   ) => {
     try {
       const examId =
-        int(
+        i(
           req.params.examId
         );
 
       const examSubjectId =
-        int(
+        i(
           req.params.examSubjectId
         );
 
@@ -2957,7 +3315,7 @@ export const getAIAnalysisByExamSubject =
       }
 
       const examSubject =
-        await loadExamSubject(
+        await getExamSubject(
           examSubjectId
         );
 
@@ -2981,17 +3339,19 @@ export const getAIAnalysisByExamSubject =
       }
 
       const [
-        aRes,
-        qRes,
-        qaRes,
-        pRes,
+        analysisResult,
+        questionsResult,
+        questionAnalysisResult,
+        paperResult,
       ] =
         await Promise.all([
           supabase
             .from(
               "exam_ai_analysis"
             )
-            .select("*")
+            .select(
+              "*"
+            )
             .eq(
               "exam_id",
               examId
@@ -3016,7 +3376,9 @@ export const getAIAnalysisByExamSubject =
             .from(
               "exam_questions"
             )
-            .select("*")
+            .select(
+              "*"
+            )
             .eq(
               "exam_id",
               examId
@@ -3037,7 +3399,9 @@ export const getAIAnalysisByExamSubject =
             .from(
               "exam_question_analysis"
             )
-            .select("*")
+            .select(
+              "*"
+            )
             .eq(
               "exam_id",
               examId
@@ -3058,7 +3422,9 @@ export const getAIAnalysisByExamSubject =
             .from(
               "exam_papers"
             )
-            .select("*")
+            .select(
+              "*"
+            )
             .eq(
               "exam_id",
               examId
@@ -3080,68 +3446,51 @@ export const getAIAnalysisByExamSubject =
             .maybeSingle(),
         ]);
 
-      supabaseError(
-        aRes.error,
+      dbError(
+        analysisResult.error,
         "Failed to load exam AI analysis"
       );
 
-      supabaseError(
-        qRes.error,
+      dbError(
+        questionsResult.error,
         "Failed to load exam questions"
       );
 
-      supabaseError(
-        qaRes.error,
-        "Failed to load exam question analysis"
+      dbError(
+        questionAnalysisResult.error,
+        "Failed to load question analysis"
       );
 
-      supabaseError(
-        pRes.error,
+      dbError(
+        paperResult.error,
         "Failed to load exam paper"
       );
 
+      const analysis =
+        analysisResult.data ||
+        null;
+
+      const questions =
+        questionsResult.data ||
+        [];
+
+      const questionAnalysis =
+        questionAnalysisResult.data ||
+        [];
+
       const paper =
-        pRes.data ||
+        paperResult.data ||
         null;
-
-      const dbAnalysis =
-        aRes.data ||
-        null;
-
-      const dbQuestions =
-        qRes.data ||
-        [];
-
-      const dbQuestionAnalysis =
-        qaRes.data ||
-        [];
-
-      const latestPaperId =
-        paper?.id
-          ? Number(
-              paper.id
-            )
-          : null;
-
-      const analysisMatchesLatestPaper =
-        dbAnalysis &&
-        latestPaperId
-          ? Number(
-              dbAnalysis.exam_paper_id
-            ) ===
-            latestPaperId
-          : true;
 
       let status =
-        text(
+        t(
           paper?.ai_status ||
             paper?.status ||
-            dbAnalysis?.analysis_status ||
-            "Pending"
-        );
+            analysis?.analysis_status
+        ) ||
+        "Pending";
 
       if (
-        paper &&
         /processing|pending|running|analyzing/i.test(
           status
         )
@@ -3149,7 +3498,6 @@ export const getAIAnalysisByExamSubject =
         status =
           "Processing";
       } else if (
-        paper &&
         /failed|error/i.test(
           status
         )
@@ -3157,72 +3505,47 @@ export const getAIAnalysisByExamSubject =
         status =
           "Failed";
       } else if (
-        dbAnalysis?.analysis_status ===
-        "Completed"
+        /completed|complete|success/i.test(
+          t(
+            analysis?.analysis_status
+          )
+        )
       ) {
         status =
           "Completed";
       }
 
-      const questions =
-        mergeQuestionData(
-          dbQuestions,
-          dbQuestionAnalysis
+      const merged =
+        mergeRows(
+          questions,
+          questionAnalysis
         );
 
-      const fallbackQuestions =
-        !questions.length &&
-        dbAnalysis?.question_analysis
-          ? dbAnalysis.question_analysis
-          : questions;
+      const finalQuestions =
+        merged.length
+          ? merged
+          : Array.isArray(
+              analysis?.question_analysis
+            )
+          ? analysis.question_analysis
+          : [];
 
-      const effectiveStatus =
-        !analysisMatchesLatestPaper &&
-        /processing|pending/i.test(
-          text(
-            paper?.ai_status ||
-              paper?.status
-          )
-        )
-          ? "Processing"
-          : status;
-
-      const analysis =
-        dbAnalysis
+      const finalAnalysis =
+        analysis
           ? {
-              ...dbAnalysis,
+              ...analysis,
+
+              status,
+
               analysis_status:
-                effectiveStatus,
-              status:
-                effectiveStatus,
+                status,
+
               summary:
-                dbAnalysis.ai_summary,
+                analysis.ai_summary ||
+                analysis.summary ||
+                null,
             }
           : null;
-
-      if (
-        !analysis &&
-        effectiveStatus !==
-          "Processing"
-      ) {
-        return res
-          .status(404)
-          .json({
-            success:
-              false,
-
-            message:
-              "No AI analysis found for this examination subject.",
-
-            exam_id:
-              examId,
-
-            exam_subject_id:
-              examSubjectId,
-
-            paper,
-          });
-      }
 
       return res
         .status(200)
@@ -3236,43 +3559,47 @@ export const getAIAnalysisByExamSubject =
           exam_subject_id:
             examSubjectId,
 
-          status:
-            effectiveStatus,
+          status,
 
           processing:
-            effectiveStatus ===
+            status ===
               "Processing" ||
-            effectiveStatus ===
+            status ===
               "Pending",
 
           message:
-            effectiveStatus ===
+            status ===
             "Completed"
               ? "AI Analysis imekamilika."
-              : effectiveStatus ===
+              : status ===
                 "Processing"
               ? "AI Analysis inaendelea."
-              : "AI Analysis imepata hitilafu.",
+              : status ===
+                "Failed"
+              ? paper?.error_message ||
+                "AI Analysis imepata hitilafu."
+              : "AI Analysis bado haijakamilika.",
 
-          analysis,
+          analysis:
+            finalAnalysis,
 
           questions:
-            fallbackQuestions,
+            finalQuestions,
 
           question_analysis:
-            dbQuestionAnalysis,
+            questionAnalysis,
 
           paper,
 
           total_questions:
-            fallbackQuestions.length,
+            finalQuestions.length,
 
           total_marks:
             Number(
-              analysis?.total_marks
+              finalAnalysis?.total_marks
             ) ||
             effectiveMarks(
-              fallbackQuestions
+              finalQuestions
             ),
         });
     } catch (
@@ -3287,7 +3614,12 @@ export const getAIAnalysisByExamSubject =
         .status(
           Number(
             error.status
-          ) || 500
+          ) >=
+            400
+            ? Number(
+                error.status
+              )
+            : 500
         )
         .json({
           success:
@@ -3301,7 +3633,7 @@ export const getAIAnalysisByExamSubject =
   };
 
 // ============================================================
-// GET BY EXAM
+// GET /ai/analysis/:examId
 // ============================================================
 
 export const getAIAnalysis =
@@ -3311,11 +3643,13 @@ export const getAIAnalysis =
   ) => {
     try {
       const examId =
-        int(
+        i(
           req.params.examId
         );
 
-      if (!examId) {
+      if (
+        !examId
+      ) {
         return res
           .status(400)
           .json({
@@ -3335,7 +3669,9 @@ export const getAIAnalysis =
           .from(
             "exam_ai_analysis"
           )
-          .select("*")
+          .select(
+            "*"
+          )
           .eq(
             "exam_id",
             examId
@@ -3352,12 +3688,14 @@ export const getAIAnalysis =
           )
           .maybeSingle();
 
-      supabaseError(
+      dbError(
         error,
         "Failed to load AI analysis"
       );
 
-      if (!data) {
+      if (
+        !data
+      ) {
         return res
           .status(404)
           .json({
@@ -3381,7 +3719,15 @@ export const getAIAnalysis =
           data,
 
           analysis:
-            data,
+            {
+              ...data,
+
+              status:
+                data.analysis_status,
+
+              summary:
+                data.ai_summary,
+            },
         });
     } catch (
       error
@@ -3395,7 +3741,12 @@ export const getAIAnalysis =
         .status(
           Number(
             error.status
-          ) || 500
+          ) >=
+            400
+            ? Number(
+                error.status
+              )
+            : 500
         )
         .json({
           success:
