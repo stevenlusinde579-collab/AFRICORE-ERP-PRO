@@ -3,6 +3,7 @@ import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGemini } from "../services/gemini.service.js";
 
+
 // ============================================================
 // AI ANALYSIS QUEUE
 // ============================================================
@@ -11,8 +12,8 @@ import { askGemini } from "../services/gemini.service.js";
 // - Papers nyingi za subject moja zinaruhusiwa.
 // - Queue inachakata paper moja baada ya nyingine.
 // - Kila upload mpya inapata exam_papers record mpya.
-// - Same PDF ikiwa tayari Processing, request duplicate
-//   inazuiwa ndani ya instance hii ya backend.
+// - Same PDF ikiwa tayari Processing, duplicate request
+//   inazuiwa.
 // ============================================================
 
 const analysisQueue = [];
@@ -20,18 +21,16 @@ const analysisQueue = [];
 let analysisWorkerRunning =
     false;
 
+
 // ============================================================
-// ACTIVE REQUEST HASHES
+// ACTIVE ANALYSIS REQUESTS
 // ============================================================
 //
-// Hii inalinda dhidi ya frontend kutuma request ile ile mara
-// mbili kwa wakati mmoja.
+// Hii inalinda dhidi ya frontend kutuma request ile ile
+// mara mbili kwa wakati mmoja.
 //
-// Key:
-// examId:examSubjectId:fileHash
-//
-// HAIJAFUNGI subject nzima.
-// Paper mpya yenye hash tofauti bado inaruhusiwa.
+// HAIJAFUNGI exam subject.
+// Paper tofauti bado inaruhusiwa.
 // ============================================================
 
 const activeAnalysisHashes =
@@ -39,7 +38,7 @@ const activeAnalysisHashes =
 
 
 // ============================================================
-// BUILD ANALYSIS HASH KEY
+// ANALYSIS HASH KEY
 // ============================================================
 
 const getAnalysisHashKey = (
@@ -56,7 +55,7 @@ const getAnalysisHashKey = (
 
 
 // ============================================================
-// RUN NEXT AI ANALYSIS JOB
+// RUN NEXT ANALYSIS JOB
 // ============================================================
 
 const runNextAnalysisJob =
@@ -103,7 +102,7 @@ const runNextAnalysisJob =
 
 
 // ============================================================
-// ENQUEUE AI ANALYSIS JOB
+// ENQUEUE ANALYSIS JOB
 // ============================================================
 
 const enqueueAnalysisJob = (
@@ -196,7 +195,7 @@ const normalizeText = (
 
 
 // ============================================================
-// NUMBER NORMALIZER
+// NORMALIZE NUMBER
 // ============================================================
 
 const normalizeNumber = (
@@ -261,7 +260,7 @@ const parseJsonSafely = (
 
 
 // ============================================================
-// REMOVE MARKDOWN JSON CODE FENCE
+// REMOVE MARKDOWN JSON FENCE
 // ============================================================
 
 const stripMarkdownCodeFence = (
@@ -298,7 +297,7 @@ const stripMarkdownCodeFence = (
 
 
 // ============================================================
-// EXTRACT JSON OBJECT
+// EXTRACT JSON
 // ============================================================
 
 const extractJsonObject = (
@@ -472,7 +471,9 @@ const getExam = async (
         error,
     } =
         await supabase
-            .from("exams")
+            .from(
+                "exams"
+            )
             .select("*")
             .eq(
                 "id",
@@ -501,7 +502,9 @@ const getSubject = async (
         error,
     } =
         await supabase
-            .from("subjects")
+            .from(
+                "subjects"
+            )
             .select("*")
             .eq(
                 "id",
@@ -564,7 +567,7 @@ const findExistingPaper =
 
 
 // ============================================================
-// FIND PAPER BY EXACT HASH
+// FIND PAPER BY HASH
 // ============================================================
 
 const findPaperByHash =
@@ -657,18 +660,11 @@ const updatePaperStatus =
 // DELETE PREVIOUS AI DATA
 // ============================================================
 //
-// Production schema confirmation:
+// exam_question_analysis haina analysis_id.
+// Tunatumia exam_id + exam_subject_id.
 //
-// exam_ai_analysis:
-// - id
-// - exam_id
-// - exam_subject_id
-// - exam_paper_id
-//
-// exam_question_analysis DOES NOT have analysis_id.
-//
-// Therefore question analysis is deleted using:
-// exam_id + exam_subject_id
+// exam_questions pia inatakiwa kusafishwa kabla ya
+// analysis mpya ya subject hiyo.
 // ============================================================
 
 const deleteExistingAiData =
@@ -677,7 +673,7 @@ const deleteExistingAiData =
         examSubjectId
     ) => {
         // ====================================================
-        // FIND PREVIOUS AI ANALYSES
+        // GET OLD ANALYSES
         // ====================================================
 
         const {
@@ -714,7 +710,7 @@ const deleteExistingAiData =
             );
 
         // ====================================================
-        // DELETE PREVIOUS QUESTION ANALYSIS
+        // DELETE OLD QUESTION ANALYSIS
         // ====================================================
 
         const {
@@ -741,7 +737,7 @@ const deleteExistingAiData =
         );
 
         // ====================================================
-        // DELETE PREVIOUS MAIN ANALYSIS
+        // DELETE OLD MAIN ANALYSIS
         // ====================================================
 
         if (
@@ -769,7 +765,7 @@ const deleteExistingAiData =
         }
 
         // ====================================================
-        // DELETE PREVIOUS EXAM QUESTIONS
+        // DELETE OLD EXAM QUESTIONS
         // ====================================================
 
         const {
@@ -958,6 +954,50 @@ const validateQuestions = (
 
                 explanation:
                     explanation,
+
+                topic:
+                    normalizeText(
+                        question.topic ||
+                            question.main_topic ||
+                            ""
+                    ),
+
+                sub_topic:
+                    normalizeText(
+                        question.sub_topic ||
+                            question.subtopic ||
+                            question.subTopic ||
+                            ""
+                    ),
+
+                difficulty_level:
+                    normalizeText(
+                        question.difficulty_level ||
+                            question.difficulty ||
+                            ""
+                    ),
+
+                bloom_level:
+                    normalizeText(
+                        question.bloom_level ||
+                            question.blooms_level ||
+                            question.bloomsLevel ||
+                            ""
+                    ),
+
+                question_type:
+                    normalizeText(
+                        question.question_type ||
+                            question.type ||
+                            ""
+                    ),
+
+                ai_confidence:
+                    normalizeNumber(
+                        question.ai_confidence ??
+                            question.confidence,
+                        null
+                    ),
             });
         }
     );
@@ -1045,7 +1085,13 @@ The JSON must follow this structure:
       "selection_count": null,
       "total_group_questions": null,
       "group": "",
-      "instruction": ""
+      "instruction": "",
+      "topic": "",
+      "sub_topic": "",
+      "difficulty_level": "",
+      "bloom_level": "",
+      "question_type": "",
+      "ai_confidence": 0
     }
   ]
 }
@@ -1062,7 +1108,10 @@ Rules:
 9. If marks are not visible for a question, use the most reasonable value based on the paper structure.
 10. Expected answers should only be provided where reasonably inferable from the question.
 11. Do not invent unsupported facts.
-12. Return valid JSON only.
+12. Identify topic only when reasonably detectable.
+13. Identify difficulty only when reasonably justified.
+14. Identify Bloom level only when reasonably justified.
+15. Return valid JSON only.
 
 EXAMINATION:
 ${normalizeText(
@@ -1100,26 +1149,41 @@ ${pdfText}
 // SAVE AI ANALYSIS
 // ============================================================
 //
-// Production schema verified:
+// IMPORTANT PRODUCTION SCHEMA:
 //
 // exam_ai_analysis:
-// - ai_summary
-// - analysis_status
-// - instructions TEXT
+//   ai_summary
+//   analysis_status
+//   instructions TEXT
 //
 // exam_question_analysis:
-// - exam_id
-// - exam_subject_id
-// - exam_paper_id
-// - question_number INTEGER
-// - question_text
-// - answer_expected
-// - ai_explanation
-// - marks
-// - max_marks
-// - etc.
+//   exam_id
+//   exam_subject_id
+//   exam_paper_id
+//   question_number
+//   question_text
+//   answer_expected
+//   ai_explanation
+//   marks
+//   max_marks
+//   ...
 //
-// There is NO analysis_id column.
+// exam_questions:
+//   exam_id
+//   subject_id
+//   exam_subject_id
+//   question_number
+//   question_text
+//   max_marks
+//   section
+//   section_type
+//   is_selective
+//   selection_required
+//   selection_count
+//   selection_total
+//   selection_group
+//   selection_instruction
+//
 // ============================================================
 
 const saveAiAnalysis = async ({
@@ -1138,7 +1202,7 @@ const saveAiAnalysis = async ({
         );
 
     // ========================================================
-    // REMOVE PREVIOUS ACTIVE AI DATA
+    // DELETE PREVIOUS DATA
     // ========================================================
 
     await deleteExistingAiData(
@@ -1178,7 +1242,7 @@ const saveAiAnalysis = async ({
     }
 
     // ========================================================
-    // CALCULATE TOTAL MARKS
+    // TOTAL MARKS
     // ========================================================
 
     const totalMarks =
@@ -1197,7 +1261,16 @@ const saveAiAnalysis = async ({
         );
 
     // ========================================================
-    // SAVE MAIN AI ANALYSIS
+    // INSERT MAIN ANALYSIS
+    // ========================================================
+    //
+    // DO NOT set Completed here.
+    //
+    // It becomes Completed only after:
+    //
+    // 1. exam_question_analysis saved
+    // 2. exam_questions saved
+    //
     // ========================================================
 
     const {
@@ -1230,7 +1303,7 @@ const saveAiAnalysis = async ({
                     aiResult,
 
                 analysis_status:
-                    "Completed",
+                    "Processing",
 
                 total_questions:
                     questions.length,
@@ -1263,7 +1336,7 @@ const saveAiAnalysis = async ({
                 question,
                 index
             ) => {
-                const parsedNumber =
+                const parsedQuestionNumber =
                     Number.parseInt(
                         String(
                             question.question_number ||
@@ -1277,9 +1350,9 @@ const saveAiAnalysis = async ({
 
                 const questionNumber =
                     Number.isFinite(
-                        parsedNumber
+                        parsedQuestionNumber
                     )
-                        ? parsedNumber
+                        ? parsedQuestionNumber
                         : index + 1;
 
                 return {
@@ -1299,31 +1372,39 @@ const saveAiAnalysis = async ({
                         question.question_text,
 
                     topic:
+                        question.topic ||
                         null,
 
                     subtopic:
+                        question.sub_topic ||
                         null,
 
                     sub_topic:
+                        question.sub_topic ||
                         null,
 
                     difficulty:
+                        question.difficulty_level ||
                         null,
 
                     difficulty_level:
+                        question.difficulty_level ||
                         null,
 
                     blooms_level:
+                        question.bloom_level ||
                         null,
 
                     bloom_level:
+                        question.bloom_level ||
                         null,
 
                     question_type:
+                        question.question_type ||
                         null,
 
                     ai_confidence:
-                        null,
+                        question.ai_confidence,
 
                     ai_explanation:
                         normalizeText(
@@ -1389,120 +1470,520 @@ const saveAiAnalysis = async ({
             }
         );
 
-    // ========================================================
-    // INSERT QUESTION ANALYSIS
-    // ========================================================
+    try {
+        if (
+            questionAnalysisRows.length >
+            0
+        ) {
+            const {
+                error:
+                    questionAnalysisError,
+            } =
+                await supabase
+                    .from(
+                        "exam_question_analysis"
+                    )
+                    .insert(
+                        questionAnalysisRows
+                    );
 
-    if (
-        questionAnalysisRows.length >
-        0
-    ) {
-        const {
-            error:
+            throwSupabaseError(
                 questionAnalysisError,
-        } =
-            await supabase
-                .from(
-                    "exam_question_analysis"
-                )
-                .insert(
-                    questionAnalysisRows
-                );
+                "Failed to save AI question analysis"
+            );
+        }
 
-        throwSupabaseError(
-            questionAnalysisError,
-            "Failed to save AI question analysis"
-        );
-    }
+        // ====================================================
+        // SAVE EXAM QUESTIONS
+        // ====================================================
 
-    // ========================================================
-    // SAVE EXAM QUESTIONS
-    // ========================================================
+        const questionRows =
+            questions.map(
+                (
+                    question,
+                    index
+                ) => {
+                    const parsedQuestionNumber =
+                        Number.parseInt(
+                            String(
+                                question.question_number ||
+                                    ""
+                            ).match(
+                                /^\d+/
+                            )?.[0] ||
+                                "",
+                            10
+                        );
 
-    const questionRows =
-        questions.map(
-            (
-                question,
-                index
-            ) => ({
-                exam_id:
-                    examId,
+                    const questionNumber =
+                        Number.isFinite(
+                            parsedQuestionNumber
+                        )
+                            ? parsedQuestionNumber
+                            : index + 1;
 
-                exam_subject_id:
-                    examSubjectId,
+                    return {
+                        exam_id:
+                            examId,
 
-                question_number:
-                    question.question_number ||
-                    String(
-                        index + 1
-                    ),
+                        subject_id:
+                            examSubject
+                                ?.subject_id ||
+                            null,
 
-                question_text:
-                    question.question_text,
+                        exam_subject_id:
+                            examSubjectId,
 
-                max_marks:
-                    question.max_marks,
+                        question_number:
+                            questionNumber,
 
-                is_selective:
-                    Boolean(
-                        question.is_selective
-                    ),
+                        question_text:
+                            question.question_text,
 
-                selection_count:
-                    question.selection_count,
+                        topic:
+                            question.topic ||
+                            null,
 
-                total_group_questions:
-                    question.total_group_questions,
+                        sub_topic:
+                            question.sub_topic ||
+                            null,
 
-                group:
-                    question.group,
+                        difficulty_level:
+                            question.difficulty_level ||
+                            null,
 
-                instruction:
-                    question.instruction,
-            })
-        );
+                        ai_confidence:
+                            question.ai_confidence,
 
-    // ========================================================
-    // INSERT EXAM QUESTIONS
-    // ========================================================
+                        bloom_level:
+                            question.bloom_level ||
+                            null,
 
-    if (
-        questionRows.length >
-        0
-    ) {
-        const {
-            error:
+                        question_type:
+                            question.question_type ||
+                            null,
+
+                        ai_explanation:
+                            normalizeText(
+                                question.explanation ||
+                                    ""
+                            ),
+
+                        ai_processed:
+                            true,
+
+                        max_marks:
+                            Number(
+                                question.max_marks
+                            ) || 0,
+
+                        section:
+                            normalizeText(
+                                question.group ||
+                                    ""
+                            ),
+
+                        section_type:
+                            null,
+
+                        is_selective:
+                            Boolean(
+                                question.is_selective
+                            ),
+
+                        selection_required:
+                            Boolean(
+                                question.is_selective
+                            ),
+
+                        selection_count:
+                            question.selection_count,
+
+                        selection_total:
+                            question.total_group_questions,
+
+                        selection_group:
+                            normalizeText(
+                                question.group ||
+                                    ""
+                            ),
+
+                        selection_instruction:
+                            normalizeText(
+                                question.instruction ||
+                                    ""
+                            ),
+                    };
+                }
+            );
+
+        if (
+            questionRows.length >
+            0
+        ) {
+            const {
+                error:
+                    questionInsertError,
+            } =
+                await supabase
+                    .from(
+                        "exam_questions"
+                    )
+                    .insert(
+                        questionRows
+                    );
+
+            throwSupabaseError(
                 questionInsertError,
+                "Failed to save examination questions"
+            );
+        }
+
+        // ====================================================
+        // ONLY NOW MARK ANALYSIS COMPLETED
+        // ====================================================
+
+        const {
+            data:
+                completedAnalysis,
+            error:
+                completedAnalysisError,
         } =
             await supabase
                 .from(
-                    "exam_questions"
+                    "exam_ai_analysis"
                 )
-                .insert(
-                    questionRows
-                );
+                .update({
+                    analysis_status:
+                        "Completed",
+                })
+                .eq(
+                    "id",
+                    analysis.id
+                )
+                .select("*")
+                .single();
 
         throwSupabaseError(
-            questionInsertError,
-            "Failed to save examination questions"
+            completedAnalysisError,
+            "Failed to mark AI analysis as completed"
         );
+
+        // ====================================================
+        // RETURN
+        // ====================================================
+
+        return {
+            analysis:
+                completedAnalysis,
+
+            questions,
+
+            exam,
+
+            subject,
+        };
+    } catch (error) {
+        // ====================================================
+        // MARK ANALYSIS FAILED
+        // ====================================================
+
+        try {
+            await supabase
+                .from(
+                    "exam_ai_analysis"
+                )
+                .update({
+                    analysis_status:
+                        "Failed",
+                })
+                .eq(
+                    "id",
+                    analysis.id
+                );
+        } catch (
+            statusError
+        ) {
+            console.error(
+                "FAILED TO MARK AI ANALYSIS AS FAILED:",
+                statusError
+            );
+        }
+
+        throw error;
     }
-
-    // ========================================================
-    // RETURN RESULT
-    // ========================================================
-
-    return {
-        analysis,
-        questions,
-        exam,
-        subject,
-    };
 };
 
 
 // ============================================================
-// PROCESS AI ANALYSIS BACKGROUND JOB
+// MERGE QUESTION ANALYSIS INTO EXAM QUESTIONS
+// ============================================================
+//
+// Frontend mostly reads:
+//
+// payload.questions
+//
+// Therefore we merge:
+//
+// exam_questions
+// +
+// exam_question_analysis
+//
+// into one usable question object.
+//
+// Matching preference:
+// 1. exact normalized question text
+// 2. question number only as fallback
+//
+// Hii ni muhimu kwa sababu AI inaweza kurudisha question
+// number ile ile kwa sub-questions.
+// ============================================================
+
+const mergeQuestionData = (
+    questions,
+    questionAnalysis
+) => {
+    const sourceQuestions =
+        Array.isArray(
+            questions
+        )
+            ? questions
+            : [];
+
+    const sourceAnalysis =
+        Array.isArray(
+            questionAnalysis
+        )
+            ? questionAnalysis
+            : [];
+
+    const normalizeQuestionText =
+        (
+            value
+        ) =>
+            normalizeText(
+                value
+            )
+                .toLowerCase()
+                .replace(
+                    /\s+/g,
+                    " "
+                );
+
+    const usedAnalysisIds =
+        new Set();
+
+    return sourceQuestions.map(
+        (
+            question,
+            index
+        ) => {
+            const questionTextKey =
+                normalizeQuestionText(
+                    question.question_text ||
+                        question.questionText
+                );
+
+            let matched =
+                null;
+
+            // =================================================
+            // FIRST: EXACT QUESTION TEXT
+            // =================================================
+
+            if (
+                questionTextKey
+            ) {
+                matched =
+                    sourceAnalysis.find(
+                        (
+                            item
+                        ) =>
+                            !usedAnalysisIds.has(
+                                item.id
+                            ) &&
+                            normalizeQuestionText(
+                                item.question_text ||
+                                    item.questionText
+                            ) ===
+                                questionTextKey
+                    ) ||
+                    null;
+            }
+
+            // =================================================
+            // SECOND: QUESTION NUMBER
+            // =================================================
+
+            if (
+                !matched
+            ) {
+                const currentNumber =
+                    Number(
+                        question.question_number ||
+                            question.number ||
+                            index + 1
+                    );
+
+                matched =
+                    sourceAnalysis.find(
+                        (
+                            item
+                        ) =>
+                            !usedAnalysisIds.has(
+                                item.id
+                            ) &&
+                            Number(
+                                item.question_number
+                            ) ===
+                                currentNumber
+                    ) ||
+                    null;
+            }
+
+            if (
+                matched?.id
+            ) {
+                usedAnalysisIds.add(
+                    matched.id
+                );
+            }
+
+            return {
+                ...question,
+
+                // =================================================
+                // ANALYSIS FIELDS
+                // =================================================
+
+                topic:
+                    matched?.topic ||
+                    question.topic ||
+                    null,
+
+                sub_topic:
+                    matched?.sub_topic ||
+                    matched?.subtopic ||
+                    question.sub_topic ||
+                    null,
+
+                difficulty_level:
+                    matched?.difficulty_level ||
+                    matched?.difficulty ||
+                    question.difficulty_level ||
+                    null,
+
+                bloom_level:
+                    matched?.bloom_level ||
+                    matched?.blooms_level ||
+                    question.bloom_level ||
+                    null,
+
+                question_type:
+                    matched?.question_type ||
+                    question.question_type ||
+                    null,
+
+                ai_confidence:
+                    matched?.ai_confidence ??
+                    question.ai_confidence ??
+                    null,
+
+                ai_explanation:
+                    matched?.ai_explanation ||
+                    question.ai_explanation ||
+                    "",
+
+                explanation:
+                    matched?.ai_explanation ||
+                    question.ai_explanation ||
+                    "",
+
+                // =================================================
+                // EXPECTED ANSWER
+                // =================================================
+
+                answer_expected:
+                    matched?.answer_expected ||
+                    "",
+
+                expected_answer:
+                    matched?.answer_expected ||
+                    "",
+
+                answer:
+                    matched?.answer_expected ||
+                    "",
+
+                // =================================================
+                // MARKS
+                // =================================================
+
+                marks:
+                    matched?.marks ??
+                    matched?.max_marks ??
+                    question.marks ??
+                    question.max_marks ??
+                    0,
+
+                max_marks:
+                    matched?.max_marks ??
+                    matched?.marks ??
+                    question.max_marks ??
+                    0,
+
+                // =================================================
+                // SELECTIVE QUESTION INFORMATION
+                // =================================================
+
+                is_selective:
+                    matched?.is_selective ??
+                    question.is_selective ??
+                    false,
+
+                selection_required:
+                    matched?.selection_required ??
+                    question.selection_required ??
+                    false,
+
+                selection_count:
+                    matched?.selection_count ??
+                    question.selection_count ??
+                    null,
+
+                selection_total:
+                    matched?.selection_total ??
+                    question.selection_total ??
+                    question.total_group_questions ??
+                    null,
+
+                selection_group:
+                    matched?.selection_group ||
+                    question.selection_group ||
+                    question.group ||
+                    "",
+
+                selection_instruction:
+                    matched?.selection_instruction ||
+                    question.selection_instruction ||
+                    question.instruction ||
+                    "",
+
+                // =================================================
+                // ORIGINAL QUESTION ANALYSIS
+                // =================================================
+
+                question_analysis:
+                    matched ||
+                    null,
+            };
+        }
+    );
+};
+
+
+// ============================================================
+// PROCESS AI ANALYSIS
 // ============================================================
 
 const processAnalyzePaper =
@@ -1516,7 +1997,7 @@ const processAnalyzePaper =
     }) => {
         try {
             // ====================================================
-            // MARK PAPER AS PROCESSING
+            // MARK PAPER PROCESSING
             // ====================================================
 
             await updatePaperStatus(
@@ -1534,7 +2015,7 @@ const processAnalyzePaper =
             );
 
             // ====================================================
-            // LOAD EXAM
+            // GET EXAM
             // ====================================================
 
             const exam =
@@ -1549,7 +2030,7 @@ const processAnalyzePaper =
             }
 
             // ====================================================
-            // LOAD EXAM SUBJECT
+            // GET EXAM SUBJECT
             // ====================================================
 
             const examSubject =
@@ -1565,7 +2046,7 @@ const processAnalyzePaper =
             }
 
             // ====================================================
-            // LOAD SUBJECT
+            // GET SUBJECT
             // ====================================================
 
             const subject =
@@ -1580,7 +2061,7 @@ const processAnalyzePaper =
             }
 
             // ====================================================
-            // VALIDATE FILE
+            // FILE VALIDATION
             // ====================================================
 
             if (
@@ -1630,7 +2111,7 @@ const processAnalyzePaper =
             );
 
             // ====================================================
-            // BUILD GEMINI PROMPT
+            // BUILD PROMPT
             // ====================================================
 
             const prompt =
@@ -1643,7 +2124,7 @@ const processAnalyzePaper =
                 });
 
             // ====================================================
-            // CALL GEMINI
+            // GEMINI
             // ====================================================
 
             const aiResponse =
@@ -1680,7 +2161,7 @@ const processAnalyzePaper =
             );
 
             // ====================================================
-            // EXTRACT GEMINI JSON
+            // PARSE JSON
             // ====================================================
 
             const aiResult =
@@ -1709,7 +2190,7 @@ const processAnalyzePaper =
             }
 
             // ====================================================
-            // SAVE AI ANALYSIS
+            // SAVE ALL DATA
             // ====================================================
 
             const saved =
@@ -1804,10 +2285,12 @@ const processAnalyzePaper =
             return null;
         } finally {
             // ====================================================
-            // RELEASE EXACT REQUEST HASH
+            // RELEASE HASH
             // ====================================================
 
-            if (hashKey) {
+            if (
+                hashKey
+            ) {
                 activeAnalysisHashes.delete(
                     hashKey
                 );
@@ -1874,7 +2357,7 @@ const analyzePaper = async (
     }
 
     // ========================================================
-    // LOAD EXAM
+    // GET EXAM
     // ========================================================
 
     const exam =
@@ -1891,7 +2374,7 @@ const analyzePaper = async (
     }
 
     // ========================================================
-    // LOAD EXAM SUBJECT
+    // GET EXAM SUBJECT
     // ========================================================
 
     const examSubject =
@@ -1908,13 +2391,15 @@ const analyzePaper = async (
         });
     }
 
-    let paper = null;
+    let paper =
+        null;
 
-    let hashKey = null;
+    let hashKey =
+        null;
 
     try {
         // ====================================================
-        // CREATE FILE HASH
+        // HASH PDF
         // ====================================================
 
         const fileHash =
@@ -1935,7 +2420,7 @@ const analyzePaper = async (
             );
 
         // ====================================================
-        // SAME EXACT REQUEST ALREADY ACTIVE
+        // SAME REQUEST ALREADY ACTIVE
         // ====================================================
 
         if (
@@ -1960,12 +2445,13 @@ const analyzePaper = async (
                     true,
 
                 paper:
-                    samePaper || null,
+                    samePaper ||
+                    null,
             });
         }
 
         // ====================================================
-        // CHECK EXISTING PAPER WITH SAME HASH
+        // CHECK SAME PAPER
         // ====================================================
 
         const samePaper =
@@ -1974,10 +2460,6 @@ const analyzePaper = async (
                 examSubjectId,
                 fileHash
             );
-
-        // ====================================================
-        // EXACT SAME PAPER IS ALREADY PROCESSING
-        // ====================================================
 
         if (
             samePaper &&
@@ -2003,7 +2485,7 @@ const analyzePaper = async (
         }
 
         // ====================================================
-        // MARK THIS EXACT REQUEST AS ACTIVE
+        // LOCK ONLY EXACT HASH
         // ====================================================
 
         activeAnalysisHashes.add(
@@ -2011,7 +2493,7 @@ const analyzePaper = async (
         );
 
         // ====================================================
-        // NEW PAPER PAYLOAD
+        // NEW PAPER
         // ====================================================
 
         const paperPayload = {
@@ -2043,7 +2525,7 @@ const analyzePaper = async (
         };
 
         // ====================================================
-        // ALWAYS CREATE NEW PAPER
+        // ALWAYS INSERT NEW PAPER
         // ====================================================
 
         const {
@@ -2068,11 +2550,8 @@ const analyzePaper = async (
         paper =
             data;
 
-        const paperId =
-            paper.id;
-
         // ====================================================
-        // COPY FILE BUFFER
+        // COPY BUFFER
         // ====================================================
 
         const buffer =
@@ -2081,7 +2560,7 @@ const analyzePaper = async (
             );
 
         // ====================================================
-        // QUEUE BACKGROUND ANALYSIS
+        // QUEUE
         // ====================================================
 
         const queuePosition =
@@ -2090,7 +2569,8 @@ const analyzePaper = async (
                     processAnalyzePaper({
                         examId,
                         examSubjectId,
-                        paperId,
+                        paperId:
+                            paper.id,
                         fileBuffer:
                             buffer,
                         fileName:
@@ -2100,16 +2580,13 @@ const analyzePaper = async (
                     })
             );
 
-        // ====================================================
-        // LOG
-        // ====================================================
-
         console.log(
             "AI EXAMINATION PAPER QUEUED:",
             {
                 examId,
                 examSubjectId,
-                paperId,
+                paperId:
+                    paper.id,
                 fileName:
                     file.originalname ||
                     "examination-paper.pdf",
@@ -2119,7 +2596,7 @@ const analyzePaper = async (
         );
 
         // ====================================================
-        // SUCCESS RESPONSE
+        // SUCCESS
         // ====================================================
 
         return res.status(200).json({
@@ -2161,7 +2638,7 @@ const analyzePaper = async (
         );
 
         // ====================================================
-        // RELEASE ACTIVE HASH IF QUEUE NEVER STARTED
+        // RELEASE HASH IF PAPER WAS NEVER SAVED
         // ====================================================
 
         if (
@@ -2174,10 +2651,12 @@ const analyzePaper = async (
         }
 
         // ====================================================
-        // PAPER WAS SAVED BUT PROCESSING FAILED
+        // PAPER ALREADY SAVED
         // ====================================================
 
-        if (paper?.id) {
+        if (
+            paper?.id
+        ) {
             try {
                 await updatePaperStatus(
                     paper.id,
@@ -2207,16 +2686,14 @@ const analyzePaper = async (
                 );
             }
 
-            // ==================================================
-            // PAPER IS SAVED.
-            // RETURN 200.
-            // ==================================================
-
             return res.status(200).json({
                 success: true,
 
                 processing:
                     false,
+
+                ai_failed:
+                    true,
 
                 paper: {
                     id:
@@ -2253,7 +2730,7 @@ const analyzePaper = async (
         }
 
         // ====================================================
-        // NOTHING WAS SAVED
+        // NOTHING SAVED
         // ====================================================
 
         return res.status(500).json({
@@ -2268,7 +2745,7 @@ const analyzePaper = async (
 
 
 // ============================================================
-// GET AI ANALYSIS BY EXAM + SUBJECT
+// GET ANALYSIS BY EXAM + SUBJECT
 // ============================================================
 
 const getAnalysis = async (
@@ -2303,7 +2780,7 @@ const getAnalysis = async (
 
     try {
         // ====================================================
-        // GET LATEST PAPER
+        // LATEST PAPER
         // ====================================================
 
         const paper =
@@ -2313,7 +2790,7 @@ const getAnalysis = async (
             );
 
         // ====================================================
-        // GET LATEST AI ANALYSIS
+        // LATEST ANALYSIS
         // ====================================================
 
         const {
@@ -2349,23 +2826,6 @@ const getAnalysis = async (
         );
 
         // ====================================================
-        // NORMALIZE MAIN ANALYSIS
-        // ====================================================
-
-        const normalizedAnalysis =
-            analysis
-                ? {
-                    ...analysis,
-
-                    status:
-                        analysis.analysis_status,
-
-                    summary:
-                        analysis.ai_summary,
-                }
-                : null;
-
-        // ====================================================
         // GET QUESTION ANALYSIS
         // ====================================================
 
@@ -2373,10 +2833,13 @@ const getAnalysis = async (
             [];
 
         if (
-            normalizedAnalysis?.id
+            analysis?.id
         ) {
-            let query =
-                supabase
+            const {
+                data,
+                error,
+            } =
+                await supabase
                     .from(
                         "exam_question_analysis"
                     )
@@ -2390,32 +2853,12 @@ const getAnalysis = async (
                         examSubjectId
                     )
                     .order(
-                        "question_number",
+                        "id",
                         {
                             ascending:
                                 true,
                         }
                     );
-
-            // ==================================================
-            // Latest paper filter
-            // ==================================================
-
-            if (
-                normalizedAnalysis.exam_paper_id
-            ) {
-                query =
-                    query.eq(
-                        "exam_paper_id",
-                        normalizedAnalysis.exam_paper_id
-                    );
-            }
-
-            const {
-                data,
-                error,
-            } =
-                await query;
 
             throwSupabaseError(
                 error,
@@ -2423,28 +2866,36 @@ const getAnalysis = async (
             );
 
             questionAnalysis =
-                (
-                    data || []
-                ).map(
-                    (
-                        question
-                    ) => ({
-                        ...question,
+                data || [];
 
-                        expected_answer:
-                            question.answer_expected ||
-                            "",
+            // ==================================================
+            // FILTER TO LATEST PAPER IF POSSIBLE
+            // ==================================================
 
-                        explanation:
-                            question.ai_explanation ||
-                            "",
+            if (
+                analysis.exam_paper_id
+            ) {
+                const latestPaperRows =
+                    questionAnalysis.filter(
+                        (
+                            item
+                        ) =>
+                            String(
+                                item.exam_paper_id
+                            ) ===
+                            String(
+                                analysis.exam_paper_id
+                            )
+                    );
 
-                        max_marks:
-                            question.max_marks ??
-                            question.marks ??
-                            0,
-                    })
-                );
+                if (
+                    latestPaperRows.length >
+                    0
+                ) {
+                    questionAnalysis =
+                        latestPaperRows;
+                }
+            }
         }
 
         // ====================================================
@@ -2469,7 +2920,7 @@ const getAnalysis = async (
                     examSubjectId
                 )
                 .order(
-                    "question_number",
+                    "id",
                     {
                         ascending:
                             true,
@@ -2480,6 +2931,33 @@ const getAnalysis = async (
             questionsError,
             "Failed to load examination questions"
         );
+
+        // ====================================================
+        // MERGE QUESTION ANALYSIS + EXAM QUESTIONS
+        // ====================================================
+
+        const mergedQuestions =
+            mergeQuestionData(
+                questions || [],
+                questionAnalysis
+            );
+
+        // ====================================================
+        // NORMALIZE MAIN ANALYSIS
+        // ====================================================
+
+        const normalizedAnalysis =
+            analysis
+                ? {
+                    ...analysis,
+
+                    status:
+                        analysis.analysis_status,
+
+                    summary:
+                        analysis.ai_summary,
+                }
+                : null;
 
         // ====================================================
         // RESPONSE
@@ -2494,8 +2972,16 @@ const getAnalysis = async (
                 paper?.status ===
                     "Processing",
 
+            status:
+                normalizedAnalysis
+                    ?.analysis_status ||
+                paper?.ai_status ||
+                paper?.status ||
+                null,
+
             paper:
-                paper || null,
+                paper ||
+                null,
 
             analysis:
                 normalizedAnalysis,
@@ -2504,7 +2990,7 @@ const getAnalysis = async (
                 questionAnalysis,
 
             questions:
-                questions || [],
+                mergedQuestions,
         });
     } catch (error) {
         console.error(
@@ -2524,7 +3010,7 @@ const getAnalysis = async (
 
 
 // ============================================================
-// GET AI ANALYSIS BY EXAM
+// GET ANALYSIS BY EXAM
 // ============================================================
 
 const getAnalysisByExam =
@@ -2551,7 +3037,7 @@ const getAnalysisByExam =
 
         try {
             // ====================================================
-            // GET PAPERS
+            // PAPERS
             // ====================================================
 
             const {
@@ -2581,7 +3067,7 @@ const getAnalysisByExam =
             );
 
             // ====================================================
-            // GET ANALYSES
+            // ANALYSES
             // ====================================================
 
             const {
@@ -2610,29 +3096,25 @@ const getAnalysisByExam =
                 "Failed to load examination AI analyses"
             );
 
-            // ====================================================
-            // NORMALIZE ANALYSES FOR FRONTEND
-            // ====================================================
-
             const normalizedAnalyses =
                 (
                     analyses || []
                 ).map(
                     (
-                        analysis
+                        item
                     ) => ({
-                        ...analysis,
+                        ...item,
 
                         status:
-                            analysis.analysis_status,
+                            item.analysis_status,
 
                         summary:
-                            analysis.ai_summary,
+                            item.ai_summary,
                     })
                 );
 
             // ====================================================
-            // GET QUESTIONS
+            // EXAM QUESTIONS
             // ====================================================
 
             const {
@@ -2649,7 +3131,7 @@ const getAnalysisByExam =
                         examId
                     )
                     .order(
-                        "question_number",
+                        "id",
                         {
                             ascending:
                                 true,
@@ -2662,7 +3144,7 @@ const getAnalysisByExam =
             );
 
             // ====================================================
-            // GET QUESTION ANALYSIS
+            // QUESTION ANALYSIS
             // ====================================================
 
             const {
@@ -2681,7 +3163,7 @@ const getAnalysisByExam =
                         examId
                     )
                     .order(
-                        "question_number",
+                        "id",
                         {
                             ascending:
                                 true,
@@ -2693,29 +3175,19 @@ const getAnalysisByExam =
                 "Failed to load examination question analysis"
             );
 
+            // ====================================================
+            // MERGE DATA
+            // ====================================================
+
             const normalizedQuestionAnalysis =
-                (
-                    questionAnalysis ||
-                    []
-                ).map(
-                    (
-                        question
-                    ) => ({
-                        ...question,
+                questionAnalysis ||
+                [];
 
-                        expected_answer:
-                            question.answer_expected ||
-                            "",
-
-                        explanation:
-                            question.ai_explanation ||
-                            "",
-
-                        max_marks:
-                            question.max_marks ??
-                            question.marks ??
-                            0,
-                    })
+            const mergedQuestions =
+                mergeQuestionData(
+                    questions ||
+                        [],
+                    normalizedQuestionAnalysis
                 );
 
             // ====================================================
@@ -2732,7 +3204,7 @@ const getAnalysisByExam =
                     normalizedAnalyses,
 
                 questions:
-                    questions || [],
+                    mergedQuestions,
 
                 question_analysis:
                     normalizedQuestionAnalysis,
