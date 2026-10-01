@@ -8,10 +8,12 @@ import { askGemini } from "../services/gemini.service.js";
 // ============================================================
 //
 // Muhimu:
-// - Hakuna lock ya exam + subject tena.
-// - Papers nyingi za subject moja zinaweza kuingia kwenye queue.
-// - Queue inazichakata moja baada ya nyingine.
-// - Hii inaruhusu Upload Another / Re-analysis.
+//
+// 1. Hakuna lock ya exam + subject tena.
+// 2. Papers nyingi za subject moja zinaweza kuingia queue.
+// 3. Queue inazichakata moja baada ya nyingine.
+// 4. Kila upload mpya inapata exam_papers record mpya.
+// 5. Same PDF ikiwa bado Processing haitaanzishwa mara mbili.
 // ============================================================
 
 const analysisQueue = [];
@@ -527,13 +529,20 @@ const findExistingPaper =
 
 
 // ============================================================
-// FIND PAPER BY EXACT HASH
+// FIND PAPER BY EXACT FILE HASH
 // ============================================================
 //
-// Used only to stop the same exact PDF from being submitted
-// twice while the first request is still processing.
+// Hii inatumika kwa duplicate protection.
+// Haitoi block kwa subject nzima.
 //
-// This does NOT block a new/different paper.
+// Same exact PDF + Processing:
+//     return existing paper.
+//
+// Same exact PDF + Completed:
+//     allow re-analysis.
+//
+// Different PDF:
+//     always allow.
 // ============================================================
 
 const findPaperByHash =
@@ -624,6 +633,10 @@ const updatePaperStatus =
 
 // ============================================================
 // DELETE PREVIOUS AI DATA
+// ============================================================
+//
+// Hii inaacha latest analysis ikiwa ndiyo active analysis
+// ya exam subject.
 // ============================================================
 
 const deleteExistingAiData =
@@ -870,6 +883,21 @@ const validateQuestions = (
                 group,
 
                 instruction,
+
+                // Preserve expected answer if Gemini returns it.
+                expected_answer:
+                    normalizeText(
+                        question.expected_answer ||
+                            question.answer ||
+                            ""
+                    ),
+
+                // Preserve explanation if Gemini returns it.
+                explanation:
+                    normalizeText(
+                        question.explanation ||
+                            ""
+                    ),
             });
         }
     );
@@ -950,6 +978,8 @@ The JSON must follow this structure:
     {
       "question_number": "1",
       "question_text": "complete question",
+      "expected_answer": "expected answer if reasonably detectable",
+      "explanation": "brief explanation if reasonably useful",
       "max_marks": 10,
       "is_selective": false,
       "selection_count": null,
@@ -970,7 +1000,9 @@ Rules:
 7. Never invent a question.
 8. Never invent marks that are clearly visible in the paper.
 9. If marks are not visible for a question, use the most reasonable value based on the paper structure.
-10. Return valid JSON only.
+10. Expected answers should only be provided where reasonably inferable from the question.
+11. Do not invent unsupported facts.
+12. Return valid JSON only.
 
 EXAMINATION:
 ${normalizeText(
@@ -1023,13 +1055,86 @@ const saveAiAnalysis = async ({
             examSubject?.full_marks
         );
 
+    // ========================================================
+    // REMOVE PREVIOUS ACTIVE AI DATA
+    // ========================================================
+
     await deleteExistingAiData(
         examId,
         examSubjectId
     );
 
     // ========================================================
+    // PREPARE INSTRUCTIONS
+    // ========================================================
+    //
+    // Production schema:
+    // instructions = TEXT
+    //
+    // Kwa hiyo hatuhifadhi array moja kwa moja.
+    // Tunaibadilisha kuwa text.
+    // ========================================================
+
+    let instructionsText =
+        "";
+
+    if (
+        Array.isArray(
+            aiResult.instructions
+        )
+    ) {
+        instructionsText =
+            aiResult.instructions
+                .map(
+                    (item) =>
+                        normalizeText(
+                            item
+                        )
+                )
+                .filter(
+                    Boolean
+                )
+                .join("\n");
+    } else {
+        instructionsText =
+            normalizeText(
+                aiResult.instructions
+            );
+    }
+
+    // ========================================================
+    // CALCULATE TOTAL MARKS
+    // ========================================================
+
+    const totalMarks =
+        questions.reduce(
+            (
+                total,
+                question
+            ) =>
+                total +
+                (
+                    Number(
+                        question.max_marks
+                    ) || 0
+                ),
+            0
+        );
+
+    // ========================================================
     // SAVE AI ANALYSIS
+    // ========================================================
+    //
+    // Production schema uses:
+    //
+    // ai_summary
+    // analysis_status
+    // instructions TEXT
+    //
+    // NOT:
+    //
+    // summary
+    // status
     // ========================================================
 
     const {
@@ -1050,23 +1155,32 @@ const saveAiAnalysis = async ({
                 exam_paper_id:
                     paperId,
 
-                summary:
+                ai_summary:
                     normalizeText(
                         aiResult.summary
                     ),
 
                 instructions:
-                    Array.isArray(
-                        aiResult.instructions
-                    )
-                        ? aiResult.instructions
-                        : [],
+                    instructionsText,
 
                 raw_response:
                     aiResult,
 
-                status:
+                analysis_status:
                     "Completed",
+
+                total_questions:
+                    questions.length,
+
+                total_marks:
+                    totalMarks,
+
+                subject:
+                    normalizeText(
+                        subject?.name ||
+                            subject?.subject_name ||
+                            ""
+                    ),
             })
             .select("*")
             .single();
@@ -1107,7 +1221,6 @@ const saveAiAnalysis = async ({
                 expected_answer:
                     normalizeText(
                         question.expected_answer ||
-                            question.answer ||
                             ""
                     ),
 
@@ -1216,6 +1329,10 @@ const saveAiAnalysis = async ({
         );
     }
 
+    // ========================================================
+    // RETURN RESULT
+    // ========================================================
+
     return {
         analysis,
         questions,
@@ -1239,7 +1356,7 @@ const processAnalyzePaper =
     }) => {
         try {
             // ====================================================
-            // MARK PAPER PROCESSING
+            // MARK PAPER AS PROCESSING
             // ====================================================
 
             await updatePaperStatus(
@@ -1341,6 +1458,17 @@ const processAnalyzePaper =
                 );
             }
 
+            console.log(
+                "AI PDF TEXT EXTRACTED:",
+                {
+                    examId,
+                    examSubjectId,
+                    paperId,
+                    characters:
+                        cleanPdfText.length,
+                }
+            );
+
             // ====================================================
             // BUILD GEMINI PROMPT
             // ====================================================
@@ -1377,6 +1505,19 @@ const processAnalyzePaper =
                       JSON.stringify(
                           aiResponse
                       );
+
+            console.log(
+                "GEMINI RESPONSE RECEIVED:",
+                {
+                    examId,
+                    examSubjectId,
+                    paperId,
+                    responseLength:
+                        normalizeText(
+                            rawAiText
+                        ).length,
+                }
+            );
 
             // ====================================================
             // EXTRACT GEMINI JSON
@@ -1548,7 +1689,7 @@ const analyzePaper = async (
     }
 
     // ========================================================
-    // VALIDATE FILE
+    // VALIDATE PDF
     // ========================================================
 
     const file =
@@ -1615,13 +1756,17 @@ const analyzePaper = async (
                 .digest("hex");
 
         // ====================================================
-        // CHECK WHETHER EXACT SAME PAPER IS ALREADY PROCESSING
+        // SAME EXACT PDF CHECK
         // ====================================================
         //
-        // Hii ni protection dhidi ya duplicate request.
+        // Hii inazuia ONLY duplicate request ya paper ambayo
+        // tayari iko Processing.
         //
-        // Haizuii paper mpya.
-        // Haizuii re-analysis baada ya Completed/Failed.
+        // Paper hiyo hiyo ikiwa Completed:
+        //     upload nyingine inaruhusiwa.
+        //
+        // Paper tofauti:
+        //     inaruhusiwa.
         // ====================================================
 
         const samePaper =
@@ -1640,6 +1785,17 @@ const analyzePaper = async (
                     "Processing"
             )
         ) {
+            console.log(
+                "DUPLICATE AI PAPER REQUEST IGNORED:",
+                {
+                    examId,
+                    examSubjectId,
+                    paperId:
+                        samePaper.id,
+                    fileHash,
+                }
+            );
+
             return res.status(200).json({
                 success: true,
 
@@ -1687,21 +1843,12 @@ const analyzePaper = async (
         };
 
         // ====================================================
-        // ALWAYS CREATE NEW PAPER RECORD
+        // ALWAYS INSERT NEW PAPER
         // ====================================================
         //
-        // IMPORTANT:
         // Hatufanyi UPDATE ya paper ya zamani.
         //
-        // Kila upload mpya inapata ID yake mpya.
-        //
-        // Example:
-        //
-        // Paper 1 -> ID 334
-        // Paper 2 -> ID 335
-        // Paper 3 -> ID 336
-        //
-        // Papers hizi zote zinaweza kuwa za subject moja.
+        // Kila upload mpya inapata ID mpya.
         // ====================================================
 
         const {
@@ -1758,7 +1905,7 @@ const analyzePaper = async (
             );
 
         // ====================================================
-        // LOG QUEUED PAPER
+        // LOG
         // ====================================================
 
         console.log(
@@ -1768,13 +1915,14 @@ const analyzePaper = async (
                 examSubjectId,
                 paperId,
                 fileName:
-                    file.originalname,
+                    file.originalname ||
+                    "examination-paper.pdf",
                 queuePosition,
             }
         );
 
         // ====================================================
-        // RETURN SUCCESS
+        // SUCCESS
         // ====================================================
 
         return res.status(200).json({
@@ -1816,7 +1964,7 @@ const analyzePaper = async (
         );
 
         // ====================================================
-        // PAPER WAS SAVED BUT SOMETHING FAILED AFTERWARD
+        // PAPER WAS SAVED BUT QUEUE/PROCESSING FAILED
         // ====================================================
 
         if (paper?.id) {
@@ -1848,11 +1996,6 @@ const analyzePaper = async (
                     statusError
                 );
             }
-
-            // ==================================================
-            // PDF ALREADY SAVED.
-            // RETURN 200 SO FRONTEND DOES NOT SEE FALSE 500.
-            // ==================================================
 
             return res.status(200).json({
                 success: true,
@@ -2095,6 +2238,7 @@ const getAnalysis = async (
 
         return res.status(500).json({
             success: false,
+
             message:
                 error?.message ||
                 "Failed to load AI analysis",
