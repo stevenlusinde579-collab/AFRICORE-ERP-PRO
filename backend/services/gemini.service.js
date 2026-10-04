@@ -16,9 +16,41 @@ const GEMINI_BASE_URL =
     "https://generativelanguage.googleapis.com/v1beta/models";
 
 // ============================================================
+// MODEL FALLBACKS
+//
+// Primary:
+//   gemini-3.8-flash
+//
+// If Google returns temporary server/capacity errors:
+//   gemini-3.7-flash
+//   gemini-3.6-flash
+//
+// IMPORTANT:
+// We do NOT fallback for:
+// 400, 401, 403, 404, 413, 429.
+//
+// 429 = quota/rate limit and must fail fast.
+// ============================================================
+
+const DEFAULT_MODEL_FALLBACKS = [
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+];
+
+const GEMINI_MODELS = [
+    GEMINI_MODEL,
+    ...DEFAULT_MODEL_FALLBACKS,
+].filter(
+    (model, index, array) =>
+        model &&
+        array.indexOf(model) === index
+);
+
+// ============================================================
 // IMPORTANT
 //
 // Gemini analysis lazima iwe fast-fail.
+//
 // 429 / quota HAITAKIWI kusubiri retries nyingi.
 //
 // Default:
@@ -26,6 +58,10 @@ const GEMINI_BASE_URL =
 // - maximum 1 retry for temporary server errors
 // - short retry delay
 // - 60 second HTTP timeout
+//
+// IMPORTANT CHANGE:
+// Temporary 503/502/504 errors can move to the next model
+// instead of repeatedly hitting the same overloaded model.
 // ============================================================
 
 const MAX_RETRIES =
@@ -227,12 +263,14 @@ const getRetryDelay = (
 // ============================================================
 // SHOULD RETRY
 //
-// VERY IMPORTANT:
-//
 // 429 = NO RETRY
 //
-// Kwa sababu quota/rate-limit inaweza kufanya system
-// ikae dakika nyingi ikisubiri.
+// 500/502/503/504 = temporary server error.
+//
+// Network timeout/reset = temporary.
+//
+// IMPORTANT:
+// The caller may switch model after a temporary error.
 // ============================================================
 
 const shouldRetryGeminiRequest = (
@@ -281,10 +319,45 @@ const shouldRetryGeminiRequest = (
 };
 
 // ============================================================
+// TEMPORARY ERROR CHECK
+// ============================================================
+
+const isTemporaryGeminiError = (
+    error
+) => {
+    const status =
+        error?.response?.status;
+
+    if (
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504
+    ) {
+        return true;
+    }
+
+    if (
+        error?.code ===
+            "ECONNABORTED" ||
+        error?.code ===
+            "ETIMEDOUT" ||
+        error?.code ===
+            "ECONNRESET"
+    ) {
+        return true;
+    }
+
+    return false;
+};
+
+// ============================================================
 // GEMINI URL
 // ============================================================
 
-const getGeminiUrl = () => {
+const getGeminiUrl = (
+    model = GEMINI_MODEL
+) => {
     const apiKey =
         process.env.GEMINI_API_KEY;
 
@@ -310,7 +383,7 @@ const getGeminiUrl = () => {
 
     return (
         `${GEMINI_BASE_URL}/` +
-        `${GEMINI_MODEL}:generateContent`
+        `${model}:generateContent`
     );
 };
 
@@ -348,7 +421,8 @@ const createGeminiError = (
 // ============================================================
 
 const handleGeminiError = (
-    error
+    error,
+    model = GEMINI_MODEL
 ) => {
     if (
         error?.code ===
@@ -393,6 +467,9 @@ const handleGeminiError = (
             {
                 responseData:
                     data,
+
+                model,
+
                 retryAfter:
                     getRetryAfterMs(
                         error?.response
@@ -418,6 +495,8 @@ const handleGeminiError = (
             {
                 responseData:
                     data,
+
+                model,
             }
         );
     }
@@ -430,12 +509,14 @@ const handleGeminiError = (
         status === 404
     ) {
         throw createGeminiError(
-            `Gemini model "${GEMINI_MODEL}" haipatikani.`,
+            `Gemini model "${model}" haipatikani.`,
             "GEMINI_MODEL_NOT_FOUND",
             404,
             {
                 responseData:
                     data,
+
+                model,
             }
         );
     }
@@ -454,6 +535,8 @@ const handleGeminiError = (
             {
                 responseData:
                     data,
+
+                model,
             }
         );
     }
@@ -472,6 +555,8 @@ const handleGeminiError = (
             {
                 responseData:
                     data,
+
+                model,
             }
         );
     }
@@ -489,7 +574,10 @@ const handleGeminiError = (
         throw createGeminiError(
             "Gemini analysis ime-timeout baada ya muda uliowekwa.",
             "GEMINI_TIMEOUT",
-            504
+            504,
+            {
+                model,
+            }
         );
     }
 
@@ -500,7 +588,10 @@ const handleGeminiError = (
         throw createGeminiError(
             "Connection ya Gemini imekatika wakati wa analysis.",
             "GEMINI_NETWORK_ERROR",
-            503
+            503,
+            {
+                model,
+            }
         );
     }
 
@@ -521,6 +612,8 @@ const handleGeminiError = (
             {
                 responseData:
                     data,
+
+                model,
             }
         );
     }
@@ -537,6 +630,8 @@ const handleGeminiError = (
         {
             responseData:
                 data,
+
+            model,
         }
     );
 };
@@ -597,10 +692,13 @@ const getRequestConfig = () => {
 
 const makeGeminiRequestInternal =
     async (
-        payload
+        payload,
+        model
     ) => {
         const url =
-            getGeminiUrl();
+            getGeminiUrl(
+                model
+            );
 
         const response =
             await axios.post(
@@ -613,11 +711,22 @@ const makeGeminiRequestInternal =
     };
 
 // ============================================================
-// GEMINI REQUEST WITH FAST RETRIES
+// GEMINI REQUEST WITH MODEL FALLBACK
 //
-// 429 NEVER RETRIES.
+// Flow:
 //
-// Temporary server errors can retry ONCE only.
+// 3.8 -> temporary error
+//       ↓
+// 3.7 -> temporary error
+//       ↓
+// 3.6
+//
+// Each model can have the configured retry count.
+//
+// 429 NEVER switches model and NEVER retries.
+//
+// Permanent errors NEVER switch model.
+//
 // ============================================================
 
 const makeGeminiRequest =
@@ -628,168 +737,284 @@ const makeGeminiRequest =
             null;
 
         for (
-            let attempt = 0;
-            attempt <=
-            MAX_RETRIES;
-            attempt++
+            let modelIndex = 0;
+            modelIndex <
+            GEMINI_MODELS.length;
+            modelIndex++
         ) {
-            try {
-                console.log(
-                    "============================================================"
-                );
+            const currentModel =
+                GEMINI_MODELS[
+                    modelIndex
+                ];
 
-                console.log(
-                    "GEMINI REQUEST START"
-                );
+            let modelLastError =
+                null;
 
-                console.log(
-                    "MODEL:",
-                    GEMINI_MODEL
-                );
-
-                console.log(
-                    "ATTEMPT:",
-                    `${attempt + 1}/${MAX_RETRIES + 1}`
-                );
-
-                console.log(
-                    "TIMEOUT:",
-                    `${GEMINI_TIMEOUT_MS}ms`
-                );
-
-                console.log(
-                    "MAX OUTPUT TOKENS:",
-                    GEMINI_MAX_OUTPUT_TOKENS
-                );
-
-                console.log(
-                    "============================================================"
-                );
-
-                const response =
-                    await makeGeminiRequestInternal(
-                        payload
+            for (
+                let attempt = 0;
+                attempt <=
+                MAX_RETRIES;
+                attempt++
+            ) {
+                try {
+                    console.log(
+                        "============================================================"
                     );
 
-                console.log(
-                    "============================================================"
-                );
+                    console.log(
+                        "GEMINI REQUEST START"
+                    );
 
-                console.log(
-                    "GEMINI REQUEST SUCCESS"
-                );
+                    console.log(
+                        "MODEL:",
+                        currentModel
+                    );
 
-                console.log(
-                    "============================================================"
-                );
+                    console.log(
+                        "MODEL INDEX:",
+                        `${modelIndex + 1}/${GEMINI_MODELS.length}`
+                    );
 
-                return response;
-            } catch (
-                error
+                    console.log(
+                        "ATTEMPT:",
+                        `${attempt + 1}/${MAX_RETRIES + 1}`
+                    );
+
+                    console.log(
+                        "TIMEOUT:",
+                        `${GEMINI_TIMEOUT_MS}ms`
+                    );
+
+                    console.log(
+                        "MAX OUTPUT TOKENS:",
+                        GEMINI_MAX_OUTPUT_TOKENS
+                    );
+
+                    console.log(
+                        "============================================================"
+                    );
+
+                    const response =
+                        await makeGeminiRequestInternal(
+                            payload,
+                            currentModel
+                        );
+
+                    console.log(
+                        "============================================================"
+                    );
+
+                    console.log(
+                        "GEMINI REQUEST SUCCESS"
+                    );
+
+                    console.log(
+                        "MODEL USED:",
+                        currentModel
+                    );
+
+                    console.log(
+                        "============================================================"
+                    );
+
+                    return response;
+                } catch (
+                    error
+                ) {
+                    lastError =
+                        error;
+
+                    modelLastError =
+                        error;
+
+                    const status =
+                        error?.response
+                            ?.status;
+
+                    console.error(
+                        "============================================================"
+                    );
+
+                    console.error(
+                        "GEMINI REQUEST FAILED"
+                    );
+
+                    console.error(
+                        "MODEL:",
+                        currentModel
+                    );
+
+                    console.error(
+                        "STATUS:",
+                        status ||
+                            error?.code ||
+                            "UNKNOWN"
+                    );
+
+                    console.error(
+                        "MESSAGE:",
+                        error?.response
+                            ?.data
+                            ?.error
+                            ?.message ||
+                            error?.message
+                    );
+
+                    console.error(
+                        "============================================================"
+                    );
+
+                    // ====================================================
+                    // 429 MUST FAIL IMMEDIATELY
+                    //
+                    // DO NOT try another model.
+                    // ====================================================
+
+                    if (
+                        status === 429
+                    ) {
+                        handleGeminiError(
+                            error,
+                            currentModel
+                        );
+                    }
+
+                    // ====================================================
+                    // Permanent errors
+                    //
+                    // DO NOT try another model.
+                    // ====================================================
+
+                    if (
+                        !shouldRetryGeminiRequest(
+                            error
+                        )
+                    ) {
+                        handleGeminiError(
+                            error,
+                            currentModel
+                        );
+                    }
+
+                    // ====================================================
+                    // If this is a temporary error and retry is
+                    // still available, retry SAME MODEL once.
+                    // ====================================================
+
+                    if (
+                        attempt <
+                        MAX_RETRIES
+                    ) {
+                        const delay =
+                            getRetryDelay(
+                                attempt,
+                                error
+                                    ?.response
+                                    ?.headers ||
+                                    {}
+                            );
+
+                        console.warn(
+                            "Gemini temporary error."
+                        );
+
+                        console.warn(
+                            "MODEL:",
+                            currentModel
+                        );
+
+                        console.warn(
+                            `Retrying same model after ${delay}ms`
+                        );
+
+                        await sleep(
+                            delay
+                        );
+
+                        continue;
+                    }
+
+                    // ====================================================
+                    // SAME MODEL RETRIES EXHAUSTED
+                    // ====================================================
+
+                    break;
+                }
+            }
+
+            // ============================================================
+            // MODEL FAILED
+            //
+            // If temporary error, move to next fallback model.
+            // ============================================================
+
+            if (
+                isTemporaryGeminiError(
+                    modelLastError
+                ) &&
+                modelIndex <
+                    GEMINI_MODELS.length -
+                        1
             ) {
-                lastError =
-                    error;
+                const nextModel =
+                    GEMINI_MODELS[
+                        modelIndex + 1
+                    ];
 
-                const status =
-                    error?.response
-                        ?.status;
-
-                console.error(
+                console.warn(
                     "============================================================"
                 );
 
-                console.error(
-                    "GEMINI REQUEST FAILED"
+                console.warn(
+                    "GEMINI MODEL FALLBACK"
                 );
 
-                console.error(
-                    "STATUS:",
-                    status ||
-                        error?.code ||
-                        "UNKNOWN"
+                console.warn(
+                    "FAILED MODEL:",
+                    currentModel
                 );
 
-                console.error(
-                    "MESSAGE:",
-                    error?.response
+                console.warn(
+                    "NEXT MODEL:",
+                    nextModel
+                );
+
+                console.warn(
+                    "REASON:",
+                    modelLastError
+                        ?.response
                         ?.data
                         ?.error
                         ?.message ||
-                        error?.message
+                        modelLastError
+                            ?.message ||
+                        "Temporary Gemini error"
                 );
 
-                console.error(
+                console.warn(
                     "============================================================"
                 );
 
-                // ====================================================
-                // 429 MUST FAIL IMMEDIATELY
-                // ====================================================
+                continue;
+            }
 
-                if (
-                    status === 429
-                ) {
-                    handleGeminiError(
-                        error
-                    );
-                }
+            // ============================================================
+            // No more fallback models.
+            // ============================================================
 
-                // ====================================================
-                // Permanent errors
-                // ====================================================
-
-                if (
-                    !shouldRetryGeminiRequest(
-                        error
-                    )
-                ) {
-                    handleGeminiError(
-                        error
-                    );
-                }
-
-                // ====================================================
-                // Retry exhausted
-                // ====================================================
-
-                if (
-                    attempt >=
-                    MAX_RETRIES
-                ) {
-                    handleGeminiError(
-                        error
-                    );
-                }
-
-                // ====================================================
-                // SHORT RETRY
-                // ====================================================
-
-                const delay =
-                    getRetryDelay(
-                        attempt,
-                        error
-                            ?.response
-                            ?.headers ||
-                            {}
-                    );
-
-                console.warn(
-                    "Gemini temporary error."
-                );
-
-                console.warn(
-                    `Retrying once after ${delay}ms`
-                );
-
-                await sleep(
-                    delay
+            if (
+                modelLastError
+            ) {
+                handleGeminiError(
+                    modelLastError,
+                    currentModel
                 );
             }
         }
 
         handleGeminiError(
-            lastError
+            lastError,
+            GEMINI_MODEL
         );
     };
 
@@ -1128,6 +1353,7 @@ const cleanGeminiJson = (
                 {
                     originalError:
                         error,
+
                     rawText:
                         text,
                 }
@@ -1174,6 +1400,13 @@ export const askGemini =
         console.log(
             "PROMPT LENGTH:",
             cleanPrompt.length
+        );
+
+        console.log(
+            "AVAILABLE MODELS:",
+            GEMINI_MODELS.join(
+                " -> "
+            )
         );
 
         console.log(
@@ -1291,6 +1524,11 @@ export const askGemini =
             console.error(
                 "STATUS:",
                 error?.status
+            );
+
+            console.error(
+                "MODEL:",
+                error?.model
             );
 
             console.error(
@@ -1418,6 +1656,11 @@ export const askGeminiWithPDF =
             );
 
             console.error(
+                "MODEL:",
+                error?.model
+            );
+
+            console.error(
                 "MESSAGE:",
                 error?.message
             );
@@ -1490,6 +1733,9 @@ export const testGeminiConnection =
 export const geminiConfig = {
     model:
         GEMINI_MODEL,
+
+    models:
+        GEMINI_MODELS,
 
     maxRetries:
         MAX_RETRIES,
