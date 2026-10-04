@@ -21,15 +21,14 @@ const GEMINI_BASE_URL =
 // Primary:
 //   gemini-3.8-flash
 //
-// If Google returns temporary server/capacity errors:
+// Fallbacks:
 //   gemini-3.7-flash
 //   gemini-3.6-flash
 //
-// IMPORTANT:
-// We do NOT fallback for:
-// 400, 401, 403, 404, 413, 429.
+// Temporary capacity/server/rate-limit errors may move to
+// the next model.
 //
-// 429 = quota/rate limit and must fail fast.
+// Permanent quota exhaustion does NOT keep retrying forever.
 // ============================================================
 
 const DEFAULT_MODEL_FALLBACKS = [
@@ -47,21 +46,14 @@ const GEMINI_MODELS = [
 );
 
 // ============================================================
-// IMPORTANT
+// RETRIES
 //
-// Gemini analysis lazima iwe fast-fail.
-//
-// 429 / quota HAITAKIWI kusubiri retries nyingi.
-//
+// Maximum retries per model.
 // Default:
-// - 0 retries for quota/rate-limit
-// - maximum 1 retry for temporary server errors
-// - short retry delay
-// - 60 second HTTP timeout
+//   1 retry
 //
-// IMPORTANT CHANGE:
-// Temporary 503/502/504 errors can move to the next model
-// instead of repeatedly hitting the same overloaded model.
+// This applies to temporary server errors and temporary
+// rate-limit responses.
 // ============================================================
 
 const MAX_RETRIES =
@@ -75,6 +67,10 @@ const MAX_RETRIES =
             )
         )
     );
+
+// ============================================================
+// RETRY DELAYS
+// ============================================================
 
 const DEFAULT_RETRY_DELAY =
     Math.max(
@@ -96,9 +92,6 @@ const MAX_RETRY_DELAY =
 
 // ============================================================
 // OUTPUT TOKENS
-//
-// 65536 ilikuwa kubwa sana kwa examination JSON.
-// 32768 bado ni kubwa lakini inapunguza unnecessary generation.
 // ============================================================
 
 const GEMINI_MAX_OUTPUT_TOKENS =
@@ -261,16 +254,184 @@ const getRetryDelay = (
 };
 
 // ============================================================
-// SHOULD RETRY
+// NORMALIZE GEMINI ERROR TEXT
+// ============================================================
+
+const getGeminiErrorText = (
+    error
+) => {
+    const data =
+        error?.response?.data;
+
+    const apiMessage =
+        data?.error?.message ||
+        data?.message ||
+        error?.message ||
+        "";
+
+    return String(
+        apiMessage
+    ).toLowerCase();
+};
+
+// ============================================================
+// DETECT DAILY / HARD QUOTA EXHAUSTION
 //
-// 429 = NO RETRY
+// These conditions should NOT keep retrying.
 //
-// 500/502/503/504 = temporary server error.
+// Examples:
+//   quota exceeded
+//   daily quota
+//   daily limit
+//   requests per day
+//   generate requests per day
+//   tokens per day
+//   limit: 0
+// ============================================================
+
+const isHardQuotaExceeded = (
+    error
+) => {
+    const status =
+        error?.response?.status;
+
+    if (
+        status !== 429
+    ) {
+        return false;
+    }
+
+    const message =
+        getGeminiErrorText(
+            error
+        );
+
+    const data =
+        error?.response?.data;
+
+    const errorStatus =
+        String(
+            data?.error?.status ||
+            ""
+        ).toLowerCase();
+
+    const combined =
+        `${message} ${errorStatus}`;
+
+    const hardQuotaPatterns = [
+        "quota exceeded",
+        "daily quota",
+        "daily limit",
+        "requests per day",
+        "request per day",
+        "tokens per day",
+        "limit: 0",
+        "per day",
+        "quota_exceeded",
+        "quota-exceeded",
+    ];
+
+    return hardQuotaPatterns.some(
+        (pattern) =>
+            combined.includes(
+                pattern
+            )
+    );
+};
+
+// ============================================================
+// DETECT TEMPORARY RATE LIMIT
 //
-// Network timeout/reset = temporary.
+// 429 does NOT automatically mean daily quota.
 //
-// IMPORTANT:
-// The caller may switch model after a temporary error.
+// A temporary rate-limit response can be retried.
+//
+// Examples:
+//   too many requests
+//   rate limit
+//   rate_limit_exceeded
+//   resource exhausted without daily quota wording
+// ============================================================
+
+const isTemporaryRateLimit = (
+    error
+) => {
+    const status =
+        error?.response?.status;
+
+    if (
+        status !== 429
+    ) {
+        return false;
+    }
+
+    if (
+        isHardQuotaExceeded(
+            error
+        )
+    ) {
+        return false;
+    }
+
+    const message =
+        getGeminiErrorText(
+            error
+        );
+
+    const data =
+        error?.response?.data;
+
+    const errorStatus =
+        String(
+            data?.error?.status ||
+            ""
+        ).toLowerCase();
+
+    const combined =
+        `${message} ${errorStatus}`;
+
+    const rateLimitPatterns = [
+        "rate limit",
+        "rate_limit",
+        "too many requests",
+        "too_many_requests",
+        "temporarily rate",
+        "resource exhausted",
+        "resource_exhausted",
+        "try again later",
+        "requests per minute",
+        "request per minute",
+        "tokens per minute",
+        "requests per second",
+        "request per second",
+    ];
+
+    return rateLimitPatterns.some(
+        (pattern) =>
+            combined.includes(
+                pattern
+            )
+    );
+};
+
+// ============================================================
+// SHOULD RETRY GEMINI REQUEST
+//
+// Retry:
+//   429 temporary rate-limit
+//   500
+//   502
+//   503
+//   504
+//   network timeout/reset
+//
+// Do NOT retry:
+//   hard quota
+//   400
+//   401
+//   403
+//   404
+//   413
 // ============================================================
 
 const shouldRetryGeminiRequest = (
@@ -282,7 +443,9 @@ const shouldRetryGeminiRequest = (
     if (
         status === 429
     ) {
-        return false;
+        return isTemporaryRateLimit(
+            error
+        );
     }
 
     if (
@@ -320,6 +483,8 @@ const shouldRetryGeminiRequest = (
 
 // ============================================================
 // TEMPORARY ERROR CHECK
+//
+// Used to decide whether to move to the next model.
 // ============================================================
 
 const isTemporaryGeminiError = (
@@ -327,6 +492,14 @@ const isTemporaryGeminiError = (
 ) => {
     const status =
         error?.response?.status;
+
+    if (
+        status === 429
+    ) {
+        return isTemporaryRateLimit(
+            error
+        );
+    }
 
     if (
         status === 500 ||
@@ -452,16 +625,20 @@ const handleGeminiError = (
         "Unknown Gemini error";
 
     // ========================================================
-    // 429
+    // 429 HARD QUOTA
     //
-    // DO NOT RETRY.
+    // Daily/project quota exhausted.
+    // Do not keep retrying.
     // ========================================================
 
     if (
-        status === 429
+        status === 429 &&
+        isHardQuotaExceeded(
+            error
+        )
     ) {
         throw createGeminiError(
-            "Gemini API quota/rate limit imefika. AI analysis imesimamishwa bila kusubiri retries.",
+            "Gemini API quota ya matumizi imefika. AI analysis imesimamishwa bila kuendelea na retries zisizo na maana.",
             "GEMINI_QUOTA_EXCEEDED",
             429,
             {
@@ -476,6 +653,42 @@ const handleGeminiError = (
                             ?.headers ||
                             {}
                     ),
+
+                quotaType:
+                    "hard_quota",
+            }
+        );
+    }
+
+    // ========================================================
+    // 429 TEMPORARY RATE LIMIT
+    //
+    // This should only be reached if the caller has exhausted
+    // the configured temporary retries.
+    // ========================================================
+
+    if (
+        status === 429
+    ) {
+        throw createGeminiError(
+            "Gemini API rate limit imefika kwa muda. Mfumo umejaribu retry/fallback models lakini haukupata nafasi.",
+            "GEMINI_RATE_LIMIT",
+            429,
+            {
+                responseData:
+                    data,
+
+                model,
+
+                retryAfter:
+                    getRetryAfterMs(
+                        error?.response
+                            ?.headers ||
+                            {}
+                    ),
+
+                quotaType:
+                    "temporary_rate_limit",
             }
         );
     }
@@ -715,17 +928,21 @@ const makeGeminiRequestInternal =
 //
 // Flow:
 //
-// 3.8 -> temporary error
-//       ↓
-// 3.7 -> temporary error
-//       ↓
+// 3.8
+//   ↓ temporary 429/503/etc
+// retry 3.8
+//   ↓ still temporary
+// 3.7
+//   ↓ temporary
+// retry 3.7
+//   ↓
 // 3.6
 //
-// Each model can have the configured retry count.
+// HARD QUOTA:
+//   STOP immediately.
 //
-// 429 NEVER switches model and NEVER retries.
-//
-// Permanent errors NEVER switch model.
+// PERMANENT ERROR:
+//   STOP immediately.
 //
 // ============================================================
 
@@ -831,6 +1048,16 @@ const makeGeminiRequest =
                         error?.response
                             ?.status;
 
+                    const temporaryRateLimit =
+                        isTemporaryRateLimit(
+                            error
+                        );
+
+                    const hardQuota =
+                        isHardQuotaExceeded(
+                            error
+                        );
+
                     console.error(
                         "============================================================"
                     );
@@ -860,18 +1087,33 @@ const makeGeminiRequest =
                             error?.message
                     );
 
+                    if (
+                        status === 429
+                    ) {
+                        console.error(
+                            "429 TYPE:",
+                            hardQuota
+                                ? "HARD QUOTA"
+                                : temporaryRateLimit
+                                    ? "TEMPORARY RATE LIMIT"
+                                    : "UNKNOWN 429"
+                        );
+                    }
+
                     console.error(
                         "============================================================"
                     );
 
                     // ====================================================
-                    // 429 MUST FAIL IMMEDIATELY
+                    // HARD QUOTA
                     //
-                    // DO NOT try another model.
+                    // Never retry.
+                    // Never switch model.
                     // ====================================================
 
                     if (
-                        status === 429
+                        status === 429 &&
+                        hardQuota
                     ) {
                         handleGeminiError(
                             error,
@@ -880,15 +1122,36 @@ const makeGeminiRequest =
                     }
 
                     // ====================================================
-                    // Permanent errors
+                    // UNKNOWN 429
                     //
-                    // DO NOT try another model.
+                    // We treat an unclassified 429 as a temporary
+                    // rate limit rather than blindly declaring daily
+                    // quota exhausted.
+                    // ====================================================
+
+                    if (
+                        status === 429 &&
+                        !hardQuota &&
+                        !temporaryRateLimit
+                    ) {
+                        console.warn(
+                            "Gemini returned an unclassified 429."
+                        );
+
+                        console.warn(
+                            "Treating it as temporary rate limit."
+                        );
+                    }
+
+                    // ====================================================
+                    // PERMANENT ERRORS
                     // ====================================================
 
                     if (
                         !shouldRetryGeminiRequest(
                             error
-                        )
+                        ) &&
+                        status !== 429
                     ) {
                         handleGeminiError(
                             error,
@@ -897,8 +1160,9 @@ const makeGeminiRequest =
                     }
 
                     // ====================================================
-                    // If this is a temporary error and retry is
-                    // still available, retry SAME MODEL once.
+                    // TEMPORARY ERROR / RATE LIMIT
+                    //
+                    // Retry the SAME MODEL if retry is available.
                     // ====================================================
 
                     if (
@@ -914,9 +1178,17 @@ const makeGeminiRequest =
                                     {}
                             );
 
-                        console.warn(
-                            "Gemini temporary error."
-                        );
+                        if (
+                            status === 429
+                        ) {
+                            console.warn(
+                                "Gemini temporary rate limit."
+                            );
+                        } else {
+                            console.warn(
+                                "Gemini temporary server/network error."
+                            );
+                        }
 
                         console.warn(
                             "MODEL:",
@@ -945,7 +1217,8 @@ const makeGeminiRequest =
             // ============================================================
             // MODEL FAILED
             //
-            // If temporary error, move to next fallback model.
+            // Move to next model only for temporary errors,
+            // including temporary 429 rate limits.
             // ============================================================
 
             if (
@@ -980,6 +1253,16 @@ const makeGeminiRequest =
                 );
 
                 console.warn(
+                    "STATUS:",
+                    modelLastError
+                        ?.response
+                        ?.status ||
+                        modelLastError
+                            ?.code ||
+                        "UNKNOWN"
+                );
+
+                console.warn(
                     "REASON:",
                     modelLastError
                         ?.response
@@ -999,7 +1282,7 @@ const makeGeminiRequest =
             }
 
             // ============================================================
-            // No more fallback models.
+            // NO MORE FALLBACK MODELS
             // ============================================================
 
             if (
