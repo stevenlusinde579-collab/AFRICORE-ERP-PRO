@@ -128,13 +128,6 @@ export default function AddTeacher() {
 
   /* ============================================================
      LOAD CLASSES
-
-     IMPORTANT:
-     Classes belong to BOTH:
-       1. Current School
-       2. Active Academic Year
-
-     Therefore we MUST filter using both IDs.
   ============================================================ */
 
   useEffect(() => {
@@ -375,7 +368,10 @@ export default function AddTeacher() {
       return;
     }
 
-    if (assignmentType === "subject" && !assignmentSubjectId) {
+    if (
+      assignmentType === "subject" &&
+      !assignmentSubjectId
+    ) {
       setMessage("Please select a subject.");
       setMessageType("error");
       return;
@@ -669,6 +665,8 @@ export default function AddTeacher() {
     try {
       setLoading(true);
 
+      setCreatedAccount(null);
+
       const {
         data: { session },
         error: sessionError,
@@ -759,12 +757,6 @@ export default function AddTeacher() {
           teacher.photo_url?.trim() ||
           null,
 
-        /*
-         * IMPORTANT:
-         * Backend accepts ONLY:
-         * "Staff"
-         * "Non-Staff"
-         */
         staff_type:
           teacher.staff_type,
 
@@ -833,13 +825,69 @@ export default function AddTeacher() {
         response.data
       );
 
-      setCreatedAccount(
-        response.data
-      );
+      /* ========================================================
+         FIX:
+         BACKEND CREDENTIALS ARE INSIDE login_credentials
+      ======================================================== */
+
+      const loginCredentials =
+        response?.data?.login_credentials;
+
+      if (loginCredentials) {
+        setCreatedAccount({
+          ...loginCredentials,
+
+          login_email:
+            loginCredentials.login_email ||
+            loginCredentials.email ||
+            null,
+
+          login_phone:
+            loginCredentials.login_phone ||
+            loginCredentials.phone ||
+            null,
+
+          temporary_password:
+            loginCredentials.temporary_password ||
+            loginCredentials.password ||
+            null,
+        });
+      } else {
+        /*
+         * Fallback for older backend response format.
+         */
+        setCreatedAccount({
+          email:
+            response?.data?.email ||
+            null,
+
+          username:
+            response?.data?.username ||
+            null,
+
+          phone:
+            response?.data?.phone ||
+            null,
+
+          temporary_password:
+            response?.data?.temporary_password ||
+            null,
+
+          login_email:
+            response?.data?.login_email ||
+            response?.data?.email ||
+            null,
+
+          login_phone:
+            response?.data?.login_phone ||
+            response?.data?.phone ||
+            null,
+        });
+      }
 
       setMessage(
         response.data?.message ||
-          "Staff member created successfully."
+          "Staff member created successfully. Login credentials have been generated."
       );
 
       setMessageType(
@@ -1424,8 +1472,6 @@ export default function AddTeacher() {
                 Assign subjects and classes to this staff member.
               </p>
 
-              {/* CURRENT CLASS SOURCE */}
-
               <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1470,8 +1516,6 @@ export default function AddTeacher() {
 
               </div>
 
-              {/* Assignment type */}
-
               <div className="mb-5">
 
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1500,8 +1544,6 @@ export default function AddTeacher() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                {/* SUBJECT */}
 
                 {assignmentType === "subject" ? (
                   <div>
@@ -1561,8 +1603,6 @@ export default function AddTeacher() {
 
                   </div>
                 )}
-
-                {/* CLASS */}
 
                 <div>
 
@@ -1636,8 +1676,6 @@ export default function AddTeacher() {
 
               </div>
 
-              {/* ADD ASSIGNMENT */}
-
               <div className="mt-5">
 
                 <button
@@ -1658,8 +1696,6 @@ export default function AddTeacher() {
                 </button>
 
               </div>
-
-              {/* ASSIGNMENTS LIST */}
 
               {assignments.length > 0 && (
                 <div className="mt-6">
@@ -1723,42 +1759,101 @@ export default function AddTeacher() {
           ==================================================== */}
 
           {createdAccount && (
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
+            <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-5 md:p-6 mb-6 shadow-sm">
 
-              <h2 className="text-lg font-bold text-green-800 mb-3">
-                Staff Account Created
-              </h2>
+              <div className="flex items-start gap-3 mb-5">
 
-              <div className="text-sm text-green-900 space-y-1">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-lg">
+                  ✓
+                </div>
 
-                {createdAccount.email && (
-                  <p>
-                    <strong>
-                      Email:
-                    </strong>{" "}
-                    {createdAccount.email}
+                <div>
+                  <h2 className="text-xl font-bold text-green-800">
+                    Staff Account Created Successfully
+                  </h2>
+
+                  <p className="text-sm text-green-700 mt-1">
+                    The following credentials should be given to
+                    the staff member for system login.
                   </p>
+                </div>
+
+              </div>
+
+              <div className="bg-green-100 border border-green-200 rounded-xl p-5 space-y-4">
+
+                {(createdAccount.login_email ||
+                  createdAccount.email) && (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-1">
+                      Login Email
+                    </p>
+
+                    <p className="text-base md:text-lg font-semibold text-gray-900 break-all">
+                      {createdAccount.login_email ||
+                        createdAccount.email}
+                    </p>
+                  </div>
+                )}
+
+                {(createdAccount.login_phone ||
+                  createdAccount.phone) && (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-1">
+                      Login Phone
+                    </p>
+
+                    <p className="text-base md:text-lg font-semibold text-gray-900">
+                      {createdAccount.login_phone ||
+                        createdAccount.phone}
+                    </p>
+                  </div>
                 )}
 
                 {createdAccount.username && (
-                  <p>
-                    <strong>
-                      Username:
-                    </strong>{" "}
-                    {createdAccount.username}
-                  </p>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-1">
+                      Username
+                    </p>
+
+                    <p className="text-base md:text-lg font-semibold text-gray-900">
+                      {createdAccount.username}
+                    </p>
+                  </div>
                 )}
 
                 {createdAccount.temporary_password && (
-                  <p>
-                    <strong>
-                      Temporary Password:
-                    </strong>{" "}
-                    {
-                      createdAccount.temporary_password
-                    }
-                  </p>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-1">
+                      Temporary Password
+                    </p>
+
+                    <div className="rounded-xl border-2 border-yellow-300 bg-yellow-50 px-4 py-3">
+                      <p className="text-lg md:text-xl font-mono font-bold text-gray-900 break-all">
+                        {createdAccount.temporary_password}
+                      </p>
+                    </div>
+
+                    <p className="text-xs text-gray-600 mt-2">
+                      Give this temporary password to the
+                      staff member for login.
+                    </p>
+                  </div>
                 )}
+
+                <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+
+                  <p className="text-sm font-semibold text-blue-900">
+                    Login Information
+                  </p>
+
+                  <p className="text-sm text-blue-800 mt-1">
+                    Use the login email or phone together with
+                    the temporary password to access the
+                    AfriCore ERP system.
+                  </p>
+
+                </div>
 
               </div>
 
