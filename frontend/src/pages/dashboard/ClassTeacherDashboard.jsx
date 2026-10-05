@@ -9,25 +9,17 @@ import {
 } from "react-icons/md";
 
 
-// =====================================================
-// CLASS TEACHER DASHBOARD
-// =====================================================
-
 function ClassTeacherDashboard() {
 
     const navigate = useNavigate();
 
-
-    // =================================================
-    // DASHBOARD CARDS
-    // =================================================
 
     const items = [
 
         {
             title: "My Students",
             description:
-                "View and manage students belonging to your assigned class.",
+                "View students in the student management module.",
             path: "/students",
             icon: <MdPeople />,
             color: "text-blue-600",
@@ -37,8 +29,8 @@ function ClassTeacherDashboard() {
         {
             title: "My Subjects",
             description:
-                "View subjects and academic content related to your teaching.",
-            path: "/subjects",
+                "View teachers, subjects and classes related to your teaching assignments.",
+            path: "/class-teacher/subject-teachers",
             icon: <MdBook />,
             color: "text-green-600",
             bg: "bg-green-50"
@@ -47,8 +39,8 @@ function ClassTeacherDashboard() {
         {
             title: "My Attendance",
             description:
-                "Manage and monitor attendance for your assigned class.",
-            path: "/attendance",
+                "Record and monitor attendance for students in your assigned class.",
+            path: "/class-teacher/attendance",
             icon: <MdHowToReg />,
             color: "text-orange-600",
             bg: "bg-orange-50"
@@ -77,17 +69,20 @@ function ClassTeacherDashboard() {
     ];
 
 
-    // =================================================
-    // RENDER
-    // =================================================
+    const handleOpen = (path) => {
+
+        navigate(path);
+
+    };
+
 
     return (
 
         <div className="p-6">
 
-            {/* =========================================
+            {/* =====================================================
                 HEADER
-            ========================================= */}
+            ===================================================== */}
 
             <div className="mb-8">
 
@@ -103,9 +98,9 @@ function ClassTeacherDashboard() {
             </div>
 
 
-            {/* =========================================
-                INFORMATION BANNER
-            ========================================= */}
+            {/* =====================================================
+                WORKSPACE HEADER
+            ===================================================== */}
 
             <div className="mb-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-lg">
 
@@ -136,9 +131,9 @@ function ClassTeacherDashboard() {
             </div>
 
 
-            {/* =========================================
-                DASHBOARD CARDS
-            ========================================= */}
+            {/* =====================================================
+                CARDS
+            ===================================================== */}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 
@@ -147,7 +142,7 @@ function ClassTeacherDashboard() {
                     <button
                         key={item.title}
                         type="button"
-                        onClick={() => navigate(item.path)}
+                        onClick={() => handleOpen(item.path)}
                         className="
                             group
                             text-left
@@ -210,7 +205,7 @@ function ClassTeacherDashboard() {
                         </p>
 
 
-                        {/* OPEN */}
+                        {/* ACTION */}
 
                         <div
                             className="

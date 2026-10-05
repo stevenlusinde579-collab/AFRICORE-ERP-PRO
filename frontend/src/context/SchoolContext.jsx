@@ -9,7 +9,6 @@ import React, {
 
 import { supabase } from "../services/supabase";
 
-
 // =====================================================
 // SCHOOL CONTEXT
 // =====================================================
@@ -20,25 +19,28 @@ import { supabase } from "../services/supabase";
 // - Academic Years
 // - Active Academic Year
 //
-// School resolution priority:
+// IMPORTANT:
 //
-// 1. Saved selected profile role
-// 2. Saved role ID
-// 3. Primary active profile role
-// 4. Any active profile role
-// 5. profiles.school_id fallback
+// Super Admin:
+//     selected role ID = 1 OR selected role name = Super Admin
+//     => profiles.school_id is authoritative.
+//
+// Other roles:
+//     selected profile role / saved role / primary role
+//     may determine the school.
+//
+// This prevents Super Admin from being redirected to a
+// different school because of a stale profile_roles record.
 //
 // =====================================================
 
 const SchoolContext = createContext(null);
-
 
 // =====================================================
 // STORAGE KEY
 // =====================================================
 
 const ROLE_STORAGE_KEY = "africore_selected_role";
-
 
 // =====================================================
 // SCHOOL COLUMNS
@@ -61,7 +63,6 @@ const SCHOOL_COLUMNS = `
     show_email
 `;
 
-
 // =====================================================
 // PROVIDER
 // =====================================================
@@ -80,7 +81,6 @@ export const SchoolProvider = ({ children }) => {
 
     const [error, setError] = useState(null);
 
-
     // =================================================
     // ACADEMIC YEAR STATE
     // =================================================
@@ -95,7 +95,6 @@ export const SchoolProvider = ({ children }) => {
 
     const [academicYearError, setAcademicYearError] =
         useState(null);
-
 
     // =================================================
     // GET SAVED ROLE
@@ -148,7 +147,6 @@ export const SchoolProvider = ({ children }) => {
 
     }, []);
 
-
     // =================================================
     // RESOLVE USER SCHOOL
     // =================================================
@@ -156,26 +154,173 @@ export const SchoolProvider = ({ children }) => {
     const resolveUserSchoolId = useCallback(
         async (
             userId,
-            profileSchoolId
+            profileSchoolId,
+            profileRoleId
         ) => {
 
             if (!userId) {
                 return null;
             }
 
+            const numericProfileRoleId =
+                Number(profileRoleId);
 
-            // =============================================
-            // STEP 1
-            // SAVED PROFILE ROLE
-            // =============================================
+            const numericProfileSchoolId =
+                Number(profileSchoolId);
+
+            // =================================================
+            // READ CURRENTLY SELECTED ROLE
+            // =================================================
 
             const savedRole =
                 getSavedRole();
 
+            const selectedRoleId =
+                Number(
+                    savedRole?.roleId ??
+                    savedRole?.role_id ??
+                    savedRole?.selectedRoleId ??
+                    savedRole?.selected_role_id
+                );
+
+            const selectedProfileRoleId =
+                Number(
+                    savedRole?.profileRoleId ??
+                    savedRole?.profile_role_id ??
+                    savedRole?.selectedProfileRoleId ??
+                    savedRole?.selected_profile_role_id
+                );
+
+            const selectedRoleName =
+                String(
+                    savedRole?.roleName ??
+                    savedRole?.role_name ??
+                    savedRole?.selectedRoleName ??
+                    savedRole?.selected_role_name ??
+                    savedRole?.name ??
+                    ""
+                )
+                    .trim()
+                    .toLowerCase();
+
+            const isSuperAdminBySelectedRole =
+                selectedRoleId === 1 ||
+                selectedRoleName === "super admin" ||
+                selectedRoleName === "super administrator";
+
+            const isSuperAdminByProfile =
+                numericProfileRoleId === 1;
+
+            // =================================================
+            // SUPER ADMIN
+            // =================================================
+            //
+            // IMPORTANT:
+            //
+            // The current logs show:
+            //
+            // selected role ID       = 1
+            // selected role name     = Super Admin
+            // profile role ID        = 2
+            //
+            // Therefore checking only profile.role_id is WRONG.
+            //
+            // Super Admin must be detected from either:
+            //
+            // 1. selected role
+            // 2. profile role
+            //
+            // When Super Admin is selected, profiles.school_id
+            // remains the authoritative school.
+            //
+            // =================================================
 
             if (
-                savedRole?.profileRoleId
+                isSuperAdminBySelectedRole ||
+                isSuperAdminByProfile
             ) {
+
+                if (
+                    Number.isFinite(
+                        numericProfileSchoolId
+                    ) &&
+                    numericProfileSchoolId > 0
+                ) {
+
+                    console.log(
+                        "========================================"
+                    );
+
+                    console.log(
+                        "SCHOOL CONTEXT - SUPER ADMIN SCHOOL SOURCE"
+                    );
+
+                    console.log(
+                        "SELECTED ROLE ID:",
+                        Number.isFinite(selectedRoleId)
+                            ? selectedRoleId
+                            : null
+                    );
+
+                    console.log(
+                        "SELECTED ROLE NAME:",
+                        selectedRoleName || null
+                    );
+
+                    console.log(
+                        "SELECTED PROFILE ROLE ID:",
+                        Number.isFinite(
+                            selectedProfileRoleId
+                        )
+                            ? selectedProfileRoleId
+                            : null
+                    );
+
+                    console.log(
+                        "PROFILE ROLE ID:",
+                        numericProfileRoleId
+                    );
+
+                    console.log(
+                        "PROFILE SCHOOL ID:",
+                        numericProfileSchoolId
+                    );
+
+                    console.log(
+                        "SCHOOL CONTEXT - SUPER ADMIN USING profiles.school_id"
+                    );
+
+                    console.log(
+                        "========================================"
+                    );
+
+                    return numericProfileSchoolId;
+                }
+
+                console.warn(
+                    "SCHOOL CONTEXT - SUPER ADMIN HAS NO VALID profiles.school_id"
+                );
+
+                return null;
+            }
+
+            // =================================================
+            // OTHER ROLES
+            // =================================================
+
+            // =================================================
+            // STEP 1
+            // SAVED PROFILE ROLE
+            // =================================================
+
+            if (
+                savedRole?.profileRoleId ||
+                savedRole?.profile_role_id
+            ) {
+
+                const savedProfileRoleId =
+                    savedRole.profileRoleId ??
+                    savedRole.profile_role_id;
 
                 const {
                     data: selectedProfileRole,
@@ -191,7 +336,7 @@ export const SchoolProvider = ({ children }) => {
                     `)
                     .eq(
                         "id",
-                        savedRole.profileRoleId
+                        savedProfileRoleId
                     )
                     .eq(
                         "profile_id",
@@ -203,16 +348,13 @@ export const SchoolProvider = ({ children }) => {
                     )
                     .maybeSingle();
 
-
                 if (selectedRoleError) {
 
                     console.warn(
                         "SCHOOL CONTEXT - SELECTED PROFILE ROLE ERROR:",
                         selectedRoleError
                     );
-
                 }
-
 
                 if (
                     selectedProfileRole?.school_id
@@ -224,16 +366,13 @@ export const SchoolProvider = ({ children }) => {
                     );
 
                     return selectedProfileRole.school_id;
-
                 }
-
             }
 
-
-            // =============================================
+            // =================================================
             // STEP 2
             // SAVED ROLE ID
-            // =============================================
+            // =================================================
 
             if (
                 savedRole?.roleId ||
@@ -243,7 +382,6 @@ export const SchoolProvider = ({ children }) => {
                 const savedRoleId =
                     savedRole.roleId ??
                     savedRole.role_id;
-
 
                 const {
                     data: savedRoleRows,
@@ -283,16 +421,13 @@ export const SchoolProvider = ({ children }) => {
                     )
                     .limit(1);
 
-
                 if (savedRoleError) {
 
                     console.warn(
                         "SCHOOL CONTEXT - SAVED ROLE ID ERROR:",
                         savedRoleError
                     );
-
                 }
-
 
                 const savedRoleRow =
                     Array.isArray(
@@ -300,7 +435,6 @@ export const SchoolProvider = ({ children }) => {
                     )
                         ? savedRoleRows[0]
                         : null;
-
 
                 if (
                     savedRoleRow?.school_id
@@ -312,16 +446,13 @@ export const SchoolProvider = ({ children }) => {
                     );
 
                     return savedRoleRow.school_id;
-
                 }
-
             }
 
-
-            // =============================================
+            // =================================================
             // STEP 3
             // PRIMARY ACTIVE PROFILE ROLE
-            // =============================================
+            // =================================================
 
             const {
                 data: primaryRoles,
@@ -355,16 +486,13 @@ export const SchoolProvider = ({ children }) => {
                 )
                 .limit(1);
 
-
             if (primaryRoleError) {
 
                 console.warn(
                     "SCHOOL CONTEXT - PRIMARY ROLE ERROR:",
                     primaryRoleError
                 );
-
             }
-
 
             const primaryRole =
                 Array.isArray(
@@ -372,7 +500,6 @@ export const SchoolProvider = ({ children }) => {
                 )
                     ? primaryRoles[0]
                     : null;
-
 
             if (
                 primaryRole?.school_id
@@ -384,14 +511,12 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 return primaryRole.school_id;
-
             }
 
-
-            // =============================================
+            // =================================================
             // STEP 4
             // ANY ACTIVE PROFILE ROLE
-            // =============================================
+            // =================================================
 
             const {
                 data: activeRoles,
@@ -427,16 +552,13 @@ export const SchoolProvider = ({ children }) => {
                 )
                 .limit(1);
 
-
             if (activeRolesError) {
 
                 console.warn(
                     "SCHOOL CONTEXT - ACTIVE ROLE ERROR:",
                     activeRolesError
                 );
-
             }
-
 
             const activeRole =
                 Array.isArray(
@@ -444,7 +566,6 @@ export const SchoolProvider = ({ children }) => {
                 )
                     ? activeRoles[0]
                     : null;
-
 
             if (
                 activeRole?.school_id
@@ -456,26 +577,27 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 return activeRole.school_id;
-
             }
 
-
-            // =============================================
+            // =================================================
             // STEP 5
             // LEGACY PROFILE FALLBACK
-            // =============================================
+            // =================================================
 
-            if (profileSchoolId) {
+            if (
+                Number.isFinite(
+                    numericProfileSchoolId
+                ) &&
+                numericProfileSchoolId > 0
+            ) {
 
                 console.warn(
                     "SCHOOL CONTEXT - USING LEGACY profiles.school_id FALLBACK:",
-                    profileSchoolId
+                    numericProfileSchoolId
                 );
 
-                return profileSchoolId;
-
+                return numericProfileSchoolId;
             }
-
 
             return null;
 
@@ -485,15 +607,8 @@ export const SchoolProvider = ({ children }) => {
         ]
     );
 
-
     // =================================================
     // LOAD ACADEMIC YEARS
-    // =================================================
-    //
-    // IMPORTANT:
-    // This is declared before refreshSchool and before
-    // every effect that uses refreshSchool.
-    //
     // =================================================
 
     const loadAcademicYears = useCallback(
@@ -504,7 +619,6 @@ export const SchoolProvider = ({ children }) => {
             const targetSchoolId =
                 currentSchoolId ??
                 schoolId;
-
 
             if (!targetSchoolId) {
 
@@ -521,9 +635,7 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 return [];
-
             }
-
 
             try {
 
@@ -534,7 +646,6 @@ export const SchoolProvider = ({ children }) => {
                 setAcademicYearError(
                     null
                 );
-
 
                 const {
                     data,
@@ -562,26 +673,21 @@ export const SchoolProvider = ({ children }) => {
                         }
                     );
 
-
                 if (
                     academicYearQueryError
                 ) {
 
                     throw academicYearQueryError;
-
                 }
-
 
                 const normalizedYears =
                     Array.isArray(data)
                         ? data
                         : [];
 
-
                 setAcademicYears(
                     normalizedYears
                 );
-
 
                 const currentYear =
                     normalizedYears.find(
@@ -590,11 +696,9 @@ export const SchoolProvider = ({ children }) => {
                     ) ||
                     null;
 
-
                 setActiveAcademicYear(
                     currentYear
                 );
-
 
                 if (!currentYear) {
 
@@ -607,21 +711,17 @@ export const SchoolProvider = ({ children }) => {
                     setAcademicYearError(
                         null
                     );
-
                 }
-
 
                 console.log(
                     "SCHOOL CONTEXT ACADEMIC YEARS:",
                     normalizedYears
                 );
 
-
                 console.log(
                     "SCHOOL CONTEXT ACTIVE ACADEMIC YEAR:",
                     currentYear
                 );
-
 
                 return normalizedYears;
 
@@ -631,7 +731,6 @@ export const SchoolProvider = ({ children }) => {
                     "LOAD ACADEMIC YEARS ERROR:",
                     err
                 );
-
 
                 setAcademicYears([]);
 
@@ -644,7 +743,6 @@ export const SchoolProvider = ({ children }) => {
                     "Failed to load academic years."
                 );
 
-
                 return [];
 
             } finally {
@@ -652,7 +750,6 @@ export const SchoolProvider = ({ children }) => {
                 setAcademicYearLoading(
                     false
                 );
-
             }
 
         },
@@ -660,7 +757,6 @@ export const SchoolProvider = ({ children }) => {
             schoolId,
         ]
     );
-
 
     // =================================================
     // LOAD CURRENT USER SCHOOL
@@ -675,7 +771,6 @@ export const SchoolProvider = ({ children }) => {
 
                 setError(null);
 
-
                 // =========================================
                 // CURRENT AUTH USER
                 // =========================================
@@ -687,11 +782,9 @@ export const SchoolProvider = ({ children }) => {
                     error: authError,
                 } = await supabase.auth.getUser();
 
-
                 if (authError) {
                     throw authError;
                 }
-
 
                 // =========================================
                 // NO USER
@@ -710,9 +803,7 @@ export const SchoolProvider = ({ children }) => {
                     setAcademicYearError(null);
 
                     return null;
-
                 }
-
 
                 // =========================================
                 // PROFILE
@@ -734,11 +825,9 @@ export const SchoolProvider = ({ children }) => {
                     )
                     .maybeSingle();
 
-
                 if (profileError) {
                     throw profileError;
                 }
-
 
                 // =========================================
                 // PROFILE NOT FOUND
@@ -757,9 +846,7 @@ export const SchoolProvider = ({ children }) => {
                     setAcademicYearError(null);
 
                     return null;
-
                 }
-
 
                 // =========================================
                 // RESOLVE SCHOOL
@@ -768,9 +855,9 @@ export const SchoolProvider = ({ children }) => {
                 const resolvedSchoolId =
                     await resolveUserSchoolId(
                         user.id,
-                        profile.school_id
+                        profile.school_id,
+                        profile.role_id
                     );
-
 
                 if (!resolvedSchoolId) {
 
@@ -787,9 +874,7 @@ export const SchoolProvider = ({ children }) => {
                     );
 
                     return null;
-
                 }
-
 
                 console.log(
                     "========================================"
@@ -806,9 +891,13 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 console.log(
-                    "========================================"
+                    "SCHOOL CONTEXT - PROFILE ROLE ID:",
+                    profile.role_id
                 );
 
+                console.log(
+                    "========================================"
+                );
 
                 // =========================================
                 // LOAD SCHOOL
@@ -828,11 +917,9 @@ export const SchoolProvider = ({ children }) => {
                     )
                     .maybeSingle();
 
-
                 if (schoolError) {
                     throw schoolError;
                 }
-
 
                 // =========================================
                 // SCHOOL NOT FOUND
@@ -853,9 +940,7 @@ export const SchoolProvider = ({ children }) => {
                     );
 
                     return null;
-
                 }
-
 
                 // =========================================
                 // SAVE SCHOOL
@@ -868,7 +953,6 @@ export const SchoolProvider = ({ children }) => {
                 setSchoolId(
                     schoolData.id
                 );
-
 
                 return schoolData;
 
@@ -890,7 +974,6 @@ export const SchoolProvider = ({ children }) => {
                     "========================================"
                 );
 
-
                 setError(
                     err?.message ||
                     "Failed to load current school."
@@ -909,13 +992,11 @@ export const SchoolProvider = ({ children }) => {
                     "Failed to load current academic year."
                 );
 
-
                 return null;
 
             } finally {
 
                 setLoading(false);
-
             }
 
         },
@@ -924,19 +1005,8 @@ export const SchoolProvider = ({ children }) => {
         ]
     );
 
-
     // =================================================
     // REFRESH SCHOOL
-    // =================================================
-    //
-    // IMPORTANT:
-    // This MUST be declared before any useEffect that
-    // references refreshSchool.
-    //
-    // This is the direct fix for:
-    //
-    // Cannot access 'S' before initialization
-    //
     // =================================================
 
     const refreshSchool = useCallback(
@@ -944,7 +1014,6 @@ export const SchoolProvider = ({ children }) => {
 
             const schoolData =
                 await loadSchool();
-
 
             if (
                 schoolData?.id
@@ -965,9 +1034,7 @@ export const SchoolProvider = ({ children }) => {
                 setAcademicYearLoading(
                     false
                 );
-
             }
-
 
             return schoolData;
 
@@ -977,7 +1044,6 @@ export const SchoolProvider = ({ children }) => {
             loadAcademicYears,
         ]
     );
-
 
     // =================================================
     // REFRESH ACADEMIC YEAR
@@ -990,7 +1056,6 @@ export const SchoolProvider = ({ children }) => {
                 schoolId ??
                 school?.id ??
                 null;
-
 
             if (!targetSchoolId) {
 
@@ -1007,9 +1072,7 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 return [];
-
             }
-
 
             return await loadAcademicYears(
                 targetSchoolId
@@ -1023,7 +1086,6 @@ export const SchoolProvider = ({ children }) => {
         ]
     );
 
-
     // =================================================
     // INITIAL SCHOOL + ACADEMIC YEAR LOAD
     // =================================================
@@ -1032,18 +1094,15 @@ export const SchoolProvider = ({ children }) => {
 
         let mounted = true;
 
-
         const initializeContext =
             async () => {
 
                 const schoolData =
                     await loadSchool();
 
-
                 if (!mounted) {
                     return;
                 }
-
 
                 if (
                     schoolData?.id
@@ -1064,19 +1123,14 @@ export const SchoolProvider = ({ children }) => {
                     setAcademicYearLoading(
                         false
                     );
-
                 }
-
             };
 
-
         initializeContext();
-
 
         return () => {
 
             mounted = false;
-
         };
 
     }, [
@@ -1084,13 +1138,8 @@ export const SchoolProvider = ({ children }) => {
         loadAcademicYears,
     ]);
 
-
     // =================================================
     // REFRESH WHEN ROLE SELECTION CHANGES
-    // =================================================
-    //
-    // refreshSchool is already initialized above.
-    //
     // =================================================
 
     useEffect(() => {
@@ -1105,18 +1154,13 @@ export const SchoolProvider = ({ children }) => {
             ) {
 
                 refreshSchool();
-
             }
-
         };
-
 
         const handleRoleChanged = () => {
 
             refreshSchool();
-
         };
-
 
         window.addEventListener(
             "storage",
@@ -1127,7 +1171,6 @@ export const SchoolProvider = ({ children }) => {
             "africore-role-changed",
             handleRoleChanged
         );
-
 
         return () => {
 
@@ -1140,13 +1183,11 @@ export const SchoolProvider = ({ children }) => {
                 "africore-role-changed",
                 handleRoleChanged
             );
-
         };
 
     }, [
         refreshSchool,
     ]);
-
 
     // =================================================
     // AUTH STATE LISTENER
@@ -1166,7 +1207,6 @@ export const SchoolProvider = ({ children }) => {
                     event
                 );
 
-
                 if (
                     event === "SIGNED_IN" ||
                     event === "SIGNED_OUT" ||
@@ -1175,23 +1215,18 @@ export const SchoolProvider = ({ children }) => {
                 ) {
 
                     refreshSchool();
-
                 }
-
             }
         );
-
 
         return () => {
 
             subscription?.unsubscribe();
-
         };
 
     }, [
         refreshSchool,
     ]);
-
 
     // =================================================
     // DERIVED ACADEMIC YEAR VALUES
@@ -1201,16 +1236,13 @@ export const SchoolProvider = ({ children }) => {
         activeAcademicYear?.id ??
         null;
 
-
     const activeAcademicYearName =
         activeAcademicYear?.year_name ??
         "";
 
-
     const activeAcademicYearTerm =
         activeAcademicYear?.term ??
         "";
-
 
     // =================================================
     // SCHOOL INFORMATION
@@ -1220,31 +1252,25 @@ export const SchoolProvider = ({ children }) => {
         school?.school_name ??
         "";
 
-
     const registrationNumber =
         school?.registration_number ??
         "";
-
 
     const address =
         school?.address ??
         "";
 
-
     const phone =
         school?.phone ??
         "";
-
 
     const email =
         school?.email ??
         "";
 
-
     const logo =
         school?.logo ??
         "";
-
 
     // =================================================
     // DOCUMENT SETTINGS
@@ -1253,26 +1279,20 @@ export const SchoolProvider = ({ children }) => {
     const showSchoolName =
         school?.show_school_name !== false;
 
-
     const showLogo =
         school?.show_logo !== false;
-
 
     const showRegistrationNumber =
         school?.show_registration_number !== false;
 
-
     const showAddress =
         school?.show_address !== false;
-
 
     const showPhone =
         school?.show_phone !== false;
 
-
     const showEmail =
         school?.show_email !== false;
-
 
     // =================================================
     // DOCUMENT BRANDING
@@ -1323,7 +1343,6 @@ export const SchoolProvider = ({ children }) => {
         ]
     );
 
-
     // =================================================
     // CONTEXT VALUE
     // =================================================
@@ -1351,7 +1370,6 @@ export const SchoolProvider = ({ children }) => {
 
             logo,
 
-
             // =========================================
             // DOCUMENT SETTINGS
             // =========================================
@@ -1368,13 +1386,11 @@ export const SchoolProvider = ({ children }) => {
 
             showEmail,
 
-
             // =========================================
             // DOCUMENT BRANDING
             // =========================================
 
             documentBranding,
-
 
             // =========================================
             // STATE
@@ -1383,7 +1399,6 @@ export const SchoolProvider = ({ children }) => {
             loading,
 
             error,
-
 
             // =========================================
             // ACADEMIC YEARS
@@ -1402,7 +1417,6 @@ export const SchoolProvider = ({ children }) => {
             academicYearLoading,
 
             academicYearError,
-
 
             // =========================================
             // ACTIONS
@@ -1450,7 +1464,6 @@ export const SchoolProvider = ({ children }) => {
         ]
     );
 
-
     // =================================================
     // PROVIDER
     // =================================================
@@ -1462,9 +1475,7 @@ export const SchoolProvider = ({ children }) => {
             {children}
         </SchoolContext.Provider>
     );
-
 };
-
 
 // =====================================================
 // CUSTOM HOOK
@@ -1477,20 +1488,15 @@ export const useSchool = () => {
             SchoolContext
         );
 
-
     if (!context) {
 
         throw new Error(
             "useSchool must be used inside SchoolProvider."
         );
-
     }
 
-
     return context;
-
 };
-
 
 // =====================================================
 // DEFAULT EXPORT

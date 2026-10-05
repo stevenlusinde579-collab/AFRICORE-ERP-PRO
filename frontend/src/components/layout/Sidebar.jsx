@@ -33,8 +33,7 @@ const normalizeRole = (roleName) => {
     return "";
   }
 
-  return roleName
-    .toString()
+  return String(roleName)
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
@@ -49,15 +48,45 @@ const normalizeRole = (roleName) => {
 function Sidebar() {
 
   const {
-    loading: roleLoading,
-    selectedRoleName,
+    loadingRoles = true,
+    selectedRoleName = "",
+    selectedRoleId = null,
+    selectedRole = null,
     roles: availableRoles = [],
+    isSuperAdmin = false,
+    selectedRoleIsSuperAdmin = false,
   } = useRole();
 
+
+  /* =======================================================
+     CURRENT ROLE
+  ======================================================= */
 
   const currentRole = normalizeRole(
     selectedRoleName
   );
+
+
+  /* =======================================================
+     SUPER ADMIN DETECTION
+     
+     We intentionally check:
+     
+     1. RoleContext isSuperAdmin
+     2. selectedRoleIsSuperAdmin
+     3. role ID = 1
+     4. normalized role name
+     
+     This prevents the sidebar from disappearing because
+     of a role-name mismatch.
+  ======================================================= */
+
+  const superAdmin =
+    Boolean(isSuperAdmin) ||
+    Boolean(selectedRoleIsSuperAdmin) ||
+    Number(selectedRoleId) === 1 ||
+    currentRole === "super admin" ||
+    currentRole === "super administrator";
 
 
   /* =======================================================
@@ -381,23 +410,55 @@ function Sidebar() {
 
   /* =======================================================
      VISIBLE MENU
+     
+     IMPORTANT:
+     
+     Super Admin gets ALL menu items.
+     
+     Other roles continue using the normal role filter.
   ======================================================= */
 
   const visibleMenu = useMemo(() => {
 
-    if (!selectedRoleName) {
-      return [];
+    /* -----------------------------------------------
+       SUPER ADMIN
+       
+       Full system access.
+       ----------------------------------------------- */
+
+    if (superAdmin) {
+
+      return allMenu;
+
     }
+
+
+    /* -----------------------------------------------
+       NO ROLE
+       ----------------------------------------------- */
+
+    if (!currentRole) {
+
+      return [];
+
+    }
+
+
+    /* -----------------------------------------------
+       NORMAL ROLE
+       ----------------------------------------------- */
 
     return allMenu.filter(
       (item) =>
-        item.roles.includes(currentRole)
+        item.roles.includes(
+          currentRole
+        )
     );
 
   }, [
     allMenu,
     currentRole,
-    selectedRoleName
+    superAdmin,
   ]);
 
 
@@ -405,7 +466,7 @@ function Sidebar() {
      LOADING
   ======================================================= */
 
-  if (roleLoading) {
+  if (loadingRoles) {
 
     return (
 
@@ -449,7 +510,7 @@ function Sidebar() {
      NO ROLE
   ======================================================= */
 
-  if (!selectedRoleName) {
+  if (!selectedRoleName && !superAdmin) {
 
     return (
 
@@ -495,6 +556,16 @@ function Sidebar() {
     );
 
   }
+
+
+  /* =======================================================
+     DISPLAY ROLE
+  ======================================================= */
+
+  const displayRole =
+    superAdmin
+      ? "Super Admin"
+      : selectedRoleName;
 
 
   /* =======================================================
@@ -544,7 +615,7 @@ function Sidebar() {
             </p>
 
             <p className="text-sm font-semibold text-white truncate">
-              {selectedRoleName}
+              {displayRole}
             </p>
 
           </div>
@@ -613,34 +684,50 @@ function Sidebar() {
           <div className="space-y-2">
 
             {availableRoles.map(
-              (role) => (
+              (role) => {
 
-                <div
-                  key={
-                    role.profileRoleId ||
-                    role.roleId
-                  }
-                  className={`
-                    text-xs
-                    px-3
-                    py-2
-                    rounded-lg
-                    ${
-                      role.isPrimary
-                        ? "bg-blue-900/50 text-blue-300"
-                        : "bg-slate-800 text-gray-400"
-                    }
-                  `}
-                >
+                const roleName =
+                  role.role_name ??
+                  role.name ??
+                  "";
 
-                  {role.roleName}
+                const isPrimary =
+                  role.is_primary === true;
 
-                  {role.isPrimary &&
-                    " • Primary"}
+                const profileRoleId =
+                  role.profileRoleId ??
+                  role.profile_role_id ??
+                  role.id ??
+                  role.role_id;
 
-                </div>
 
-              )
+                return (
+
+                  <div
+                    key={profileRoleId}
+                    className={`
+                      text-xs
+                      px-3
+                      py-2
+                      rounded-lg
+                      ${
+                        isPrimary
+                          ? "bg-blue-900/50 text-blue-300"
+                          : "bg-slate-800 text-gray-400"
+                      }
+                    `}
+                  >
+
+                    {roleName}
+
+                    {isPrimary &&
+                      " • Primary"}
+
+                  </div>
+
+                );
+
+              }
             )}
 
           </div>

@@ -24,30 +24,29 @@ import {
 
 function StudentTable({ filters = {} }) {
 
-
   const navigate = useNavigate();
 
 
   // =====================================================
-  // GLOBAL SCHOOL + ACADEMIC YEAR
+  // SCHOOL CONTEXT
   // =====================================================
 
   const {
     schoolId,
     activeAcademicYear,
     activeAcademicYearId,
-    academicYearLoading,
-    academicYearError,
   } = useSchool();
 
 
   // =====================================================
-  // CURRENT SELECTED ROLE
+  // ROLE CONTEXT
   // =====================================================
 
   const {
     selectedRoleId,
     selectedRoleName,
+    isSuperAdmin,
+    selectedRoleIsSuperAdmin,
   } = useRole();
 
 
@@ -55,13 +54,29 @@ function StudentTable({ filters = {} }) {
   // STATE
   // =====================================================
 
-  const [students, setStudents] = useState([]);
+  const [students, setStudents] =
+    useState([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-  const [deletingId, setDeletingId] = useState(null);
+  const [deletingId, setDeletingId] =
+    useState(null);
+
+  const [resolvedSchoolId, setResolvedSchoolId] =
+    useState(null);
+
+  const [resolvedAcademicYearId, setResolvedAcademicYearId] =
+    useState(null);
+
+  const [resolvedAcademicYearName, setResolvedAcademicYearName] =
+    useState("");
+
+  const [expandedClasses, setExpandedClasses] =
+    useState({});
 
   const [isSubjectTeacher, setIsSubjectTeacher] =
     useState(false);
@@ -74,27 +89,19 @@ function StudentTable({ filters = {} }) {
 
 
   // =====================================================
-  // CLASS CARD STATE
+  // GET CURRENT PROFILE
   // =====================================================
 
-  const [expandedClasses, setExpandedClasses] =
-    useState({});
-
-
-  // =====================================================
-  // FETCH CURRENT PROFILE
-  // =====================================================
-
-  const loadCurrentProfile = useCallback(async () => {
-
-    try {
+  const loadCurrentProfile =
+    useCallback(async () => {
 
       const {
         data: {
           user,
         },
         error: authError,
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
 
       if (authError) {
@@ -104,701 +111,927 @@ function StudentTable({ filters = {} }) {
 
       if (!user) {
 
-        return null;
+        throw new Error(
+          "No authenticated user was found."
+        );
 
       }
 
-
-      // -------------------------------------------------
-      // GET PROFILE
-      // -------------------------------------------------
 
       const {
         data: profile,
         error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          role_id,
-          employee_id,
-          teacher_id,
-          school_id
-        `)
-        .eq(
-          "id",
-          user.id
-        )
-        .single();
+      } =
+        await supabase
+          .from("profiles")
+          .select(`
+            id,
+            role_id,
+            employee_id,
+            teacher_id,
+            school_id
+          `)
+          .eq(
+            "id",
+            user.id
+          )
+          .single();
 
 
       if (profileError) {
-
         throw profileError;
-
       }
-
-
-      return profile || null;
-
-
-    } catch (error) {
-
-      console.error(
-        "LOAD CURRENT PROFILE ERROR:",
-        error
-      );
-
-
-      return null;
-
-    }
-
-  }, []);
-
-
-  // =====================================================
-  // FETCH STUDENTS
-  // =====================================================
-
-  const fetchStudents = useCallback(async () => {
-
-    try {
-
-      setLoading(true);
-
-      setErrorMessage("");
-
-
-      // =================================================
-      // RESET ROLE-SPECIFIC STATE
-      // =================================================
-
-      setIsSubjectTeacher(false);
-
-      setIsClassTeacher(false);
-
-      setTeacherAssignments([]);
-
-
-      // =================================================
-      // CHECK SESSION
-      // =================================================
-
-      const {
-        data: {
-          session,
-        },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-
-      if (sessionError) {
-
-        console.error(
-          "SESSION ERROR:",
-          sessionError
-        );
-
-        throw sessionError;
-
-      }
-
-
-      if (!session) {
-
-        throw new Error(
-          "Your session has expired. Please login again."
-        );
-
-      }
-
-
-      // =================================================
-      // WAIT FOR GLOBAL ACADEMIC YEAR
-      // =================================================
-
-      if (academicYearLoading) {
-
-        return;
-
-      }
-
-
-      // =================================================
-      // REQUIRE ACTIVE ACADEMIC YEAR
-      // =================================================
-
-      if (!activeAcademicYearId) {
-
-        setStudents([]);
-
-        setErrorMessage(
-          academicYearError ||
-          "No active academic year has been configured for this school."
-        );
-
-        return;
-
-      }
-
-
-      // =================================================
-      // CURRENT PROFILE
-      // =================================================
-
-      const profile =
-        await loadCurrentProfile();
 
 
       if (!profile) {
 
         throw new Error(
-          "Unable to load your profile."
+          "Your profile could not be found."
         );
 
       }
 
 
-      // =================================================
-      // VERIFY SCHOOL
-      // =================================================
+      return profile;
 
-      const currentSchoolId =
-        schoolId ||
-        profile.school_id;
+    }, []);
 
 
-      if (!currentSchoolId) {
+  // =====================================================
+  // RESOLVE ACTIVE ACADEMIC YEAR
+  // =====================================================
 
-        throw new Error(
-          "Your profile is not assigned to a school."
-        );
+  const resolveAcademicYear =
+    useCallback(async (
+      currentSchoolId
+    ) => {
 
-      }
-
-
-      // =================================================
-      // CURRENT SELECTED ROLE
-      // =================================================
-
-      const currentRoleId =
-        Number(selectedRoleId);
-
-
-      const normalizedRoleName =
-        String(
-          selectedRoleName || ""
-        )
-          .trim()
-          .toLowerCase();
-
-
-      // =================================================
-      // ROLE DETECTION
-      // =================================================
-
-      const subjectTeacherSelected =
-        currentRoleId === 5;
-
-
-      const classTeacherSelected =
-        normalizedRoleName ===
-          "class teacher";
-
-
-      console.log(
-        "STUDENT MODULE SELECTED ROLE ID:",
-        currentRoleId
-      );
-
-
-      console.log(
-        "STUDENT MODULE SELECTED ROLE NAME:",
-        selectedRoleName
-      );
-
-
-      console.log(
-        "STUDENT MODULE SCHOOL ID:",
-        currentSchoolId
-      );
-
-
-      console.log(
-        "GLOBAL ACTIVE ACADEMIC YEAR:",
-        activeAcademicYearId,
-        activeAcademicYear?.year_name
-      );
-
-
-      console.log(
-        "SUBJECT TEACHER SELECTED:",
-        subjectTeacherSelected
-      );
-
-
-      console.log(
-        "CLASS TEACHER SELECTED:",
-        classTeacherSelected
-      );
-
-
-      // =================================================
-      // TEACHER ASSIGNMENTS
-      // =================================================
-      //
-      // Both Subject Teacher and Class Teacher use the
-      // existing teacher_assignments table.
-      //
-      // Confirmed fields:
-      //
-      // id
-      // school_id
-      // teacher_id
-      // subject_id
-      // class_id
-      //
-      // We DO NOT add academic_year_id because that field
-      // has not been confirmed in this table.
-      //
-      // =================================================
-
-      let assignedClassIds = [];
-
-      let assignedSubjectIds = [];
-
-      let assignments = [];
-
+      // -------------------------------------------------
+      // FIRST: USE SCHOOL CONTEXT IF VALID
+      // -------------------------------------------------
 
       if (
-        subjectTeacherSelected ||
-        classTeacherSelected
+        activeAcademicYearId &&
+        Number(activeAcademicYearId) > 0
       ) {
 
-        // ------------------------------------------------
-        // TEACHER ID
-        // ------------------------------------------------
+        return {
 
-        const teacherId =
-          profile.teacher_id;
+          id:
+            Number(
+              activeAcademicYearId
+            ),
 
+          name:
+            activeAcademicYear?.year_name ||
+            activeAcademicYear?.name ||
+            activeAcademicYear?.year ||
+            "",
 
-        if (!teacherId) {
+        };
 
-          throw new Error(
-            "Your profile is not linked to a teacher record."
-          );
-
-        }
-
-
-        console.log(
-          "CURRENT TEACHER ID:",
-          teacherId
-        );
+      }
 
 
-        // ------------------------------------------------
-        // LOAD ASSIGNMENTS
-        // ------------------------------------------------
+      // -------------------------------------------------
+      // FALLBACK: DIRECT SUPABASE QUERY
+      // -------------------------------------------------
 
-        const {
-          data: assignmentRows,
-          error: assignmentError,
-        } = await supabase
-          .from("teacher_assignments")
+      console.log(
+        "STUDENT TABLE: resolving active academic year directly..."
+      );
+
+
+      const {
+        data: activeYear,
+        error: activeYearError,
+      } =
+        await supabase
+          .from("academic_years")
           .select(`
             id,
-            school_id,
-            teacher_id,
-            subject_id,
-            class_id
+            year_name,
+            year,
+            is_active,
+            school_id
           `)
           .eq(
             "school_id",
             currentSchoolId
           )
           .eq(
-            "teacher_id",
-            teacherId
-          );
-
-
-        if (assignmentError) {
-
-          console.error(
-            "TEACHER ASSIGNMENTS ERROR:",
-            assignmentError
-          );
-
-          throw assignmentError;
-
-        }
-
-
-        assignments =
-          Array.isArray(
-            assignmentRows
+            "is_active",
+            true
           )
-            ? assignmentRows
-            : [];
+          .order(
+            "id",
+            {
+              ascending: false,
+            }
+          )
+          .limit(1)
+          .maybeSingle();
 
 
-        setTeacherAssignments(
-          assignments
-        );
-
-
-        // ------------------------------------------------
-        // UNIQUE CLASS IDS
-        // ------------------------------------------------
-
-        assignedClassIds = [
-          ...new Set(
-            assignments
-              .map(
-                (assignment) =>
-                  assignment.class_id
-              )
-              .filter(
-                (classId) =>
-                  classId !== null &&
-                  classId !== undefined &&
-                  String(classId).trim() !== ""
-              )
-          ),
-        ];
-
-
-        // ------------------------------------------------
-        // UNIQUE SUBJECT IDS
-        // ------------------------------------------------
-
-        assignedSubjectIds = [
-          ...new Set(
-            assignments
-              .map(
-                (assignment) =>
-                  assignment.subject_id
-              )
-              .filter(
-                (subjectId) =>
-                  subjectId !== null &&
-                  subjectId !== undefined &&
-                  String(subjectId).trim() !== ""
-              )
-          ),
-        ];
-
-
-        console.log(
-          "TEACHER ASSIGNMENTS:",
-          assignments
-        );
-
-
-        console.log(
-          "ASSIGNED CLASS IDS:",
-          assignedClassIds
-        );
-
-
-        console.log(
-          "ASSIGNED SUBJECT IDS:",
-          assignedSubjectIds
-        );
-
-
-        // ------------------------------------------------
-        // SUBJECT TEACHER STATE
-        // ------------------------------------------------
-
-        if (
-          subjectTeacherSelected
-        ) {
-
-          setIsSubjectTeacher(true);
-
-        }
-
-
-        // ------------------------------------------------
-        // CLASS TEACHER STATE
-        // ------------------------------------------------
-
-        if (
-          classTeacherSelected
-        ) {
-
-          setIsClassTeacher(true);
-
-        }
-
-
-        // ------------------------------------------------
-        // NO CLASS ASSIGNMENT
-        // ------------------------------------------------
-
-        if (
-          assignedClassIds.length === 0
-        ) {
-
-          setStudents([]);
-
-          return;
-
-        }
-
+      if (activeYearError) {
+        throw activeYearError;
       }
 
 
-      // =================================================
-      // FETCH CURRENT-YEAR STUDENTS
-      // =================================================
+      if (!activeYear) {
 
-      let query = supabase
-        .from("students")
-        .select(`
-          id,
-          admission_number,
-          first_name,
-          middle_name,
-          last_name,
-          gender,
-          status,
-          student_status,
-          current_class_id,
-          academic_year_id,
-          school_id,
-          class_name,
-          created_at,
-          admission_date
-        `);
-
-
-      // ------------------------------------------------
-      // SCHOOL SCOPE
-      // ------------------------------------------------
-
-      query = query.eq(
-        "school_id",
-        currentSchoolId
-      );
-
-
-      // ------------------------------------------------
-      // GLOBAL ACTIVE ACADEMIC YEAR
-      // ------------------------------------------------
-
-      query = query.eq(
-        "academic_year_id",
-        activeAcademicYearId
-      );
-
-
-      // ------------------------------------------------
-      // ACTIVE STUDENT
-      // ------------------------------------------------
-
-      query = query.eq(
-        "status",
-        "Active"
-      );
-
-
-      query = query.eq(
-        "student_status",
-        "Active"
-      );
-
-
-      // =================================================
-      // TEACHER CLASS SCOPE
-      // =================================================
-      //
-      // Subject Teacher:
-      //     only assigned classes
-      //
-      // Class Teacher:
-      //     only assigned classes
-      //
-      // Other roles:
-      //     no teacher assignment restriction
-      //
-      // =================================================
-
-      if (
-        subjectTeacherSelected ||
-        classTeacherSelected
-      ) {
-
-        query = query.in(
-          "current_class_id",
-          assignedClassIds
+        throw new Error(
+          "No active academic year was found for this school."
         );
 
       }
 
 
-      // =================================================
-      // ORDER
-      // =================================================
+      return {
 
-      query = query.order(
-        "created_at",
-        {
-          ascending: false,
+        id:
+          Number(
+            activeYear.id
+          ),
+
+        name:
+          activeYear.year_name ||
+          activeYear.year ||
+          "",
+
+      };
+
+    }, [
+      activeAcademicYearId,
+      activeAcademicYear,
+    ]);
+
+
+  // =====================================================
+  // FETCH STUDENTS
+  // =====================================================
+
+  const fetchStudents =
+    useCallback(async () => {
+
+      try {
+
+        setLoading(true);
+
+        setErrorMessage("");
+
+        setStudents([]);
+
+        setExpandedClasses({});
+
+        setTeacherAssignments([]);
+
+        setIsSubjectTeacher(false);
+
+        setIsClassTeacher(false);
+
+
+        // =================================================
+        // SESSION
+        // =================================================
+
+        const {
+          data: {
+            session,
+          },
+          error: sessionError,
+        } =
+          await supabase.auth.getSession();
+
+
+        if (sessionError) {
+          throw sessionError;
         }
-      );
 
 
-      // =================================================
-      // EXECUTE QUERY
-      // =================================================
+        if (!session) {
 
-      const {
-        data,
-        error,
-      } = await query;
+          throw new Error(
+            "Your session has expired. Please login again."
+          );
+
+        }
 
 
-      if (error) {
+        console.log(
+          "=================================================="
+        );
 
-        console.error(
-          "STUDENT FETCH ERROR:",
-          error
+        console.log(
+          "STUDENT TABLE - AUTHORITATIVE PROFILE LOAD"
+        );
+
+        console.log(
+          "=================================================="
         );
 
 
+        // =================================================
+        // PROFILE
+        // =================================================
+
+        const profile =
+          await loadCurrentProfile();
+
+
+        // =================================================
+        // SCHOOL
+        // =================================================
+        //
+        // PROFILE SCHOOL ID IS AUTHORITATIVE.
+        // CONTEXT IS ONLY A FALLBACK.
+        // =================================================
+
+        const currentSchoolId =
+          Number(
+            profile.school_id ||
+            schoolId
+          );
+
+
         if (
-          error.code === "401" ||
-          error.message
-            ?.toLowerCase()
-            .includes("jwt") ||
-          error.message
-            ?.toLowerCase()
-            .includes("unauthorized")
+          !currentSchoolId ||
+          Number.isNaN(currentSchoolId)
         ) {
 
           throw new Error(
-            "Unauthorized access. Please logout and login again."
+            "No school is assigned to your profile."
           );
 
         }
 
 
-        throw error;
+        setResolvedSchoolId(
+          currentSchoolId
+        );
+
+
+        // =================================================
+        // ACADEMIC YEAR
+        // =================================================
+
+        const academicYear =
+          await resolveAcademicYear(
+            currentSchoolId
+          );
+
+
+        const currentAcademicYearId =
+          Number(
+            academicYear.id
+          );
+
+
+        if (
+          !currentAcademicYearId ||
+          Number.isNaN(
+            currentAcademicYearId
+          )
+        ) {
+
+          throw new Error(
+            "Unable to resolve the active academic year."
+          );
+
+        }
+
+
+        setResolvedAcademicYearId(
+          currentAcademicYearId
+        );
+
+
+        setResolvedAcademicYearName(
+          academicYear.name ||
+          ""
+        );
+
+
+        // =================================================
+        // AUTHORITATIVE ROLE RESOLUTION
+        // =================================================
+        //
+        // IMPORTANT:
+        //
+        // profiles.role_id is checked FIRST.
+        //
+        // If profiles.role_id = 1, this user is ALWAYS
+        // treated as Super Admin in this module.
+        //
+        // RoleContext must NOT be allowed to downgrade
+        // a Super Admin to another selected role here.
+        // =================================================
+
+        const profileRoleId =
+          Number(
+            profile.role_id
+          );
+
+
+        const contextRoleId =
+          Number(
+            selectedRoleId
+          );
+
+
+        const contextRoleName =
+          String(
+            selectedRoleName || ""
+          )
+            .trim()
+            .toLowerCase();
+
+
+        const profileIsSuperAdmin =
+          profileRoleId === 1;
+
+
+        const contextIsSuperAdmin =
+          Boolean(
+            isSuperAdmin ||
+            selectedRoleIsSuperAdmin ||
+            contextRoleId === 1 ||
+            contextRoleName === "super admin" ||
+            contextRoleName === "super administrator"
+          );
+
+
+        // -------------------------------------------------
+        // AUTHORITATIVE CURRENT ROLE
+        // -------------------------------------------------
+
+        const currentRoleId =
+          profileIsSuperAdmin
+            ? 1
+            : (
+                contextRoleId ||
+                profileRoleId
+              );
+
+
+        const superAdminSelected =
+          profileIsSuperAdmin ||
+          contextIsSuperAdmin ||
+          currentRoleId === 1;
+
+
+        console.log(
+          "PROFILE ROLE ID:",
+          profileRoleId
+        );
+
+        console.log(
+          "CONTEXT ROLE ID:",
+          contextRoleId
+        );
+
+        console.log(
+          "CONTEXT ROLE NAME:",
+          selectedRoleName
+        );
+
+        console.log(
+          "PROFILE IS SUPER ADMIN:",
+          profileIsSuperAdmin
+        );
+
+        console.log(
+          "CONTEXT IS SUPER ADMIN:",
+          contextIsSuperAdmin
+        );
+
+        console.log(
+          "FINAL ROLE ID:",
+          currentRoleId
+        );
+
+        console.log(
+          "FINAL SUPER ADMIN:",
+          superAdminSelected
+        );
+
+
+        // =================================================
+        // TEACHER TYPES
+        // =================================================
+        //
+        // SUPER ADMIN MUST NEVER ENTER THESE RESTRICTIONS.
+        // =================================================
+
+        const subjectTeacherSelected =
+          !superAdminSelected &&
+          currentRoleId === 5;
+
+
+        const classTeacherSelected =
+          !superAdminSelected &&
+          (
+            contextRoleName === "class teacher" ||
+            currentRoleId === 12
+          );
+
+
+        // =================================================
+        // TEACHER ASSIGNMENTS
+        // =================================================
+
+        let assignedClassIds = [];
+
+
+        if (
+          subjectTeacherSelected ||
+          classTeacherSelected
+        ) {
+
+          const teacherId =
+            profile.teacher_id;
+
+
+          if (!teacherId) {
+
+            throw new Error(
+              "Your profile is not linked to a teacher record."
+            );
+
+          }
+
+
+          const {
+            data: assignments,
+            error: assignmentError,
+          } =
+            await supabase
+              .from("teacher_assignments")
+              .select(`
+                id,
+                school_id,
+                teacher_id,
+                subject_id,
+                class_id
+              `)
+              .eq(
+                "school_id",
+                currentSchoolId
+              )
+              .eq(
+                "teacher_id",
+                teacherId
+              );
+
+
+          if (assignmentError) {
+            throw assignmentError;
+          }
+
+
+          const safeAssignments =
+            Array.isArray(
+              assignments
+            )
+              ? assignments
+              : [];
+
+
+          setTeacherAssignments(
+            safeAssignments
+          );
+
+
+          assignedClassIds = [
+            ...new Set(
+              safeAssignments
+                .map(
+                  (item) =>
+                    item.class_id
+                )
+                .filter(
+                  (id) =>
+                    id !== null &&
+                    id !== undefined
+                )
+            ),
+          ];
+
+
+          setIsSubjectTeacher(
+            subjectTeacherSelected
+          );
+
+
+          setIsClassTeacher(
+            classTeacherSelected
+          );
+
+
+          if (
+            assignedClassIds.length === 0
+          ) {
+
+            setStudents([]);
+
+            return;
+
+          }
+
+        }
+
+
+        // =================================================
+        // STUDENTS QUERY
+        // =================================================
+        //
+        // SUPER ADMIN:
+        // NO TEACHER FILTER.
+        //
+        // ALL ACTIVE STUDENTS IN THE CURRENT SCHOOL
+        // AND ACTIVE ACADEMIC YEAR ARE RETURNED.
+        // =================================================
+
+        let studentQuery =
+          supabase
+            .from("students")
+            .select(`
+              id,
+              admission_number,
+              first_name,
+              middle_name,
+              last_name,
+              gender,
+              status,
+              student_status,
+              current_class_id,
+              academic_year_id,
+              school_id,
+              class_name,
+              created_at,
+              admission_date
+            `)
+            .eq(
+              "school_id",
+              currentSchoolId
+            )
+            .eq(
+              "academic_year_id",
+              currentAcademicYearId
+            )
+            .eq(
+              "status",
+              "Active"
+            )
+            .eq(
+              "student_status",
+              "Active"
+            );
+
+
+        // =================================================
+        // TEACHER RESTRICTION
+        // =================================================
+
+        if (
+          !superAdminSelected &&
+          (
+            subjectTeacherSelected ||
+            classTeacherSelected
+          ) &&
+          assignedClassIds.length > 0
+        ) {
+
+          studentQuery =
+            studentQuery.in(
+              "current_class_id",
+              assignedClassIds
+            );
+
+        }
+
+
+        // =================================================
+        // ORDER
+        // =================================================
+
+        studentQuery =
+          studentQuery.order(
+            "created_at",
+            {
+              ascending: false,
+            }
+          );
+
+
+        // =================================================
+        // EXECUTE STUDENT QUERY
+        // =================================================
+
+        const {
+          data: studentRows,
+          error: studentError,
+        } =
+          await studentQuery;
+
+
+        if (studentError) {
+          throw studentError;
+        }
+
+
+        const loadedStudents =
+          Array.isArray(
+            studentRows
+          )
+            ? studentRows
+            : [];
+
+
+        console.log(
+          "STUDENT QUERY SCHOOL:",
+          currentSchoolId
+        );
+
+        console.log(
+          "STUDENT QUERY ACADEMIC YEAR:",
+          currentAcademicYearId
+        );
+
+        console.log(
+          "STUDENT QUERY SUPER ADMIN:",
+          superAdminSelected
+        );
+
+        console.log(
+          "STUDENT ROWS RETURNED:",
+          loadedStudents.length
+        );
+
+        console.log(
+          "STUDENT ROWS:",
+          loadedStudents
+        );
+
+
+        // =================================================
+        // GET CLASS IDS
+        // =================================================
+
+        const classIds = [
+          ...new Set(
+            loadedStudents
+              .map(
+                (student) =>
+                  student.current_class_id
+              )
+              .filter(
+                (id) =>
+                  id !== null &&
+                  id !== undefined
+              )
+          ),
+        ];
+
+
+        console.log(
+          "CLASS IDS FROM STUDENTS:",
+          classIds
+        );
+
+
+        // =================================================
+        // FETCH CLASSES
+        // =================================================
+
+        let classRows = [];
+
+
+        if (
+          classIds.length > 0
+        ) {
+
+          const {
+            data: classes,
+            error: classError,
+          } =
+            await supabase
+              .from("classes")
+              .select(`
+                id,
+                class_name,
+                school_id,
+                academic_year_id
+              `)
+              .in(
+                "id",
+                classIds
+              );
+
+
+          if (classError) {
+
+            console.error(
+              "CLASS QUERY ERROR:",
+              classError
+            );
+
+          } else {
+
+            classRows =
+              Array.isArray(
+                classes
+              )
+                ? classes
+                : [];
+
+          }
+
+        }
+
+
+        console.log(
+          "CLASS ROWS:",
+          classRows
+        );
+
+
+        // =================================================
+        // CLASS MAP
+        // =================================================
+
+        const classMap =
+          new Map();
+
+
+        classRows.forEach(
+          (classRow) => {
+
+            classMap.set(
+              String(
+                classRow.id
+              ),
+
+              classRow.class_name ||
+              `Class ${classRow.id}`
+            );
+
+          }
+        );
+
+
+        // =================================================
+        // BUILD FINAL STUDENT DATA
+        // =================================================
+
+        const finalStudents =
+          loadedStudents.map(
+            (student) => {
+
+              const className =
+                classMap.get(
+                  String(
+                    student.current_class_id
+                  )
+                ) ||
+                student.class_name ||
+                "Unassigned Class";
+
+
+              return {
+
+                ...student,
+
+                class_name:
+                  className,
+
+              };
+
+            }
+          );
+
+
+        // =================================================
+        // SAVE STUDENTS
+        // =================================================
+
+        setStudents(
+          finalStudents
+        );
+
+
+        // =================================================
+        // AUTO EXPAND CLASSES
+        // =================================================
+
+        const classState = {};
+
+
+        finalStudents.forEach(
+          (student) => {
+
+            const classKey =
+              String(
+                student.current_class_id ||
+                student.class_name ||
+                "unassigned"
+              );
+
+
+            classState[
+              classKey
+            ] = true;
+
+          }
+        );
+
+
+        setExpandedClasses(
+          classState
+        );
+
+
+        console.log(
+          "FINAL STUDENTS:",
+          finalStudents
+        );
+
+        console.log(
+          "FINAL STUDENT COUNT:",
+          finalStudents.length
+        );
+
+        console.log(
+          "FINAL CLASS COUNT:",
+          Object.keys(
+            classState
+          ).length
+        );
+
+        console.log(
+          "=================================================="
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "=================================================="
+        );
+
+        console.error(
+          "STUDENT TABLE FAILED"
+        );
+
+        console.error(
+          error
+        );
+
+        console.error(
+          "=================================================="
+        );
+
+
+        setStudents([]);
+
+        setExpandedClasses({});
+
+
+        setErrorMessage(
+          error?.message ||
+          "Failed to load students."
+        );
+
+
+      } finally {
+
+        setLoading(false);
 
       }
 
-
-      console.log(
-        "CURRENT SCHOOL:",
-        currentSchoolId
-      );
-
-
-      console.log(
-        "GLOBAL ACADEMIC YEAR:",
-        activeAcademicYearId,
-        activeAcademicYear?.year_name
-      );
-
-
-      console.log(
-        "CURRENT SELECTED ROLE:",
-        currentRoleId
-      );
-
-
-      console.log(
-        "CURRENT SELECTED ROLE NAME:",
-        selectedRoleName
-      );
-
-
-      console.log(
-        "SUBJECT TEACHER SCOPE ACTIVE:",
-        subjectTeacherSelected
-      );
-
-
-      console.log(
-        "CLASS TEACHER SCOPE ACTIVE:",
-        classTeacherSelected
-      );
-
-
-      console.log(
-        "CURRENT-YEAR STUDENTS LOADED:",
-        data
-      );
-
-
-      setStudents(
-        Array.isArray(data)
-          ? data
-          : []
-      );
-
-
-    } catch (error) {
-
-      console.error(
-        "FETCH STUDENTS FAILED:",
-        error
-      );
-
-
-      setStudents([]);
-
-
-      setErrorMessage(
-        error.message ||
-        "Failed to load students. Please try again."
-      );
-
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
-  }, [
-    schoolId,
-    activeAcademicYear,
-    activeAcademicYearId,
-    academicYearLoading,
-    academicYearError,
-    loadCurrentProfile,
-    selectedRoleId,
-    selectedRoleName,
-  ]);
+    }, [
+      schoolId,
+      activeAcademicYear,
+      activeAcademicYearId,
+      loadCurrentProfile,
+      resolveAcademicYear,
+      selectedRoleId,
+      selectedRoleName,
+      isSuperAdmin,
+      selectedRoleIsSuperAdmin,
+    ]);
 
 
   // =====================================================
-  // LOAD STUDENTS
+  // INITIAL LOAD
   // =====================================================
 
   useEffect(() => {
-
-    if (academicYearLoading) {
-
-      return;
-
-    }
-
 
     fetchStudents();
 
   }, [
     fetchStudents,
-    academicYearLoading,
-    activeAcademicYearId,
-    selectedRoleId,
-    selectedRoleName,
   ]);
 
 
@@ -806,168 +1039,139 @@ function StudentTable({ filters = {} }) {
   // DELETE STUDENT
   // =====================================================
 
-  const deleteStudent = async (id) => {
+  const deleteStudent =
+    async (
+      studentId
+    ) => {
 
-    // ---------------------------------------------------
-    // Subject Teacher must not delete students
-    // ---------------------------------------------------
+      if (
+        isSubjectTeacher ||
+        isClassTeacher
+      ) {
 
-    if (isSubjectTeacher) {
+        alert(
+          "You are not allowed to delete students."
+        );
 
-      alert(
-        "Subject Teachers are not allowed to delete students."
-      );
+        return;
 
-      return;
-
-    }
-
-
-    // ---------------------------------------------------
-    // Class Teacher must not delete students
-    // ---------------------------------------------------
-
-    if (isClassTeacher) {
-
-      alert(
-        "Class Teachers are not allowed to delete students."
-      );
-
-      return;
-
-    }
+      }
 
 
-    // ---------------------------------------------------
-    // Academic year must still be active
-    // ---------------------------------------------------
+      if (
+        !resolvedSchoolId ||
+        !resolvedAcademicYearId
+      ) {
 
-    if (!activeAcademicYearId) {
+        alert(
+          "School or academic year could not be resolved."
+        );
 
-      alert(
-        "No active academic year is configured."
-      );
+        return;
 
-      return;
-
-    }
-
-
-    // ---------------------------------------------------
-    // Confirm
-    // ---------------------------------------------------
-
-    const confirmDelete =
-      window.confirm(
-        "Are you sure you want to delete this student?"
-      );
+      }
 
 
-    if (!confirmDelete) {
-
-      return;
-
-    }
-
-
-    try {
-
-      setDeletingId(id);
-
-      setErrorMessage("");
-
-
-      // =================================================
-      // DELETE ONLY FROM CURRENT SCHOOL + CURRENT YEAR
-      // =================================================
-
-      const {
-        error,
-      } = await supabase
-        .from("students")
-        .delete()
-        .eq(
-          "id",
-          id
-        )
-        .eq(
-          "school_id",
-          schoolId
-        )
-        .eq(
-          "academic_year_id",
-          activeAcademicYearId
+      const confirmed =
+        window.confirm(
+          "Are you sure you want to delete this student?"
         );
 
 
-      if (error) {
+      if (!confirmed) {
+        return;
+      }
+
+
+      try {
+
+        setDeletingId(
+          studentId
+        );
+
+
+        const {
+          error,
+        } =
+          await supabase
+            .from("students")
+            .delete()
+            .eq(
+              "id",
+              studentId
+            )
+            .eq(
+              "school_id",
+              resolvedSchoolId
+            )
+            .eq(
+              "academic_year_id",
+              resolvedAcademicYearId
+            );
+
+
+        if (error) {
+          throw error;
+        }
+
+
+        setStudents(
+          (current) =>
+            current.filter(
+              (student) =>
+                student.id !==
+                studentId
+            )
+        );
+
+
+      } catch (error) {
 
         console.error(
           "DELETE STUDENT ERROR:",
           error
         );
 
-        throw error;
+
+        alert(
+          error?.message ||
+          "Failed to delete student."
+        );
+
+
+      } finally {
+
+        setDeletingId(null);
 
       }
 
-
-      setStudents(
-        (currentStudents) =>
-          currentStudents.filter(
-            (student) =>
-              student.id !== id
-          )
-      );
-
-
-      alert(
-        "Student deleted successfully."
-      );
-
-
-    } catch (error) {
-
-      console.error(
-        "DELETE STUDENT FAILED:",
-        error
-      );
-
-
-      alert(
-        error.message ||
-        "Failed to delete student."
-      );
-
-
-    } finally {
-
-      setDeletingId(null);
-
-    }
-
-  };
+    };
 
 
   // =====================================================
-  // FILTER VALUES
+  // FILTERS
   // =====================================================
 
-  const search = String(
-    filters?.search || ""
-  )
-    .trim()
-    .toLowerCase();
+  const search =
+    String(
+      filters?.search || ""
+    )
+      .trim()
+      .toLowerCase();
 
 
   const selectedGender =
-    String(filters?.gender || "")
+    String(
+      filters?.gender || ""
+    )
       .trim()
       .toLowerCase();
 
 
   const selectedStatus =
-    String(filters?.status || "")
+    String(
+      filters?.status || ""
+    )
       .trim()
       .toLowerCase();
 
@@ -977,284 +1181,247 @@ function StudentTable({ filters = {} }) {
   // =====================================================
 
   const filteredStudents =
-    students.filter(
-      (student) => {
+    useMemo(() => {
 
-        // ------------------------------------------------
-        // GENDER
-        // ------------------------------------------------
-
-        if (
-          selectedGender &&
-          String(
-            student.gender || ""
-          )
-            .trim()
-            .toLowerCase() !==
-          selectedGender
-        ) {
-
-          return false;
-
-        }
-
-
-        // ------------------------------------------------
-        // STATUS
-        // ------------------------------------------------
-
-        if (
-          selectedStatus &&
-          String(
-            student.status ||
-            student.student_status ||
-            ""
-          )
-            .trim()
-            .toLowerCase() !==
-          selectedStatus
-        ) {
-
-          return false;
-
-        }
-
-
-        // ------------------------------------------------
-        // SEARCH
-        // ------------------------------------------------
-
-        if (!search) {
-
-          return true;
-
-        }
-
-
-        const fullName = [
-
-          student.first_name,
-
-          student.middle_name,
-
-          student.last_name,
-
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-
-        const admissionNumber =
-          String(
-            student.admission_number || ""
-          ).toLowerCase();
-
-
-        const gender =
-          String(
-            student.gender || ""
-          ).toLowerCase();
-
-
-        const className =
-          String(
-            student.class_name || ""
-          ).toLowerCase();
-
-
-        return (
-
-          fullName.includes(search) ||
-
-          admissionNumber.includes(search) ||
-
-          gender.includes(search) ||
-
-          className.includes(search)
-
-        );
-
-      }
-    );
-
-
-  // =====================================================
-  // GROUP STUDENTS BY CLASS
-  // =====================================================
-
-  const studentsByClass = useMemo(() => {
-
-    const groups = {};
-
-
-    filteredStudents.forEach(
-      (student) => {
-
-        const className =
-          String(
-            student.class_name ||
-            "Unassigned Class"
-          ).trim() ||
-          "Unassigned Class";
-
-
-        // ------------------------------------------------
-        // GROUP BY CURRENT CLASS ID
-        // ------------------------------------------------
-
-        const classKey =
-          String(
-            student.current_class_id ||
-            className
-          );
-
-
-        if (!groups[classKey]) {
-
-          groups[classKey] = {
-
-            key: classKey,
-
-            className,
-
-            students: [],
-
-          };
-
-        }
-
-
-        groups[classKey].students.push(
-          student
-        );
-
-      }
-    );
-
-
-    return Object.values(groups)
-      .sort((a, b) => {
-
-        const aMatch =
-          a.className.match(
-            /(\d+)/
-          );
-
-
-        const bMatch =
-          b.className.match(
-            /(\d+)/
-          );
-
-
-        if (
-          aMatch &&
-          bMatch
-        ) {
-
-          const numberDifference =
-            Number(aMatch[1]) -
-            Number(bMatch[1]);
-
+      return students.filter(
+        (student) => {
 
           if (
-            numberDifference !== 0
+            selectedGender &&
+            String(
+              student.gender || ""
+            )
+              .trim()
+              .toLowerCase() !==
+            selectedGender
           ) {
 
-            return numberDifference;
+            return false;
 
           }
 
+
+          if (
+            selectedStatus &&
+            String(
+              student.status ||
+              student.student_status ||
+              ""
+            )
+              .trim()
+              .toLowerCase() !==
+            selectedStatus
+          ) {
+
+            return false;
+
+          }
+
+
+          if (!search) {
+            return true;
+          }
+
+
+          const fullName =
+            [
+              student.first_name,
+              student.middle_name,
+              student.last_name,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+
+          const admission =
+            String(
+              student.admission_number ||
+              ""
+            ).toLowerCase();
+
+
+          const className =
+            String(
+              student.class_name ||
+              ""
+            ).toLowerCase();
+
+
+          return (
+            fullName.includes(search) ||
+            admission.includes(search) ||
+            className.includes(search)
+          );
+
         }
+      );
 
-
-        return a.className.localeCompare(
-          b.className
-        );
-
-      });
-
-  }, [
-    filteredStudents,
-  ]);
+    }, [
+      students,
+      search,
+      selectedGender,
+      selectedStatus,
+    ]);
 
 
   // =====================================================
-  // CLASS CARD TOGGLE
+  // GROUP BY CLASS
   // =====================================================
 
-  const toggleClass = (
-    classKey
-  ) => {
+  const studentsByClass =
+    useMemo(() => {
 
-    setExpandedClasses(
-      (current) => ({
+      const groups = {};
 
-        ...current,
 
-        [classKey]:
-          !current[classKey],
+      filteredStudents.forEach(
+        (student) => {
 
-      })
-    );
+          const className =
+            String(
+              student.class_name ||
+              "Unassigned Class"
+            ).trim() ||
+            "Unassigned Class";
 
-  };
+
+          const classKey =
+            String(
+              student.current_class_id ||
+              className
+            );
+
+
+          if (
+            !groups[classKey]
+          ) {
+
+            groups[classKey] = {
+
+              key:
+                classKey,
+
+              className:
+                className,
+
+              students: [],
+
+            };
+
+          }
+
+
+          groups[
+            classKey
+          ].students.push(
+            student
+          );
+
+        }
+      );
+
+
+      return Object.values(
+        groups
+      ).sort(
+        (a, b) => {
+
+          return a.className.localeCompare(
+            b.className,
+            undefined,
+            {
+              numeric: true,
+              sensitivity: "base",
+            }
+          );
+
+        }
+      );
+
+    }, [
+      filteredStudents,
+    ]);
+
+
+  // =====================================================
+  // TOGGLE CLASS
+  // =====================================================
+
+  const toggleClass =
+    (classKey) => {
+
+      setExpandedClasses(
+        (current) => ({
+
+          ...current,
+
+          [classKey]:
+            !current[classKey],
+
+        })
+      );
+
+    };
 
 
   // =====================================================
   // OPEN ALL
   // =====================================================
 
-  const openAllClasses = () => {
+  const openAllClasses =
+    () => {
 
-    const nextState = {};
-
-
-    studentsByClass.forEach(
-      (group) => {
-
-        nextState[group.key] =
-          true;
-
-      }
-    );
+      const next = {};
 
 
-    setExpandedClasses(
-      nextState
-    );
+      studentsByClass.forEach(
+        (group) => {
 
-  };
+          next[
+            group.key
+          ] = true;
+
+        }
+      );
+
+
+      setExpandedClasses(
+        next
+      );
+
+    };
 
 
   // =====================================================
   // CLOSE ALL
   // =====================================================
 
-  const closeAllClasses = () => {
+  const closeAllClasses =
+    () => {
 
-    setExpandedClasses({});
+      setExpandedClasses(
+        {}
+      );
 
-  };
+    };
 
 
   // =====================================================
   // LOADING
   // =====================================================
 
-  if (
-    loading ||
-    academicYearLoading
-  ) {
+  if (loading) {
 
     return (
 
       <div className="rounded-xl bg-white p-6 shadow">
 
-        <div className="text-slate-600">
+        <div className="animate-pulse">
 
-          Loading students...
+          <div className="mb-4 h-6 w-48 rounded bg-slate-200" />
+
+          <div className="h-20 rounded bg-slate-100" />
 
         </div>
 
@@ -1266,44 +1433,7 @@ function StudentTable({ filters = {} }) {
 
 
   // =====================================================
-  // ACADEMIC YEAR ERROR
-  // =====================================================
-
-  if (
-    !activeAcademicYearId
-  ) {
-
-    return (
-
-      <div className="rounded-xl bg-white p-6 shadow">
-
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
-
-          <strong>
-            No Active Academic Year
-          </strong>
-
-
-          <p className="mt-1">
-
-            {
-              academicYearError ||
-              "Please configure an active academic year in Settings."
-            }
-
-          </p>
-
-        </div>
-
-      </div>
-
-    );
-
-  }
-
-
-  // =====================================================
-  // GENERAL ERROR
+  // ERROR
   // =====================================================
 
   if (errorMessage) {
@@ -1312,14 +1442,16 @@ function StudentTable({ filters = {} }) {
 
       <div className="rounded-xl bg-white p-6 shadow">
 
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-5">
 
-          <strong>
+          <h3 className="font-semibold text-red-800">
+
             Unable to load students
-          </strong>
+
+          </h3>
 
 
-          <p className="mt-1">
+          <p className="mt-2 text-sm text-red-700">
 
             {errorMessage}
 
@@ -1329,12 +1461,11 @@ function StudentTable({ filters = {} }) {
 
 
         <button
+          type="button"
           onClick={fetchStudents}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+          className="mt-4 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"
         >
-
           Try Again
-
         </button>
 
       </div>
@@ -1345,100 +1476,73 @@ function StudentTable({ filters = {} }) {
 
 
   // =====================================================
-  // TEACHER INFORMATION
-  // =====================================================
-
-  const assignedClassCount =
-    [
-      ...new Set(
-        teacherAssignments
-          .map(
-            (assignment) =>
-              assignment.class_id
-          )
-          .filter(
-            (classId) =>
-              classId !== null &&
-              classId !== undefined &&
-              String(classId).trim() !== ""
-          )
-      ),
-    ].length;
-
-
-  const assignedSubjectCount =
-    [
-      ...new Set(
-        teacherAssignments
-          .map(
-            (assignment) =>
-              assignment.subject_id
-          )
-          .filter(
-            (subjectId) =>
-              subjectId !== null &&
-              subjectId !== undefined &&
-              String(subjectId).trim() !== ""
-          )
-      ),
-    ].length;
-
-
-  // =====================================================
-  // MAIN UI
+  // MAIN
   // =====================================================
 
   return (
 
-    <div>
+    <div className="space-y-4">
 
       {/* =================================================
-          ACTIVE ACADEMIC YEAR
+          SCOPE INFORMATION
           ================================================= */}
 
-      <div className="mb-4 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-        <div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <div>
 
-            Academic Year
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
 
-          </div>
+              Academic Year
 
-
-          <div className="text-base font-semibold text-slate-900">
-
-            {
-              activeAcademicYear?.year_name ||
-              "-"
-            }
+            </div>
 
 
-            {activeAcademicYear?.term && (
+            <div className="text-lg font-bold text-slate-900">
 
-              <span className="ml-2 text-sm font-normal text-slate-500">
+              {
+                resolvedAcademicYearName ||
+                activeAcademicYear?.year_name ||
+                activeAcademicYear?.year ||
+                "Active Year"
+              }
 
-                ({activeAcademicYear.term})
-
-              </span>
-
-            )}
+            </div>
 
           </div>
 
-        </div>
+
+          <div className="flex flex-wrap gap-2">
+
+            <span className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+
+              School:{" "}
+
+              {resolvedSchoolId || "-"}
+
+            </span>
 
 
-        <div className="text-sm text-slate-500">
+            <span className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
 
-          {filteredStudents.length} student
+              Students:{" "}
 
-          {
-            filteredStudents.length === 1
-              ? ""
-              : "s"
-          }
+              {filteredStudents.length}
+
+            </span>
+
+
+            <span className="rounded-lg bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700">
+
+              Classes:{" "}
+
+              {studentsByClass.length}
+
+            </span>
+
+          </div>
 
         </div>
 
@@ -1446,147 +1550,47 @@ function StudentTable({ filters = {} }) {
 
 
       {/* =================================================
-          SUBJECT TEACHER INFORMATION
+          SUPER ADMIN
           ================================================= */}
 
-      {isSubjectTeacher && (
+      {
+        (
+          isSuperAdmin ||
+          selectedRoleIsSuperAdmin ||
+          Number(selectedRoleId) === 1
+        ) && (
 
-        <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
 
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="font-semibold text-blue-900">
 
-            <div>
-
-              <h3 className="font-semibold text-blue-900">
-
-                My Students
-
-              </h3>
-
-
-              <p className="text-sm text-blue-700">
-
-                You are viewing students from
-                your assigned classes only.
-
-              </p>
+              Super Admin — Full Student Access
 
             </div>
 
 
-            <div className="flex flex-wrap gap-3 text-sm">
+            <div className="mt-1 text-sm text-blue-700">
 
-              <span className="rounded-lg bg-white px-3 py-2 text-blue-800 shadow-sm">
-
-                Subjects:{" "}
-
-                <strong>
-                  {assignedSubjectCount}
-                </strong>
-
-              </span>
-
-
-              <span className="rounded-lg bg-white px-3 py-2 text-blue-800 shadow-sm">
-
-                Classes:{" "}
-
-                <strong>
-                  {assignedClassCount}
-                </strong>
-
-              </span>
-
-
-              <span className="rounded-lg bg-white px-3 py-2 text-blue-800 shadow-sm">
-
-                Students:{" "}
-
-                <strong>
-                  {filteredStudents.length}
-                </strong>
-
-              </span>
+              All active students for this school and
+              academic year are displayed below.
 
             </div>
 
           </div>
 
-        </div>
-
-      )}
-
-
-      {/* =================================================
-          CLASS TEACHER INFORMATION
-          ================================================= */}
-
-      {isClassTeacher && (
-
-        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-
-            <div>
-
-              <h3 className="font-semibold text-emerald-900">
-
-                My Class Students
-
-              </h3>
-
-
-              <p className="text-sm text-emerald-700">
-
-                You are viewing students from
-                your assigned class only.
-
-              </p>
-
-            </div>
-
-
-            <div className="flex flex-wrap gap-3 text-sm">
-
-              <span className="rounded-lg bg-white px-3 py-2 text-emerald-800 shadow-sm">
-
-                Classes:{" "}
-
-                <strong>
-                  {assignedClassCount}
-                </strong>
-
-              </span>
-
-
-              <span className="rounded-lg bg-white px-3 py-2 text-emerald-800 shadow-sm">
-
-                Students:{" "}
-
-                <strong>
-                  {filteredStudents.length}
-                </strong>
-
-              </span>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+        )
+      }
 
 
       {/* =================================================
-          CLASS CARD CONTROLS
+          CLASS CONTROLS
           ================================================= */}
 
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
 
         <div>
 
-          <h3 className="text-base font-semibold text-slate-900">
+          <h3 className="font-semibold text-slate-900">
 
             Students by Class
 
@@ -1618,406 +1622,383 @@ function StudentTable({ filters = {} }) {
         </div>
 
 
-        {studentsByClass.length > 0 && (
+        <div className="flex gap-2">
 
-          <div className="flex gap-2">
-
-            <button
-              type="button"
-              onClick={openAllClasses}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-
-              Open All
-
-            </button>
+          <button
+            type="button"
+            onClick={openAllClasses}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Open All
+          </button>
 
 
-            <button
-              type="button"
-              onClick={closeAllClasses}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+          <button
+            type="button"
+            onClick={closeAllClasses}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Close All
+          </button>
 
-              Close All
-
-            </button>
-
-          </div>
-
-        )}
+        </div>
 
       </div>
 
 
       {/* =================================================
-          NO STUDENTS
+          NO DATA
           ================================================= */}
 
-      {studentsByClass.length === 0 ? (
+      {
+        studentsByClass.length === 0 ? (
 
-        <div className="rounded-xl bg-white p-10 text-center text-slate-500 shadow">
+          <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
 
-          {
-            isSubjectTeacher
+            <div className="text-lg font-semibold text-slate-800">
 
-              ? "No students found in your assigned classes for the current academic year."
+              No Students Found
 
-              : isClassTeacher
-
-                ? "No students found in your assigned class for the current academic year."
-
-                : "No students found for the current academic year."
-          }
-
-        </div>
-
-      ) : (
-
-        <div className="space-y-3">
-
-          {studentsByClass.map(
-            (group) => {
-
-              const isExpanded =
-                Boolean(
-                  expandedClasses[
-                    group.key
-                  ]
-                );
+            </div>
 
 
-              return (
+            <p className="mt-2 text-sm text-slate-500">
 
-                <div
-                  key={group.key}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                >
+              No active students were found for the
+              resolved school and academic year.
 
-                  {/* =======================================
-                      CLASS CARD HEADER
-                      ======================================= */}
+            </p>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      toggleClass(
+
+            <div className="mt-4 text-xs text-slate-400">
+
+              School ID:{" "}
+              {resolvedSchoolId || "-"}
+
+              {" • "}
+
+              Academic Year ID:{" "}
+              {resolvedAcademicYearId || "-"}
+
+            </div>
+
+          </div>
+
+        ) : (
+
+          <div className="space-y-3">
+
+            {
+              studentsByClass.map(
+                (group) => {
+
+                  const isExpanded =
+                    Boolean(
+                      expandedClasses[
                         group.key
-                      )
-                    }
-                    className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition hover:bg-slate-50"
-                    aria-expanded={
-                      isExpanded
-                    }
-                  >
+                      ]
+                    );
 
-                    <div className="flex min-w-0 items-center gap-3">
 
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xl font-bold ${
-                          isExpanded
-                            ? "bg-slate-900 text-white"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
+                  return (
+
+                    <div
+                      key={
+                        group.key
+                      }
+                      className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                    >
+
+                      {/* =================================
+                          CLASS HEADER
+                          ================================= */}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleClass(
+                            group.key
+                          )
+                        }
+                        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50"
                       >
 
-                        {
-                          isExpanded
-                            ? "−"
-                            : "+"
-                        }
+                        <div className="flex items-center gap-3">
 
-                      </div>
+                          <div
+                            className={`flex h-10 w-10 items-center justify-center rounded-lg font-bold ${
+                              isExpanded
+                                ? "bg-blue-600 text-white"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+
+                            {
+                              isExpanded
+                                ? "−"
+                                : "+"
+                            }
+
+                          </div>
 
 
-                      <div className="min-w-0">
+                          <div>
 
-                        <div className="truncate text-base font-semibold text-slate-900">
+                            <div className="font-semibold text-slate-900">
 
-                          {group.className}
+                              {group.className}
+
+                            </div>
+
+
+                            <div className="text-sm text-slate-500">
+
+                              {group.students.length} student
+
+                              {
+                                group.students.length === 1
+                                  ? ""
+                                  : "s"
+                              }
+
+                            </div>
+
+                          </div>
 
                         </div>
 
 
-                        <div className="text-sm text-slate-500">
-
-                          {group.students.length} student
+                        <div className="text-slate-500">
 
                           {
-                            group.students.length === 1
-                              ? ""
-                              : "s"
+                            isExpanded
+                              ? "▲"
+                              : "▼"
                           }
 
                         </div>
 
-                      </div>
+                      </button>
 
-                    </div>
 
+                      {/* =================================
+                          STUDENT TABLE
+                          ================================= */}
 
-                    <div className="flex shrink-0 items-center gap-2">
+                      {
+                        isExpanded && (
 
-                      <span
-                        className={`hidden rounded-full px-3 py-1 text-xs font-medium sm:inline-flex ${
-                          isExpanded
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
+                          <div className="overflow-x-auto border-t border-slate-200">
 
-                        {
-                          isExpanded
-                            ? "Open"
-                            : "Closed"
-                        }
+                            <table className="w-full min-w-[900px]">
 
-                      </span>
+                              <thead className="bg-slate-900 text-white">
 
+                                <tr>
 
-                      <span className="text-xl leading-none text-slate-500">
+                                  <th className="px-4 py-3 text-left text-sm">
+                                    Admission No
+                                  </th>
 
-                        {
-                          isExpanded
-                            ? "⌃"
-                            : "⌄"
-                        }
 
-                      </span>
+                                  <th className="px-4 py-3 text-left text-sm">
+                                    Student Name
+                                  </th>
 
-                    </div>
 
-                  </button>
+                                  <th className="px-4 py-3 text-left text-sm">
+                                    Gender
+                                  </th>
 
 
-                  {/* =======================================
-                      STUDENT TABLE
-                      ======================================= */}
+                                  <th className="px-4 py-3 text-left text-sm">
+                                    Class
+                                  </th>
 
-                  {isExpanded && (
 
-                    <div className="border-t border-slate-200">
+                                  <th className="px-4 py-3 text-left text-sm">
+                                    Status
+                                  </th>
 
-                      <div className="overflow-x-auto">
 
-                        <table className="w-full min-w-[850px]">
-
-                          <thead className="bg-slate-900 text-white">
-
-                            <tr>
-
-                              <th className="p-4 text-left">
-                                Admission No
-                              </th>
-
-
-                              <th className="p-4 text-left">
-                                Name
-                              </th>
-
-
-                              <th className="p-4 text-left">
-                                Gender
-                              </th>
-
-
-                              <th className="p-4 text-left">
-                                Class
-                              </th>
-
-
-                              <th className="p-4 text-left">
-                                Status
-                              </th>
-
-
-                              <th className="p-4 text-center">
-                                Actions
-                              </th>
-
-                            </tr>
-
-                          </thead>
-
-
-                          <tbody>
-
-                            {group.students.map(
-                              (student) => (
-
-                                <tr
-                                  key={
-                                    student.id
-                                  }
-                                  className="border-b border-slate-200 hover:bg-slate-50"
-                                >
-
-                                  <td className="p-4 font-medium">
-
-                                    {
-                                      student.admission_number ||
-                                      "-"
-                                    }
-
-                                  </td>
-
-
-                                  <td className="p-4">
-
-                                    {[
-                                      student.first_name,
-                                      student.middle_name,
-                                      student.last_name,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" ") ||
-                                      "-"}
-
-                                  </td>
-
-
-                                  <td className="p-4">
-
-                                    {
-                                      student.gender ||
-                                      "-"
-                                    }
-
-                                  </td>
-
-
-                                  <td className="p-4">
-
-                                    {
-                                      student.class_name ||
-                                      "-"
-                                    }
-
-                                  </td>
-
-
-                                  <td className="p-4">
-
-                                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm">
-
-                                      {
-                                        student.status ||
-                                        student.student_status ||
-                                        "-"
-                                      }
-
-                                    </span>
-
-                                  </td>
-
-
-                                  <td className="p-4">
-
-                                    <div className="flex justify-center gap-2">
-
-                                      {/* =========================
-                                          VIEW
-                                          ========================= */}
-
-                                      <button
-                                        onClick={() =>
-                                          navigate(
-                                            `/students/profile/${student.id}`
-                                          )
-                                        }
-                                        className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700"
-                                      >
-
-                                        View
-
-                                      </button>
-
-
-                                      {/* =========================
-                                          EDIT
-                                          ========================= */}
-
-                                      {!isSubjectTeacher &&
-                                        !isClassTeacher && (
-
-                                          <button
-                                            onClick={() =>
-                                              navigate(
-                                                `/students/edit/${student.id}`
-                                              )
-                                            }
-                                            className="rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"
-                                          >
-
-                                            Edit
-
-                                          </button>
-
-                                        )}
-
-
-                                      {/* =========================
-                                          DELETE
-                                          ========================= */}
-
-                                      {!isSubjectTeacher &&
-                                        !isClassTeacher && (
-
-                                          <button
-                                            onClick={() =>
-                                              deleteStudent(
-                                                student.id
-                                              )
-                                            }
-                                            disabled={
-                                              deletingId ===
-                                              student.id
-                                            }
-                                            className="rounded-lg bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                          >
-
-                                            {
-                                              deletingId ===
-                                              student.id
-
-                                                ? "Deleting..."
-
-                                                : "Delete"
-                                            }
-
-                                          </button>
-
-                                        )}
-
-                                    </div>
-
-                                  </td>
+                                  <th className="px-4 py-3 text-center text-sm">
+                                    Actions
+                                  </th>
 
                                 </tr>
 
-                              )
-                            )}
+                              </thead>
 
-                          </tbody>
 
-                        </table>
+                              <tbody>
 
-                      </div>
+                                {
+                                  group.students.map(
+                                    (student) => (
+
+                                      <tr
+                                        key={
+                                          student.id
+                                        }
+                                        className="border-b border-slate-200 hover:bg-slate-50"
+                                      >
+
+                                        <td className="px-4 py-4 font-medium text-slate-800">
+
+                                          {
+                                            student.admission_number ||
+                                            "-"
+                                          }
+
+                                        </td>
+
+
+                                        <td className="px-4 py-4 font-medium text-slate-900">
+
+                                          {
+                                            [
+                                              student.first_name,
+                                              student.middle_name,
+                                              student.last_name,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(" ") ||
+                                            "-"
+                                          }
+
+                                        </td>
+
+
+                                        <td className="px-4 py-4 text-slate-700">
+
+                                          {
+                                            student.gender ||
+                                            "-"
+                                          }
+
+                                        </td>
+
+
+                                        <td className="px-4 py-4 text-slate-700">
+
+                                          {
+                                            student.class_name ||
+                                            "-"
+                                          }
+
+                                        </td>
+
+
+                                        <td className="px-4 py-4">
+
+                                          <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+
+                                            {
+                                              student.status ||
+                                              student.student_status ||
+                                              "Active"
+                                            }
+
+                                          </span>
+
+                                        </td>
+
+
+                                        <td className="px-4 py-4">
+
+                                          <div className="flex justify-center gap-2">
+
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                navigate(
+                                                  `/students/profile/${student.id}`
+                                                )
+                                              }
+                                              className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                                            >
+                                              View
+                                            </button>
+
+
+                                            {
+                                              !isSubjectTeacher &&
+                                              !isClassTeacher && (
+
+                                                <>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      navigate(
+                                                        `/students/edit/${student.id}`
+                                                      )
+                                                    }
+                                                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                                                  >
+                                                    Edit
+                                                  </button>
+
+
+                                                  <button
+                                                    type="button"
+                                                    disabled={
+                                                      deletingId ===
+                                                      student.id
+                                                    }
+                                                    onClick={() =>
+                                                      deleteStudent(
+                                                        student.id
+                                                      )
+                                                    }
+                                                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                                  >
+
+                                                    {
+                                                      deletingId ===
+                                                      student.id
+                                                        ? "Deleting..."
+                                                        : "Delete"
+                                                    }
+
+                                                  </button>
+
+                                                </>
+
+                                              )
+                                            }
+
+                                          </div>
+
+                                        </td>
+
+                                      </tr>
+
+                                    )
+                                  )
+                                }
+
+                              </tbody>
+
+                            </table>
+
+                          </div>
+
+                        )
+                      }
 
                     </div>
 
-                  )}
+                  );
 
-                </div>
-
-              );
-
+                }
+              )
             }
-          )}
 
-        </div>
+          </div>
 
-      )}
+        )
+      }
 
     </div>
 

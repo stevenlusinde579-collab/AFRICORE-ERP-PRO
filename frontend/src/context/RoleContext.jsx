@@ -20,22 +20,28 @@ import { supabase } from "../services/supabase";
 // - Selected role
 // - Selected profile role
 // - Selected school
+// - Primary role
+// - Super Admin status
 //
 // IMPORTANT:
-// The actual roles table uses:
+//
+// The database uses:
 //
 // roles.id
 // roles.role_name
 // roles.description
-// roles.created_at
 //
-// There is NO `roles.name` column.
-// There is NO `roles.module` column.
+// profile_roles.role_id
+// profile_roles.profile_id
+// profile_roles.school_id
+// profile_roles.is_primary
+// profile_roles.is_active
 //
 // =====================================================
 
 
-const RoleContext = createContext(null);
+const RoleContext =
+    createContext(null);
 
 
 // =====================================================
@@ -47,10 +53,20 @@ const ROLE_STORAGE_KEY =
 
 
 // =====================================================
+// SUPER ADMIN
+// =====================================================
+
+const SUPER_ADMIN_ROLE_ID =
+    1;
+
+
+// =====================================================
 // NORMALIZE ROLE
 // =====================================================
 
-const normalizeRole = (row) => {
+const normalizeRole = (
+    row
+) => {
 
     if (!row) {
         return null;
@@ -113,9 +129,8 @@ const normalizeRole = (row) => {
         // MODULE
         // ---------------------------------------------
         //
-        // Older parts of AfriCore may read `module`.
-        // The current database does not have a module
-        // column, therefore keep it safely empty.
+        // Kept only for compatibility with older
+        // AfriCore components.
         //
         // ---------------------------------------------
 
@@ -345,30 +360,29 @@ export function RoleProvider({
 
                     setSelectedRole(null);
 
+                    saveStoredRole(null);
+
                     return;
 
                 }
 
 
                 console.log(
-                    "ROLE CONTEXT - LOADING ROLES FOR USER:",
+                    "====================================================="
+                );
+
+                console.log(
+                    "ROLE CONTEXT - LOADING ROLES"
+                );
+
+                console.log(
+                    "USER:",
                     user.id
                 );
 
 
                 // =====================================
                 // LOAD PROFILE ROLES
-                // =====================================
-                //
-                // IMPORTANT:
-                //
-                // roles.role_name is the actual
-                // database column.
-                //
-                // Do NOT request:
-                // roles.name
-                // roles.module
-                //
                 // =====================================
 
                 const {
@@ -477,6 +491,130 @@ export function RoleProvider({
 
 
                 // =====================================
+                // FIND PRIMARY ROLE
+                // =====================================
+
+                const primaryRole =
+                    normalized.find(
+                        (role) =>
+                            role.is_primary === true
+                    ) ||
+                    normalized[0] ||
+                    null;
+
+
+                console.log(
+                    "ROLE CONTEXT - PRIMARY ROLE:",
+                    primaryRole
+                );
+
+
+                // =====================================
+                // SUPER ADMIN PRIMARY ROLE
+                // =====================================
+                //
+                // CRITICAL FIX
+                //
+                // If the user's primary profile role is
+                // Super Admin, NEVER allow an old
+                // localStorage selection to replace it.
+                //
+                // This prevents:
+                //
+                // Super Admin
+                //      ↓
+                // old stored role
+                //      ↓
+                // Sidebar sees another role
+                //      ↓
+                // Students / Classes disappear
+                //
+                // =====================================
+
+                const primaryRoleId =
+                    Number(
+                        primaryRole?.role_id ??
+                        primaryRole?.id
+                    );
+
+
+                const primaryRoleName =
+                    String(
+                        primaryRole?.role_name ??
+                        primaryRole?.name ??
+                        ""
+                    )
+                        .trim()
+                        .toLowerCase();
+
+
+                const primaryIsSuperAdmin =
+                    primaryRoleId ===
+                        SUPER_ADMIN_ROLE_ID ||
+                    primaryRoleName ===
+                        "super admin" ||
+                    primaryRoleName ===
+                        "super administrator";
+
+
+                if (
+                    primaryIsSuperAdmin
+                ) {
+
+                    console.log(
+                        "====================================================="
+                    );
+
+                    console.log(
+                        "ROLE CONTEXT - SUPER ADMIN DETECTED"
+                    );
+
+                    console.log(
+                        "SUPER ADMIN ROLE ID:",
+                        primaryRoleId
+                    );
+
+                    console.log(
+                        "SUPER ADMIN ROLE:",
+                        primaryRole
+                    );
+
+                    console.log(
+                        "ROLE CONTEXT - FORCING PRIMARY SUPER ADMIN ROLE"
+                    );
+
+                    console.log(
+                        "====================================================="
+                    );
+
+
+                    setSelectedRole(
+                        primaryRole
+                    );
+
+
+                    saveStoredRole(
+                        primaryRole
+                    );
+
+
+                    window.dispatchEvent(
+                        new CustomEvent(
+                            "africore-role-loaded",
+                            {
+                                detail:
+                                    primaryRole,
+                            }
+                        )
+                    );
+
+
+                    return;
+
+                }
+
+
+                // =====================================
                 // GET STORED ROLE
                 // =====================================
 
@@ -574,11 +712,7 @@ export function RoleProvider({
                 if (!nextRole) {
 
                     nextRole =
-                        normalized.find(
-                            (role) =>
-                                role.is_primary
-                        ) ||
-                        null;
+                        primaryRole;
 
                 }
 
@@ -591,6 +725,30 @@ export function RoleProvider({
 
                     nextRole =
                         normalized[0];
+
+                }
+
+
+                // =====================================
+                // SAFETY:
+                // STORED ROLE MUST EXIST
+                // =====================================
+
+                if (
+                    nextRole &&
+                    !normalized.some(
+                        (role) =>
+                            String(
+                                role.profileRoleId
+                            ) ===
+                            String(
+                                nextRole.profileRoleId
+                            )
+                    )
+                ) {
+
+                    nextRole =
+                        primaryRole;
 
                 }
 
@@ -872,6 +1030,89 @@ export function RoleProvider({
 
 
             // =========================================
+            // PROTECT SUPER ADMIN
+            // =========================================
+            //
+            // If Super Admin is the user's primary
+            // system role, do not allow a role switch
+            // to accidentally downgrade the system role.
+            //
+            // The user can still have multiple roles in
+            // the database, but primary Super Admin remains
+            // the authoritative system role.
+            //
+            // =========================================
+
+            const primaryRole =
+                roles.find(
+                    (role) =>
+                        role.is_primary === true
+                ) ||
+                null;
+
+
+            const primaryRoleId =
+                Number(
+                    primaryRole?.role_id ??
+                    primaryRole?.id
+                );
+
+
+            const primaryRoleName =
+                String(
+                    primaryRole?.role_name ??
+                    primaryRole?.name ??
+                    ""
+                )
+                    .trim()
+                    .toLowerCase();
+
+
+            const primaryIsSuperAdmin =
+                primaryRoleId ===
+                    SUPER_ADMIN_ROLE_ID ||
+                primaryRoleName ===
+                    "super admin" ||
+                primaryRoleName ===
+                    "super administrator";
+
+
+            if (
+                primaryIsSuperAdmin
+            ) {
+
+                console.log(
+                    "ROLE CONTEXT - PRIMARY SUPER ADMIN PROTECTED"
+                );
+
+
+                setSelectedRole(
+                    primaryRole
+                );
+
+
+                saveStoredRole(
+                    primaryRole
+                );
+
+
+                window.dispatchEvent(
+                    new CustomEvent(
+                        "africore-role-changed",
+                        {
+                            detail:
+                                primaryRole,
+                        }
+                    )
+                );
+
+
+                return;
+
+            }
+
+
+            // =========================================
             // SAVE
             // =========================================
 
@@ -916,6 +1157,61 @@ export function RoleProvider({
         useCallback(
             () => {
 
+                const primaryRole =
+                    roles.find(
+                        (role) =>
+                            role.is_primary === true
+                    ) ||
+                    null;
+
+
+                const primaryRoleId =
+                    Number(
+                        primaryRole?.role_id ??
+                        primaryRole?.id
+                    );
+
+
+                const primaryRoleName =
+                    String(
+                        primaryRole?.role_name ??
+                        primaryRole?.name ??
+                        ""
+                    )
+                        .trim()
+                        .toLowerCase();
+
+
+                const primaryIsSuperAdmin =
+                    primaryRoleId ===
+                        SUPER_ADMIN_ROLE_ID ||
+                    primaryRoleName ===
+                        "super admin" ||
+                    primaryRoleName ===
+                        "super administrator";
+
+
+                // -------------------------------------
+                // NEVER CLEAR PRIMARY SUPER ADMIN
+                // -------------------------------------
+
+                if (
+                    primaryIsSuperAdmin
+                ) {
+
+                    setSelectedRole(
+                        primaryRole
+                    );
+
+                    saveStoredRole(
+                        primaryRole
+                    );
+
+                    return;
+
+                }
+
+
                 setSelectedRole(
                     null
                 );
@@ -937,7 +1233,9 @@ export function RoleProvider({
                 );
 
             },
-            []
+            [
+                roles,
+            ]
         );
 
 
@@ -1090,6 +1388,89 @@ export function RoleProvider({
         "";
 
 
+    // =================================================
+    // PRIMARY ROLE
+    // =================================================
+
+    const primaryRole =
+        roles.find(
+            (role) =>
+                role.is_primary === true
+        ) ||
+        roles[0] ||
+        null;
+
+
+    // =================================================
+    // PRIMARY ROLE ID
+    // =================================================
+
+    const primaryRoleId =
+        primaryRole?.role_id ??
+        primaryRole?.id ??
+        null;
+
+
+    // =================================================
+    // PRIMARY ROLE NAME
+    // =================================================
+
+    const primaryRoleName =
+        primaryRole?.role_name ??
+        primaryRole?.name ??
+        "";
+
+
+    // =================================================
+    // SUPER ADMIN
+    // =================================================
+
+    const isSuperAdmin =
+        Number(
+            primaryRoleId
+        ) ===
+            SUPER_ADMIN_ROLE_ID ||
+        String(
+            primaryRoleName
+        )
+            .trim()
+            .toLowerCase() ===
+            "super admin" ||
+        String(
+            primaryRoleName
+        )
+            .trim()
+            .toLowerCase() ===
+            "super administrator";
+
+
+    // =================================================
+    // SELECTED ROLE IS SUPER ADMIN
+    // =================================================
+
+    const selectedRoleIsSuperAdmin =
+        Number(
+            selectedRoleId
+        ) ===
+            SUPER_ADMIN_ROLE_ID ||
+        String(
+            selectedRoleName
+        )
+            .trim()
+            .toLowerCase() ===
+            "super admin" ||
+        String(
+            selectedRoleName
+        )
+            .trim()
+            .toLowerCase() ===
+            "super administrator";
+
+
+    // =================================================
+    // MULTIPLE ROLES
+    // =================================================
+
     const hasMultipleRoles =
         roles.length > 1;
 
@@ -1098,73 +1479,104 @@ export function RoleProvider({
     // CONTEXT VALUE
     // =================================================
 
-    const value = useMemo(
-        () => ({
+    const value =
+        useMemo(
+            () => ({
 
-            // -----------------------------------------
-            // ROLES
-            // -----------------------------------------
+                // -------------------------------------
+                // ROLES
+                // -------------------------------------
 
-            roles,
+                roles,
 
-            selectedRole,
+                selectedRole,
 
-            selectedRoleId,
+                selectedRoleId,
 
-            selectedProfileRoleId,
+                selectedProfileRoleId,
 
-            selectedSchoolId,
+                selectedSchoolId,
 
-            selectedRoleName,
+                selectedRoleName,
 
-            loadingRoles,
+                loadingRoles,
 
-            hasMultipleRoles,
+                hasMultipleRoles,
 
 
-            // -----------------------------------------
-            // ACTIONS
-            // -----------------------------------------
+                // -------------------------------------
+                // PRIMARY ROLE
+                // -------------------------------------
 
-            selectRole,
+                primaryRole,
 
-            clearSelectedRole,
+                primaryRoleId,
 
-            hasRole,
+                primaryRoleName,
 
-            selectedRoleIs,
 
-            loadRoles,
+                // -------------------------------------
+                // SUPER ADMIN
+                // -------------------------------------
 
-        }),
-        [
-            roles,
+                isSuperAdmin,
 
-            selectedRole,
+                selectedRoleIsSuperAdmin,
 
-            selectedRoleId,
 
-            selectedProfileRoleId,
+                // -------------------------------------
+                // ACTIONS
+                // -------------------------------------
 
-            selectedSchoolId,
+                selectRole,
 
-            selectedRoleName,
+                clearSelectedRole,
 
-            loadingRoles,
+                hasRole,
 
-            hasMultipleRoles,
+                selectedRoleIs,
 
-            selectRole,
+                loadRoles,
 
-            clearSelectedRole,
+            }),
+            [
+                roles,
 
-            hasRole,
+                selectedRole,
 
-            selectedRoleIs,
+                selectedRoleId,
 
-            loadRoles,
-        ]
-    );
+                selectedProfileRoleId,
+
+                selectedSchoolId,
+
+                selectedRoleName,
+
+                loadingRoles,
+
+                hasMultipleRoles,
+
+                primaryRole,
+
+                primaryRoleId,
+
+                primaryRoleName,
+
+                isSuperAdmin,
+
+                selectedRoleIsSuperAdmin,
+
+                selectRole,
+
+                clearSelectedRole,
+
+                hasRole,
+
+                selectedRoleIs,
+
+                loadRoles,
+            ]
+        );
 
 
     // =================================================
@@ -1173,7 +1585,9 @@ export function RoleProvider({
 
     return (
         <RoleContext.Provider
-            value={value}
+            value={
+                value
+            }
         >
             {children}
         </RoleContext.Provider>

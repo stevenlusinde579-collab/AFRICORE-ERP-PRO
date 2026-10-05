@@ -11,7 +11,6 @@ import {
 // ===============================
 // AUTH
 // ===============================
-import LandingPage from "../pages/landing/LandingPage";
 import Login from "../pages/auth/Login";
 import AuthTest from "../pages/AuthTest";
 import AccessScopeTest from "../pages/AccessScopeTest";
@@ -103,6 +102,16 @@ import AddTimetable from "../pages/timetable/AddTimetable";
 import EditTimetable from "../pages/timetable/EditTimetable";
 import TimetableSettings from "../pages/timetable/TimetableSettings";
 import DutyScheduleManager from "../pages/timetable/DutyScheduleManager";
+
+
+// =====================================================
+// CLASS TEACHER
+// =====================================================
+import ClassTeacherAttendance
+    from "../pages/class-teacher/ClassTeacherAttendance";
+
+import ClassTeacherSubjectTeachers
+    from "../pages/class-teacher/ClassTeacherSubjectTeachers";
 
 
 // =====================================================
@@ -204,11 +213,9 @@ function useCurrentRoleCheck() {
                 ? null
                 : Number(selectedRoleId),
 
-        profileRoleId:
-            selectedProfileRoleId,
+        profileRoleId: selectedProfileRoleId,
 
-        roleName:
-            selectedRoleName,
+        roleName: selectedRoleName,
     };
 }
 
@@ -232,17 +239,9 @@ function SuperAdminOrPermissionRoute({
         return null;
     }
 
-    // =====================================================
-    // SUPER ADMIN BYPASS
-    // =====================================================
-
     if (Number(roleId) === 1) {
         return <Outlet />;
     }
-
-    // =====================================================
-    // NORMAL PERMISSION CHECK
-    // =====================================================
 
     return (
         <PermissionRoute
@@ -262,9 +261,7 @@ function SuperAdminOrPermissionRoute({
                     : {}
             )}
 
-            requireAny={
-                requireAny
-            }
+            requireAny={requireAny}
         />
     );
 }
@@ -288,9 +285,7 @@ function SuperAdminOrAllowedRoleRoute({
     }
 
     const currentRoleId =
-        Number(
-            roleId
-        );
+        Number(roleId);
 
     const allowed =
         allowedRoles
@@ -322,19 +317,6 @@ export default function AppRoutes() {
     return (
 
         <Routes>
-
-
-            {/* =====================================================
-                LANDING PAGE
-            ===================================================== */}
-
-            <Route
-                path="/"
-                element={
-                    <LandingPage />
-                }
-            />
-
 
             {/* =====================================================
                 LOGIN
@@ -389,6 +371,7 @@ export default function AppRoutes() {
             ===================================================== */}
 
             <Route
+                path="/"
                 element={
                     <Layout />
                 }
@@ -400,9 +383,59 @@ export default function AppRoutes() {
                 ===================================================== */}
 
                 <Route
-                    path="/dashboard"
+                    index
                     element={
                         <Dashboard />
+                    }
+                />
+
+                <Route
+                    path="dashboard"
+                    element={
+                        <Dashboard />
+                    }
+                />
+
+
+                {/* =====================================================
+                    CLASS TEACHER
+                ===================================================== */}
+
+                <Route
+                    path="class-teacher/attendance"
+                    element={
+                        <ClassTeacherAttendance />
+                    }
+                />
+
+                {/* -----------------------------------------------------
+                    ATTENDANCE ALIAS
+
+                    The existing Class Teacher dashboard may still
+                    navigate to /attendance.
+
+                    This route intentionally points to the same
+                    ClassTeacherAttendance component.
+                ----------------------------------------------------- */}
+
+                <Route
+                    path="attendance"
+                    element={
+                        <ClassTeacherAttendance />
+                    }
+                />
+
+                <Route
+                    path="class-teacher/subject-teachers"
+                    element={
+                        <ClassTeacherSubjectTeachers />
+                    }
+                />
+
+                <Route
+                    path="class-teacher/subjects"
+                    element={
+                        <ClassTeacherSubjectTeachers />
                     }
                 />
 
@@ -787,12 +820,6 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     EXAMINATION - LIST / VIEW
-
-                    SUBJECT TEACHER = ROLE 5
-
-                    Role 5 is allowed here because Subject Teacher
-                    needs to open the examination workspace and
-                    continue to their assigned subject workflow.
                 ===================================================== */}
 
                 <Route
@@ -802,8 +829,7 @@ export default function AppRoutes() {
                                 1,
                                 2,
                                 3,
-                                4,
-                                5
+                                4
                             ]}
                         />
                     }
@@ -923,14 +949,6 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     EXAMINATION - AI ANALYSIS
-
-                    SUBJECT TEACHER = ROLE 5
-
-                    AI analysis can be accessed by roles 1-5,
-                    subject to the actual AI/examination permissions.
-
-                    requireAny=true means the user only needs one
-                    of the listed permissions.
                 ===================================================== */}
 
                 <Route
@@ -949,11 +967,10 @@ export default function AppRoutes() {
 
                     <Route
                         element={
-                            <SuperAdminOrPermissionRoute
+                            <PermissionRoute
                                 permissions={[
                                     "EXAM_GENERATE_AI_ANALYSIS",
-                                    "EXAM_VIEW_AI_REPORT",
-                                    "EXAM_VIEW"
+                                    "EXAM_VIEW_AI_REPORT"
                                 ]}
                                 requireAny={
                                     true
@@ -1027,7 +1044,8 @@ export default function AppRoutes() {
                         <SuperAdminOrAllowedRoleRoute
                             allowedRoles={[
                                 1,
-                                4
+                                4,
+                                5
                             ]}
                         />
                     }
@@ -1055,12 +1073,6 @@ export default function AppRoutes() {
 
                 {/* =====================================================
                     EXAMINATION - RESULTS ANALYSIS
-
-                    SUBJECT TEACHER = ROLE 5
-
-                    ResultsAnalysis.jsx performs the additional
-                    Subject Teacher filtering so role 5 only works
-                    with the assigned class and subject.
                 ===================================================== */}
 
                 <Route
@@ -1069,8 +1081,7 @@ export default function AppRoutes() {
                             allowedRoles={[
                                 1,
                                 2,
-                                4,
-                                5
+                                4
                             ]}
                         />
                     }
@@ -1323,7 +1334,7 @@ export default function AppRoutes() {
 
 
                 {/* =====================================================
-                    COMMUNICATION - CREATE / MANAGE MEETINGS
+                    COMMUNICATION - MEETINGS
                 ===================================================== */}
 
                 <Route
@@ -1345,25 +1356,11 @@ export default function AppRoutes() {
 
 
                 {/* =====================================================
-                    SHARED LIVE MEETING ROOM
-
-                    DO NOT put create_meeting permission here.
-
-                    A participant may join an existing meeting without
-                    having permission to create a meeting.
-
-                    Both URL patterns are supported.
+                    SHARED MEETING ROOM
                 ===================================================== */}
 
                 <Route
                     path="communication/meeting/:meetingId"
-                    element={
-                        <CommunicationMeeting />
-                    }
-                />
-
-                <Route
-                    path="communication/meetings/:meetingId"
                     element={
                         <CommunicationMeeting />
                     }
@@ -1438,7 +1435,7 @@ export default function AppRoutes() {
 
 
                 {/* =====================================================
-                    FALLBACK INSIDE APPLICATION
+                    FALLBACK
                 ===================================================== */}
 
                 <Route
@@ -1453,22 +1450,6 @@ export default function AppRoutes() {
 
             </Route>
 
-
-            {/* =====================================================
-                GLOBAL FALLBACK
-            ===================================================== */}
-
-            <Route
-                path="*"
-                element={
-                    <Navigate
-                        to="/"
-                        replace
-                    />
-                }
-            />
-
         </Routes>
-
     );
 }
