@@ -128,7 +128,7 @@ export default function AddTeacher() {
 
   /* ============================================================
      LOAD CLASSES
-     
+
      IMPORTANT:
      Classes belong to BOTH:
        1. Current School
@@ -759,6 +759,12 @@ export default function AddTeacher() {
           teacher.photo_url?.trim() ||
           null,
 
+        /*
+         * IMPORTANT:
+         * Backend accepts ONLY:
+         * "Staff"
+         * "Non-Staff"
+         */
         staff_type:
           teacher.staff_type,
 
@@ -798,6 +804,11 @@ export default function AddTeacher() {
       console.log(
         "ASSIGNMENTS:",
         cleanAssignments
+      );
+
+      console.log(
+        "STAFF TYPE:",
+        teacher.staff_type
       );
 
       console.log(
@@ -1142,12 +1153,12 @@ export default function AddTeacher() {
                     Select Staff Type
                   </option>
 
-                  <option value="Teaching">
-                    Teaching
+                  <option value="Staff">
+                    Staff (Teaching Staff)
                   </option>
 
-                  <option value="Non-Teaching">
-                    Non-Teaching
+                  <option value="Non-Staff">
+                    Non-Staff (Non-Teaching Staff)
                   </option>
                 </select>
               </div>
