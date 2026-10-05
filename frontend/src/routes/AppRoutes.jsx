@@ -7,116 +7,62 @@ import {
     Navigate
 } from "react-router-dom";
 
-
-// ===============================
-// AUTH
-// ===============================
 import Login from "../pages/auth/Login";
 import AuthTest from "../pages/AuthTest";
 import AccessScopeTest from "../pages/AccessScopeTest";
 
-
-// ===============================
-// ACCESS / SECURITY
-// ===============================
 import AccessDenied from "../pages/access/AccessDenied";
 import PermissionRoute from "../auth/PermissionRoute";
 import { useRole } from "../context/RoleContext";
 
+import LandingPage from "../pages/landing/LandingPage";
 
-// ===============================
-// LAYOUT
-// ===============================
 import Layout from "../components/layout/Layout";
 
-
-// ===============================
-// DASHBOARD
-// ===============================
 import Dashboard from "../pages/dashboard/Dashboard";
 
-
-// ===============================
-// STUDENTS
-// ===============================
 import Students from "../pages/students/Students";
 import AddStudent from "../pages/students/AddStudent";
 import EditStudent from "../pages/students/EditStudent";
 import StudentProfile from "../pages/students/StudentProfile";
 
-
-// ===============================
-// TEACHERS
-// ===============================
 import Teachers from "../pages/teachers/Teachers";
 import AddTeacher from "../pages/teachers/AddTeacher";
 import EditTeacher from "../pages/teachers/EditTeacher";
 import TeacherProfile from "../pages/teachers/TeacherProfile";
 
-
-// ===============================
-// SUBJECTS
-// ===============================
 import Subjects from "../pages/subjects/Subjects";
 import AddSubject from "../pages/subjects/AddSubject";
 import EditSubject from "../pages/subjects/EditSubject";
 import SubjectProfile from "../pages/subjects/SubjectProfile";
 
-
-// ===============================
-// CLASSES
-// ===============================
 import Classes from "../pages/classes/Classes";
 import Addclass from "../pages/classes/Addclass";
 import EditClass from "../pages/classes/EditClass";
 import ClassProfile from "../pages/classes/ClassProfile";
 
-
-// ===============================
-// ACADEMIC
-// ===============================
 import Academics from "../pages/academics/Academics";
 import AcademicYears from "../pages/academic-years/AcademicYears";
 
-
-// ===============================
-// TEACHER ASSIGNMENT
-// ===============================
 import TeacherAssignment from "../pages/teacher-assignment/TeacherAssignment";
 import AssignmentForm from "../pages/teacher-assignment/AssignmentForm";
 import EditAssignment from "../pages/teacher-assignment/EditAssignment";
 import AssignmentProfile from "../pages/teacher-assignment/AssignmentProfile";
 
-
-// ===============================
-// PERIODS
-// ===============================
 import Periods from "../pages/periods/Periods";
 
-
-// ===============================
-// TIMETABLE
-// ===============================
 import Timetable from "../pages/timetable/Timetable";
 import AddTimetable from "../pages/timetable/AddTimetable";
 import EditTimetable from "../pages/timetable/EditTimetable";
 import TimetableSettings from "../pages/timetable/TimetableSettings";
 import DutyScheduleManager from "../pages/timetable/DutyScheduleManager";
 
-
-// =====================================================
-// CLASS TEACHER
-// =====================================================
 import ClassTeacherAttendance
     from "../pages/class-teacher/ClassTeacherAttendance";
 
 import ClassTeacherSubjectTeachers
     from "../pages/class-teacher/ClassTeacherSubjectTeachers";
 
-
-// =====================================================
-// EXAMINATION MODULE
-// =====================================================
 import ExaminationDashboard from "../pages/examination/ExaminationDashboard";
 import AddExam from "../pages/examination/AddExam";
 import EditExam from "../pages/examination/EditExam";
@@ -133,10 +79,6 @@ import ExaminationRoleDashboard from "../pages/examination/ExaminationRoleDashbo
 import SubjectTeacherExamUpload from "../pages/examination/SubjectTeacherExamUpload";
 import ExamPrintingUnit from "../pages/examination/ExamPrintingUnit";
 
-
-// =====================================================
-// FINANCE MODULE
-// =====================================================
 import Finance from "../pages/finance/Finance";
 import FinanceDashboard from "../pages/finance/FinanceDashboard";
 import ChartOfAccounts from "../pages/finance/ChartOfAccounts";
@@ -148,10 +90,6 @@ import ClassFeeCollection from "../pages/finance/ClassFeeCollection";
 import RecordReceivable from "../pages/finance/RecordReceivable";
 import RecordPayable from "../pages/finance/RecordPayable";
 
-
-// =====================================================
-// COMMUNICATION MODULE
-// =====================================================
 import Communication from "../pages/communication/Communication";
 import CommunicationChat from "../pages/communication/CommunicationChat";
 import CommunicationMeetings from "../pages/communication/CommunicationMeetings";
@@ -160,40 +98,22 @@ import CommunicationNotifications from "../pages/communication/CommunicationNoti
 import CommunicationAnnouncements from "../pages/communication/CommunicationAnnouncements";
 import SuggestionBox from "../pages/communication/SuggestionBox";
 
+import SocialWelfareDashboard
+    from "../pages/social-welfare/SocialWelfareDashboard";
 
-// =====================================================
-// SOCIAL WELFARE MODULE
-// =====================================================
-import SocialWelfareDashboard from "../pages/social-welfare/SocialWelfareDashboard";
+import PatronMatron
+    from "../pages/patron-matron/PatronMatron";
 
-
-// =====================================================
-// PATRON & MATRON MANAGEMENT
-// =====================================================
-import PatronMatron from "../pages/patron-matron/PatronMatron";
-
-
-// ===============================
-// REPORTS
-// ===============================
 import Report from "../pages/report/Report";
 
-
-// ===============================
-// AI
-// ===============================
 import AI from "../pages/ai/AI";
 
-
-// ===============================
-// SETTINGS
-// ===============================
 import Settings from "../pages/settings/Settings";
 
 
-// =====================================================
-// CURRENT ROLE / ROUTE ACCESS
-// =====================================================
+/* ============================================================
+   CURRENT ROLE CHECK
+============================================================ */
 
 function useCurrentRoleCheck() {
 
@@ -205,6 +125,7 @@ function useCurrentRoleCheck() {
     } = useRole();
 
     return {
+
         loading: roleLoading,
 
         roleId:
@@ -213,16 +134,18 @@ function useCurrentRoleCheck() {
                 ? null
                 : Number(selectedRoleId),
 
-        profileRoleId: selectedProfileRoleId,
+        profileRoleId:
+            selectedProfileRoleId,
 
-        roleName: selectedRoleName,
+        roleName:
+            selectedRoleName,
     };
 }
 
 
-// =====================================================
-// PERMISSION ROUTE
-// =====================================================
+/* ============================================================
+   SUPER ADMIN OR PERMISSION ROUTE
+============================================================ */
 
 function SuperAdminOrPermissionRoute({
     permission,
@@ -267,9 +190,9 @@ function SuperAdminOrPermissionRoute({
 }
 
 
-// =====================================================
-// MODULE ROLE GATE
-// =====================================================
+/* ============================================================
+   SUPER ADMIN OR ALLOWED ROLE ROUTE
+============================================================ */
 
 function SuperAdminOrAllowedRoleRoute({
     allowedRoles = [],
@@ -308,9 +231,9 @@ function SuperAdminOrAllowedRoleRoute({
 }
 
 
-// =====================================================
-// APP ROUTES
-// =====================================================
+/* ============================================================
+   APP ROUTES
+============================================================ */
 
 export default function AppRoutes() {
 
@@ -318,9 +241,25 @@ export default function AppRoutes() {
 
         <Routes>
 
-            {/* =====================================================
+            {/* =================================================
+                LANDING PAGE
+
+                /
+                ↓
+                LandingPage
+            ================================================= */}
+
+            <Route
+                path="/"
+                element={
+                    <LandingPage />
+                }
+            />
+
+
+            {/* =================================================
                 LOGIN
-            ===================================================== */}
+            ================================================= */}
 
             <Route
                 path="/login"
@@ -330,9 +269,9 @@ export default function AppRoutes() {
             />
 
 
-            {/* =====================================================
+            {/* =================================================
                 ACCESS DENIED
-            ===================================================== */}
+            ================================================= */}
 
             <Route
                 path="/access-denied"
@@ -342,9 +281,9 @@ export default function AppRoutes() {
             />
 
 
-            {/* =====================================================
+            {/* =================================================
                 AUTH TEST
-            ===================================================== */}
+            ================================================= */}
 
             <Route
                 path="/auth-test"
@@ -354,9 +293,9 @@ export default function AppRoutes() {
             />
 
 
-            {/* =====================================================
+            {/* =================================================
                 ACCESS SCOPE TEST
-            ===================================================== */}
+            ================================================= */}
 
             <Route
                 path="/access-scope-test"
@@ -366,9 +305,13 @@ export default function AppRoutes() {
             />
 
 
-            {/* =====================================================
-                MAIN APPLICATION
-            ===================================================== */}
+            {/* =================================================
+                MAIN APPLICATION LAYOUT
+
+                Dashboard is ONLY:
+
+                /dashboard
+            ================================================= */}
 
             <Route
                 path="/"
@@ -377,17 +320,11 @@ export default function AppRoutes() {
                 }
             >
 
-
-                {/* =====================================================
+                {/* =================================================
                     DASHBOARD
-                ===================================================== */}
 
-                <Route
-                    index
-                    element={
-                        <Dashboard />
-                    }
-                />
+                    /dashboard
+                ================================================= */}
 
                 <Route
                     path="dashboard"
@@ -397,9 +334,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     CLASS TEACHER
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="class-teacher/attendance"
@@ -407,16 +344,6 @@ export default function AppRoutes() {
                         <ClassTeacherAttendance />
                     }
                 />
-
-                {/* -----------------------------------------------------
-                    ATTENDANCE ALIAS
-
-                    The existing Class Teacher dashboard may still
-                    navigate to /attendance.
-
-                    This route intentionally points to the same
-                    ClassTeacherAttendance component.
-                ----------------------------------------------------- */}
 
                 <Route
                     path="attendance"
@@ -440,9 +367,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
-                    STUDENTS - VIEW
-                ===================================================== */}
+                {/* =================================================
+                    STUDENTS
+                ================================================= */}
 
                 <Route
                     element={
@@ -469,10 +396,6 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    STUDENTS - CREATE
-                ===================================================== */}
-
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -490,10 +413,6 @@ export default function AppRoutes() {
 
                 </Route>
 
-
-                {/* =====================================================
-                    STUDENTS - EDIT
-                ===================================================== */}
 
                 <Route
                     element={
@@ -513,9 +432,9 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
+                {/* =================================================
                     TEACHERS
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="teachers"
@@ -546,9 +465,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     SUBJECTS
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="subjects"
@@ -579,9 +498,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     CLASSES
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="classes"
@@ -612,9 +531,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
-                    ACADEMIC
-                ===================================================== */}
+                {/* =================================================
+                    ACADEMICS
+                ================================================= */}
 
                 <Route
                     path="academics"
@@ -631,9 +550,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     TEACHER ASSIGNMENT
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="teacher-assignment"
@@ -664,9 +583,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     PERIODS
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="periods"
@@ -676,9 +595,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     TIMETABLE
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="timetable"
@@ -688,19 +607,10 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
-                    TIMETABLE CREATE
-                ===================================================== */}
-
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 3, 4]}
                         />
                     }
                 >
@@ -715,19 +625,10 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    TIMETABLE EDIT
-                ===================================================== */}
-
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 3, 4]}
                         />
                     }
                 >
@@ -742,19 +643,10 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    TIMETABLE SETTINGS
-                ===================================================== */}
-
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 3, 4]}
                         />
                     }
                 >
@@ -769,19 +661,10 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    DUTY SCHEDULE
-                ===================================================== */}
-
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 3, 4]}
                         />
                     }
                 >
@@ -796,9 +679,9 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - ROLE DASHBOARD
-                ===================================================== */}
+                {/* =================================================
+                    EXAMINATION DASHBOARD
+                ================================================= */}
 
                 <Route
                     element={
@@ -818,19 +701,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - LIST / VIEW
-                ===================================================== */}
+                {/* =================================================
+                    EXAMINATION VIEW
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 3, 4]}
                         />
                     }
                 >
@@ -869,17 +747,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - CREATE / EDIT
-                ===================================================== */}
+                {/* =================================================
+                    EXAMINATION CREATE / EDIT / UPLOAD
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                4
-                            ]}
+                            allowedRoles={[1, 4]}
                         />
                     }
                 >
@@ -947,20 +822,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - AI ANALYSIS
-                ===================================================== */}
+                {/* =================================================
+                    AI EXAMINATION ANALYSIS
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4,
-                                5
-                            ]}
+                            allowedRoles={[1, 2, 3, 4, 5]}
                         />
                     }
                 >
@@ -972,9 +841,7 @@ export default function AppRoutes() {
                                     "EXAM_GENERATE_AI_ANALYSIS",
                                     "EXAM_VIEW_AI_REPORT"
                                 ]}
-                                requireAny={
-                                    true
-                                }
+                                requireAny={true}
                             />
                         }
                     >
@@ -991,19 +858,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - APPROVAL
-                ===================================================== */}
+                {/* =================================================
+                    EXAMINATION APPROVAL
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                3,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 3, 4]}
                         />
                     }
                 >
@@ -1016,9 +878,7 @@ export default function AppRoutes() {
                                     "EXAM_APPROVE_SECOND_MASTER",
                                     "EXAM_APPROVE_HEADMASTER"
                                 ]}
-                                requireAny={
-                                    true
-                                }
+                                requireAny={true}
                             />
                         }
                     >
@@ -1035,18 +895,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - ENTER MARKS
-                ===================================================== */}
+                {/* =================================================
+                    ENTER MARKS
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                4,
-                                5
-                            ]}
+                            allowedRoles={[1, 4, 5]}
                         />
                     }
                 >
@@ -1071,18 +927,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - RESULTS ANALYSIS
-                ===================================================== */}
+                {/* =================================================
+                    RESULTS ANALYSIS
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                4
-                            ]}
+                            allowedRoles={[1, 2, 4]}
                         />
                     }
                 >
@@ -1107,16 +959,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - SUBJECT TEACHER UPLOAD
-                ===================================================== */}
+                {/* =================================================
+                    SUBJECT TEACHER UPLOAD
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                5
-                            ]}
+                            allowedRoles={[5]}
                         />
                     }
                 >
@@ -1141,19 +991,14 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    EXAMINATION - PRINTING UNIT
-                ===================================================== */}
+                {/* =================================================
+                    EXAM PRINTING UNIT
+                ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[
-                                1,
-                                2,
-                                4,
-                                7
-                            ]}
+                            allowedRoles={[1, 2, 4, 7]}
                         />
                     }
                 >
@@ -1178,9 +1023,9 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    FINANCE - VIEW
-                ===================================================== */}
+                {/* =================================================
+                    FINANCE VIEW
+                ================================================= */}
 
                 <Route
                     element={
@@ -1214,9 +1059,9 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    FINANCIAL STATEMENTS - READ ONLY
-                ===================================================== */}
+                {/* =================================================
+                    FINANCIAL STATEMENTS
+                ================================================= */}
 
                 <Route
                     path="finance/financial-statements"
@@ -1226,9 +1071,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
-                    FINANCE - MANAGEMENT
-                ===================================================== */}
+                {/* =================================================
+                    FINANCE MANAGEMENT
+                ================================================= */}
 
                 <Route
                     element={
@@ -1283,9 +1128,9 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    COMMUNICATION - GENERAL
-                ===================================================== */}
+                {/* =================================================
+                    COMMUNICATION
+                ================================================= */}
 
                 <Route
                     element={
@@ -1333,9 +1178,9 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    COMMUNICATION - MEETINGS
-                ===================================================== */}
+                {/* =================================================
+                    COMMUNICATION MEETINGS
+                ================================================= */}
 
                 <Route
                     element={
@@ -1355,10 +1200,6 @@ export default function AppRoutes() {
                 </Route>
 
 
-                {/* =====================================================
-                    SHARED MEETING ROOM
-                ===================================================== */}
-
                 <Route
                     path="communication/meeting/:meetingId"
                     element={
@@ -1367,9 +1208,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     SOCIAL WELFARE
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="social-welfare"
@@ -1379,9 +1220,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
-                    PATRON & MATRON MANAGEMENT
-                ===================================================== */}
+                {/* =================================================
+                    PATRON / MATRON
+                ================================================= */}
 
                 <Route
                     path="patron-matron"
@@ -1391,9 +1232,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     REPORTS
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="report"
@@ -1410,9 +1251,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     AI
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="ai"
@@ -1422,9 +1263,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
+                {/* =================================================
                     SETTINGS
-                ===================================================== */}
+                ================================================= */}
 
                 <Route
                     path="settings"
@@ -1434,9 +1275,9 @@ export default function AppRoutes() {
                 />
 
 
-                {/* =====================================================
-                    FALLBACK
-                ===================================================== */}
+                {/* =================================================
+                    UNKNOWN DASHBOARD ROUTES
+                ================================================= */}
 
                 <Route
                     path="*"
