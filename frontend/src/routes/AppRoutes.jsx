@@ -21,6 +21,7 @@ import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/dashboard/Dashboard";
 import TeacherOnDutyDashboard from "../pages/dashboard/TeacherOnDutyDashboard";
+import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
 import Students from "../pages/students/Students";
 import AddStudent from "../pages/students/AddStudent";
@@ -1282,6 +1283,10 @@ export default function AppRoutes() {
                     /teacher-on-duty
 
                     Available to teaching staff
+
+                    IMPORTANT:
+                    This route now opens the actual
+                    TeacherOnDuty module.
                 ================================================= */}
 
                 <Route
@@ -1295,7 +1300,7 @@ export default function AppRoutes() {
                     <Route
                         path="teacher-on-duty"
                         element={
-                            <TeacherOnDutyDashboard />
+                            <TeacherOnDuty />
                         }
                     />
 
