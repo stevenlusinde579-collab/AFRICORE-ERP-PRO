@@ -1182,25 +1182,51 @@ export default function AppRoutes() {
 
                 {/* =================================================
                     COMMUNICATION MEETINGS
+
+                    IMPORTANT:
+
+                    The MEETING LIST must not require
+                    create_meeting.
+
+                    Users without create_meeting must still
+                    be able to open this page and join a meeting.
+
+                    The Create button itself will be controlled
+                    inside CommunicationMeetings.jsx using the
+                    existing create_meeting permission.
+
+                    Therefore:
+
+                    Super Admin
+                    Headmaster
+                    Second Master
+                    Academic Master
+                        → Create + Join
+
+                    Other authenticated users
+                        → Join + Copy Link
+
+                    Do NOT wrap this route with
+                    SuperAdminOrPermissionRoute.
                 ================================================= */}
 
                 <Route
+                    path="communication/meetings"
                     element={
-                        <SuperAdminOrPermissionRoute
-                            permission="create_meeting"
-                        />
+                        <CommunicationMeetings />
                     }
-                >
+                />
 
-                    <Route
-                        path="communication/meetings"
-                        element={
-                            <CommunicationMeetings />
-                        }
-                    />
 
-                </Route>
+                {/* =================================================
+                    SINGLE VIDEO MEETING ROOM
 
+                    Any authenticated user who has the meeting
+                    link can enter the room.
+
+                    create_meeting permission is NOT required
+                    here.
+                ================================================= */}
 
                 <Route
                     path="communication/meeting/:meetingId"
