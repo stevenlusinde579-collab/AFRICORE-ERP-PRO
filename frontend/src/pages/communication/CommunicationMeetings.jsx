@@ -326,9 +326,6 @@ const CommunicationMeetings = () => {
              * -------------------------------------------------
              * CREATE A REAL ROOM CODE
              * -------------------------------------------------
-             *
-             * The room code is separate from the numeric
-             * video_rooms.id.
              */
             const randomPart = Math.random()
                 .toString(36)
@@ -343,10 +340,6 @@ const CommunicationMeetings = () => {
              * -------------------------------------------------
              * BUILD SCHEDULE
              * -------------------------------------------------
-             *
-             * If date/time are provided, create scheduled_start.
-             * If no date is selected, the room can be joined
-             * immediately.
              */
             let scheduledStart = null;
 
@@ -372,18 +365,6 @@ const CommunicationMeetings = () => {
              * -------------------------------------------------
              * INSERT INTO video_rooms
              * -------------------------------------------------
-             *
-             * THIS IS THE IMPORTANT FIX.
-             *
-             * Previously the application created:
-             *
-             * crypto.randomUUID()
-             *
-             * only inside React state.
-             *
-             * Now the room is permanently created in
-             * Supabase and the returned database ID is used
-             * for joining.
              */
             const {
                 data: createdRoom,
@@ -401,10 +382,6 @@ const CommunicationMeetings = () => {
 
                     created_by: user.id,
 
-                    /*
-                     * Use the existing status values expected
-                     * by CommunicationMeeting.jsx.
-                     */
                     status: meetingDate
                         ? "scheduled"
                         : "live",
@@ -457,10 +434,6 @@ const CommunicationMeetings = () => {
 
                 ...createdRoom,
 
-                /*
-                 * IMPORTANT:
-                 * Use the actual numeric database ID.
-                 */
                 id: createdRoom.id,
 
                 title:
@@ -523,9 +496,6 @@ const CommunicationMeetings = () => {
             );
 
 
-            /*
-             * Automatically remove success message.
-             */
             window.setTimeout(() => {
 
                 setSuccessMessage("");
@@ -560,10 +530,14 @@ const CommunicationMeetings = () => {
      * COPY MEETING LINK
      * ---------------------------------------------------------
      *
-     * IMPORTANT:
-     * The link uses the actual database room ID.
+     * IMPORTANT FIX:
      *
-     * CommunicationMeeting.jsx accepts:
+     * The actual route is:
+     *
+     * /communication/meeting/:meetingId
+     *
+     * NOT:
+     *
      * /communication/meetings/:meetingId
      */
     const copyMeetingLink = async (meetingId) => {
@@ -574,7 +548,7 @@ const CommunicationMeetings = () => {
 
 
         const link =
-            `${window.location.origin}/communication/meetings/${encodeURIComponent(
+            `${window.location.origin}/communication/meeting/${encodeURIComponent(
                 String(meetingId)
             )}`;
 
@@ -610,6 +584,21 @@ const CommunicationMeetings = () => {
      * ---------------------------------------------------------
      * JOIN MEETING
      * ---------------------------------------------------------
+     *
+     * IMPORTANT FIX:
+     *
+     * The previous code used:
+     *
+     * /communication/meetings/:meetingId
+     *
+     * which DOES NOT exist in AppRoutes.
+     *
+     * The correct route is:
+     *
+     * /communication/meeting/:meetingId
+     *
+     * This was the reason React Router could fall through
+     * to the Main Dashboard.
      */
     const joinMeeting = (meetingId) => {
 
@@ -619,7 +608,7 @@ const CommunicationMeetings = () => {
 
 
         navigate(
-            `/communication/meetings/${encodeURIComponent(
+            `/communication/meeting/${encodeURIComponent(
                 String(meetingId)
             )}`
         );
@@ -749,8 +738,6 @@ const CommunicationMeetings = () => {
 
             ) : meetings.length === 0 ? (
 
-                /* EMPTY */
-
                 <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
 
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
@@ -781,8 +768,6 @@ const CommunicationMeetings = () => {
 
             ) : filteredMeetings.length === 0 ? (
 
-                /* NO SEARCH RESULTS */
-
                 <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
 
                     <Search className="mx-auto h-10 w-10 text-slate-300" />
@@ -798,8 +783,6 @@ const CommunicationMeetings = () => {
                 </div>
 
             ) : (
-
-                /* MEETINGS */
 
                 <div className="grid gap-4 lg:grid-cols-2">
 
@@ -834,8 +817,6 @@ const CommunicationMeetings = () => {
 
                             </div>
 
-
-                            {/* ROOM CODE */}
 
                             {meeting.room_code && (
 
