@@ -49,6 +49,13 @@ function TeacherOnDutyDashboard() {
     selectedRoleName ||
     "Teacher on Duty";
 
+  /* =========================================================
+     DUTY MODULES
+
+     IMPORTANT:
+     These paths are routes that ACTUALLY EXIST in AppRoutes.jsx.
+  ========================================================= */
+
   const dutyModules = [
     {
       title: "Duty Schedule",
@@ -57,16 +64,16 @@ function TeacherOnDutyDashboard() {
       icon: MdSchedule,
       iconClass:
         "bg-blue-500/10 text-blue-400 border-blue-500/20",
-      path: "/teacher-on-duty",
+      path: "/timetable/duty-schedule",
     },
     {
       title: "Student Supervision",
       description:
-        "Monitor students and maintain proper supervision during duty.",
+        "Access class and student supervision tools during duty.",
       icon: MdSupervisorAccount,
       iconClass:
         "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-      path: "/teacher-on-duty",
+      path: "/class-teacher/subject-teachers",
     },
     {
       title: "Attendance & Latecomers",
@@ -75,34 +82,34 @@ function TeacherOnDutyDashboard() {
       icon: MdAccessTime,
       iconClass:
         "bg-amber-500/10 text-amber-400 border-amber-500/20",
-      path: "/teacher-on-duty",
+      path: "/attendance",
     },
     {
       title: "Incidents & Discipline",
       description:
-        "Record and follow up incidents and discipline matters.",
+        "Access student welfare and discipline-related management.",
       icon: MdReportProblem,
       iconClass:
         "bg-red-500/10 text-red-400 border-red-500/20",
-      path: "/teacher-on-duty",
+      path: "/patron-matron",
     },
     {
       title: "Duty Report",
       description:
-        "Prepare and review the daily teacher-on-duty report.",
+        "Prepare and review school reports related to daily duty.",
       icon: MdAssignment,
       iconClass:
         "bg-purple-500/10 text-purple-400 border-purple-500/20",
-      path: "/teacher-on-duty",
+      path: "/report",
     },
     {
       title: "Duty Handover",
       description:
-        "Pass important duty information to the next responsible staff.",
+        "Access school communication tools for important duty information.",
       icon: MdSwapHoriz,
       iconClass:
         "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-      path: "/teacher-on-duty",
+      path: "/communication",
     },
     {
       title: "Communication",
@@ -114,6 +121,16 @@ function TeacherOnDutyDashboard() {
       path: "/communication",
     },
   ];
+
+  /* =========================================================
+     NAVIGATION
+  ========================================================= */
+
+  const openModule = (path) => {
+    if (!path) return;
+
+    navigate(path);
+  };
 
   return (
     <div className="min-h-full bg-slate-950 text-white">
@@ -136,9 +153,7 @@ function TeacherOnDutyDashboard() {
               <div className="flex items-start gap-4">
 
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-blue-400">
-
                   <MdSupervisorAccount size={36} />
-
                 </div>
 
                 <div>
@@ -219,11 +234,16 @@ function TeacherOnDutyDashboard() {
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-500">
+
             <MdCheckCircle
               size={17}
               className="text-emerald-400"
             />
-            <span>School supervision tools</span>
+
+            <span>
+              School supervision tools
+            </span>
+
           </div>
 
         </div>
@@ -242,8 +262,8 @@ function TeacherOnDutyDashboard() {
               <button
                 key={module.title}
                 type="button"
-                onClick={() => navigate(module.path)}
-                className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-left shadow-lg transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30 hover:bg-slate-900 hover:shadow-2xl"
+                onClick={() => openModule(module.path)}
+                className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-left shadow-lg transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30 hover:bg-slate-900 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               >
 
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-500/5 blur-2xl transition-all group-hover:bg-blue-500/10" />
@@ -314,6 +334,7 @@ function TeacherOnDutyDashboard() {
               <div className="mt-4 flex flex-wrap gap-2">
 
                 {activeRoles.length > 0 ? (
+
                   activeRoles.map((role, index) => {
 
                     const name =
@@ -345,13 +366,17 @@ function TeacherOnDutyDashboard() {
                             Primary
                           </span>
                         )}
+
                       </span>
                     );
                   })
+
                 ) : (
+
                   <span className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300">
                     {roleName}
                   </span>
+
                 )}
 
               </div>
