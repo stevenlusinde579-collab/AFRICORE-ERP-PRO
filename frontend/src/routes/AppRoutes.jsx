@@ -20,6 +20,7 @@ import LandingPage from "../pages/landing/LandingPage";
 import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/dashboard/Dashboard";
+import TeacherOnDutyDashboard from "../pages/dashboard/TeacherOnDutyDashboard";
 
 import Students from "../pages/students/Students";
 import AddStudent from "../pages/students/AddStudent";
@@ -1273,6 +1274,32 @@ export default function AppRoutes() {
                         <Settings />
                     }
                 />
+
+
+                {/* =================================================
+                    TEACHER ON DUTY
+
+                    /teacher-on-duty
+
+                    Available to teaching staff
+                ================================================= */}
+
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 2, 3, 4, 5]}
+                        />
+                    }
+                >
+
+                    <Route
+                        path="teacher-on-duty"
+                        element={
+                            <TeacherOnDutyDashboard />
+                        }
+                    />
+
+                </Route>
 
 
                 {/* =================================================

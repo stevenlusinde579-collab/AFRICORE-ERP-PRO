@@ -69,14 +69,14 @@ function Sidebar() {
 
   /* =======================================================
      SUPER ADMIN DETECTION
-     
+
      We intentionally check:
-     
+
      1. RoleContext isSuperAdmin
      2. selectedRoleIsSuperAdmin
      3. role ID = 1
      4. normalized role name
-     
+
      This prevents the sidebar from disappearing because
      of a role-name mismatch.
   ======================================================= */
@@ -302,6 +302,18 @@ function Sidebar() {
 
     /* =====================================================
        TEACHER ON DUTY
+
+       AVAILABLE TO ALL TEACHING STAFF
+
+       - Headmaster
+       - Deputy Headmaster
+       - Academic Master
+       - Subject Teacher
+       - Class Teacher
+       - Teacher on Duty
+
+       Super Admin automatically gets this because
+       Super Admin receives allMenu.
     ===================================================== */
 
     {
@@ -309,6 +321,11 @@ function Sidebar() {
       path: "/teacher-on-duty",
       icon: <FaUserShield />,
       roles: [
+        "headmaster",
+        "deputy headmaster",
+        "academic master",
+        "subject teacher",
+        "class teacher",
         "teacher on duty"
       ]
     },
@@ -410,11 +427,11 @@ function Sidebar() {
 
   /* =======================================================
      VISIBLE MENU
-     
+
      IMPORTANT:
-     
+
      Super Admin gets ALL menu items.
-     
+
      Other roles continue using the normal role filter.
   ======================================================= */
 
@@ -422,9 +439,9 @@ function Sidebar() {
 
     /* -----------------------------------------------
        SUPER ADMIN
-       
+
        Full system access.
-       ----------------------------------------------- */
+    ----------------------------------------------- */
 
     if (superAdmin) {
 
@@ -435,7 +452,7 @@ function Sidebar() {
 
     /* -----------------------------------------------
        NO ROLE
-       ----------------------------------------------- */
+    ----------------------------------------------- */
 
     if (!currentRole) {
 
@@ -446,7 +463,7 @@ function Sidebar() {
 
     /* -----------------------------------------------
        NORMAL ROLE
-       ----------------------------------------------- */
+    ----------------------------------------------- */
 
     return allMenu.filter(
       (item) =>
