@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
     useCallback,
     useEffect,
     useMemo,
@@ -1497,7 +1497,7 @@ const CommunicationMeeting = () => {
                     );
 
                     showFloatingReaction(
-                        "👏",
+                        "ðŸ‘",
                         displayName
                     );
 
@@ -1533,7 +1533,7 @@ const CommunicationMeeting = () => {
 
                     if (raised) {
                         showFloatingReaction(
-                            "✋",
+                            "âœ‹",
                             displayName
                         );
                     }
@@ -1647,7 +1647,7 @@ const CommunicationMeeting = () => {
                     nextRaised
                 ) {
                     showFloatingReaction(
-                        "✋",
+                        "âœ‹",
                         currentDisplayNameRef.current
                     );
                 }
@@ -1681,7 +1681,7 @@ const CommunicationMeeting = () => {
                 );
 
                 showFloatingReaction(
-                    "👏",
+                    "ðŸ‘",
                     currentDisplayNameRef.current
                 );
 
@@ -2076,11 +2076,7 @@ const CommunicationMeeting = () => {
         video.play?.().catch(
             () => null
         );
-    }, [
-        cameraStarted,
-        localCameraEnabled,
-        screenSharing,
-    ]);
+    }, [screenSharing]);
 
     /*
      * ============================================================
@@ -4326,7 +4322,7 @@ const CommunicationMeeting = () => {
                                 </span>
 
                                 <span>
-                                    •
+                                    â€¢
                                 </span>
 
                                 <span>
@@ -4767,7 +4763,7 @@ const CommunicationMeeting = () => {
                                     title="Applause / Support"
                                 >
                                     <span className="text-lg leading-none">
-                                        👏
+                                        ðŸ‘
                                     </span>
 
                                     {applauseCount >
