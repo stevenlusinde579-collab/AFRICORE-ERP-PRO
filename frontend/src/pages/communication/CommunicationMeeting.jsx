@@ -36,11 +36,6 @@ import {
 
 import { supabase } from "../../services/supabase";
 
-
-// ============================================================
-// WEBRTC CONFIG
-// ============================================================
-
 const ICE_SERVERS = [
     {
         urls: "stun:stun.l.google.com:19302",
@@ -49,11 +44,6 @@ const ICE_SERVERS = [
         urls: "stun:stun1.l.google.com:19302",
     },
 ];
-
-
-// ============================================================
-// HELPERS
-// ============================================================
 
 const getInitials = (name) => {
     const value = String(name || "").trim();
@@ -72,10 +62,10 @@ const getInitials = (name) => {
             .toUpperCase();
     }
 
-    return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`
-        .toUpperCase();
+    return `${parts[0][0] || ""}${
+        parts[parts.length - 1][0] || ""
+    }`.toUpperCase();
 };
-
 
 const normalizeId = (value) => {
     if (
@@ -88,14 +78,11 @@ const normalizeId = (value) => {
     return String(value).trim();
 };
 
-
 const makeRoomChannelName = (roomId) =>
     `video-meeting-${normalizeId(roomId)}`;
 
-
 const isValidRoomId = (value) =>
     String(value || "").trim().length > 0;
-
 
 const formatTime = (value) => {
     if (!value) {
@@ -108,15 +95,11 @@ const formatTime = (value) => {
         return "";
     }
 
-    return date.toLocaleTimeString(
-        [],
-        {
-            hour: "2-digit",
-            minute: "2-digit",
-        }
-    );
+    return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 };
-
 
 const formatDateTime = (value) => {
     if (!value) {
@@ -129,15 +112,11 @@ const formatDateTime = (value) => {
         return "No scheduled time";
     }
 
-    return date.toLocaleString(
-        [],
-        {
-            dateStyle: "medium",
-            timeStyle: "short",
-        }
-    );
+    return date.toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+    });
 };
-
 
 const extractPresenceUsers = (
     presenceState
@@ -148,17 +127,14 @@ const extractPresenceUsers = (
         presenceState || {}
     ).forEach(
         ([key, entries]) => {
-            const list =
-                Array.isArray(entries)
-                    ? entries
-                    : [];
+            const list = Array.isArray(entries)
+                ? entries
+                : [];
 
             list.forEach((entry) => {
-                const userId =
-                    normalizeId(
-                        entry?.user_id ||
-                            key
-                    );
+                const userId = normalizeId(
+                    entry?.user_id || key
+                );
 
                 if (!userId) {
                     return;
@@ -174,69 +150,47 @@ const extractPresenceUsers = (
 
     const seen = new Set();
 
-    return users.filter(
-        (user) => {
-            const userId =
-                normalizeId(
-                    user.user_id
-                );
+    return users.filter((user) => {
+        const userId = normalizeId(
+            user.user_id
+        );
 
-            if (!userId) {
-                return false;
-            }
-
-            if (seen.has(userId)) {
-                return false;
-            }
-
-            seen.add(userId);
-
-            return true;
+        if (!userId) {
+            return false;
         }
-    );
-};
 
+        if (seen.has(userId)) {
+            return false;
+        }
+
+        seen.add(userId);
+
+        return true;
+    });
+};
 
 const getErrorMessage = (
     error,
     fallback
 ) => {
-    if (
-        error?.message
-    ) {
+    if (error?.message) {
         return error.message;
     }
 
-    if (
-        error?.details
-    ) {
+    if (error?.details) {
         return error.details;
     }
 
-    if (
-        error?.hint
-    ) {
+    if (error?.hint) {
         return error.hint;
     }
 
     return fallback;
 };
 
-
-// ============================================================
-// COMPONENT
-// ============================================================
-
 const CommunicationMeeting = () => {
     const navigate = useNavigate();
-
-    const { meetingId } =
-        useParams();
-
-
-    // ========================================================
-    // MEDIA REFS
-    // ========================================================
+    const { meetingId } = useParams();
 
     const localVideoRef =
         useRef(null);
@@ -247,10 +201,8 @@ const CommunicationMeeting = () => {
     const screenStreamRef =
         useRef(null);
 
-
-    // ========================================================
-    // REALTIME / WEBRTC REFS
-    // ========================================================
+    const screenSharingRef =
+        useRef(false);
 
     const channelRef =
         useRef(null);
@@ -267,32 +219,22 @@ const CommunicationMeeting = () => {
     const pendingIceCandidatesRef =
         useRef(new Map());
 
-
-    // ========================================================
-    // REACTION REFS
-    // ========================================================
-
     const reactionTimersRef =
         useRef(new Map());
 
     const localParticipantJoinedAt =
         useRef(null);
 
-
-    // ========================================================
-    // LIFECYCLE REFS
-    // ========================================================
-
     const mountedRef =
         useRef(false);
 
-    const initializingRef =
-        useRef(false);
-
-
-    // ========================================================
-    // WEBRTC DEDUP REFS
-    // ========================================================
+    /*
+     * IMPORTANT:
+     * A generation token prevents an old async initialization
+     * from creating a new channel or peer after React cleanup.
+     */
+    const initializationGenerationRef =
+        useRef(0);
 
     const processedOffersRef =
         useRef(new Set());
@@ -303,14 +245,6 @@ const CommunicationMeeting = () => {
     const processedIceRef =
         useRef(new Set());
 
-
-    // ========================================================
-    // STABLE RUNTIME REFS
-    // IMPORTANT:
-    // These prevent UI state changes from rebuilding
-    // the realtime/WebRTC initialization.
-    // ========================================================
-
     const currentUserIdRef =
         useRef("");
 
@@ -319,11 +253,6 @@ const CommunicationMeeting = () => {
 
     const roomRef =
         useRef(null);
-
-
-    // ========================================================
-    // STATE
-    // ========================================================
 
     const [loading, setLoading] =
         useState(true);
@@ -346,8 +275,10 @@ const CommunicationMeeting = () => {
     const [localMicEnabled, setLocalMicEnabled] =
         useState(true);
 
-    const [localCameraEnabled, setLocalCameraEnabled] =
-        useState(true);
+    const [
+        localCameraEnabled,
+        setLocalCameraEnabled,
+    ] = useState(true);
 
     const [cameraStarted, setCameraStarted] =
         useState(false);
@@ -358,20 +289,26 @@ const CommunicationMeeting = () => {
     const [chatOpen, setChatOpen] =
         useState(false);
 
-    const [participantsOpen, setParticipantsOpen] =
-        useState(false);
+    const [
+        participantsOpen,
+        setParticipantsOpen,
+    ] = useState(false);
 
     const [settingsOpen, setSettingsOpen] =
         useState(false);
 
-    const [raiseHandEnabled, setRaiseHandEnabled] =
-        useState(false);
+    const [
+        raiseHandEnabled,
+        setRaiseHandEnabled,
+    ] = useState(false);
 
     const [applauseCount, setApplauseCount] =
         useState(0);
 
-    const [floatingReactions, setFloatingReactions] =
-        useState([]);
+    const [
+        floatingReactions,
+        setFloatingReactions,
+    ] = useState([]);
 
     const [messages, setMessages] =
         useState([]);
@@ -382,50 +319,40 @@ const CommunicationMeeting = () => {
     const [copySuccess, setCopySuccess] =
         useState(false);
 
-    const [endingMeeting, setEndingMeeting] =
-        useState(false);
+    const [
+        endingMeeting,
+        setEndingMeeting,
+    ] = useState(false);
 
-    const [remoteStreamVersion, setRemoteStreamVersion] =
-        useState(0);
+    const [
+        remoteStreamVersion,
+        setRemoteStreamVersion,
+    ] = useState(0);
 
+    const currentUserId = useMemo(
+        () =>
+            normalizeId(
+                currentUser?.id
+            ),
+        [currentUser]
+    );
 
-    // ========================================================
-    // DERIVED DATA
-    // ========================================================
+    const currentDisplayName = useMemo(
+        () =>
+            profile?.full_name ||
+            currentUser?.email ||
+            "Participant",
+        [profile, currentUser]
+    );
 
-    const currentUserId =
-        useMemo(
-            () =>
-                normalizeId(
-                    currentUser?.id
-                ),
-            [currentUser]
-        );
-
-
-    const currentDisplayName =
-        useMemo(
-            () =>
-                profile?.full_name ||
-                currentUser?.email ||
-                "Participant",
-            [
-                profile,
-                currentUser,
-            ]
-        );
-
-
-    const joinLink =
-        useMemo(
-            () =>
-                typeof window !==
-                    "undefined"
-                    ? `${window.location.origin}/communication/meetings/${meetingId}`
-                    : "",
-            [meetingId]
-        );
-
+    const joinLink = useMemo(
+        () =>
+            typeof window !==
+            "undefined"
+                ? `${window.location.origin}/communication/meetings/${meetingId}`
+                : "",
+        [meetingId]
+    );
 
     const remoteParticipantCount =
         useMemo(
@@ -434,102 +361,82 @@ const CommunicationMeeting = () => {
                     (participant) =>
                         normalizeId(
                             participant.user_id
-                        ) !==
-                        currentUserId
+                        ) !== currentUserId
                 ).length,
-            [
-                participants,
-                currentUserId,
-            ]
+            [participants, currentUserId]
         );
-
-
-    // ========================================================
-    // KEEP RUNTIME REFS CURRENT
-    // ========================================================
 
     useEffect(() => {
         currentUserIdRef.current =
             currentUserId;
     }, [currentUserId]);
 
-
     useEffect(() => {
         currentDisplayNameRef.current =
             currentDisplayName;
     }, [currentDisplayName]);
 
-
     useEffect(() => {
-        roomRef.current =
-            room;
+        roomRef.current = room;
     }, [room]);
 
+    useEffect(() => {
+        screenSharingRef.current =
+            screenSharing;
+    }, [screenSharing]);
 
-    // ========================================================
-    // STOP ALL MEDIA
-    // ========================================================
+    /*
+     * ============================================================
+     * STOP MEDIA
+     * ============================================================
+     */
 
-    const stopAllMedia =
-        useCallback(() => {
-            if (
-                localStreamRef.current
-            ) {
+    const stopAllMedia = useCallback(
+        () => {
+            if (localStreamRef.current) {
                 localStreamRef.current
                     .getTracks()
-                    .forEach(
-                        (track) => {
-                            try {
-                                track.stop();
-                            } catch {
-                                // Ignore cleanup errors.
-                            }
-                        }
-                    );
+                    .forEach((track) => {
+                        try {
+                            track.stop();
+                        } catch {}
+                    });
             }
 
-            if (
-                screenStreamRef.current
-            ) {
+            if (screenStreamRef.current) {
                 screenStreamRef.current
                     .getTracks()
-                    .forEach(
-                        (track) => {
-                            try {
-                                track.stop();
-                            } catch {
-                                // Ignore cleanup errors.
-                            }
-                        }
-                    );
+                    .forEach((track) => {
+                        try {
+                            track.stop();
+                        } catch {}
+                    });
             }
 
-            localStreamRef.current =
-                null;
+            localStreamRef.current = null;
+            screenStreamRef.current = null;
+            screenSharingRef.current = false;
 
-            screenStreamRef.current =
-                null;
+            if (mountedRef.current) {
+                setCameraStarted(false);
+                setScreenSharing(false);
+            }
 
-            setCameraStarted(false);
-
-            setScreenSharing(false);
-
-            if (
-                localVideoRef.current
-            ) {
+            if (localVideoRef.current) {
                 try {
                     localVideoRef.current.srcObject =
                         null;
-                } catch {
-                    // Ignore cleanup errors.
-                }
+                } catch {}
             }
-        }, []);
+        },
+        []
+    );
 
-
-    // ========================================================
-    // CLOSE ONE PEER
-    // ========================================================
+    /*
+     * ============================================================
+     * CLOSE ONE PEER
+     * ============================================================
+     */
 
     const closePeerConnection =
         useCallback(
@@ -550,25 +457,16 @@ const CommunicationMeeting = () => {
 
                 if (peer) {
                     try {
-                        peer.ontrack =
-                            null;
-
-                        peer.onicecandidate =
-                            null;
-
+                        peer.ontrack = null;
+                        peer.onicecandidate = null;
                         peer.onconnectionstatechange =
                             null;
-
                         peer.oniceconnectionstatechange =
                             null;
-
                         peer.onnegotiationneeded =
                             null;
-
                         peer.close();
-                    } catch {
-                        // Ignore peer cleanup errors.
-                    }
+                    } catch {}
                 }
 
                 peerConnectionsRef.current.delete(
@@ -587,9 +485,7 @@ const CommunicationMeeting = () => {
                     userId
                 );
 
-                if (
-                    mountedRef.current
-                ) {
+                if (mountedRef.current) {
                     setRemoteStreamVersion(
                         (value) =>
                             value + 1
@@ -599,49 +495,36 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // CLOSE ALL PEERS
-    // ========================================================
+    /*
+     * ============================================================
+     * CLOSE ALL PEERS
+     * ============================================================
+     */
 
     const closeAllPeerConnections =
         useCallback(() => {
             peerConnectionsRef.current.forEach(
                 (peer) => {
                     try {
-                        peer.ontrack =
-                            null;
-
-                        peer.onicecandidate =
-                            null;
-
+                        peer.ontrack = null;
+                        peer.onicecandidate = null;
                         peer.onconnectionstatechange =
                             null;
-
                         peer.oniceconnectionstatechange =
                             null;
-
                         peer.onnegotiationneeded =
                             null;
-
                         peer.close();
-                    } catch {
-                        // Ignore cleanup errors.
-                    }
+                    } catch {}
                 }
             );
 
             peerConnectionsRef.current.clear();
-
             remoteStreamsRef.current.clear();
-
             remoteVideoRefs.current.clear();
-
             pendingIceCandidatesRef.current.clear();
 
-            if (
-                mountedRef.current
-            ) {
+            if (mountedRef.current) {
                 setRemoteStreamVersion(
                     (value) =>
                         value + 1
@@ -649,10 +532,11 @@ const CommunicationMeeting = () => {
             }
         }, []);
 
-
-    // ========================================================
-    // UPDATE PARTICIPANT PRESENCE
-    // ========================================================
+    /*
+     * ============================================================
+     * PRESENCE
+     * ============================================================
+     */
 
     const updateParticipantPresence =
         useCallback(
@@ -731,10 +615,11 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // FLUSH ICE CANDIDATES
-    // ========================================================
+    /*
+     * ============================================================
+     * ICE QUEUE
+     * ============================================================
+     */
 
     const flushPendingIceCandidates =
         useCallback(
@@ -759,9 +644,7 @@ const CommunicationMeeting = () => {
                         userId
                     ) || [];
 
-                if (
-                    !queued.length
-                ) {
+                if (!queued.length) {
                     return;
                 }
 
@@ -791,10 +674,11 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // SEND REALTIME
-    // ========================================================
+    /*
+     * ============================================================
+     * REALTIME SEND
+     * ============================================================
+     */
 
     const sendRealtime =
         useCallback(
@@ -831,10 +715,11 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // CREATE PEER CONNECTION
-    // ========================================================
+    /*
+     * ============================================================
+     * CREATE PEER CONNECTION
+     * ============================================================
+     */
 
     const createPeerConnection =
         useCallback(
@@ -853,8 +738,7 @@ const CommunicationMeeting = () => {
                 if (
                     !userId ||
                     !localUserId ||
-                    userId ===
-                        localUserId
+                    userId === localUserId
                 ) {
                     return null;
                 }
@@ -868,47 +752,19 @@ const CommunicationMeeting = () => {
                     );
                 }
 
+                /*
+                 * IMPORTANT:
+                 * Never renegotiate just because another presence
+                 * event asks for an offer. One peer must own the
+                 * initial offer. The caller already uses the
+                 * deterministic smaller-user-ID rule.
+                 */
                 const existingPeer =
                     peerConnectionsRef.current.get(
                         userId
                     );
 
-                if (
-                    existingPeer
-                ) {
-                    if (
-                        shouldCreateOffer &&
-                        existingPeer.signalingState ===
-                            "stable"
-                    ) {
-                        try {
-                            const offer =
-                                await existingPeer.createOffer();
-
-                            await existingPeer.setLocalDescription(
-                                offer
-                            );
-
-                            await sendRealtime(
-                                "webrtc-offer",
-                                {
-                                    from:
-                                        localUserId,
-                                    to:
-                                        userId,
-                                    offer,
-                                }
-                            );
-                        } catch (
-                            offerError
-                        ) {
-                            console.warn(
-                                "Existing peer renegotiation failed:",
-                                offerError
-                            );
-                        }
-                    }
-
+                if (existingPeer) {
                     return existingPeer;
                 }
 
@@ -925,78 +781,80 @@ const CommunicationMeeting = () => {
 
                 localStream
                     .getTracks()
-                    .forEach(
-                        (track) => {
-                            try {
-                                peer.addTrack(
-                                    track,
-                                    localStream
-                                );
-                            } catch (
-                                trackError
-                            ) {
-                                console.warn(
-                                    "Unable to add local track:",
-                                    trackError
-                                );
-                            }
-                        }
-                    );
-
-
-                peer.ontrack =
-                    (event) => {
-                        const incomingStream =
-                            event.streams?.[0] ||
-                            remoteStreamsRef.current.get(
-                                userId
+                    .forEach((track) => {
+                        try {
+                            peer.addTrack(
+                                track,
+                                localStream
                             );
-
-                        if (
-                            !incomingStream
+                        } catch (
+                            trackError
                         ) {
-                            return;
+                            console.warn(
+                                "Unable to add local track:",
+                                trackError
+                            );
                         }
+                    });
 
-                        remoteStreamsRef.current.set(
-                            userId,
-                            incomingStream
+                peer.ontrack = (
+                    event
+                ) => {
+                    /*
+                     * Ignore callbacks from an obsolete peer.
+                     */
+                    if (
+                        peerConnectionsRef.current.get(
+                            userId
+                        ) !== peer
+                    ) {
+                        return;
+                    }
+
+                    const incomingStream =
+                        event.streams?.[0] ||
+                        remoteStreamsRef.current.get(
+                            userId
                         );
 
-                        if (
-                            mountedRef.current
-                        ) {
-                            setRemoteStreamVersion(
-                                (value) =>
-                                    value + 1
-                            );
-                        }
+                    if (!incomingStream) {
+                        return;
+                    }
 
-                        const element =
-                            remoteVideoRefs.current.get(
-                                userId
-                            );
+                    remoteStreamsRef.current.set(
+                        userId,
+                        incomingStream
+                    );
 
-                        if (
-                            element &&
-                            element.srcObject !==
-                                incomingStream
-                        ) {
-                            try {
-                                element.srcObject =
-                                    incomingStream;
+                    if (mountedRef.current) {
+                        setRemoteStreamVersion(
+                            (value) =>
+                                value + 1
+                        );
+                    }
 
-                                element
-                                    .play?.()
-                                    .catch(
-                                        () => null
-                                    );
-                            } catch {
-                                // Ignore attachment errors.
-                            }
-                        }
-                    };
+                    const element =
+                        remoteVideoRefs.current.get(
+                            userId
+                        );
 
+                    if (
+                        element &&
+                        element.srcObject !==
+                            incomingStream
+                    ) {
+                        try {
+                            element.srcObject =
+                                incomingStream;
+
+                            element
+                                .play?.()
+                                .catch(
+                                    () => null
+                                );
+                        } catch {}
+                    }
+                };
 
                 peer.onicecandidate =
                     async (event) => {
@@ -1006,22 +864,48 @@ const CommunicationMeeting = () => {
                             return;
                         }
 
+                        /*
+                         * Do not send ICE from an obsolete peer.
+                         */
+                        if (
+                            peerConnectionsRef.current.get(
+                                userId
+                            ) !== peer
+                        ) {
+                            return;
+                        }
+
                         await sendRealtime(
                             "webrtc-ice",
                             {
                                 from:
                                     localUserId,
-                                to:
-                                    userId,
+                                to: userId,
                                 candidate:
                                     event.candidate,
                             }
                         );
                     };
 
-
+                /*
+                 * IMPORTANT:
+                 *
+                 * "disconnected" is transient.
+                 * Do NOT close the peer here.
+                 */
                 peer.onconnectionstatechange =
                     () => {
+                        /*
+                         * This callback may belong to an old peer.
+                         */
+                        if (
+                            peerConnectionsRef.current.get(
+                                userId
+                            ) !== peer
+                        ) {
+                            return;
+                        }
+
                         const state =
                             peer.connectionState;
 
@@ -1034,43 +918,29 @@ const CommunicationMeeting = () => {
                             closePeerConnection(
                                 userId
                             );
-
-                            return;
-                        }
-
-                        if (
-                            state ===
-                            "disconnected"
-                        ) {
-                            window.setTimeout(
-                                () => {
-                                    if (
-                                        peer.connectionState ===
-                                            "disconnected" ||
-                                        peer.connectionState ===
-                                            "failed"
-                                    ) {
-                                        closePeerConnection(
-                                            userId
-                                        );
-                                    }
-                                },
-                                5000
-                            );
                         }
                     };
 
-
+                /*
+                 * ICE "disconnected" is also transient.
+                 * Only "failed" requires cleanup.
+                 */
                 peer.oniceconnectionstatechange =
                     () => {
+                        if (
+                            peerConnectionsRef.current.get(
+                                userId
+                            ) !== peer
+                        ) {
+                            return;
+                        }
+
                         const state =
                             peer.iceConnectionState;
 
                         if (
                             state ===
-                                "failed" ||
-                            state ===
-                                "closed"
+                            "failed"
                         ) {
                             closePeerConnection(
                                 userId
@@ -1078,25 +948,54 @@ const CommunicationMeeting = () => {
                         }
                     };
 
-
                 if (
                     shouldCreateOffer
                 ) {
                     try {
+                        /*
+                         * Only the deterministic offer owner should
+                         * normally reach this branch.
+                         */
+                        if (
+                            localUserId >=
+                            userId
+                        ) {
+                            return peer;
+                        }
+
                         const offer =
                             await peer.createOffer();
+
+                        /*
+                         * Peer could have been replaced while
+                         * createOffer() was running.
+                         */
+                        if (
+                            peerConnectionsRef.current.get(
+                                userId
+                            ) !== peer
+                        ) {
+                            return null;
+                        }
 
                         await peer.setLocalDescription(
                             offer
                         );
+
+                        if (
+                            peerConnectionsRef.current.get(
+                                userId
+                            ) !== peer
+                        ) {
+                            return null;
+                        }
 
                         await sendRealtime(
                             "webrtc-offer",
                             {
                                 from:
                                     localUserId,
-                                to:
-                                    userId,
+                                to: userId,
                                 offer,
                             }
                         );
@@ -1108,9 +1007,15 @@ const CommunicationMeeting = () => {
                             offerError
                         );
 
-                        closePeerConnection(
-                            userId
-                        );
+                        if (
+                            peerConnectionsRef.current.get(
+                                userId
+                            ) === peer
+                        ) {
+                            closePeerConnection(
+                                userId
+                            );
+                        }
 
                         throw offerError;
                     }
@@ -1124,10 +1029,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // HANDLE OFFER
-    // ========================================================
+    /*
+     * ============================================================
+     * HANDLE OFFER
+     * ============================================================
+     */
 
     const handleOffer =
         useCallback(
@@ -1153,10 +1059,8 @@ const CommunicationMeeting = () => {
                     !from ||
                     !to ||
                     !offer ||
-                    to !==
-                        localUserId ||
-                    from ===
-                        localUserId
+                    to !== localUserId ||
+                    from === localUserId
                 ) {
                     return;
                 }
@@ -1189,17 +1093,59 @@ const CommunicationMeeting = () => {
                         );
                 }
 
-                if (
-                    !peer
-                ) {
+                if (!peer) {
                     return;
                 }
 
                 if (
+                    peerConnectionsRef.current.get(
+                        from
+                    ) !== peer
+                ) {
+                    return;
+                }
+
+                /*
+                 * Perfect-negotiation style collision handling.
+                 *
+                 * Smaller ID is the deterministic offer owner.
+                 * The larger ID is polite and may rollback its
+                 * own local offer when a collision occurs.
+                 */
+                if (
+                    peer.signalingState ===
+                    "have-local-offer"
+                ) {
+                    const polite =
+                        localUserId >
+                        from;
+
+                    if (!polite) {
+                        return;
+                    }
+
+                    try {
+                        await peer.setLocalDescription(
+                            {
+                                type:
+                                    "rollback",
+                            }
+                        );
+                    } catch (
+                        rollbackError
+                    ) {
+                        console.warn(
+                            "WebRTC offer collision rollback failed:",
+                            rollbackError
+                        );
+
+                        return;
+                    }
+                }
+
+                if (
                     peer.signalingState !==
-                        "stable" &&
-                    peer.signalingState !==
-                        "have-local-offer"
+                    "stable"
                 ) {
                     return;
                 }
@@ -1210,6 +1156,14 @@ const CommunicationMeeting = () => {
                             offer
                         )
                     );
+
+                    if (
+                        peerConnectionsRef.current.get(
+                            from
+                        ) !== peer
+                    ) {
+                        return;
+                    }
 
                     await flushPendingIceCandidates(
                         from,
@@ -1223,13 +1177,20 @@ const CommunicationMeeting = () => {
                         answer
                     );
 
+                    if (
+                        peerConnectionsRef.current.get(
+                            from
+                        ) !== peer
+                    ) {
+                        return;
+                    }
+
                     await sendRealtime(
                         "webrtc-answer",
                         {
                             from:
                                 localUserId,
-                            to:
-                                from,
+                            to: from,
                             answer,
                         }
                     );
@@ -1249,10 +1210,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // HANDLE ANSWER
-    // ========================================================
+    /*
+     * ============================================================
+     * HANDLE ANSWER
+     * ============================================================
+     */
 
     const handleAnswer =
         useCallback(
@@ -1277,10 +1239,8 @@ const CommunicationMeeting = () => {
                     !from ||
                     !to ||
                     !answer ||
-                    to !==
-                        localUserId ||
-                    from ===
-                        localUserId
+                    to !== localUserId ||
+                    from === localUserId
                 ) {
                     return;
                 }
@@ -1305,9 +1265,7 @@ const CommunicationMeeting = () => {
                         from
                     );
 
-                if (
-                    !peer
-                ) {
+                if (!peer) {
                     return;
                 }
 
@@ -1343,10 +1301,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // HANDLE ICE
-    // ========================================================
+    /*
+     * ============================================================
+     * HANDLE ICE
+     * ============================================================
+     */
 
     const handleIceCandidate =
         useCallback(
@@ -1371,10 +1330,8 @@ const CommunicationMeeting = () => {
                     !from ||
                     !to ||
                     !candidate ||
-                    to !==
-                        localUserId ||
-                    from ===
-                        localUserId
+                    to !== localUserId ||
+                    from === localUserId
                 ) {
                     return;
                 }
@@ -1408,9 +1365,7 @@ const CommunicationMeeting = () => {
                             from
                         ) || [];
 
-                    queue.push(
-                        candidate
-                    );
+                    queue.push(candidate);
 
                     pendingIceCandidatesRef.current.set(
                         from,
@@ -1438,10 +1393,11 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // FLOATING REACTION
-    // ========================================================
+    /*
+     * ============================================================
+     * REACTIONS
+     * ============================================================
+     */
 
     const showFloatingReaction =
         useCallback(
@@ -1502,14 +1458,6 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // HANDLE REMOTE REACTION
-    // IMPORTANT:
-    // Use refs instead of UI state as dependencies.
-    // This keeps the realtime callbacks stable.
-    // ========================================================
-
     const handleRemoteReaction =
         useCallback(
             (payload) => {
@@ -1530,8 +1478,7 @@ const CommunicationMeeting = () => {
 
                 if (
                     !from ||
-                    from ===
-                        localUserId
+                    from === localUserId
                 ) {
                     return;
                 }
@@ -1574,8 +1521,7 @@ const CommunicationMeeting = () => {
                                 ) =>
                                     normalizeId(
                                         participant.user_id
-                                    ) ===
-                                    from
+                                    ) === from
                                         ? {
                                               ...participant,
                                               hand_raised:
@@ -1598,10 +1544,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // TOGGLE RAISE HAND
-    // ========================================================
+    /*
+     * ============================================================
+     * RAISE HAND
+     * ============================================================
+     */
 
     const toggleRaiseHand =
         useCallback(
@@ -1712,10 +1659,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // APPLAUSE
-    // ========================================================
+    /*
+     * ============================================================
+     * APPLAUSE
+     * ============================================================
+     */
 
     const sendApplause =
         useCallback(
@@ -1723,9 +1671,7 @@ const CommunicationMeeting = () => {
                 const localUserId =
                     currentUserIdRef.current;
 
-                if (
-                    !localUserId
-                ) {
+                if (!localUserId) {
                     return;
                 }
 
@@ -1757,10 +1703,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // REMOTE LEAVE
-    // ========================================================
+    /*
+     * ============================================================
+     * REMOTE LEAVE
+     * ============================================================
+     */
 
     const handleRemoteLeave =
         useCallback(
@@ -1787,8 +1734,7 @@ const CommunicationMeeting = () => {
                             ) =>
                                 normalizeId(
                                     participant.user_id
-                                ) !==
-                                userId
+                                ) !== userId
                         )
                 );
             },
@@ -1797,10 +1743,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // REMOTE MEDIA STATE
-    // ========================================================
+    /*
+     * ============================================================
+     * REMOTE MEDIA STATE
+     * ============================================================
+     */
 
     const handleRemoteMediaState =
         useCallback(
@@ -1839,10 +1786,11 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // REMOTE CHAT
-    // ========================================================
+    /*
+     * ============================================================
+     * REMOTE CHAT
+     * ============================================================
+     */
 
     const handleRemoteChat =
         useCallback(
@@ -1892,10 +1840,11 @@ const CommunicationMeeting = () => {
             []
         );
 
-
-    // ========================================================
-    // BROADCAST HANDLER
-    // ========================================================
+    /*
+     * ============================================================
+     * BROADCAST HANDLER
+     * ============================================================
+     */
 
     const handleBroadcast =
         useCallback(
@@ -1965,32 +1914,28 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // START LOCAL MEDIA
-    // ========================================================
+    /*
+     * ============================================================
+     * START LOCAL MEDIA
+     * ============================================================
+     */
 
     const startLocalMedia =
         useCallback(
-            async () => {
+            async (
+                generation
+            ) => {
                 if (
                     localStreamRef.current
                 ) {
-                    setCameraStarted(
-                        true
-                    );
-
                     if (
-                        localVideoRef.current
+                        mountedRef.current &&
+                        initializationGenerationRef.current ===
+                            generation
                     ) {
-                        localVideoRef.current.srcObject =
-                            localStreamRef.current;
-
-                        localVideoRef.current
-                            .play?.()
-                            .catch(
-                                () => null
-                            );
+                        setCameraStarted(
+                            true
+                        );
                     }
 
                     return localStreamRef.current;
@@ -2022,6 +1967,29 @@ const CommunicationMeeting = () => {
                         }
                     );
 
+                /*
+                 * The permission dialog may take a long time.
+                 * If the component was already cleaned up while
+                 * waiting, immediately stop this stale stream.
+                 */
+                if (
+                    !mountedRef.current ||
+                    initializationGenerationRef.current !==
+                        generation
+                ) {
+                    stream
+                        .getTracks()
+                        .forEach(
+                            (track) => {
+                                try {
+                                    track.stop();
+                                } catch {}
+                            }
+                        );
+
+                    return null;
+                }
+
                 localStreamRef.current =
                     stream;
 
@@ -2049,28 +2017,76 @@ const CommunicationMeeting = () => {
                     true
                 );
 
-                if (
-                    localVideoRef.current
-                ) {
-                    localVideoRef.current.srcObject =
-                        stream;
-
-                    localVideoRef.current
-                        .play?.()
-                        .catch(
-                            () => null
-                        );
-                }
+                /*
+                 * Do not depend on the video element existing here.
+                 * The dedicated local-video effect below handles it
+                 * after React renders the self-view.
+                 */
 
                 return stream;
             },
             []
         );
 
+    /*
+     * ============================================================
+     * LOCAL VIDEO ATTACHMENT
+     *
+     * IMPORTANT FIX:
+     *
+     * The video element remains mounted all the time.
+     * We only change its visibility using opacity.
+     *
+     * This prevents React from destroying/recreating the video
+     * element when the camera is toggled.
+     * ============================================================
+     */
 
-    // ========================================================
-    // BROADCAST MEDIA STATE
-    // ========================================================
+    useEffect(() => {
+        const video =
+            localVideoRef.current;
+
+        if (!video) {
+            return;
+        }
+
+        const stream =
+            screenSharing &&
+            screenStreamRef.current
+                ? screenStreamRef.current
+                : localStreamRef.current;
+
+        if (!stream) {
+            video.srcObject = null;
+            return;
+        }
+
+        if (
+            video.srcObject !==
+            stream
+        ) {
+            video.srcObject =
+                stream;
+        }
+
+        video.muted = true;
+        video.playsInline = true;
+        video.autoplay = true;
+
+        video.play?.().catch(
+            () => null
+        );
+    }, [
+        cameraStarted,
+        localCameraEnabled,
+        screenSharing,
+    ]);
+
+    /*
+     * ============================================================
+     * BROADCAST MEDIA STATE
+     * ============================================================
+     */
 
     const broadcastMediaState =
         useCallback(
@@ -2082,12 +2098,14 @@ const CommunicationMeeting = () => {
                     {
                         user_id:
                             currentUserIdRef.current,
+
                         mic_enabled:
                             overrides.mic_enabled ??
                             localStreamRef.current
                                 ?.getAudioTracks?.()[0]
                                 ?.enabled ??
                             localMicEnabled,
+
                         camera_enabled:
                             overrides.camera_enabled ??
                             localStreamRef.current
@@ -2104,10 +2122,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // TOGGLE MIC
-    // ========================================================
+    /*
+     * ============================================================
+     * TOGGLE MIC
+     * ============================================================
+     */
 
     const toggleMic =
         useCallback(
@@ -2140,10 +2159,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // TOGGLE CAMERA
-    // ========================================================
+    /*
+     * ============================================================
+     * TOGGLE CAMERA
+     * ============================================================
+     */
 
     const toggleCamera =
         useCallback(
@@ -2171,34 +2191,22 @@ const CommunicationMeeting = () => {
                         nextEnabled,
                 });
 
-                if (
-                    localVideoRef.current &&
-                    localStreamRef.current
-                ) {
-                    if (
-                        localVideoRef.current.srcObject !==
-                        localStreamRef.current
-                    ) {
-                        localVideoRef.current.srcObject =
-                            localStreamRef.current;
-                    }
-
-                    localVideoRef.current
-                        .play?.()
-                        .catch(
-                            () => null
-                        );
-                }
+                /*
+                 * Do NOT manually replace the local video stream
+                 * here while screen sharing. The local-video effect
+                 * owns which stream is displayed.
+                 */
             },
             [
                 broadcastMediaState,
             ]
         );
 
-
-    // ========================================================
-    // SCREEN SHARE
-    // ========================================================
+    /*
+     * ============================================================
+     * SCREEN SHARE
+     * ============================================================
+     */
 
     const toggleScreenShare =
         useCallback(
@@ -2209,75 +2217,82 @@ const CommunicationMeeting = () => {
                     return;
                 }
 
+                /*
+                 * IMPORTANT:
+                 * Read from ref instead of captured React state.
+                 *
+                 * This makes browser's screenTrack.onended callback
+                 * reliable even when the callback was created while
+                 * screenSharing had a different value.
+                 */
                 if (
-                    screenSharing
+                    screenSharingRef.current
                 ) {
                     const cameraTrack =
                         localStreamRef.current
                             .getVideoTracks?.()[0];
 
-                    peerConnectionsRef.current.forEach(
-                        (peer) => {
-                            const sender =
-                                peer
-                                    .getSenders?.()
-                                    ?.find(
-                                        (
-                                            item
-                                        ) =>
-                                            item.track
-                                                ?.kind ===
-                                            "video"
-                                    );
+                    if (
+                        cameraTrack
+                    ) {
+                        peerConnectionsRef.current.forEach(
+                            (peer) => {
+                                const sender =
+                                    peer
+                                        .getSenders?.()
+                                        ?.find(
+                                            (
+                                                item
+                                            ) =>
+                                                item.track
+                                                    ?.kind ===
+                                                "video"
+                                        );
 
-                            if (
-                                sender &&
-                                cameraTrack
-                            ) {
-                                sender
-                                    .replaceTrack(
-                                        cameraTrack
-                                    )
-                                    .catch(
-                                        () =>
-                                            null
-                                    );
-                            }
-                        }
-                    );
-
-                    screenStreamRef.current
-                        ?.getTracks?.()
-                        .forEach(
-                            (track) => {
-                                try {
-                                    track.stop();
-                                } catch {
-                                    // Ignore.
+                                if (
+                                    sender
+                                ) {
+                                    sender
+                                        .replaceTrack(
+                                            cameraTrack
+                                        )
+                                        .catch(
+                                            () =>
+                                                null
+                                        );
                                 }
                             }
                         );
+                    }
+
+                    if (
+                        screenStreamRef.current
+                    ) {
+                        screenStreamRef.current
+                            .getTracks()
+                            .forEach(
+                                (track) => {
+                                    try {
+                                        track.stop();
+                                    } catch {}
+                                }
+                            );
+                    }
 
                     screenStreamRef.current =
                         null;
+
+                    screenSharingRef.current =
+                        false;
 
                     setScreenSharing(
                         false
                     );
 
-                    if (
-                        localVideoRef.current
-                    ) {
-                        localVideoRef.current.srcObject =
-                            localStreamRef.current;
-
-                        localVideoRef.current
-                            .play?.()
-                            .catch(
-                                () => null
-                            );
-                    }
-
+                    /*
+                     * The local-video effect restores the camera
+                     * stream automatically.
+                     */
                     return;
                 }
 
@@ -2301,12 +2316,42 @@ const CommunicationMeeting = () => {
                             }
                         );
 
+                    /*
+                     * User may have left the meeting while the
+                     * browser was waiting for screen-share selection.
+                     */
+                    if (
+                        !mountedRef.current
+                    ) {
+                        screenStream
+                            .getTracks()
+                            .forEach(
+                                (track) => {
+                                    try {
+                                        track.stop();
+                                    } catch {}
+                                }
+                            );
+
+                        return;
+                    }
+
                     const screenTrack =
                         screenStream.getVideoTracks()[0];
 
                     if (
                         !screenTrack
                     ) {
+                        screenStream
+                            .getTracks()
+                            .forEach(
+                                (track) => {
+                                    try {
+                                        track.stop();
+                                    } catch {}
+                                }
+                            );
+
                         return;
                     }
 
@@ -2342,34 +2387,26 @@ const CommunicationMeeting = () => {
                         }
                     );
 
-                    if (
-                        localVideoRef.current
-                    ) {
-                        localVideoRef.current.srcObject =
-                            screenStream;
-
-                        localVideoRef.current
-                            .play?.()
-                            .catch(
-                                () => null
-                            );
-                    }
+                    screenSharingRef.current =
+                        true;
 
                     setScreenSharing(
                         true
                     );
 
+                    /*
+                     * Browser stop-sharing button.
+                     */
                     screenTrack.onended =
                         () => {
                             if (
                                 mountedRef.current &&
                                 screenStreamRef.current
                             ) {
-                                toggleScreenShare()
-                                    .catch(
-                                        () =>
-                                            null
-                                    );
+                                toggleScreenShare().catch(
+                                    () =>
+                                        null
+                                );
                             }
                         };
                 } catch (
@@ -2388,15 +2425,14 @@ const CommunicationMeeting = () => {
                     }
                 }
             },
-            [
-                screenSharing,
-            ]
+            []
         );
 
-
-    // ========================================================
-    // CHAT
-    // ========================================================
+    /*
+     * ============================================================
+     * CHAT
+     * ============================================================
+     */
 
     const sendChatMessage =
         useCallback(
@@ -2451,10 +2487,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // COPY LINK
-    // ========================================================
+    /*
+     * ============================================================
+     * COPY LINK
+     * ============================================================
+     */
 
     const copyJoinLink =
         useCallback(
@@ -2493,10 +2530,11 @@ const CommunicationMeeting = () => {
             [joinLink]
         );
 
-
-    // ========================================================
-    // LOAD ROOM
-    // ========================================================
+    /*
+     * ============================================================
+     * LOAD ROOM
+     * ============================================================
+     */
 
     const loadRoom =
         useCallback(
@@ -2519,9 +2557,7 @@ const CommunicationMeeting = () => {
                 } =
                     await supabase.auth.getUser();
 
-                if (
-                    userError
-                ) {
+                if (userError) {
                     throw userError;
                 }
 
@@ -2554,12 +2590,14 @@ const CommunicationMeeting = () => {
                         .from(
                             "profiles"
                         )
-                        .select(`
+                        .select(
+                            `
                             id,
                             full_name,
                             school_id,
                             role_id
-                        `)
+                        `
+                        )
                         .eq(
                             "id",
                             user.id
@@ -2615,7 +2653,8 @@ const CommunicationMeeting = () => {
                             .from(
                                 "video_rooms"
                             )
-                            .select(`
+                            .select(
+                                `
                                 id,
                                 school_id,
                                 room_code,
@@ -2627,7 +2666,8 @@ const CommunicationMeeting = () => {
                                 scheduled_end,
                                 created_at,
                                 updated_at
-                            `)
+                            `
+                            )
                             .eq(
                                 "id",
                                 numericId
@@ -2650,7 +2690,8 @@ const CommunicationMeeting = () => {
                             .from(
                                 "video_rooms"
                             )
-                            .select(`
+                            .select(
+                                `
                                 id,
                                 school_id,
                                 room_code,
@@ -2662,7 +2703,8 @@ const CommunicationMeeting = () => {
                                 scheduled_end,
                                 created_at,
                                 updated_at
-                            `)
+                            `
+                            )
                             .eq(
                                 "room_code",
                                 rawMeetingId
@@ -2725,7 +2767,8 @@ const CommunicationMeeting = () => {
                         .from(
                             "video_room_participants"
                         )
-                        .select(`
+                        .select(
+                            `
                             id,
                             room_id,
                             user_id,
@@ -2734,7 +2777,8 @@ const CommunicationMeeting = () => {
                             joined_at,
                             left_at,
                             created_at
-                        `)
+                        `
+                        )
                         .eq(
                             "room_id",
                             roomData.id
@@ -2856,6 +2900,7 @@ const CommunicationMeeting = () => {
                             return {
                                 user_id:
                                     rowUserId,
+
                                 display_name:
                                     profileMap.get(
                                         rowUserId
@@ -2870,16 +2915,22 @@ const CommunicationMeeting = () => {
                                               "Participant"
                                             : "Participant"
                                     ),
+
                                 joined_at:
                                     row.joined_at,
+
                                 role:
                                     row.role,
+
                                 status:
                                     row.status,
+
                                 hand_raised:
                                     false,
+
                                 mic_enabled:
                                     true,
+
                                 camera_enabled:
                                     true,
                             };
@@ -2898,17 +2949,19 @@ const CommunicationMeeting = () => {
             [meetingId]
         );
 
-
-    // ========================================================
-    // JOIN REALTIME ROOM
-    // ========================================================
+    /*
+     * ============================================================
+     * JOIN REALTIME ROOM
+     * ============================================================
+     */
 
     const joinRealtimeRoom =
         useCallback(
             async (
                 roomData,
                 user,
-                profileData
+                profileData,
+                generation
             ) => {
                 if (
                     !roomData?.id ||
@@ -2917,6 +2970,18 @@ const CommunicationMeeting = () => {
                     throw new Error(
                         "Meeting room information is incomplete."
                     );
+                }
+
+                const isCurrentGeneration =
+                    () =>
+                        mountedRef.current &&
+                        initializationGenerationRef.current ===
+                            generation;
+
+                if (
+                    !isCurrentGeneration()
+                ) {
+                    return;
                 }
 
                 const roomId =
@@ -2942,10 +3007,11 @@ const CommunicationMeeting = () => {
                 roomRef.current =
                     roomData;
 
-
-                // ====================================================
-                // REMOVE EXISTING CHANNEL
-                // ====================================================
+                /*
+                 * ==================================================
+                 * REMOVE EXISTING CHANNEL
+                 * ==================================================
+                 */
 
                 if (
                     channelRef.current
@@ -2963,8 +3029,20 @@ const CommunicationMeeting = () => {
                         );
                     }
 
+                    if (
+                        !isCurrentGeneration()
+                    ) {
+                        return;
+                    }
+
                     channelRef.current =
                         null;
+                }
+
+                if (
+                    !isCurrentGeneration()
+                ) {
+                    return;
                 }
 
                 const staleChannels =
@@ -2994,6 +3072,12 @@ const CommunicationMeeting = () => {
                 for (
                     const staleChannel of staleChannels
                 ) {
+                    if (
+                        !isCurrentGeneration()
+                    ) {
+                        return;
+                    }
+
                     try {
                         await supabase.removeChannel(
                             staleChannel
@@ -3006,12 +3090,19 @@ const CommunicationMeeting = () => {
                             removeError
                         );
                     }
+
+                    if (
+                        !isCurrentGeneration()
+                    ) {
+                        return;
+                    }
                 }
 
-
-                // ====================================================
-                // CREATE FRESH CHANNEL
-                // ====================================================
+                if (
+                    !isCurrentGeneration()
+                ) {
+                    return;
+                }
 
                 const channel =
                     supabase.channel(
@@ -3032,10 +3123,11 @@ const CommunicationMeeting = () => {
                 channelRef.current =
                     channel;
 
-
-                // ====================================================
-                // BROADCAST LISTENERS
-                // ====================================================
+                /*
+                 * ==================================================
+                 * BROADCAST LISTENERS
+                 * ==================================================
+                 */
 
                 const registerBroadcast =
                     (eventName) => {
@@ -3051,6 +3143,12 @@ const CommunicationMeeting = () => {
                                 if (
                                     channelRef.current !==
                                     channel
+                                ) {
+                                    return;
+                                }
+
+                                if (
+                                    !mountedRef.current
                                 ) {
                                     return;
                                 }
@@ -3103,10 +3201,11 @@ const CommunicationMeeting = () => {
                     "meeting-reaction"
                 );
 
-
-                // ====================================================
-                // PRESENCE SYNC
-                // ====================================================
+                /*
+                 * ==================================================
+                 * PRESENCE SYNC
+                 * ==================================================
+                 */
 
                 channel.on(
                     "presence",
@@ -3117,24 +3216,23 @@ const CommunicationMeeting = () => {
                     () => {
                         if (
                             channelRef.current !==
-                            channel
+                            channel ||
+                            !isCurrentGeneration()
                         ) {
                             return;
                         }
 
-                        const state =
-                            channel.presenceState();
-
                         updateParticipantPresence(
-                            state
+                            channel.presenceState()
                         );
                     }
                 );
 
-
-                // ====================================================
-                // PRESENCE JOIN
-                // ====================================================
+                /*
+                 * ==================================================
+                 * PRESENCE JOIN
+                 * ==================================================
+                 */
 
                 channel.on(
                     "presence",
@@ -3148,7 +3246,8 @@ const CommunicationMeeting = () => {
                     }) => {
                         if (
                             channelRef.current !==
-                            channel
+                                channel ||
+                            !isCurrentGeneration()
                         ) {
                             return;
                         }
@@ -3197,6 +3296,10 @@ const CommunicationMeeting = () => {
                             (
                                 remoteId
                             ) => {
+                                /*
+                                 * Deterministic offer owner:
+                                 * smaller user ID creates offer.
+                                 */
                                 if (
                                     localUserId <
                                     remoteId
@@ -3220,10 +3323,11 @@ const CommunicationMeeting = () => {
                     }
                 );
 
-
-                // ====================================================
-                // PRESENCE LEAVE
-                // ====================================================
+                /*
+                 * ==================================================
+                 * PRESENCE LEAVE
+                 * ==================================================
+                 */
 
                 channel.on(
                     "presence",
@@ -3237,7 +3341,8 @@ const CommunicationMeeting = () => {
                     }) => {
                         if (
                             channelRef.current !==
-                            channel
+                                channel ||
+                            !isCurrentGeneration()
                         ) {
                             return;
                         }
@@ -3272,9 +3377,7 @@ const CommunicationMeeting = () => {
                                     )
                             );
 
-                        if (
-                            key
-                        ) {
+                        if (key) {
                             leftIds.add(
                                 normalizeId(
                                     key
@@ -3301,10 +3404,11 @@ const CommunicationMeeting = () => {
                     }
                 );
 
-
-                // ====================================================
-                // SUBSCRIBE
-                // ====================================================
+                /*
+                 * ==================================================
+                 * SUBSCRIBE
+                 * ==================================================
+                 */
 
                 await new Promise(
                     (
@@ -3396,40 +3500,52 @@ const CommunicationMeeting = () => {
                     }
                 );
 
-
                 if (
-                    !mountedRef.current ||
+                    !isCurrentGeneration() ||
                     channelRef.current !==
                         channel
                 ) {
+                    try {
+                        await supabase.removeChannel(
+                            channel
+                        );
+                    } catch {}
+
                     return;
                 }
 
-
-                // ====================================================
-                // TRACK PRESENCE
-                // ====================================================
+                /*
+                 * ==================================================
+                 * TRACK PRESENCE
+                 * ==================================================
+                 */
 
                 await channel.track({
                     user_id:
                         user.id,
+
                     display_name:
                         profileData?.full_name ||
                         user.email ||
                         "Participant",
+
                     joined_at:
                         localParticipantJoinedAt.current ||
                         new Date().toISOString(),
+
                     mic_enabled:
                         localStreamRef.current
                             ?.getAudioTracks?.()[0]
                             ?.enabled !== false,
+
                     camera_enabled:
                         localStreamRef.current
                             ?.getVideoTracks?.()[0]
                             ?.enabled !== false,
+
                     hand_raised:
                         false,
+
                     role:
                         normalizeId(
                             roomData.created_by
@@ -3441,10 +3557,19 @@ const CommunicationMeeting = () => {
                             : "participant",
                 });
 
+                if (
+                    !isCurrentGeneration() ||
+                    channelRef.current !==
+                        channel
+                ) {
+                    return;
+                }
 
-                // ====================================================
-                // PERSIST PARTICIPANT JOIN
-                // ====================================================
+                /*
+                 * ==================================================
+                 * PERSIST PARTICIPANT JOIN
+                 * ==================================================
+                 */
 
                 const participantRole =
                     normalizeId(
@@ -3494,10 +3619,19 @@ const CommunicationMeeting = () => {
                     );
                 }
 
+                if (
+                    !isCurrentGeneration() ||
+                    channelRef.current !==
+                        channel
+                ) {
+                    return;
+                }
 
-                // ====================================================
-                // ONLY HOST CHANGES SCHEDULED -> LIVE
-                // ====================================================
+                /*
+                 * ==================================================
+                 * ONLY HOST CHANGES SCHEDULED -> LIVE
+                 * ==================================================
+                 */
 
                 if (
                     String(
@@ -3545,7 +3679,7 @@ const CommunicationMeeting = () => {
                             liveUpdateError
                         );
                     } else if (
-                        mountedRef.current
+                        isCurrentGeneration()
                     ) {
                         const updatedRoom =
                             {
@@ -3563,10 +3697,19 @@ const CommunicationMeeting = () => {
                     }
                 }
 
+                if (
+                    !isCurrentGeneration() ||
+                    channelRef.current !==
+                        channel
+                ) {
+                    return;
+                }
 
-                // ====================================================
-                // INITIAL PRESENCE
-                // ====================================================
+                /*
+                 * ==================================================
+                 * INITIAL PRESENCE
+                 * ==================================================
+                 */
 
                 const presenceState =
                     channel.presenceState();
@@ -3596,14 +3739,21 @@ const CommunicationMeeting = () => {
                                     )
                         );
 
-
-                // ====================================================
-                // CREATE OFFERS TO EXISTING PARTICIPANTS
-                // ====================================================
+                /*
+                 * ==================================================
+                 * CREATE OFFERS TO EXISTING PARTICIPANTS
+                 * ==================================================
+                 */
 
                 for (
                     const remoteUserId of existingUsers
                 ) {
+                    if (
+                        !isCurrentGeneration()
+                    ) {
+                        return;
+                    }
+
                     if (
                         normalizeId(
                             user.id
@@ -3614,6 +3764,12 @@ const CommunicationMeeting = () => {
                             remoteUserId,
                             true
                         );
+
+                        if (
+                            !isCurrentGeneration()
+                        ) {
+                            return;
+                        }
                     }
                 }
             },
@@ -3625,10 +3781,11 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // LEAVE MEETING
-    // ========================================================
+    /*
+     * ============================================================
+     * LEAVE MEETING
+     * ============================================================
+     */
 
     const leaveMeeting =
         useCallback(
@@ -3768,11 +3925,17 @@ const CommunicationMeeting = () => {
                             );
                         }
                     } catch {
-                        // Ignore channel removal errors.
+                        // Ignore.
                     }
 
                     channelRef.current =
                         null;
+
+                    /*
+                     * Invalidate any in-flight initialization.
+                     */
+                    initializationGenerationRef.current +=
+                        1;
 
                     closeAllPeerConnections();
 
@@ -3796,41 +3959,46 @@ const CommunicationMeeting = () => {
             ]
         );
 
-
-    // ========================================================
-    // INITIALIZATION
-    //
-    // CRITICAL FIX:
-    //
-    // This effect MUST NOT depend on state-sensitive callback
-    // identities such as joinRealtimeRoom/handleBroadcast.
-    //
-    // Otherwise clicking a meeting control can cause React to
-    // run cleanup -> remove channel -> close peers -> stop media
-    // -> initialize the whole meeting again.
-    //
-    // Meeting initialization is therefore tied only to
-    // meetingId.
-    // ========================================================
+    /*
+     * ============================================================
+     * INITIALIZATION
+     *
+     * IMPORTANT:
+     *
+     * This effect depends ONLY on meetingId.
+     *
+     * UI state such as:
+     * - Mic
+     * - Camera
+     * - Raise hand
+     * - Applause
+     * - Chat
+     * - Participants
+     * - Settings
+     *
+     * can therefore never cause this effect to reconnect.
+     *
+     * The generation token additionally prevents stale async
+     * initialization from surviving React StrictMode cleanup.
+     * ============================================================
+     */
 
     useEffect(() => {
         mountedRef.current =
             true;
 
-        if (
-            initializingRef.current
-        ) {
-            return () => {
-                mountedRef.current =
-                    false;
+        const generation =
+            initializationGenerationRef.current +
+            1;
 
-                initializingRef.current =
-                    false;
-            };
-        }
+        initializationGenerationRef.current =
+            generation;
 
-        initializingRef.current =
-            true;
+        const isCurrentGeneration =
+            () =>
+                mountedRef.current &&
+                initializationGenerationRef.current ===
+                    generation;
 
         const initialize =
             async () => {
@@ -3847,16 +4015,20 @@ const CommunicationMeeting = () => {
                         await loadRoom();
 
                     if (
-                        !mountedRef.current ||
+                        !isCurrentGeneration() ||
                         !roomContext
                     ) {
                         return;
                     }
 
-                    await startLocalMedia();
+                    const localStream =
+                        await startLocalMedia(
+                            generation
+                        );
 
                     if (
-                        !mountedRef.current
+                        !isCurrentGeneration() ||
+                        !localStream
                     ) {
                         return;
                     }
@@ -3864,8 +4036,15 @@ const CommunicationMeeting = () => {
                     await joinRealtimeRoom(
                         roomContext.room,
                         roomContext.user,
-                        roomContext.profile
+                        roomContext.profile,
+                        generation
                     );
+
+                    if (
+                        !isCurrentGeneration()
+                    ) {
+                        return;
+                    }
                 } catch (
                     initializationError
                 ) {
@@ -3875,7 +4054,7 @@ const CommunicationMeeting = () => {
                     );
 
                     if (
-                        mountedRef.current
+                        isCurrentGeneration()
                     ) {
                         setError(
                             getErrorMessage(
@@ -3886,7 +4065,7 @@ const CommunicationMeeting = () => {
                     }
                 } finally {
                     if (
-                        mountedRef.current
+                        isCurrentGeneration()
                     ) {
                         setLoading(
                             false
@@ -3898,52 +4077,62 @@ const CommunicationMeeting = () => {
         initialize();
 
         return () => {
-            mountedRef.current =
-                false;
-
-            initializingRef.current =
-                false;
-
+            /*
+             * Invalidate this exact initialization generation.
+             * Any pending async work will stop when it resumes.
+             */
             if (
-                channelRef.current
+                initializationGenerationRef.current ===
+                generation
             ) {
-                supabase
-                    .removeChannel(
-                        channelRef.current
-                    )
-                    .catch(
-                        () => null
-                    );
+                initializationGenerationRef.current +=
+                    1;
 
-                channelRef.current =
-                    null;
-            }
+                mountedRef.current =
+                    false;
 
-            closeAllPeerConnections();
+                if (
+                    channelRef.current
+                ) {
+                    const channel =
+                        channelRef.current;
 
-            stopAllMedia();
+                    channelRef.current =
+                        null;
 
-            reactionTimersRef.current.forEach(
-                (timer) => {
-                    window.clearTimeout(
-                        timer
-                    );
+                    supabase
+                        .removeChannel(
+                            channel
+                        )
+                        .catch(
+                            () => null
+                        );
                 }
-            );
 
-            reactionTimersRef.current.clear();
+                closeAllPeerConnections();
+
+                stopAllMedia();
+
+                reactionTimersRef.current.forEach(
+                    (timer) => {
+                        window.clearTimeout(
+                            timer
+                        );
+                    }
+                );
+
+                reactionTimersRef.current.clear();
+            }
         };
 
-        // IMPORTANT:
-        // Do not add UI/control callback dependencies here.
-        // The meeting must not reconnect when state changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [meetingId]);
 
-
-    // ========================================================
-    // ATTACH REMOTE VIDEO STREAMS AFTER RENDER
-    // ========================================================
+    /*
+     * ============================================================
+     * ATTACH REMOTE VIDEO STREAMS
+     * ============================================================
+     */
 
     useEffect(() => {
         void remoteStreamVersion;
@@ -3987,9 +4176,7 @@ const CommunicationMeeting = () => {
                             .catch(
                                 () => null
                             );
-                    } catch {
-                        // Ignore video attachment errors.
-                    }
+                    } catch {}
                 }
             }
         );
@@ -3998,11 +4185,6 @@ const CommunicationMeeting = () => {
         currentUserId,
         remoteStreamVersion,
     ]);
-
-
-    // ========================================================
-    // REMOTE PARTICIPANTS
-    // ========================================================
 
     const remoteParticipants =
         participants.filter(
@@ -4013,14 +4195,13 @@ const CommunicationMeeting = () => {
                 currentUserId
         );
 
+    /*
+     * ============================================================
+     * LOADING
+     * ============================================================
+     */
 
-    // ========================================================
-    // LOADING
-    // ========================================================
-
-    if (
-        loading
-    ) {
+    if (loading) {
         return (
             <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-center shadow-2xl backdrop-blur">
@@ -4040,10 +4221,11 @@ const CommunicationMeeting = () => {
         );
     }
 
-
-    // ========================================================
-    // ERROR
-    // ========================================================
+    /*
+     * ============================================================
+     * ERROR
+     * ============================================================
+     */
 
     if (
         error &&
@@ -4097,17 +4279,14 @@ const CommunicationMeeting = () => {
         );
     }
 
-
-    // ========================================================
-    // MAIN UI
-    // ========================================================
+    /*
+     * ============================================================
+     * MAIN UI
+     * ============================================================
+     */
 
     return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-
-            {/* ==================================================
-                TOP BAR
-            ================================================== */}
 
             <header className="border-b border-white/10 bg-slate-950/95 backdrop-blur sticky top-0 z-40">
                 <div className="flex min-h-[68px] items-center justify-between gap-4 px-4 md:px-6">
@@ -4163,7 +4342,6 @@ const CommunicationMeeting = () => {
                             </div>
                         </div>
                     </div>
-
 
                     <div className="hidden items-center gap-2 lg:flex">
                         <button
@@ -4221,7 +4399,6 @@ const CommunicationMeeting = () => {
                         </button>
                     </div>
 
-
                     <button
                         type="button"
                         onClick={() =>
@@ -4237,11 +4414,6 @@ const CommunicationMeeting = () => {
                 </div>
             </header>
 
-
-            {/* ==================================================
-                ERROR BANNER
-            ================================================== */}
-
             {error &&
                 room && (
                     <div className="mx-4 mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 md:mx-6">
@@ -4249,23 +4421,10 @@ const CommunicationMeeting = () => {
                     </div>
                 )}
 
-
-            {/* ==================================================
-                BODY
-            ================================================== */}
-
             <main className="flex-1 p-4 md:p-6">
                 <div className="mx-auto flex h-[calc(100vh-150px)] min-h-[520px] max-w-[1800px] gap-4 overflow-hidden">
 
-                    {/* ==================================================
-                        VIDEO AREA
-                    ================================================== */}
-
                     <section className="relative min-w-0 flex-1 overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
-
-                        {/* ==================================================
-                            REMOTE VIDEO AREA
-                        ================================================== */}
 
                         <div
                             className={`grid h-full gap-3 p-3 pb-24 ${
@@ -4281,7 +4440,6 @@ const CommunicationMeeting = () => {
                                             : "grid-cols-2 lg:grid-cols-3"
                             }`}
                         >
-
                             {remoteParticipants.map(
                                 (
                                     participant
@@ -4303,7 +4461,6 @@ const CommunicationMeeting = () => {
                                             }
                                             className="group relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
                                         >
-
                                             {stream ? (
                                                 <video
                                                     ref={(
@@ -4361,7 +4518,6 @@ const CommunicationMeeting = () => {
                                                 </div>
                                             )}
 
-
                                             {!participant.camera_enabled && (
                                                 <div className="absolute inset-0 flex items-center justify-center bg-slate-950/85">
                                                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-800 text-xl font-bold text-slate-200">
@@ -4371,7 +4527,6 @@ const CommunicationMeeting = () => {
                                                     </div>
                                                 </div>
                                             )}
-
 
                                             <div className="absolute left-3 top-3 flex items-center gap-2">
                                                 <span className="max-w-[220px] truncate rounded-full border border-white/10 bg-slate-950/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
@@ -4390,7 +4545,6 @@ const CommunicationMeeting = () => {
                                                 )}
                                             </div>
 
-
                                             <div className="absolute bottom-3 right-3 flex items-center gap-2">
                                                 {!participant.mic_enabled && (
                                                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500/90 text-white">
@@ -4403,11 +4557,6 @@ const CommunicationMeeting = () => {
                                 }
                             )}
 
-
-                            {/* ==================================================
-                                EMPTY STATE
-                            ================================================== */}
-
                             {remoteParticipants.length ===
                                 0 && (
                                 <div className="pointer-events-none absolute inset-x-0 top-8 flex justify-center px-6">
@@ -4418,26 +4567,43 @@ const CommunicationMeeting = () => {
                             )}
                         </div>
 
-
-                        {/* ==================================================
-                            SELF VIEW
-                            SMALL FLOATING TILE
-                        ================================================== */}
+                        {/* SELF VIEW */}
 
                         <div className="absolute bottom-24 right-4 z-30 h-32 w-48 overflow-hidden rounded-2xl border border-white/20 bg-slate-900 shadow-2xl ring-1 ring-black/40 sm:h-36 sm:w-56 md:bottom-24 md:right-5 md:h-40 md:w-64">
 
-                            {cameraStarted &&
-                            localCameraEnabled ? (
-                                <video
-                                    ref={
-                                        localVideoRef
-                                    }
-                                    autoPlay
-                                    muted
-                                    playsInline
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
+                            {/*
+                             * IMPORTANT FIX:
+                             * The video is ALWAYS mounted.
+                             * Camera off only changes opacity.
+                             * This preserves srcObject and prevents
+                             * the self-view from disappearing after
+                             * camera toggles.
+                             */}
+                            <video
+                                ref={
+                                    localVideoRef
+                                }
+                                autoPlay
+                                muted
+                                playsInline
+                                className={`h-full w-full object-cover transition-opacity duration-200 ${
+                                    cameraStarted &&
+                                    (
+                                        localCameraEnabled ||
+                                        screenSharing
+                                    )
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                }`}
+                            />
+
+                            {!(
+                                cameraStarted &&
+                                (
+                                    localCameraEnabled ||
+                                    screenSharing
+                                )
+                            ) && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
                                     <div className="flex flex-col items-center gap-2 text-center">
                                         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500/20 text-lg font-bold text-indigo-200 ring-1 ring-indigo-400/20">
@@ -4453,7 +4619,6 @@ const CommunicationMeeting = () => {
                                 </div>
                             )}
 
-
                             <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
                                 <span className="rounded-full border border-white/10 bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">
                                     You
@@ -4465,7 +4630,6 @@ const CommunicationMeeting = () => {
                                     </span>
                                 )}
                             </div>
-
 
                             <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2">
                                 <span className="max-w-[145px] truncate rounded-full border border-white/10 bg-slate-950/75 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
@@ -4480,11 +4644,6 @@ const CommunicationMeeting = () => {
                             </div>
                         </div>
 
-
-                        {/* ==================================================
-                            STATUS
-                        ================================================== */}
-
                         <div className="absolute left-5 top-5 hidden rounded-full border border-white/10 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-300 backdrop-blur sm:block">
                             {remoteParticipantCount >
                             0
@@ -4496,11 +4655,6 @@ const CommunicationMeeting = () => {
                                   } connected`
                                 : "Private meeting room"}
                         </div>
-
-
-                        {/* ==================================================
-                            LIVE REACTIONS
-                        ================================================== */}
 
                         {floatingReactions.length >
                             0 && (
@@ -4532,11 +4686,6 @@ const CommunicationMeeting = () => {
                             </div>
                         )}
 
-
-                        {/* ==================================================
-                            BOTTOM CONTROLS
-                        ================================================== */}
-
                         <div className="absolute inset-x-0 bottom-0 flex justify-center px-4 pb-5 pt-10">
                             <div className="flex flex-wrap items-center justify-center gap-2 rounded-3xl border border-white/10 bg-slate-950/85 p-2.5 shadow-2xl backdrop-blur-xl">
 
@@ -4563,7 +4712,6 @@ const CommunicationMeeting = () => {
                                     )}
                                 </button>
 
-
                                 <button
                                     type="button"
                                     onClick={
@@ -4586,7 +4734,6 @@ const CommunicationMeeting = () => {
                                         <VideoOff className="h-5 w-5" />
                                     )}
                                 </button>
-
 
                                 <button
                                     type="button"
@@ -4611,7 +4758,6 @@ const CommunicationMeeting = () => {
                                     )}
                                 </button>
 
-
                                 <button
                                     type="button"
                                     onClick={
@@ -4634,7 +4780,6 @@ const CommunicationMeeting = () => {
                                     )}
                                 </button>
 
-
                                 <button
                                     type="button"
                                     onClick={
@@ -4653,7 +4798,6 @@ const CommunicationMeeting = () => {
                                 >
                                     <Hand className="h-5 w-5" />
                                 </button>
-
 
                                 <button
                                     type="button"
@@ -4675,7 +4819,6 @@ const CommunicationMeeting = () => {
                                     <MessageCircle className="h-5 w-5" />
                                 </button>
 
-
                                 <button
                                     type="button"
                                     onClick={() =>
@@ -4696,7 +4839,6 @@ const CommunicationMeeting = () => {
                                     <Users className="h-5 w-5" />
                                 </button>
 
-
                                 <button
                                     type="button"
                                     onClick={() =>
@@ -4716,7 +4858,6 @@ const CommunicationMeeting = () => {
                                 >
                                     <Settings className="h-5 w-5" />
                                 </button>
-
 
                                 <button
                                     type="button"
@@ -4780,11 +4921,6 @@ const CommunicationMeeting = () => {
                         </div>
                     </section>
 
-
-                    {/* ==================================================
-                        CHAT SIDEBAR
-                    ================================================== */}
-
                     {chatOpen && (
                         <aside className="hidden w-[360px] shrink-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl xl:flex">
                             <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
@@ -4817,7 +4953,6 @@ const CommunicationMeeting = () => {
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-
 
                             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
                                 {messages.length ===
@@ -4907,7 +5042,6 @@ const CommunicationMeeting = () => {
                                 )}
                             </div>
 
-
                             <div className="border-t border-white/10 p-3">
                                 <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
                                     <textarea
@@ -4963,11 +5097,6 @@ const CommunicationMeeting = () => {
                         </aside>
                     )}
 
-
-                    {/* ==================================================
-                        PARTICIPANT SIDEBAR
-                    ================================================== */}
-
                     {participantsOpen && (
                         <aside className="hidden w-[320px] shrink-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl xl:flex">
                             <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
@@ -4996,7 +5125,6 @@ const CommunicationMeeting = () => {
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-
 
                             <div className="min-h-0 flex-1 overflow-y-auto p-3">
                                 <div className="space-y-2">
@@ -5075,11 +5203,6 @@ const CommunicationMeeting = () => {
                 </div>
             </main>
 
-
-            {/* ==================================================
-                MOBILE UTILITY SHEET
-            ================================================== */}
-
             {settingsOpen && (
                 <div className="fixed inset-0 z-50 flex items-end bg-black/60 p-3 backdrop-blur-sm lg:items-center lg:justify-center">
                     <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
@@ -5110,7 +5233,6 @@ const CommunicationMeeting = () => {
                             </button>
                         </div>
 
-
                         <div className="mt-5 grid gap-2">
                             <button
                                 type="button"
@@ -5129,7 +5251,6 @@ const CommunicationMeeting = () => {
                                     <Copy className="h-4 w-4 text-slate-400" />
                                 )}
                             </button>
-
 
                             <button
                                 type="button"
@@ -5151,7 +5272,6 @@ const CommunicationMeeting = () => {
                                 <Users className="h-4 w-4 text-slate-400" />
                             </button>
 
-
                             <button
                                 type="button"
                                 onClick={() => {
@@ -5171,7 +5291,6 @@ const CommunicationMeeting = () => {
 
                                 <MessageCircle className="h-4 w-4 text-slate-400" />
                             </button>
-
 
                             <div className="mt-2 rounded-2xl border border-indigo-400/10 bg-indigo-500/5 p-4">
                                 <div className="flex items-start gap-3">
@@ -5195,6 +5314,5 @@ const CommunicationMeeting = () => {
         </div>
     );
 };
-
 
 export default CommunicationMeeting;
