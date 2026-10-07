@@ -125,19 +125,6 @@ const normalizeTanzaniaPhone = (phone) => {
  * ============================================================
  * NORMALIZE STAFF TYPE
  * ============================================================
- *
- * Supported database values:
- *
- * Staff
- * Non-Staff
- *
- * Staff:
- * Teaching Staff / Teacher
- *
- * Non-Staff:
- * Non-Teaching Staff
- *
- * ============================================================
  */
 
 const normalizeStaffType = (staffType) => {
@@ -221,16 +208,6 @@ const normalizeAssignments = (assignments) => {
 /**
  * ============================================================
  * NORMALIZE ROLE IDS
- * ============================================================
- *
- * Supports:
- *
- * role_ids: [1, 4, 7]
- *
- * and legacy:
- *
- * role_id: 4
- *
  * ============================================================
  */
 
@@ -868,9 +845,6 @@ export const createTeacher = async (
             photo_url:
                 photo_url || null,
 
-            /**
-             * Staff / Non-Staff
-             */
             staff_type:
                 normalizedStaffType
         };
@@ -1580,6 +1554,26 @@ export const createTeacher = async (
  *
  * PUT /api/teachers/:id
  * ============================================================
+ *
+ * IMPORTANT STATUS LOGIC
+ *
+ * Active:
+ *   - Auth account is unbanned
+ *   - teachers.status = Active
+ *   - teachers.user_id remains linked
+ *   - profile_roles.is_active = true
+ *
+ * Inactive:
+ *   - Auth account is banned
+ *   - teachers.status = Inactive
+ *   - teachers.user_id remains linked
+ *   - profile_roles.is_active = false
+ *
+ * Existing old records:
+ *   If teachers.user_id is NULL, recover the Auth ID from
+ *   profiles.teacher_id.
+ *
+ * ============================================================
  */
 
 export const updateTeacher = async (
@@ -1671,16 +1665,6 @@ export const updateTeacher = async (
         /**
          * --------------------------------------------------------
          * NORMALIZE STAFF TYPE
-         * --------------------------------------------------------
-         *
-         * Edit form may send:
-         *
-         * Staff
-         * Non-Staff
-         *
-         * If older Edit form does not send staff_type,
-         * existing database value is preserved.
-         *
          * --------------------------------------------------------
          */
 
@@ -1874,10 +1858,6 @@ export const updateTeacher = async (
                 );
 
 
-            /**
-             * Defensive fallback.
-             */
-
             if (!normalizedStaffType) {
 
                 normalizedStaffType =
@@ -1986,14 +1966,131 @@ export const updateTeacher = async (
 
 
         /**
-         * --------------------------------------------------------
-         * EXISTING AUTH USER
-         * --------------------------------------------------------
+         * ========================================================
+         * RECOVER AUTH USER
+         * ========================================================
+         *
+         * NORMAL CASE:
+         *
+         * teachers.user_id already contains Auth ID.
+         *
+         * OLD DEACTIVATED RECORD:
+         *
+         * teachers.user_id may be NULL because the previous
+         * deactivate implementation removed it.
+         *
+         * In that situation we recover the original Auth ID from:
+         *
+         * profiles.teacher_id
+         *
+         * This is especially important for old inactive staff
+         * such as Benjamin.
+         *
+         * ========================================================
          */
 
-        const authUserId =
-            existingTeacher.user_id;
+        let authUserId =
+            existingTeacher.user_id ||
+            null;
 
+
+        let recoveredProfile =
+            null;
+
+
+        if (!authUserId) {
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "AFRICORE AUTH LINK RECOVERY"
+            );
+
+            console.log(
+                "Teacher ID:",
+                teacherId
+            );
+
+            console.log(
+                "teachers.user_id is NULL"
+            );
+
+            console.log(
+                "Searching profiles.teacher_id..."
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            const {
+                data: profile,
+                error: profileLookupError
+            } = await supabase
+                .from("profiles")
+                .select(`
+                    id,
+                    teacher_id,
+                    role_id,
+                    school_id
+                `)
+                .eq(
+                    "teacher_id",
+                    teacherId
+                )
+                .maybeSingle();
+
+
+            if (profileLookupError) {
+
+                console.error(
+                    "AUTH LINK RECOVERY PROFILE ERROR:",
+                    profileLookupError
+                );
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        `Unable to recover the original login account: ${profileLookupError.message}`
+
+                });
+            }
+
+
+            recoveredProfile =
+                profile || null;
+
+
+            if (recoveredProfile?.id) {
+
+                authUserId =
+                    recoveredProfile.id;
+
+                console.log(
+                    "AUTH LINK RECOVERED:",
+                    authUserId
+                );
+
+            }
+
+        }
+
+
+        /**
+         * --------------------------------------------------------
+         * AUTH ACCOUNT MUST EXIST
+         * --------------------------------------------------------
+         *
+         * We do NOT create a new Auth user during editing.
+         *
+         * If the original account cannot be recovered, stop safely.
+         * --------------------------------------------------------
+         */
 
         if (!authUserId) {
 
@@ -2002,7 +2099,104 @@ export const updateTeacher = async (
                 success: false,
 
                 message:
-                    "This teacher is not linked to a login account."
+                    "This teacher is not linked to a recoverable login account. No new login account was created."
+
+            });
+        }
+
+
+        /**
+         * --------------------------------------------------------
+         * PREVENT SELF DEACTIVATION
+         * --------------------------------------------------------
+         */
+
+        const requestedStatus =
+            String(
+                teacher.status ||
+                existingTeacher.status ||
+                "Active"
+            )
+                .trim();
+
+
+        const normalizedStatus =
+            requestedStatus.toLowerCase() ===
+            "inactive"
+                ? "Inactive"
+                : "Active";
+
+
+        if (
+            normalizedStatus === "Inactive" &&
+            String(
+                authUserId
+            ) ===
+            String(
+                req.user.id
+            )
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "You cannot deactivate your own Staff & Non-Staff account."
+
+            });
+        }
+
+
+        /**
+         * ========================================================
+         * VERIFY ORIGINAL AUTH USER
+         * ========================================================
+         *
+         * We use the recovered/original Auth ID.
+         *
+         * We NEVER create a new login account here.
+         * ========================================================
+         */
+
+        const {
+            data: existingAuthResult,
+            error: existingAuthError
+        } =
+            await supabase
+                .auth
+                .admin
+                .getUserById(
+                    authUserId
+                );
+
+
+        if (existingAuthError) {
+
+            console.error(
+                "EXISTING AUTH USER LOOKUP ERROR:",
+                existingAuthError
+            );
+
+            return res.status(500).json({
+
+                success: false,
+
+                message:
+                    `Unable to verify the original login account: ${existingAuthError.message}`
+
+            });
+        }
+
+
+        if (!existingAuthResult?.user?.id) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "The original Supabase Auth account could not be found. No new login account was created."
 
             });
         }
@@ -2109,6 +2303,68 @@ export const updateTeacher = async (
 
 
         /**
+         * ========================================================
+         * AUTH LOGIN STATUS
+         * ========================================================
+         *
+         * ACTIVE:
+         *
+         * ban_duration = "none"
+         *
+         * INACTIVE:
+         *
+         * ban_duration = "876000h"
+         *
+         * ========================================================
+         */
+
+        authUpdatePayload.ban_duration =
+            normalizedStatus === "Active"
+                ? "none"
+                : "876000h";
+
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "AFRICORE STAFF AUTH UPDATE"
+        );
+
+        console.log(
+            "Teacher ID:",
+            teacherId
+        );
+
+        console.log(
+            "Auth User ID:",
+            authUserId
+        );
+
+        console.log(
+            "Status:",
+            normalizedStatus
+        );
+
+        console.log(
+            "Auth Login:",
+            normalizedStatus === "Active"
+                ? "ENABLED / UNBANNED"
+                : "DISABLED / BANNED"
+        );
+
+        console.log(
+            "Ban Duration:",
+            authUpdatePayload.ban_duration
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        /**
          * --------------------------------------------------------
          * UPDATE SUPABASE AUTH
          * --------------------------------------------------------
@@ -2127,12 +2383,17 @@ export const updateTeacher = async (
 
         if (authUpdateError) {
 
+            console.error(
+                "UPDATE STAFF AUTH ERROR:",
+                authUpdateError
+            );
+
             return res.status(500).json({
 
                 success: false,
 
                 message:
-                    `Unable to update teacher login account: ${authUpdateError.message}`
+                    `Unable to ${normalizedStatus === "Active" ? "restore" : "disable"} the teacher login account: ${authUpdateError.message}`
 
             });
         }
@@ -2141,6 +2402,13 @@ export const updateTeacher = async (
         /**
          * --------------------------------------------------------
          * UPDATE TEACHER
+         * --------------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * user_id is deliberately preserved/recovered.
+         *
+         * NEVER set it to NULL.
          * --------------------------------------------------------
          */
 
@@ -2182,16 +2450,21 @@ export const updateTeacher = async (
                 teacher.specialization || null,
 
             status:
-                teacher.status || "Active",
+                normalizedStatus,
 
             photo_url:
                 teacher.photo_url || null,
 
-            /**
-             * Staff / Non-Staff
-             */
             staff_type:
-                normalizedStaffType
+                normalizedStaffType,
+
+            /**
+             * CRITICAL:
+             *
+             * Preserve/reconnect original Auth account.
+             */
+            user_id:
+                authUserId
         };
 
 
@@ -2231,9 +2504,14 @@ export const updateTeacher = async (
 
 
         /**
-         * --------------------------------------------------------
+         * ========================================================
          * UPDATE PROFILE
-         * --------------------------------------------------------
+         * ========================================================
+         *
+         * For old inactive records, the profile already exists.
+         *
+         * We update it using the recovered Auth ID.
+         * ========================================================
          */
 
         const fullName =
@@ -2246,54 +2524,155 @@ export const updateTeacher = async (
                 .join(" ");
 
 
+        let updatedProfile = null;
+
+
         const {
-            data: updatedProfile,
-            error: profileUpdateError
-        } = await supabase
-            .from("profiles")
-            .update({
-
-                full_name:
-                    fullName,
-
-                phone:
-                    normalizedPhone,
-
-                role_id:
-                    numericPrimaryRoleId,
-
-                school_id:
-                    teacherPayload.school_id,
-
-                teacher_id:
-                    teacherId
-
-            })
-            .eq(
-                "id",
-                authUserId
-            )
-            .select("*")
-            .single();
+            data: existingProfile,
+            error: profileExistsError
+        } =
+            await supabase
+                .from("profiles")
+                .select("*")
+                .eq(
+                    "id",
+                    authUserId
+                )
+                .maybeSingle();
 
 
-        if (profileUpdateError) {
+        if (profileExistsError) {
 
             return res.status(500).json({
 
                 success: false,
 
                 message:
-                    `Unable to update teacher profile: ${profileUpdateError.message}`
+                    `Unable to verify teacher profile: ${profileExistsError.message}`
 
             });
         }
 
 
+        const profilePayload = {
+
+            full_name:
+                fullName,
+
+            phone:
+                normalizedPhone,
+
+            role_id:
+                numericPrimaryRoleId,
+
+            school_id:
+                teacherPayload.school_id,
+
+            teacher_id:
+                teacherId
+
+        };
+
+
+        if (existingProfile) {
+
+            const {
+                data,
+                error
+            } = await supabase
+                .from("profiles")
+                .update(
+                    profilePayload
+                )
+                .eq(
+                    "id",
+                    authUserId
+                )
+                .select("*")
+                .single();
+
+
+            if (error) {
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        `Unable to update teacher profile: ${error.message}`
+
+                });
+            }
+
+
+            updatedProfile =
+                data;
+
+        } else {
+
+            /**
+             * ----------------------------------------------------
+             * RECOVER MISSING PROFILE SAFELY
+             * ----------------------------------------------------
+             *
+             * We do NOT create a new Auth user.
+             * We only recreate the missing profile row for the
+             * already-existing Auth user.
+             * ----------------------------------------------------
+             */
+
+            const {
+                data,
+                error
+            } = await supabase
+                .from("profiles")
+                .insert({
+
+                    id:
+                        authUserId,
+
+                    full_name:
+                        fullName,
+
+                    phone:
+                        normalizedPhone,
+
+                    role_id:
+                        numericPrimaryRoleId,
+
+                    school_id:
+                        teacherPayload.school_id,
+
+                    teacher_id:
+                        teacherId
+
+                })
+                .select("*")
+                .single();
+
+
+            if (error) {
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        `Unable to restore teacher profile: ${error.message}`
+
+                });
+            }
+
+
+            updatedProfile =
+                data;
+        }
+
+
         /**
-         * --------------------------------------------------------
+         * ========================================================
          * REPLACE PROFILE ROLES
-         * --------------------------------------------------------
+         * ========================================================
          */
 
         const {
@@ -2355,9 +2734,45 @@ export const updateTeacher = async (
 
 
         /**
-         * --------------------------------------------------------
+         * ========================================================
+         * ACTIVATE / DEACTIVATE PROFILE ROLES
+         * ========================================================
+         */
+
+        const {
+            error: roleStatusError
+        } =
+            await supabase
+                .from("profile_roles")
+                .update({
+
+                    is_active:
+                        normalizedStatus === "Active"
+
+                })
+                .eq(
+                    "profile_id",
+                    authUserId
+                );
+
+
+        if (roleStatusError) {
+
+            return res.status(500).json({
+
+                success: false,
+
+                message:
+                    `Unable to update teacher role access: ${roleStatusError.message}`
+
+            });
+        }
+
+
+        /**
+         * ========================================================
          * SYNCHRONIZE TEACHER ASSIGNMENTS
-         * --------------------------------------------------------
+         * ========================================================
          */
 
         const {
@@ -2387,7 +2802,14 @@ export const updateTeacher = async (
         let updatedAssignments = [];
 
 
+        /**
+         * --------------------------------------------------------
+         * Only active teachers receive active assignments.
+         * --------------------------------------------------------
+         */
+
         if (
+            normalizedStatus === "Active" &&
             normalizedAssignments.length > 0
         ) {
 
@@ -2441,17 +2863,64 @@ export const updateTeacher = async (
 
 
         /**
-         * --------------------------------------------------------
+         * ========================================================
          * SUCCESS
-         * --------------------------------------------------------
+         * ========================================================
          */
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "AFRICORE STAFF UPDATE SUCCESS"
+        );
+
+        console.log(
+            "Teacher ID:",
+            teacherId
+        );
+
+        console.log(
+            "Auth User ID:",
+            authUserId
+        );
+
+        console.log(
+            "Status:",
+            normalizedStatus
+        );
+
+        console.log(
+            "Login:",
+            normalizedStatus === "Active"
+                ? "ENABLED"
+                : "DISABLED"
+        );
+
+        console.log(
+            "teachers.user_id PRESERVED:",
+            true
+        );
+
+        console.log(
+            "Historical records preserved:",
+            true
+        );
+
+        console.log(
+            "========================================"
+        );
+
 
         return res.status(200).json({
 
             success: true,
 
             message:
-                "Teacher / Staff, profile, roles and assignments updated successfully.",
+                normalizedStatus === "Active"
+                    ? "Teacher / Staff has been restored successfully. The original login account is active again."
+                    : "Teacher / Staff has been deactivated successfully. The original login account is disabled and historical records have been preserved.",
 
             teacher:
                 updatedTeacher,
@@ -2491,7 +2960,16 @@ export const updateTeacher = async (
 
             staff_type:
                 updatedTeacher?.staff_type ||
-                normalizedStaffType
+                normalizedStaffType,
+
+            status:
+                normalizedStatus,
+
+            login_enabled:
+                normalizedStatus === "Active",
+
+            historical_record_preserved:
+                true
 
         });
 
@@ -2526,6 +3004,7 @@ export const updateTeacher = async (
     }
 };
 
+
 /**
  * ============================================================
  * DELETE / DEACTIVATE TEACHER / STAFF
@@ -2541,22 +3020,21 @@ export const updateTeacher = async (
  * - profiles
  * - messages
  * - historical ERP records
- *
- * Supabase Auth user is NOT deleted because the profile may
- * already be referenced by historical communication records.
+ * - auth.users
  *
  * Instead:
  *
- * 1. Permanently-style BAN the Supabase Auth account
- * 2. Remove teachers.user_id
+ * 1. Ban the Supabase Auth account
+ * 2. Keep teachers.user_id linked
  * 3. Set teachers.status = Inactive
  * 4. Disable profile_roles
  * 5. Preserve all historical records
  *
- * Supabase supports ban_duration through
- * auth.admin.updateUserById().
+ * IMPORTANT:
  *
- * 876000h = approximately 100 years.
+ * teachers.user_id MUST NOT be set to NULL.
+ *
+ * This allows the same account to be restored later.
  *
  * ============================================================
  */
@@ -2570,6 +3048,7 @@ export const deleteTeacher = async (
         Number(
             req.params.id
         );
+
 
     if (
         !Number.isInteger(
@@ -2588,6 +3067,7 @@ export const deleteTeacher = async (
         });
 
     }
+
 
     try {
 
@@ -2656,14 +3136,78 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
+         * GET AUTH USER ID
+         * ====================================================
+         *
+         * Normally it is already in teachers.user_id.
+         *
+         * For old records where a previous version set user_id
+         * to NULL, recover it through profiles.teacher_id.
+         *
+         * ====================================================
+         */
+
+        let authUserId =
+            teacher.user_id ||
+            null;
+
+
+        if (!authUserId) {
+
+            const {
+                data: profile,
+                error: profileLookupError
+            } = await supabase
+                .from("profiles")
+                .select(`
+                    id,
+                    teacher_id
+                `)
+                .eq(
+                    "teacher_id",
+                    teacherId
+                )
+                .maybeSingle();
+
+
+            if (profileLookupError) {
+
+                console.error(
+                    "DELETE TEACHER AUTH RECOVERY ERROR:",
+                    profileLookupError
+                );
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        `Unable to recover Staff & Non-Staff login account: ${profileLookupError.message}`
+
+                });
+            }
+
+
+            if (profile?.id) {
+
+                authUserId =
+                    profile.id;
+
+            }
+
+        }
+
+
+        /**
+         * ====================================================
          * PREVENT SELF DEACTIVATION
          * ====================================================
          */
 
         if (
-            teacher.user_id &&
+            authUserId &&
             String(
-                teacher.user_id
+                authUserId
             ) ===
             String(
                 req.user.id
@@ -2675,16 +3219,11 @@ export const deleteTeacher = async (
                 success: false,
 
                 message:
-                    "You cannot delete your own Staff & Non-Staff account."
+                    "You cannot deactivate your own Staff & Non-Staff account."
 
             });
 
         }
-
-
-        const authUserId =
-            teacher.user_id ||
-            null;
 
 
         /**
@@ -2692,28 +3231,14 @@ export const deleteTeacher = async (
          * DISABLE SUPABASE AUTH LOGIN
          * ====================================================
          *
-         * IMPORTANT:
+         * We BAN instead of deleting.
          *
-         * DO NOT use:
-         *
-         * supabase.auth.admin.deleteUser()
-         *
-         * because this user's profile may be referenced by
-         * messages.sender_id, messages.receiver_id and other
-         * historical ERP records.
-         *
-         * Instead we ban the Auth account for approximately
-         * 100 years.
-         *
-         * This prevents normal login while preserving the
-         * Auth/Profile/history relationship.
+         * This protects historical relationships.
          *
          * ====================================================
          */
 
-        if (
-            authUserId
-        ) {
+        if (authUserId) {
 
             console.log(
                 "========================================"
@@ -2744,10 +3269,8 @@ export const deleteTeacher = async (
 
 
             const {
-                data:
-                    bannedUser,
-                error:
-                    authBanError
+                data: bannedUser,
+                error: authBanError
             } =
                 await supabase
                     .auth
@@ -2785,6 +3308,7 @@ export const deleteTeacher = async (
                     authBanError?.code
                 );
 
+
                 return res.status(500).json({
 
                     success: false,
@@ -2813,14 +3337,34 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * REMOVE ACTIVE TEACHER -> AUTH LINK
+         * DEACTIVATE TEACHER
          * ====================================================
          *
-         * The Auth account remains preserved but the active
-         * teacher record no longer points to it.
+         * CRITICAL CHANGE:
+         *
+         * DO NOT set user_id = null.
+         *
+         * The original Auth ID remains connected so the account
+         * can be restored later.
          *
          * ====================================================
          */
+
+        const teacherUpdatePayload = {
+
+            status:
+                "Inactive"
+
+        };
+
+
+        if (authUserId) {
+
+            teacherUpdatePayload.user_id =
+                authUserId;
+
+        }
+
 
         const {
             data:
@@ -2830,15 +3374,9 @@ export const deleteTeacher = async (
         } =
             await supabase
                 .from("teachers")
-                .update({
-
-                    user_id:
-                        null,
-
-                    status:
-                        "Inactive"
-
-                })
+                .update(
+                    teacherUpdatePayload
+                )
                 .eq(
                     "id",
                     teacherId
@@ -2875,7 +3413,7 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * DISABLE ALL ACTIVE PROFILE ROLES
+         * DISABLE ALL PROFILE ROLES
          * ====================================================
          */
 
@@ -2935,10 +3473,20 @@ export const deleteTeacher = async (
         );
 
         console.log(
+            "Auth User ID preserved:",
+            authUserId
+        );
+
+        console.log(
             "Auth account banned:",
             Boolean(
                 authUserId
             )
+        );
+
+        console.log(
+            "teachers.user_id preserved:",
+            true
         );
 
         console.log(
@@ -2980,11 +3528,17 @@ export const deleteTeacher = async (
                     authUserId
                 ),
 
+            auth_user_id:
+                authUserId,
+
+            user_id_preserved:
+                true,
+
             historical_record_preserved:
                 true,
 
             message:
-                "Staff & Non-Staff member has been removed from active management and the login account has been permanently disabled. Historical records have been preserved.",
+                "Staff & Non-Staff member has been removed from active management and the original login account has been disabled. The account can be restored later and historical records have been preserved.",
 
             teacher:
                 deactivatedTeacher
