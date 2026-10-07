@@ -198,11 +198,13 @@ function SuperAdminOrPermissionRoute({
 
 function SuperAdminOrAllowedRoleRoute({
     allowedRoles = [],
+    allowedRoleNames = [],
 }) {
 
     const {
         loading,
         roleId,
+        roleName,
     } = useCurrentRoleCheck();
 
     if (loading) {
@@ -212,12 +214,31 @@ function SuperAdminOrAllowedRoleRoute({
     const currentRoleId =
         Number(roleId);
 
-    const allowed =
+    const currentRoleName =
+        String(roleName || "")
+            .trim()
+            .toLowerCase();
+
+    const allowedById =
         allowedRoles
             .map(Number)
             .includes(
                 currentRoleId
             );
+
+    const allowedByName =
+        allowedRoleNames
+            .some(
+                (name) =>
+                    String(name || "")
+                        .trim()
+                        .toLowerCase() ===
+                    currentRoleName
+            );
+
+    const allowed =
+        allowedById ||
+        allowedByName;
 
     if (!allowed) {
 
@@ -1308,17 +1329,25 @@ export default function AppRoutes() {
 
                     /teacher-on-duty
 
-                    Available to teaching staff
+                    Available to teaching staff.
+
+                    CLASS TEACHER:
+                    Allowed explicitly by role name so the
+                    module does not depend on guessing the
+                    Class Teacher role ID.
 
                     IMPORTANT:
-                    This route now opens the actual
-                    TeacherOnDuty module.
+                    This is the ONLY route changed for the
+                    current fix.
                 ================================================= */}
 
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
                             allowedRoles={[1, 2, 3, 4, 5]}
+                            allowedRoleNames={[
+                                "Class Teacher"
+                            ]}
                         />
                     }
                 >
