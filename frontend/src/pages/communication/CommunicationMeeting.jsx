@@ -38,7 +38,7 @@ import { supabase } from "../../services/supabase";
 
 
 // ============================================================
-// WEBRTC
+// WEBRTC CONFIG
 // ============================================================
 
 const ICE_SERVERS = [
@@ -55,40 +55,46 @@ const ICE_SERVERS = [
 // HELPERS
 // ============================================================
 
-const getInitials = (name = "") => {
+const getInitials = (name) => {
     const value = String(name || "").trim();
 
     if (!value) {
-        return "U";
+        return "P";
     }
 
-    const parts = value.split(/\s+/).filter(Boolean);
+    const parts = value
+        .split(/\s+/)
+        .filter(Boolean);
 
     if (parts.length === 1) {
-        return parts[0].slice(0, 2).toUpperCase();
+        return parts[0]
+            .slice(0, 2)
+            .toUpperCase();
     }
 
-    return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
+    return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`
+        .toUpperCase();
 };
 
 
 const normalizeId = (value) => {
-    if (value === null || value === undefined) {
+    if (
+        value === null ||
+        value === undefined
+    ) {
         return "";
     }
 
-    return String(value);
+    return String(value).trim();
 };
 
 
-const makeRoomChannelName = (roomId) => {
-    return `video-room-${normalizeId(roomId)}`;
-};
+const makeRoomChannelName = (roomId) =>
+    `video-meeting-${normalizeId(roomId)}`;
 
 
-const isValidRoomId = (value) => {
-    return String(value || "").trim().length > 0;
-};
+const isValidRoomId = (value) =>
+    String(value || "").trim().length > 0;
 
 
 const formatTime = (value) => {
@@ -96,73 +102,121 @@ const formatTime = (value) => {
         return "";
     }
 
-    try {
-        return new Intl.DateTimeFormat("en-TZ", {
-            hour: "2-digit",
-            minute: "2-digit",
-        }).format(new Date(value));
-    } catch {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
         return "";
     }
+
+    return date.toLocaleTimeString(
+        [],
+        {
+            hour: "2-digit",
+            minute: "2-digit",
+        }
+    );
 };
 
 
 const formatDateTime = (value) => {
     if (!value) {
-        return "";
+        return "No scheduled time";
     }
 
-    try {
-        return new Intl.DateTimeFormat("en-TZ", {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return "No scheduled time";
+    }
+
+    return date.toLocaleString(
+        [],
+        {
             dateStyle: "medium",
             timeStyle: "short",
-        }).format(new Date(value));
-    } catch {
-        return String(value);
-    }
+        }
+    );
 };
 
 
-const extractPresenceUsers = (presenceState = {}) => {
+const extractPresenceUsers = (
+    presenceState
+) => {
     const users = [];
 
-    Object.entries(presenceState || {}).forEach(([key, values]) => {
-        const list = Array.isArray(values) ? values : [];
+    Object.entries(
+        presenceState || {}
+    ).forEach(
+        ([key, entries]) => {
+            const list =
+                Array.isArray(entries)
+                    ? entries
+                    : [];
 
-        list.forEach((item) => {
-            users.push({
-                user_id: normalizeId(item?.user_id || key),
-                display_name: item?.display_name || "Participant",
-                joined_at: item?.joined_at || null,
-                mic_enabled: item?.mic_enabled !== false,
-                camera_enabled: item?.camera_enabled !== false,
-                hand_raised: item?.hand_raised === true,
-                role: item?.role || "participant",
+            list.forEach((entry) => {
+                const userId =
+                    normalizeId(
+                        entry?.user_id ||
+                            key
+                    );
+
+                if (!userId) {
+                    return;
+                }
+
+                users.push({
+                    ...entry,
+                    user_id: userId,
+                });
             });
-        });
-    });
-
-    const unique = new Map();
-
-    users.forEach((user) => {
-        if (!user.user_id) {
-            return;
         }
+    );
 
-        unique.set(user.user_id, user);
-    });
+    const seen = new Set();
 
-    return Array.from(unique.values());
+    return users.filter(
+        (user) => {
+            const userId =
+                normalizeId(
+                    user.user_id
+                );
+
+            if (!userId) {
+                return false;
+            }
+
+            if (seen.has(userId)) {
+                return false;
+            }
+
+            seen.add(userId);
+
+            return true;
+        }
+    );
 };
 
 
-const getErrorMessage = (error, fallback) => {
-    if (error?.message) {
+const getErrorMessage = (
+    error,
+    fallback
+) => {
+    if (
+        error?.message
+    ) {
         return error.message;
     }
 
-    if (error?.details) {
+    if (
+        error?.details
+    ) {
         return error.details;
+    }
+
+    if (
+        error?.hint
+    ) {
+        return error.hint;
     }
 
     return fallback;
@@ -173,571 +227,955 @@ const getErrorMessage = (error, fallback) => {
 // COMPONENT
 // ============================================================
 
-function CommunicationMeeting() {
-
+const CommunicationMeeting = () => {
     const navigate = useNavigate();
-    const { meetingId } = useParams();
+
+    const { meetingId } =
+        useParams();
 
 
     // ========================================================
-    // REFS
+    // MEDIA REFS
     // ========================================================
 
-    const localVideoRef = useRef(null);
-    const localStreamRef = useRef(null);
-    const screenStreamRef = useRef(null);
+    const localVideoRef =
+        useRef(null);
 
-    const channelRef = useRef(null);
+    const localStreamRef =
+        useRef(null);
 
-    const peerConnectionsRef = useRef(new Map());
-    const remoteStreamsRef = useRef(new Map());
-    const remoteVideoRefs = useRef(new Map());
-    const pendingIceCandidatesRef = useRef(new Map());
+    const screenStreamRef =
+        useRef(null);
 
-    const reactionTimersRef = useRef(new Map());
-    const localParticipantJoinedAt = useRef(null);
 
-    const mountedRef = useRef(false);
-    const initializingRef = useRef(false);
+    // ========================================================
+    // REALTIME / WEBRTC REFS
+    // ========================================================
 
-    const processedOffersRef = useRef(new Set());
-    const processedAnswersRef = useRef(new Set());
-    const processedIceRef = useRef(new Set());
+    const channelRef =
+        useRef(null);
+
+    const peerConnectionsRef =
+        useRef(new Map());
+
+    const remoteStreamsRef =
+        useRef(new Map());
+
+    const remoteVideoRefs =
+        useRef(new Map());
+
+    const pendingIceCandidatesRef =
+        useRef(new Map());
+
+
+    // ========================================================
+    // REACTION REFS
+    // ========================================================
+
+    const reactionTimersRef =
+        useRef(new Map());
+
+    const localParticipantJoinedAt =
+        useRef(null);
+
+
+    // ========================================================
+    // LIFECYCLE REFS
+    // ========================================================
+
+    const mountedRef =
+        useRef(false);
+
+    const initializingRef =
+        useRef(false);
+
+
+    // ========================================================
+    // WEBRTC DEDUP REFS
+    // ========================================================
+
+    const processedOffersRef =
+        useRef(new Set());
+
+    const processedAnswersRef =
+        useRef(new Set());
+
+    const processedIceRef =
+        useRef(new Set());
+
 
     // ========================================================
     // STABLE RUNTIME REFS
-    // These prevent the initialization effect from restarting
-    // when currentUser/profile/room state changes.
+    // IMPORTANT:
+    // These prevent UI state changes from rebuilding
+    // the realtime/WebRTC initialization.
     // ========================================================
 
-    const currentUserIdRef = useRef("");
-    const currentDisplayNameRef = useRef("Participant");
-    const roomRef = useRef(null);
+    const currentUserIdRef =
+        useRef("");
+
+    const currentDisplayNameRef =
+        useRef("Participant");
+
+    const roomRef =
+        useRef(null);
 
 
     // ========================================================
     // STATE
     // ========================================================
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+    const [loading, setLoading] =
+        useState(true);
 
-    const [room, setRoom] = useState(null);
-    const [currentUser, setCurrentUser] = useState(null);
-    const [profile, setProfile] = useState(null);
-    const [participants, setParticipants] = useState([]);
+    const [error, setError] =
+        useState("");
 
-    const [localMicEnabled, setLocalMicEnabled] = useState(true);
-    const [localCameraEnabled, setLocalCameraEnabled] = useState(true);
-    const [cameraStarted, setCameraStarted] = useState(false);
-    const [screenSharing, setScreenSharing] = useState(false);
+    const [room, setRoom] =
+        useState(null);
 
-    const [chatOpen, setChatOpen] = useState(false);
-    const [participantsOpen, setParticipantsOpen] = useState(false);
-    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [currentUser, setCurrentUser] =
+        useState(null);
 
-    const [raiseHandEnabled, setRaiseHandEnabled] = useState(false);
-    const [applauseCount, setApplauseCount] = useState(0);
-    const [floatingReactions, setFloatingReactions] = useState([]);
+    const [profile, setProfile] =
+        useState(null);
 
-    const [messages, setMessages] = useState([]);
-    const [chatMessage, setChatMessage] = useState("");
+    const [participants, setParticipants] =
+        useState([]);
 
-    const [copySuccess, setCopySuccess] = useState(false);
-    const [endingMeeting, setEndingMeeting] = useState(false);
+    const [localMicEnabled, setLocalMicEnabled] =
+        useState(true);
 
-    // IMPORTANT:
-    // A ref update does not trigger React rendering.
-    // This counter forces the remote-video grid to re-render
-    // whenever a WebRTC stream arrives.
-    const [remoteStreamVersion, setRemoteStreamVersion] = useState(0);
+    const [localCameraEnabled, setLocalCameraEnabled] =
+        useState(true);
+
+    const [cameraStarted, setCameraStarted] =
+        useState(false);
+
+    const [screenSharing, setScreenSharing] =
+        useState(false);
+
+    const [chatOpen, setChatOpen] =
+        useState(false);
+
+    const [participantsOpen, setParticipantsOpen] =
+        useState(false);
+
+    const [settingsOpen, setSettingsOpen] =
+        useState(false);
+
+    const [raiseHandEnabled, setRaiseHandEnabled] =
+        useState(false);
+
+    const [applauseCount, setApplauseCount] =
+        useState(0);
+
+    const [floatingReactions, setFloatingReactions] =
+        useState([]);
+
+    const [messages, setMessages] =
+        useState([]);
+
+    const [chatMessage, setChatMessage] =
+        useState("");
+
+    const [copySuccess, setCopySuccess] =
+        useState(false);
+
+    const [endingMeeting, setEndingMeeting] =
+        useState(false);
+
+    const [remoteStreamVersion, setRemoteStreamVersion] =
+        useState(0);
 
 
     // ========================================================
-    // MEMOS
+    // DERIVED DATA
     // ========================================================
 
-    const currentUserId = useMemo(() => {
-        return normalizeId(currentUser?.id);
-    }, [currentUser]);
-
-
-    const currentDisplayName = useMemo(() => {
-        return (
-            profile?.full_name ||
-            currentUser?.email ||
-            "Participant"
+    const currentUserId =
+        useMemo(
+            () =>
+                normalizeId(
+                    currentUser?.id
+                ),
+            [currentUser]
         );
-    }, [profile, currentUser]);
 
 
-    const joinLink = useMemo(() => {
-        if (!room) {
-            return "";
-        }
+    const currentDisplayName =
+        useMemo(
+            () =>
+                profile?.full_name ||
+                currentUser?.email ||
+                "Participant",
+            [
+                profile,
+                currentUser,
+            ]
+        );
 
-        const value = room?.room_code || room?.id || meetingId;
 
-        return `${window.location.origin}/communication/meeting/${encodeURIComponent(
-            String(value)
-        )}`;
-    }, [room, meetingId]);
+    const joinLink =
+        useMemo(
+            () =>
+                typeof window !==
+                    "undefined"
+                    ? `${window.location.origin}/communication/meetings/${meetingId}`
+                    : "",
+            [meetingId]
+        );
 
 
-    const remoteParticipantCount = useMemo(() => {
-        return participants.filter(
-            (participant) =>
-                normalizeId(participant.user_id) !== currentUserId
-        ).length;
-    }, [participants, currentUserId]);
+    const remoteParticipantCount =
+        useMemo(
+            () =>
+                participants.filter(
+                    (participant) =>
+                        normalizeId(
+                            participant.user_id
+                        ) !==
+                        currentUserId
+                ).length,
+            [
+                participants,
+                currentUserId,
+            ]
+        );
 
 
     // ========================================================
-    // KEEP STABLE REFS UPDATED
+    // KEEP RUNTIME REFS CURRENT
     // ========================================================
 
     useEffect(() => {
-        currentUserIdRef.current = currentUserId;
+        currentUserIdRef.current =
+            currentUserId;
     }, [currentUserId]);
 
 
     useEffect(() => {
-        currentDisplayNameRef.current = currentDisplayName;
+        currentDisplayNameRef.current =
+            currentDisplayName;
     }, [currentDisplayName]);
 
 
     useEffect(() => {
-        roomRef.current = room;
+        roomRef.current =
+            room;
     }, [room]);
 
 
     // ========================================================
-    // MEDIA CLEANUP
+    // STOP ALL MEDIA
     // ========================================================
 
-    const stopAllMedia = useCallback(() => {
-        try {
-            localStreamRef.current?.getTracks?.().forEach((track) => {
-                track.stop();
-            });
-        } catch {
-            // Ignore cleanup errors.
-        }
-
-        try {
-            screenStreamRef.current?.getTracks?.().forEach((track) => {
-                track.stop();
-            });
-        } catch {
-            // Ignore cleanup errors.
-        }
-
-        localStreamRef.current = null;
-        screenStreamRef.current = null;
-
-        if (localVideoRef.current) {
-            localVideoRef.current.srcObject = null;
-        }
-
-        setCameraStarted(false);
-        setScreenSharing(false);
-    }, []);
-
-
-    const closePeerConnection = useCallback((remoteUserId) => {
-        const key = normalizeId(remoteUserId);
-
-        if (!key) {
-            return;
-        }
-
-        const peer = peerConnectionsRef.current.get(key);
-
-        if (peer) {
-            try {
-                peer.ontrack = null;
-                peer.onicecandidate = null;
-                peer.onconnectionstatechange = null;
-                peer.oniceconnectionstatechange = null;
-                peer.close();
-            } catch {
-                // Ignore cleanup errors.
+    const stopAllMedia =
+        useCallback(() => {
+            if (
+                localStreamRef.current
+            ) {
+                localStreamRef.current
+                    .getTracks()
+                    .forEach(
+                        (track) => {
+                            try {
+                                track.stop();
+                            } catch {
+                                // Ignore cleanup errors.
+                            }
+                        }
+                    );
             }
-        }
 
-        peerConnectionsRef.current.delete(key);
-        remoteStreamsRef.current.delete(key);
-        remoteVideoRefs.current.delete(key);
-        pendingIceCandidatesRef.current.delete(key);
+            if (
+                screenStreamRef.current
+            ) {
+                screenStreamRef.current
+                    .getTracks()
+                    .forEach(
+                        (track) => {
+                            try {
+                                track.stop();
+                            } catch {
+                                // Ignore cleanup errors.
+                            }
+                        }
+                    );
+            }
 
-        if (mountedRef.current) {
-            setRemoteStreamVersion((value) => value + 1);
-        }
-    }, []);
+            localStreamRef.current =
+                null;
 
+            screenStreamRef.current =
+                null;
 
-    const closeAllPeerConnections = useCallback(() => {
-        Array.from(peerConnectionsRef.current.keys()).forEach((userId) => {
-            const peer = peerConnectionsRef.current.get(userId);
+            setCameraStarted(false);
 
-            if (peer) {
+            setScreenSharing(false);
+
+            if (
+                localVideoRef.current
+            ) {
                 try {
-                    peer.ontrack = null;
-                    peer.onicecandidate = null;
-                    peer.onconnectionstatechange = null;
-                    peer.oniceconnectionstatechange = null;
-                    peer.close();
+                    localVideoRef.current.srcObject =
+                        null;
                 } catch {
                     // Ignore cleanup errors.
                 }
             }
-        });
-
-        peerConnectionsRef.current.clear();
-        remoteStreamsRef.current.clear();
-        pendingIceCandidatesRef.current.clear();
-        remoteVideoRefs.current.clear();
-
-        if (mountedRef.current) {
-            setRemoteStreamVersion((value) => value + 1);
-        }
-    }, []);
+        }, []);
 
 
     // ========================================================
-    // PRESENCE
+    // CLOSE ONE PEER
     // ========================================================
 
-    const updateParticipantPresence = useCallback((presenceState) => {
-        const users = extractPresenceUsers(presenceState);
+    const closePeerConnection =
+        useCallback(
+            (remoteUserId) => {
+                const userId =
+                    normalizeId(
+                        remoteUserId
+                    );
 
-        if (mountedRef.current) {
-            setParticipants(users);
-        }
-    }, []);
+                if (!userId) {
+                    return;
+                }
 
+                const peer =
+                    peerConnectionsRef.current.get(
+                        userId
+                    );
 
-    // ========================================================
-    // ICE QUEUE
-    // ========================================================
+                if (peer) {
+                    try {
+                        peer.ontrack =
+                            null;
 
-    const flushPendingIceCandidates = useCallback(
-        async (remoteUserId, peer) => {
-            const key = normalizeId(remoteUserId);
+                        peer.onicecandidate =
+                            null;
 
-            const queue =
-                pendingIceCandidatesRef.current.get(key) || [];
+                        peer.onconnectionstatechange =
+                            null;
 
-            if (!queue.length || !peer?.remoteDescription) {
-                return;
-            }
+                        peer.oniceconnectionstatechange =
+                            null;
 
-            for (const candidate of queue) {
-                try {
-                    await peer.addIceCandidate(candidate);
-                } catch (candidateError) {
-                    console.warn(
-                        "Failed to apply queued ICE candidate:",
-                        candidateError
+                        peer.onnegotiationneeded =
+                            null;
+
+                        peer.close();
+                    } catch {
+                        // Ignore peer cleanup errors.
+                    }
+                }
+
+                peerConnectionsRef.current.delete(
+                    userId
+                );
+
+                remoteStreamsRef.current.delete(
+                    userId
+                );
+
+                remoteVideoRefs.current.delete(
+                    userId
+                );
+
+                pendingIceCandidatesRef.current.delete(
+                    userId
+                );
+
+                if (
+                    mountedRef.current
+                ) {
+                    setRemoteStreamVersion(
+                        (value) =>
+                            value + 1
                     );
                 }
-            }
-
-            pendingIceCandidatesRef.current.delete(key);
-        },
-        []
-    );
+            },
+            []
+        );
 
 
     // ========================================================
-    // SEND REALTIME EVENT
+    // CLOSE ALL PEERS
     // ========================================================
 
-    const sendRealtime = useCallback(async (event, payload) => {
-        const channel = channelRef.current;
+    const closeAllPeerConnections =
+        useCallback(() => {
+            peerConnectionsRef.current.forEach(
+                (peer) => {
+                    try {
+                        peer.ontrack =
+                            null;
 
-        if (!channel) {
-            return null;
-        }
+                        peer.onicecandidate =
+                            null;
 
-        try {
-            return await channel.send({
-                type: "broadcast",
-                event,
-                payload,
-            });
-        } catch (sendError) {
-            console.warn(
-                `Realtime event ${event} failed:`,
-                sendError
+                        peer.onconnectionstatechange =
+                            null;
+
+                        peer.oniceconnectionstatechange =
+                            null;
+
+                        peer.onnegotiationneeded =
+                            null;
+
+                        peer.close();
+                    } catch {
+                        // Ignore cleanup errors.
+                    }
+                }
             );
 
-            return null;
-        }
-    }, []);
+            peerConnectionsRef.current.clear();
+
+            remoteStreamsRef.current.clear();
+
+            remoteVideoRefs.current.clear();
+
+            pendingIceCandidatesRef.current.clear();
+
+            if (
+                mountedRef.current
+            ) {
+                setRemoteStreamVersion(
+                    (value) =>
+                        value + 1
+                );
+            }
+        }, []);
+
+
+    // ========================================================
+    // UPDATE PARTICIPANT PRESENCE
+    // ========================================================
+
+    const updateParticipantPresence =
+        useCallback(
+            (presenceState) => {
+                const users =
+                    extractPresenceUsers(
+                        presenceState
+                    );
+
+                setParticipants(
+                    (current) => {
+                        const existingMap =
+                            new Map(
+                                current.map(
+                                    (
+                                        participant
+                                    ) => [
+                                        normalizeId(
+                                            participant.user_id
+                                        ),
+                                        participant,
+                                    ]
+                                )
+                            );
+
+                        return users.map(
+                            (user) => {
+                                const userId =
+                                    normalizeId(
+                                        user.user_id
+                                    );
+
+                                const existing =
+                                    existingMap.get(
+                                        userId
+                                    );
+
+                                return {
+                                    ...(existing ||
+                                        {}),
+                                    ...user,
+                                    user_id:
+                                        userId,
+                                    display_name:
+                                        user.display_name ||
+                                        existing?.display_name ||
+                                        "Participant",
+                                    joined_at:
+                                        user.joined_at ||
+                                        existing?.joined_at ||
+                                        null,
+                                    role:
+                                        user.role ||
+                                        existing?.role ||
+                                        "participant",
+                                    status:
+                                        "joined",
+                                    hand_raised:
+                                        user.hand_raised ??
+                                        existing?.hand_raised ??
+                                        false,
+                                    mic_enabled:
+                                        user.mic_enabled ??
+                                        existing?.mic_enabled ??
+                                        true,
+                                    camera_enabled:
+                                        user.camera_enabled ??
+                                        existing?.camera_enabled ??
+                                        true,
+                                };
+                            }
+                        );
+                    }
+                );
+            },
+            []
+        );
+
+
+    // ========================================================
+    // FLUSH ICE CANDIDATES
+    // ========================================================
+
+    const flushPendingIceCandidates =
+        useCallback(
+            async (
+                remoteUserId,
+                peer
+            ) => {
+                const userId =
+                    normalizeId(
+                        remoteUserId
+                    );
+
+                if (
+                    !userId ||
+                    !peer?.remoteDescription
+                ) {
+                    return;
+                }
+
+                const queued =
+                    pendingIceCandidatesRef.current.get(
+                        userId
+                    ) || [];
+
+                if (
+                    !queued.length
+                ) {
+                    return;
+                }
+
+                pendingIceCandidatesRef.current.delete(
+                    userId
+                );
+
+                for (
+                    const candidate of queued
+                ) {
+                    try {
+                        await peer.addIceCandidate(
+                            new RTCIceCandidate(
+                                candidate
+                            )
+                        );
+                    } catch (
+                        iceError
+                    ) {
+                        console.warn(
+                            "Unable to apply queued ICE candidate:",
+                            iceError
+                        );
+                    }
+                }
+            },
+            []
+        );
+
+
+    // ========================================================
+    // SEND REALTIME
+    // ========================================================
+
+    const sendRealtime =
+        useCallback(
+            async (
+                event,
+                payload
+            ) => {
+                const channel =
+                    channelRef.current;
+
+                if (!channel) {
+                    return false;
+                }
+
+                try {
+                    await channel.send({
+                        type: "broadcast",
+                        event,
+                        payload,
+                    });
+
+                    return true;
+                } catch (
+                    realtimeError
+                ) {
+                    console.warn(
+                        `Realtime ${event} send failed:`,
+                        realtimeError
+                    );
+
+                    return false;
+                }
+            },
+            []
+        );
 
 
     // ========================================================
     // CREATE PEER CONNECTION
     // ========================================================
 
-    const createPeerConnection = useCallback(
-        async (remoteUserId, shouldCreateOffer = false) => {
-            const key = normalizeId(remoteUserId);
-            const localUserId = currentUserIdRef.current;
+    const createPeerConnection =
+        useCallback(
+            async (
+                remoteUserId,
+                shouldCreateOffer = false
+            ) => {
+                const userId =
+                    normalizeId(
+                        remoteUserId
+                    );
 
-            if (!key || !localUserId || key === localUserId) {
-                return null;
-            }
+                const localUserId =
+                    currentUserIdRef.current;
 
-            if (!localStreamRef.current) {
-                console.warn(
-                    "Cannot create WebRTC peer without local media."
+                if (
+                    !userId ||
+                    !localUserId ||
+                    userId ===
+                        localUserId
+                ) {
+                    return null;
+                }
+
+                const localStream =
+                    localStreamRef.current;
+
+                if (!localStream) {
+                    throw new Error(
+                        "Local media is not ready."
+                    );
+                }
+
+                const existingPeer =
+                    peerConnectionsRef.current.get(
+                        userId
+                    );
+
+                if (
+                    existingPeer
+                ) {
+                    if (
+                        shouldCreateOffer &&
+                        existingPeer.signalingState ===
+                            "stable"
+                    ) {
+                        try {
+                            const offer =
+                                await existingPeer.createOffer();
+
+                            await existingPeer.setLocalDescription(
+                                offer
+                            );
+
+                            await sendRealtime(
+                                "webrtc-offer",
+                                {
+                                    from:
+                                        localUserId,
+                                    to:
+                                        userId,
+                                    offer,
+                                }
+                            );
+                        } catch (
+                            offerError
+                        ) {
+                            console.warn(
+                                "Existing peer renegotiation failed:",
+                                offerError
+                            );
+                        }
+                    }
+
+                    return existingPeer;
+                }
+
+                const peer =
+                    new RTCPeerConnection({
+                        iceServers:
+                            ICE_SERVERS,
+                    });
+
+                peerConnectionsRef.current.set(
+                    userId,
+                    peer
                 );
 
-                return null;
-            }
+                localStream
+                    .getTracks()
+                    .forEach(
+                        (track) => {
+                            try {
+                                peer.addTrack(
+                                    track,
+                                    localStream
+                                );
+                            } catch (
+                                trackError
+                            ) {
+                                console.warn(
+                                    "Unable to add local track:",
+                                    trackError
+                                );
+                            }
+                        }
+                    );
 
-            const existingPeer =
-                peerConnectionsRef.current.get(key);
 
-            if (existingPeer) {
+                peer.ontrack =
+                    (event) => {
+                        const incomingStream =
+                            event.streams?.[0] ||
+                            remoteStreamsRef.current.get(
+                                userId
+                            );
+
+                        if (
+                            !incomingStream
+                        ) {
+                            return;
+                        }
+
+                        remoteStreamsRef.current.set(
+                            userId,
+                            incomingStream
+                        );
+
+                        if (
+                            mountedRef.current
+                        ) {
+                            setRemoteStreamVersion(
+                                (value) =>
+                                    value + 1
+                            );
+                        }
+
+                        const element =
+                            remoteVideoRefs.current.get(
+                                userId
+                            );
+
+                        if (
+                            element &&
+                            element.srcObject !==
+                                incomingStream
+                        ) {
+                            try {
+                                element.srcObject =
+                                    incomingStream;
+
+                                element
+                                    .play?.()
+                                    .catch(
+                                        () => null
+                                    );
+                            } catch {
+                                // Ignore attachment errors.
+                            }
+                        }
+                    };
+
+
+                peer.onicecandidate =
+                    async (event) => {
+                        if (
+                            !event.candidate
+                        ) {
+                            return;
+                        }
+
+                        await sendRealtime(
+                            "webrtc-ice",
+                            {
+                                from:
+                                    localUserId,
+                                to:
+                                    userId,
+                                candidate:
+                                    event.candidate,
+                            }
+                        );
+                    };
+
+
+                peer.onconnectionstatechange =
+                    () => {
+                        const state =
+                            peer.connectionState;
+
+                        if (
+                            state ===
+                                "failed" ||
+                            state ===
+                                "closed"
+                        ) {
+                            closePeerConnection(
+                                userId
+                            );
+
+                            return;
+                        }
+
+                        if (
+                            state ===
+                            "disconnected"
+                        ) {
+                            window.setTimeout(
+                                () => {
+                                    if (
+                                        peer.connectionState ===
+                                            "disconnected" ||
+                                        peer.connectionState ===
+                                            "failed"
+                                    ) {
+                                        closePeerConnection(
+                                            userId
+                                        );
+                                    }
+                                },
+                                5000
+                            );
+                        }
+                    };
+
+
+                peer.oniceconnectionstatechange =
+                    () => {
+                        const state =
+                            peer.iceConnectionState;
+
+                        if (
+                            state ===
+                                "failed" ||
+                            state ===
+                                "closed"
+                        ) {
+                            closePeerConnection(
+                                userId
+                            );
+                        }
+                    };
+
+
                 if (
-                    shouldCreateOffer &&
-                    existingPeer.signalingState === "stable"
+                    shouldCreateOffer
                 ) {
                     try {
                         const offer =
-                            await existingPeer.createOffer();
+                            await peer.createOffer();
 
-                        await existingPeer.setLocalDescription(
+                        await peer.setLocalDescription(
                             offer
                         );
 
-                        await sendRealtime("webrtc-offer", {
-                            from: localUserId,
-                            to: key,
-                            offer: existingPeer.localDescription,
-                        });
-                    } catch (offerError) {
+                        await sendRealtime(
+                            "webrtc-offer",
+                            {
+                                from:
+                                    localUserId,
+                                to:
+                                    userId,
+                                offer,
+                            }
+                        );
+                    } catch (
+                        offerError
+                    ) {
                         console.warn(
-                            "Failed to renegotiate existing peer:",
+                            "Initial WebRTC offer failed:",
                             offerError
                         );
+
+                        closePeerConnection(
+                            userId
+                        );
+
+                        throw offerError;
                     }
                 }
 
-                return existingPeer;
-            }
-
-            const peer = new RTCPeerConnection({
-                iceServers: ICE_SERVERS,
-            });
-
-            peerConnectionsRef.current.set(key, peer);
-
-            // ----------------------------------------------------
-            // LOCAL TRACKS
-            // ----------------------------------------------------
-
-            localStreamRef.current
-                .getTracks()
-                .forEach((track) => {
-                    try {
-                        peer.addTrack(
-                            track,
-                            localStreamRef.current
-                        );
-                    } catch (trackError) {
-                        console.warn(
-                            "Failed to add local track to peer:",
-                            trackError
-                        );
-                    }
-                });
+                return peer;
+            },
+            [
+                sendRealtime,
+                closePeerConnection,
+            ]
+        );
 
 
-            // ----------------------------------------------------
-            // REMOTE TRACKS
-            // ----------------------------------------------------
+    // ========================================================
+    // HANDLE OFFER
+    // ========================================================
 
-            peer.ontrack = (event) => {
-                const stream =
-                    event.streams?.[0] ||
-                    remoteStreamsRef.current.get(key);
-
-                if (!stream) {
-                    return;
-                }
-
-                remoteStreamsRef.current.set(key, stream);
-
-                // Force React to render the remote tile again.
-                if (mountedRef.current) {
-                    setRemoteStreamVersion(
-                        (value) => value + 1
+    const handleOffer =
+        useCallback(
+            async (payload) => {
+                const from =
+                    normalizeId(
+                        payload?.from ||
+                            payload?.user_id
                     );
-                }
 
-                const videoElement =
-                    remoteVideoRefs.current.get(key);
+                const to =
+                    normalizeId(
+                        payload?.to
+                    );
 
-                if (videoElement) {
-                    try {
-                        if (videoElement.srcObject !== stream) {
-                            videoElement.srcObject = stream;
-                        }
+                const localUserId =
+                    currentUserIdRef.current;
 
-                        videoElement
-                            .play?.()
-                            .catch(() => null);
-                    } catch {
-                        // Ignore video attachment errors.
-                    }
-                }
-            };
-
-
-            // ----------------------------------------------------
-            // ICE CANDIDATES
-            // ----------------------------------------------------
-
-            peer.onicecandidate = async (event) => {
-                if (!event.candidate) {
-                    return;
-                }
-
-                await sendRealtime("webrtc-ice", {
-                    from: localUserId,
-                    to: key,
-                    candidate: event.candidate,
-                });
-            };
-
-
-            // ----------------------------------------------------
-            // CONNECTION STATE
-            // ----------------------------------------------------
-
-            peer.onconnectionstatechange = () => {
-                const state = peer.connectionState;
-
-                if (state === "failed" || state === "closed") {
-                    closePeerConnection(key);
-                    return;
-                }
-
-                // Do not immediately destroy a peer on "disconnected".
-                // Browsers can temporarily report disconnected while
-                // ICE is recovering.
-                if (state === "disconnected") {
-                    window.setTimeout(() => {
-                        if (
-                            peerConnectionsRef.current.get(key) ===
-                            peer &&
-                            (
-                                peer.connectionState ===
-                                    "disconnected" ||
-                                peer.connectionState ===
-                                    "failed"
-                            )
-                        ) {
-                            closePeerConnection(key);
-                        }
-                    }, 5000);
-                }
-            };
-
-
-            // ----------------------------------------------------
-            // ICE CONNECTION STATE
-            // ----------------------------------------------------
-
-            peer.oniceconnectionstatechange = () => {
-                const state = peer.iceConnectionState;
+                const offer =
+                    payload?.offer;
 
                 if (
-                    state === "failed" ||
-                    state === "closed"
+                    !from ||
+                    !to ||
+                    !offer ||
+                    to !==
+                        localUserId ||
+                    from ===
+                        localUserId
                 ) {
-                    closePeerConnection(key);
+                    return;
                 }
-            };
 
+                const dedupKey =
+                    `${from}:${offer?.sdp || ""}`;
 
-            // ----------------------------------------------------
-            // OFFER
-            // ----------------------------------------------------
-
-            if (shouldCreateOffer) {
-                try {
-                    const offer =
-                        await peer.createOffer();
-
-                    await peer.setLocalDescription(
-                        offer
-                    );
-
-                    await sendRealtime("webrtc-offer", {
-                        from: localUserId,
-                        to: key,
-                        offer: peer.localDescription,
-                    });
-                } catch (offerError) {
-                    console.error(
-                        "WebRTC offer creation failed:",
-                        offerError
-                    );
-
-                    closePeerConnection(key);
+                if (
+                    processedOffersRef.current.has(
+                        dedupKey
+                    )
+                ) {
+                    return;
                 }
-            }
 
-            return peer;
-        },
-        [
-            sendRealtime,
-            closePeerConnection,
-        ]
-    );
+                processedOffersRef.current.add(
+                    dedupKey
+                );
 
-
-    // ========================================================
-    // OFFER
-    // ========================================================
-
-    const handleOffer = useCallback(
-        async (payload) => {
-            const from = normalizeId(payload?.from);
-            const to = normalizeId(payload?.to);
-            const localUserId = currentUserIdRef.current;
-
-            if (
-                !from ||
-                !to ||
-                !localUserId ||
-                to !== localUserId ||
-                !payload?.offer
-            ) {
-                return;
-            }
-
-            const offerKey =
-                `${from}:${payload.offer?.sdp || ""}`;
-
-            if (
-                processedOffersRef.current.has(
-                    offerKey
-                )
-            ) {
-                return;
-            }
-
-            processedOffersRef.current.add(
-                offerKey
-            );
-
-            try {
                 let peer =
                     peerConnectionsRef.current.get(
                         from
@@ -751,108 +1189,128 @@ function CommunicationMeeting() {
                         );
                 }
 
-                if (!peer) {
+                if (
+                    !peer
+                ) {
                     return;
                 }
 
-                // If we are already in an unexpected signaling
-                // state, discard this duplicate offer rather than
-                // corrupting the connection.
                 if (
-                    peer.signalingState !== "stable" &&
+                    peer.signalingState !==
+                        "stable" &&
                     peer.signalingState !==
                         "have-local-offer"
                 ) {
                     return;
                 }
 
-                await peer.setRemoteDescription(
-                    new RTCSessionDescription(
-                        payload.offer
-                    )
-                );
+                try {
+                    await peer.setRemoteDescription(
+                        new RTCSessionDescription(
+                            offer
+                        )
+                    );
 
-                await flushPendingIceCandidates(
-                    from,
-                    peer
-                );
+                    await flushPendingIceCandidates(
+                        from,
+                        peer
+                    );
+
+                    const answer =
+                        await peer.createAnswer();
+
+                    await peer.setLocalDescription(
+                        answer
+                    );
+
+                    await sendRealtime(
+                        "webrtc-answer",
+                        {
+                            from:
+                                localUserId,
+                            to:
+                                from,
+                            answer,
+                        }
+                    );
+                } catch (
+                    offerError
+                ) {
+                    console.warn(
+                        "WebRTC offer handling failed:",
+                        offerError
+                    );
+                }
+            },
+            [
+                createPeerConnection,
+                flushPendingIceCandidates,
+                sendRealtime,
+            ]
+        );
+
+
+    // ========================================================
+    // HANDLE ANSWER
+    // ========================================================
+
+    const handleAnswer =
+        useCallback(
+            async (payload) => {
+                const from =
+                    normalizeId(
+                        payload?.from
+                    );
+
+                const to =
+                    normalizeId(
+                        payload?.to
+                    );
+
+                const localUserId =
+                    currentUserIdRef.current;
 
                 const answer =
-                    await peer.createAnswer();
+                    payload?.answer;
 
-                await peer.setLocalDescription(
-                    answer
+                if (
+                    !from ||
+                    !to ||
+                    !answer ||
+                    to !==
+                        localUserId ||
+                    from ===
+                        localUserId
+                ) {
+                    return;
+                }
+
+                const dedupKey =
+                    `${from}:${answer?.sdp || ""}`;
+
+                if (
+                    processedAnswersRef.current.has(
+                        dedupKey
+                    )
+                ) {
+                    return;
+                }
+
+                processedAnswersRef.current.add(
+                    dedupKey
                 );
 
-                await sendRealtime(
-                    "webrtc-answer",
-                    {
-                        from: localUserId,
-                        to: from,
-                        answer:
-                            peer.localDescription,
-                    }
-                );
-            } catch (offerError) {
-                console.error(
-                    "Failed to handle WebRTC offer:",
-                    offerError
-                );
-            }
-        },
-        [
-            createPeerConnection,
-            flushPendingIceCandidates,
-            sendRealtime,
-        ]
-    );
+                const peer =
+                    peerConnectionsRef.current.get(
+                        from
+                    );
 
+                if (
+                    !peer
+                ) {
+                    return;
+                }
 
-    // ========================================================
-    // ANSWER
-    // ========================================================
-
-    const handleAnswer = useCallback(
-        async (payload) => {
-            const from = normalizeId(payload?.from);
-            const to = normalizeId(payload?.to);
-            const localUserId = currentUserIdRef.current;
-
-            if (
-                !from ||
-                !to ||
-                !localUserId ||
-                to !== localUserId ||
-                !payload?.answer
-            ) {
-                return;
-            }
-
-            const answerKey =
-                `${from}:${payload.answer?.sdp || ""}`;
-
-            if (
-                processedAnswersRef.current.has(
-                    answerKey
-                )
-            ) {
-                return;
-            }
-
-            processedAnswersRef.current.add(
-                answerKey
-            );
-
-            const peer =
-                peerConnectionsRef.current.get(
-                    from
-                );
-
-            if (!peer) {
-                return;
-            }
-
-            try {
                 if (
                     peer.signalingState !==
                     "have-local-offer"
@@ -860,261 +1318,334 @@ function CommunicationMeeting() {
                     return;
                 }
 
-                await peer.setRemoteDescription(
-                    new RTCSessionDescription(
-                        payload.answer
-                    )
-                );
+                try {
+                    await peer.setRemoteDescription(
+                        new RTCSessionDescription(
+                            answer
+                        )
+                    );
 
-                await flushPendingIceCandidates(
-                    from,
-                    peer
-                );
-            } catch (answerError) {
-                console.error(
-                    "Failed to handle WebRTC answer:",
+                    await flushPendingIceCandidates(
+                        from,
+                        peer
+                    );
+                } catch (
                     answerError
-                );
-            }
-        },
-        [flushPendingIceCandidates]
-    );
+                ) {
+                    console.warn(
+                        "WebRTC answer handling failed:",
+                        answerError
+                    );
+                }
+            },
+            [
+                flushPendingIceCandidates,
+            ]
+        );
 
 
     // ========================================================
-    // ICE
+    // HANDLE ICE
     // ========================================================
 
-    const handleIceCandidate = useCallback(
-        async (payload) => {
-            const from = normalizeId(payload?.from);
-            const to = normalizeId(payload?.to);
-            const localUserId = currentUserIdRef.current;
-            const candidate = payload?.candidate;
+    const handleIceCandidate =
+        useCallback(
+            async (payload) => {
+                const from =
+                    normalizeId(
+                        payload?.from
+                    );
 
-            if (
-                !from ||
-                !to ||
-                !localUserId ||
-                to !== localUserId ||
-                !candidate
-            ) {
-                return;
-            }
+                const to =
+                    normalizeId(
+                        payload?.to
+                    );
 
-            const candidateId =
-                `${from}:${candidate?.candidate || ""}:${candidate?.sdpMLineIndex ?? ""}`;
+                const localUserId =
+                    currentUserIdRef.current;
 
-            if (
-                processedIceRef.current.has(
-                    candidateId
-                )
-            ) {
-                return;
-            }
+                const candidate =
+                    payload?.candidate;
 
-            processedIceRef.current.add(
-                candidateId
-            );
+                if (
+                    !from ||
+                    !to ||
+                    !candidate ||
+                    to !==
+                        localUserId ||
+                    from ===
+                        localUserId
+                ) {
+                    return;
+                }
 
-            const peer =
-                peerConnectionsRef.current.get(
-                    from
+                const candidateKey =
+                    `${from}:${candidate.candidate || ""}:${candidate.sdpMid || ""}:${candidate.sdpMLineIndex ?? ""}`;
+
+                if (
+                    processedIceRef.current.has(
+                        candidateKey
+                    )
+                ) {
+                    return;
+                }
+
+                processedIceRef.current.add(
+                    candidateKey
                 );
 
-            if (
-                !peer ||
-                !peer.remoteDescription
-            ) {
-                const queue =
-                    pendingIceCandidatesRef.current.get(
+                const peer =
+                    peerConnectionsRef.current.get(
                         from
-                    ) || [];
+                    );
 
-                queue.push(candidate);
+                if (
+                    !peer ||
+                    !peer.remoteDescription
+                ) {
+                    const queue =
+                        pendingIceCandidatesRef.current.get(
+                            from
+                        ) || [];
 
-                pendingIceCandidatesRef.current.set(
-                    from,
-                    queue
-                );
+                    queue.push(
+                        candidate
+                    );
 
-                return;
-            }
+                    pendingIceCandidatesRef.current.set(
+                        from,
+                        queue
+                    );
 
-            try {
-                await peer.addIceCandidate(
-                    candidate
-                );
-            } catch (iceError) {
-                console.warn(
-                    "Failed to apply ICE candidate:",
+                    return;
+                }
+
+                try {
+                    await peer.addIceCandidate(
+                        new RTCIceCandidate(
+                            candidate
+                        )
+                    );
+                } catch (
                     iceError
+                ) {
+                    console.warn(
+                        "Unable to add ICE candidate:",
+                        iceError
+                    );
+                }
+            },
+            []
+        );
+
+
+    // ========================================================
+    // FLOATING REACTION
+    // ========================================================
+
+    const showFloatingReaction =
+        useCallback(
+            (
+                emoji,
+                displayName
+            ) => {
+                const id =
+                    `${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 8)}`;
+
+                setFloatingReactions(
+                    (current) => [
+                        ...current,
+                        {
+                            id,
+                            emoji,
+                            display_name:
+                                displayName ||
+                                "Participant",
+                        },
+                    ]
                 );
-            }
-        },
-        []
-    );
+
+                const timer =
+                    window.setTimeout(
+                        () => {
+                            if (
+                                mountedRef.current
+                            ) {
+                                setFloatingReactions(
+                                    (
+                                        current
+                                    ) =>
+                                        current.filter(
+                                            (
+                                                item
+                                            ) =>
+                                                item.id !==
+                                                id
+                                        )
+                                );
+                            }
+
+                            reactionTimersRef.current.delete(
+                                id
+                            );
+                        },
+                        1800
+                    );
+
+                reactionTimersRef.current.set(
+                    id,
+                    timer
+                );
+            },
+            []
+        );
 
 
     // ========================================================
-    // MEETING REACTIONS
+    // HANDLE REMOTE REACTION
+    // IMPORTANT:
+    // Use refs instead of UI state as dependencies.
+    // This keeps the realtime callbacks stable.
     // ========================================================
 
-    const showFloatingReaction = useCallback(
-        (
-            emoji,
-            displayName = "Participant"
-        ) => {
-            const reactionId =
-                `${Date.now()}-${Math.random()
-                    .toString(36)
-                    .slice(2, 8)}`;
+    const handleRemoteReaction =
+        useCallback(
+            (payload) => {
+                if (
+                    !payload?.type
+                ) {
+                    return;
+                }
 
-            setFloatingReactions(
-                (current) => [
-                    ...current,
-                    {
-                        id: reactionId,
-                        emoji,
-                        display_name:
-                            displayName,
-                    },
-                ].slice(-8)
-            );
+                const from =
+                    normalizeId(
+                        payload.user_id ||
+                            payload.from
+                    );
 
-            const timer =
-                window.setTimeout(() => {
-                    setFloatingReactions(
+                const localUserId =
+                    currentUserIdRef.current;
+
+                if (
+                    !from ||
+                    from ===
+                        localUserId
+                ) {
+                    return;
+                }
+
+                const displayName =
+                    payload.display_name ||
+                    "Participant";
+
+                if (
+                    payload.type ===
+                    "applause"
+                ) {
+                    setApplauseCount(
+                        (value) =>
+                            value + 1
+                    );
+
+                    showFloatingReaction(
+                        "👏",
+                        displayName
+                    );
+
+                    return;
+                }
+
+                if (
+                    payload.type ===
+                    "raise_hand"
+                ) {
+                    const raised =
+                        Boolean(
+                            payload.enabled
+                        );
+
+                    setParticipants(
                         (current) =>
-                            current.filter(
-                                (item) =>
-                                    item.id !==
-                                    reactionId
+                            current.map(
+                                (
+                                    participant
+                                ) =>
+                                    normalizeId(
+                                        participant.user_id
+                                    ) ===
+                                    from
+                                        ? {
+                                              ...participant,
+                                              hand_raised:
+                                                  raised,
+                                          }
+                                        : participant
                             )
                     );
 
-                    reactionTimersRef.current.delete(
-                        reactionId
-                    );
-                }, 1800);
+                    if (raised) {
+                        showFloatingReaction(
+                            "✋",
+                            displayName
+                        );
+                    }
+                }
+            },
+            [
+                showFloatingReaction,
+            ]
+        );
 
-            reactionTimersRef.current.set(
-                reactionId,
-                timer
-            );
-        },
-        []
-    );
 
+    // ========================================================
+    // TOGGLE RAISE HAND
+    // ========================================================
 
-    const handleRemoteReaction = useCallback(
-        (payload) => {
-            const type = String(
-                payload?.type || ""
-            ).toLowerCase();
+    const toggleRaiseHand =
+        useCallback(
+            async () => {
+                const localUserId =
+                    currentUserIdRef.current;
 
-            const userId = normalizeId(
-                payload?.user_id
-            );
+                const channel =
+                    channelRef.current;
 
-            const displayName =
-                payload?.display_name ||
-                "Participant";
+                if (
+                    !localUserId ||
+                    !channel
+                ) {
+                    return;
+                }
 
-            if (
-                !type ||
-                !userId ||
-                userId ===
-                    currentUserIdRef.current
-            ) {
-                return;
-            }
+                const nextRaised =
+                    !raiseHandEnabled;
 
-            if (type === "applause") {
-                setApplauseCount(
-                    (current) => current + 1
+                setRaiseHandEnabled(
+                    nextRaised
                 );
-
-                showFloatingReaction(
-                    "👏",
-                    displayName
-                );
-
-                return;
-            }
-
-            if (type === "raise_hand") {
-                const active =
-                    payload?.active === true;
 
                 setParticipants(
                     (current) =>
                         current.map(
-                            (participant) =>
+                            (
+                                participant
+                            ) =>
                                 normalizeId(
                                     participant.user_id
-                                ) === userId
+                                ) ===
+                                localUserId
                                     ? {
                                           ...participant,
                                           hand_raised:
-                                              active,
+                                              nextRaised,
                                       }
                                     : participant
                         )
                 );
 
-                if (active) {
-                    showFloatingReaction(
-                        "✋",
-                        displayName
-                    );
-                }
-            }
-        },
-        [showFloatingReaction]
-    );
-
-
-    const toggleRaiseHand = useCallback(
-        async () => {
-            const localUserId =
-                currentUserIdRef.current;
-
-            if (!localUserId) {
-                return;
-            }
-
-            const nextRaised =
-                !raiseHandEnabled;
-
-            setRaiseHandEnabled(
-                nextRaised
-            );
-
-            setParticipants(
-                (current) =>
-                    current.map(
-                        (participant) =>
-                            normalizeId(
-                                participant.user_id
-                            ) === localUserId
-                                ? {
-                                      ...participant,
-                                      hand_raised:
-                                          nextRaised,
-                                  }
-                                : participant
-                    )
-            );
-
-            try {
-                const channel =
-                    channelRef.current;
-
-                if (channel) {
-                    const activeRoom =
-                        roomRef.current;
-
+                try {
                     await channel.track({
                         user_id:
                             localUserId,
@@ -1124,1064 +1655,1248 @@ function CommunicationMeeting() {
                             localParticipantJoinedAt.current ||
                             new Date().toISOString(),
                         mic_enabled:
-                            localMicEnabled,
+                            localStreamRef.current
+                                ?.getAudioTracks?.()[0]
+                                ?.enabled !== false,
                         camera_enabled:
-                            localCameraEnabled,
+                            localStreamRef.current
+                                ?.getVideoTracks?.()[0]
+                                ?.enabled !== false,
                         hand_raised:
                             nextRaised,
                         role:
                             normalizeId(
-                                activeRoom?.created_by
-                            ) === localUserId
+                                roomRef.current
+                                    ?.created_by
+                            ) ===
+                            localUserId
                                 ? "host"
                                 : "participant",
                     });
+                } catch (
+                    presenceError
+                ) {
+                    console.warn(
+                        "Unable to update raised hand presence:",
+                        presenceError
+                    );
                 }
-            } catch (trackError) {
-                console.warn(
-                    "Failed to update raised-hand presence:",
-                    trackError
+
+                await sendRealtime(
+                    "meeting-reaction",
+                    {
+                        type:
+                            "raise_hand",
+                        user_id:
+                            localUserId,
+                        display_name:
+                            currentDisplayNameRef.current,
+                        enabled:
+                            nextRaised,
+                    }
                 );
-            }
 
-            await sendRealtime(
-                "meeting-reaction",
-                {
-                    type: "raise_hand",
-                    user_id:
-                        localUserId,
-                    display_name:
-                        currentDisplayNameRef.current,
-                    active: nextRaised,
+                if (
+                    nextRaised
+                ) {
+                    showFloatingReaction(
+                        "✋",
+                        currentDisplayNameRef.current
+                    );
                 }
-            );
+            },
+            [
+                raiseHandEnabled,
+                sendRealtime,
+                showFloatingReaction,
+            ]
+        );
 
-            if (nextRaised) {
+
+    // ========================================================
+    // APPLAUSE
+    // ========================================================
+
+    const sendApplause =
+        useCallback(
+            async () => {
+                const localUserId =
+                    currentUserIdRef.current;
+
+                if (
+                    !localUserId
+                ) {
+                    return;
+                }
+
+                setApplauseCount(
+                    (value) =>
+                        value + 1
+                );
+
                 showFloatingReaction(
-                    "✋",
+                    "👏",
                     currentDisplayNameRef.current
                 );
-            }
-        },
-        [
-            raiseHandEnabled,
-            localMicEnabled,
-            localCameraEnabled,
-            sendRealtime,
-            showFloatingReaction,
-        ]
-    );
 
-
-    const sendApplause = useCallback(
-        async () => {
-            const localUserId =
-                currentUserIdRef.current;
-
-            if (!localUserId) {
-                return;
-            }
-
-            setApplauseCount(
-                (current) => current + 1
-            );
-
-            showFloatingReaction(
-                "👏",
-                currentDisplayNameRef.current
-            );
-
-            await sendRealtime(
-                "meeting-reaction",
-                {
-                    type: "applause",
-                    user_id:
-                        localUserId,
-                    display_name:
-                        currentDisplayNameRef.current,
-                    active: true,
-                }
-            );
-        },
-        [
-            sendRealtime,
-            showFloatingReaction,
-        ]
-    );
-
-
-    // ========================================================
-    // REMOTE EVENTS
-    // ========================================================
-
-    const handleRemoteLeave = useCallback(
-        (payload) => {
-            const userId = normalizeId(
-                payload?.user_id ||
-                    payload?.from
-            );
-
-            if (!userId) {
-                return;
-            }
-
-            closePeerConnection(userId);
-
-            setParticipants(
-                (current) =>
-                    current.filter(
-                        (participant) =>
-                            normalizeId(
-                                participant.user_id
-                            ) !== userId
-                    )
-            );
-        },
-        [closePeerConnection]
-    );
-
-
-    const handleRemoteMediaState = useCallback(
-        (payload) => {
-            if (!payload?.user_id) {
-                return;
-            }
-
-            setParticipants(
-                (current) =>
-                    current.map(
-                        (participant) =>
-                            normalizeId(
-                                participant.user_id
-                            ) ===
-                            normalizeId(
-                                payload.user_id
-                            )
-                                ? {
-                                      ...participant,
-                                      mic_enabled:
-                                          payload.mic_enabled ??
-                                          participant.mic_enabled,
-                                      camera_enabled:
-                                          payload.camera_enabled ??
-                                          participant.camera_enabled,
-                                  }
-                                : participant
-                    )
-            );
-        },
-        []
-    );
-
-
-    const handleRemoteChat = useCallback(
-        (payload) => {
-            if (
-                !payload?.id ||
-                !payload?.sender_id
-            ) {
-                return;
-            }
-
-            setMessages(
-                (current) => {
-                    if (
-                        current.some(
-                            (item) =>
-                                item.id ===
-                                payload.id
-                        )
-                    ) {
-                        return current;
+                await sendRealtime(
+                    "meeting-reaction",
+                    {
+                        type:
+                            "applause",
+                        user_id:
+                            localUserId,
+                        display_name:
+                            currentDisplayNameRef.current,
                     }
+                );
+            },
+            [
+                sendRealtime,
+                showFloatingReaction,
+            ]
+        );
 
-                    return [
-                        ...current,
-                        {
-                            id: payload.id,
-                            sender_id:
-                                normalizeId(
-                                    payload.sender_id
-                                ),
-                            sender_name:
-                                payload.sender_name ||
-                                "Participant",
-                            message_text:
-                                payload.message_text ||
-                                "",
-                            created_at:
-                                payload.created_at ||
-                                new Date().toISOString(),
-                        },
-                    ];
+
+    // ========================================================
+    // REMOTE LEAVE
+    // ========================================================
+
+    const handleRemoteLeave =
+        useCallback(
+            (payload) => {
+                const userId =
+                    normalizeId(
+                        payload?.user_id ||
+                            payload?.from
+                    );
+
+                if (!userId) {
+                    return;
                 }
-            );
-        },
-        []
-    );
+
+                closePeerConnection(
+                    userId
+                );
+
+                setParticipants(
+                    (current) =>
+                        current.filter(
+                            (
+                                participant
+                            ) =>
+                                normalizeId(
+                                    participant.user_id
+                                ) !==
+                                userId
+                        )
+                );
+            },
+            [
+                closePeerConnection,
+            ]
+        );
 
 
-    const handleBroadcast = useCallback(
-        async ({
-            event,
-            payload,
-        }) => {
-            if (!payload) {
-                return;
-            }
+    // ========================================================
+    // REMOTE MEDIA STATE
+    // ========================================================
 
-            switch (event) {
-                case "webrtc-offer":
-                    await handleOffer(payload);
-                    break;
+    const handleRemoteMediaState =
+        useCallback(
+            (payload) => {
+                if (
+                    !payload?.user_id
+                ) {
+                    return;
+                }
 
-                case "webrtc-answer":
-                    await handleAnswer(payload);
-                    break;
+                setParticipants(
+                    (current) =>
+                        current.map(
+                            (
+                                participant
+                            ) =>
+                                normalizeId(
+                                    participant.user_id
+                                ) ===
+                                normalizeId(
+                                    payload.user_id
+                                )
+                                    ? {
+                                          ...participant,
+                                          mic_enabled:
+                                              payload.mic_enabled ??
+                                              participant.mic_enabled,
+                                          camera_enabled:
+                                              payload.camera_enabled ??
+                                              participant.camera_enabled,
+                                      }
+                                    : participant
+                        )
+                );
+            },
+            []
+        );
 
-                case "webrtc-ice":
-                    await handleIceCandidate(payload);
-                    break;
 
-                case "participant-left":
-                    handleRemoteLeave(payload);
-                    break;
+    // ========================================================
+    // REMOTE CHAT
+    // ========================================================
 
-                case "media-state":
-                    handleRemoteMediaState(payload);
-                    break;
+    const handleRemoteChat =
+        useCallback(
+            (payload) => {
+                if (
+                    !payload?.id ||
+                    !payload?.sender_id
+                ) {
+                    return;
+                }
 
-                case "chat-message":
-                    handleRemoteChat(payload);
-                    break;
+                setMessages(
+                    (current) => {
+                        if (
+                            current.some(
+                                (item) =>
+                                    item.id ===
+                                    payload.id
+                            )
+                        ) {
+                            return current;
+                        }
 
-                case "meeting-reaction":
-                    handleRemoteReaction(payload);
-                    break;
+                        return [
+                            ...current,
+                            {
+                                id:
+                                    payload.id,
+                                sender_id:
+                                    normalizeId(
+                                        payload.sender_id
+                                    ),
+                                sender_name:
+                                    payload.sender_name ||
+                                    "Participant",
+                                message_text:
+                                    payload.message_text ||
+                                    "",
+                                created_at:
+                                    payload.created_at ||
+                                    new Date().toISOString(),
+                            },
+                        ];
+                    }
+                );
+            },
+            []
+        );
 
-                default:
-                    break;
-            }
-        },
-        [
-            handleOffer,
-            handleAnswer,
-            handleIceCandidate,
-            handleRemoteLeave,
-            handleRemoteMediaState,
-            handleRemoteChat,
-            handleRemoteReaction,
-        ]
-    );
+
+    // ========================================================
+    // BROADCAST HANDLER
+    // ========================================================
+
+    const handleBroadcast =
+        useCallback(
+            async ({
+                event,
+                payload,
+            }) => {
+                if (!payload) {
+                    return;
+                }
+
+                switch (event) {
+                    case "webrtc-offer":
+                        await handleOffer(
+                            payload
+                        );
+                        break;
+
+                    case "webrtc-answer":
+                        await handleAnswer(
+                            payload
+                        );
+                        break;
+
+                    case "webrtc-ice":
+                        await handleIceCandidate(
+                            payload
+                        );
+                        break;
+
+                    case "participant-left":
+                        handleRemoteLeave(
+                            payload
+                        );
+                        break;
+
+                    case "media-state":
+                        handleRemoteMediaState(
+                            payload
+                        );
+                        break;
+
+                    case "chat-message":
+                        handleRemoteChat(
+                            payload
+                        );
+                        break;
+
+                    case "meeting-reaction":
+                        handleRemoteReaction(
+                            payload
+                        );
+                        break;
+
+                    default:
+                        break;
+                }
+            },
+            [
+                handleOffer,
+                handleAnswer,
+                handleIceCandidate,
+                handleRemoteLeave,
+                handleRemoteMediaState,
+                handleRemoteChat,
+                handleRemoteReaction,
+            ]
+        );
 
 
     // ========================================================
     // START LOCAL MEDIA
     // ========================================================
 
-    const startLocalMedia = useCallback(
-        async () => {
-            if (localStreamRef.current) {
-                setCameraStarted(true);
+    const startLocalMedia =
+        useCallback(
+            async () => {
+                if (
+                    localStreamRef.current
+                ) {
+                    setCameraStarted(
+                        true
+                    );
 
-                if (localVideoRef.current) {
+                    if (
+                        localVideoRef.current
+                    ) {
+                        localVideoRef.current.srcObject =
+                            localStreamRef.current;
+
+                        localVideoRef.current
+                            .play?.()
+                            .catch(
+                                () => null
+                            );
+                    }
+
+                    return localStreamRef.current;
+                }
+
+                if (
+                    !navigator.mediaDevices
+                        ?.getUserMedia
+                ) {
+                    throw new Error(
+                        "Camera and microphone are not supported by this browser."
+                    );
+                }
+
+                const stream =
+                    await navigator.mediaDevices.getUserMedia(
+                        {
+                            audio: true,
+                            video: {
+                                width: {
+                                    ideal: 1280,
+                                },
+                                height: {
+                                    ideal: 720,
+                                },
+                                facingMode:
+                                    "user",
+                            },
+                        }
+                    );
+
+                localStreamRef.current =
+                    stream;
+
+                const audioTrack =
+                    stream.getAudioTracks()[0];
+
+                const videoTrack =
+                    stream.getVideoTracks()[0];
+
+                setLocalMicEnabled(
+                    audioTrack
+                        ? audioTrack.enabled !==
+                              false
+                        : false
+                );
+
+                setLocalCameraEnabled(
+                    videoTrack
+                        ? videoTrack.enabled !==
+                              false
+                        : false
+                );
+
+                setCameraStarted(
+                    true
+                );
+
+                if (
+                    localVideoRef.current
+                ) {
                     localVideoRef.current.srcObject =
-                        localStreamRef.current;
+                        stream;
 
                     localVideoRef.current
                         .play?.()
-                        .catch(() => null);
+                        .catch(
+                            () => null
+                        );
                 }
 
-                return localStreamRef.current;
-            }
-
-            if (
-                !navigator.mediaDevices?.getUserMedia
-            ) {
-                throw new Error(
-                    "Camera and microphone are not supported by this browser."
-                );
-            }
-
-            const stream =
-                await navigator.mediaDevices.getUserMedia(
-                    {
-                        audio: true,
-                        video: {
-                            width: {
-                                ideal: 1280,
-                            },
-                            height: {
-                                ideal: 720,
-                            },
-                            facingMode: "user",
-                        },
-                    }
-                );
-
-            localStreamRef.current =
-                stream;
-
-            const audioTrack =
-                stream.getAudioTracks()[0];
-
-            const videoTrack =
-                stream.getVideoTracks()[0];
-
-            setLocalMicEnabled(
-                audioTrack
-                    ? audioTrack.enabled !==
-                          false
-                    : false
-            );
-
-            setLocalCameraEnabled(
-                videoTrack
-                    ? videoTrack.enabled !==
-                          false
-                    : false
-            );
-
-            setCameraStarted(true);
-
-            if (localVideoRef.current) {
-                localVideoRef.current.srcObject =
-                    stream;
-
-                localVideoRef.current
-                    .play?.()
-                    .catch(() => null);
-            }
-
-            return stream;
-        },
-        []
-    );
+                return stream;
+            },
+            []
+        );
 
 
     // ========================================================
     // BROADCAST MEDIA STATE
     // ========================================================
 
-    const broadcastMediaState = useCallback(
-        async (overrides = {}) => {
-            await sendRealtime(
-                "media-state",
-                {
-                    user_id:
-                        currentUserIdRef.current,
-                    mic_enabled:
-                        overrides.mic_enabled ??
-                        localMicEnabled,
-                    camera_enabled:
-                        overrides.camera_enabled ??
-                        localCameraEnabled,
+    const broadcastMediaState =
+        useCallback(
+            async (
+                overrides = {}
+            ) => {
+                await sendRealtime(
+                    "media-state",
+                    {
+                        user_id:
+                            currentUserIdRef.current,
+                        mic_enabled:
+                            overrides.mic_enabled ??
+                            localStreamRef.current
+                                ?.getAudioTracks?.()[0]
+                                ?.enabled ??
+                            localMicEnabled,
+                        camera_enabled:
+                            overrides.camera_enabled ??
+                            localStreamRef.current
+                                ?.getVideoTracks?.()[0]
+                                ?.enabled ??
+                            localCameraEnabled,
+                    }
+                );
+            },
+            [
+                localMicEnabled,
+                localCameraEnabled,
+                sendRealtime,
+            ]
+        );
+
+
+    // ========================================================
+    // TOGGLE MIC
+    // ========================================================
+
+    const toggleMic =
+        useCallback(
+            async () => {
+                const track =
+                    localStreamRef.current
+                        ?.getAudioTracks?.()[0];
+
+                if (!track) {
+                    return;
                 }
-            );
-        },
-        [
-            localMicEnabled,
-            localCameraEnabled,
-            sendRealtime,
-        ]
-    );
+
+                const nextEnabled =
+                    !track.enabled;
+
+                track.enabled =
+                    nextEnabled;
+
+                setLocalMicEnabled(
+                    nextEnabled
+                );
+
+                await broadcastMediaState({
+                    mic_enabled:
+                        nextEnabled,
+                });
+            },
+            [
+                broadcastMediaState,
+            ]
+        );
 
 
     // ========================================================
-    // TOGGLES
+    // TOGGLE CAMERA
     // ========================================================
 
-    const toggleMic = useCallback(
-        async () => {
-            const track =
-                localStreamRef.current
-                    ?.getAudioTracks?.()[0];
+    const toggleCamera =
+        useCallback(
+            async () => {
+                const track =
+                    localStreamRef.current
+                        ?.getVideoTracks?.()[0];
 
-            if (!track) {
-                return;
-            }
+                if (!track) {
+                    return;
+                }
 
-            const nextEnabled =
-                !track.enabled;
+                const nextEnabled =
+                    !track.enabled;
 
-            track.enabled =
-                nextEnabled;
+                track.enabled =
+                    nextEnabled;
 
-            setLocalMicEnabled(
-                nextEnabled
-            );
+                setLocalCameraEnabled(
+                    nextEnabled
+                );
 
-            await broadcastMediaState({
-                mic_enabled:
-                    nextEnabled,
-            });
-        },
-        [broadcastMediaState]
-    );
+                await broadcastMediaState({
+                    camera_enabled:
+                        nextEnabled,
+                });
 
+                if (
+                    localVideoRef.current &&
+                    localStreamRef.current
+                ) {
+                    if (
+                        localVideoRef.current.srcObject !==
+                        localStreamRef.current
+                    ) {
+                        localVideoRef.current.srcObject =
+                            localStreamRef.current;
+                    }
 
-    const toggleCamera = useCallback(
-        async () => {
-            const track =
-                localStreamRef.current
-                    ?.getVideoTracks?.()[0];
-
-            if (!track) {
-                return;
-            }
-
-            const nextEnabled =
-                !track.enabled;
-
-            track.enabled =
-                nextEnabled;
-
-            setLocalCameraEnabled(
-                nextEnabled
-            );
-
-            await broadcastMediaState({
-                camera_enabled:
-                    nextEnabled,
-            });
-        },
-        [broadcastMediaState]
-    );
+                    localVideoRef.current
+                        .play?.()
+                        .catch(
+                            () => null
+                        );
+                }
+            },
+            [
+                broadcastMediaState,
+            ]
+        );
 
 
     // ========================================================
     // SCREEN SHARE
     // ========================================================
 
-    const toggleScreenShare = useCallback(
-        async () => {
-            if (!localStreamRef.current) {
-                return;
-            }
-
-            if (screenSharing) {
-                const cameraTrack =
-                    localStreamRef.current
-                        .getVideoTracks?.()[0];
-
-                peerConnectionsRef.current.forEach(
-                    (peer) => {
-                        const sender =
-                            peer
-                                .getSenders?.()
-                                ?.find(
-                                    (item) =>
-                                        item.track
-                                            ?.kind ===
-                                        "video"
-                                );
-
-                        if (
-                            sender &&
-                            cameraTrack
-                        ) {
-                            sender
-                                .replaceTrack(
-                                    cameraTrack
-                                )
-                                .catch(
-                                    () => null
-                                );
-                        }
-                    }
-                );
-
-                screenStreamRef.current
-                    ?.getTracks?.()
-                    .forEach(
-                        (track) => {
-                            track.stop();
-                        }
-                    );
-
-                screenStreamRef.current =
-                    null;
-
-                setScreenSharing(false);
-
-                if (localVideoRef.current) {
-                    localVideoRef.current.srcObject =
-                        localStreamRef.current;
-
-                    localVideoRef.current
-                        .play?.()
-                        .catch(() => null);
-                }
-
-                return;
-            }
-
-            if (
-                !navigator.mediaDevices
-                    ?.getDisplayMedia
-            ) {
-                setError(
-                    "Screen sharing is not supported by this browser."
-                );
-
-                return;
-            }
-
-            try {
-                const screenStream =
-                    await navigator.mediaDevices.getDisplayMedia(
-                        {
-                            video: true,
-                            audio: false,
-                        }
-                    );
-
-                const screenTrack =
-                    screenStream.getVideoTracks()[0];
-
-                if (!screenTrack) {
+    const toggleScreenShare =
+        useCallback(
+            async () => {
+                if (
+                    !localStreamRef.current
+                ) {
                     return;
                 }
 
-                screenStreamRef.current =
-                    screenStream;
+                if (
+                    screenSharing
+                ) {
+                    const cameraTrack =
+                        localStreamRef.current
+                            .getVideoTracks?.()[0];
 
-                peerConnectionsRef.current.forEach(
-                    (peer) => {
-                        const sender =
-                            peer
-                                .getSenders?.()
-                                ?.find(
-                                    (item) =>
-                                        item.track
-                                            ?.kind ===
-                                        "video"
-                                );
+                    peerConnectionsRef.current.forEach(
+                        (peer) => {
+                            const sender =
+                                peer
+                                    .getSenders?.()
+                                    ?.find(
+                                        (
+                                            item
+                                        ) =>
+                                            item.track
+                                                ?.kind ===
+                                            "video"
+                                    );
 
-                        if (sender) {
-                            sender
-                                .replaceTrack(
-                                    screenTrack
-                                )
-                                .catch(
-                                    () => null
-                                );
+                            if (
+                                sender &&
+                                cameraTrack
+                            ) {
+                                sender
+                                    .replaceTrack(
+                                        cameraTrack
+                                    )
+                                    .catch(
+                                        () =>
+                                            null
+                                    );
+                            }
                         }
-                    }
-                );
+                    );
 
-                if (localVideoRef.current) {
-                    localVideoRef.current.srcObject =
-                        screenStream;
+                    screenStreamRef.current
+                        ?.getTracks?.()
+                        .forEach(
+                            (track) => {
+                                try {
+                                    track.stop();
+                                } catch {
+                                    // Ignore.
+                                }
+                            }
+                        );
 
-                    localVideoRef.current
-                        .play?.()
-                        .catch(() => null);
-                }
+                    screenStreamRef.current =
+                        null;
 
-                setScreenSharing(true);
+                    setScreenSharing(
+                        false
+                    );
 
-                screenTrack.onended =
-                    () => {
-                        toggleScreenShare()
+                    if (
+                        localVideoRef.current
+                    ) {
+                        localVideoRef.current.srcObject =
+                            localStreamRef.current;
+
+                        localVideoRef.current
+                            .play?.()
                             .catch(
                                 () => null
                             );
-                    };
-            } catch (screenError) {
+                    }
+
+                    return;
+                }
+
                 if (
-                    screenError?.name !==
-                    "NotAllowedError"
+                    !navigator.mediaDevices
+                        ?.getDisplayMedia
                 ) {
                     setError(
-                        getErrorMessage(
-                            screenError,
-                            "Unable to start screen sharing."
-                        )
+                        "Screen sharing is not supported by this browser."
                     );
+
+                    return;
                 }
-            }
-        },
-        [screenSharing]
-    );
+
+                try {
+                    const screenStream =
+                        await navigator.mediaDevices.getDisplayMedia(
+                            {
+                                video: true,
+                                audio: false,
+                            }
+                        );
+
+                    const screenTrack =
+                        screenStream.getVideoTracks()[0];
+
+                    if (
+                        !screenTrack
+                    ) {
+                        return;
+                    }
+
+                    screenStreamRef.current =
+                        screenStream;
+
+                    peerConnectionsRef.current.forEach(
+                        (peer) => {
+                            const sender =
+                                peer
+                                    .getSenders?.()
+                                    ?.find(
+                                        (
+                                            item
+                                        ) =>
+                                            item.track
+                                                ?.kind ===
+                                            "video"
+                                    );
+
+                            if (
+                                sender
+                            ) {
+                                sender
+                                    .replaceTrack(
+                                        screenTrack
+                                    )
+                                    .catch(
+                                        () =>
+                                            null
+                                    );
+                            }
+                        }
+                    );
+
+                    if (
+                        localVideoRef.current
+                    ) {
+                        localVideoRef.current.srcObject =
+                            screenStream;
+
+                        localVideoRef.current
+                            .play?.()
+                            .catch(
+                                () => null
+                            );
+                    }
+
+                    setScreenSharing(
+                        true
+                    );
+
+                    screenTrack.onended =
+                        () => {
+                            if (
+                                mountedRef.current &&
+                                screenStreamRef.current
+                            ) {
+                                toggleScreenShare()
+                                    .catch(
+                                        () =>
+                                            null
+                                    );
+                            }
+                        };
+                } catch (
+                    screenError
+                ) {
+                    if (
+                        screenError?.name !==
+                        "NotAllowedError"
+                    ) {
+                        setError(
+                            getErrorMessage(
+                                screenError,
+                                "Unable to start screen sharing."
+                            )
+                        );
+                    }
+                }
+            },
+            [
+                screenSharing,
+            ]
+        );
 
 
     // ========================================================
     // CHAT
     // ========================================================
 
-    const sendChatMessage = useCallback(
-        async () => {
-            const text =
-                String(
-                    chatMessage || ""
-                ).trim();
+    const sendChatMessage =
+        useCallback(
+            async () => {
+                const text =
+                    String(
+                        chatMessage || ""
+                    ).trim();
 
-            const localUserId =
-                currentUserIdRef.current;
+                const localUserId =
+                    currentUserIdRef.current;
 
-            if (
-                !text ||
-                !localUserId
-            ) {
-                return;
-            }
+                if (
+                    !text ||
+                    !localUserId
+                ) {
+                    return;
+                }
 
-            const message = {
-                id:
-                    `${localUserId}-${Date.now()}-${Math.random()
-                        .toString(36)
-                        .slice(2, 8)}`,
-                sender_id:
-                    localUserId,
-                sender_name:
-                    currentDisplayNameRef.current,
-                message_text:
-                    text,
-                created_at:
-                    new Date().toISOString(),
-            };
+                const message = {
+                    id:
+                        `${localUserId}-${Date.now()}-${Math.random()
+                            .toString(36)
+                            .slice(2, 8)}`,
+                    sender_id:
+                        localUserId,
+                    sender_name:
+                        currentDisplayNameRef.current,
+                    message_text:
+                        text,
+                    created_at:
+                        new Date().toISOString(),
+                };
 
-            setMessages(
-                (current) => [
-                    ...current,
-                    message,
-                ]
-            );
+                setMessages(
+                    (current) => [
+                        ...current,
+                        message,
+                    ]
+                );
 
-            setChatMessage("");
+                setChatMessage("");
 
-            await sendRealtime(
-                "chat-message",
-                message
-            );
-        },
-        [
-            chatMessage,
-            sendRealtime,
-        ]
-    );
+                await sendRealtime(
+                    "chat-message",
+                    message
+                );
+            },
+            [
+                chatMessage,
+                sendRealtime,
+            ]
+        );
 
 
     // ========================================================
     // COPY LINK
     // ========================================================
 
-    const copyJoinLink = useCallback(
-        async () => {
-            if (!joinLink) {
-                return;
-            }
+    const copyJoinLink =
+        useCallback(
+            async () => {
+                if (!joinLink) {
+                    return;
+                }
 
-            try {
-                await navigator.clipboard.writeText(
-                    joinLink
-                );
+                try {
+                    await navigator.clipboard.writeText(
+                        joinLink
+                    );
 
-                setCopySuccess(true);
+                    setCopySuccess(
+                        true
+                    );
 
-                window.setTimeout(() => {
-                    if (
-                        mountedRef.current
-                    ) {
-                        setCopySuccess(
-                            false
-                        );
-                    }
-                }, 2000);
-            } catch {
-                setError(
-                    "Unable to copy the meeting link."
-                );
-            }
-        },
-        [joinLink]
-    );
+                    window.setTimeout(
+                        () => {
+                            if (
+                                mountedRef.current
+                            ) {
+                                setCopySuccess(
+                                    false
+                                );
+                            }
+                        },
+                        2000
+                    );
+                } catch {
+                    setError(
+                        "Unable to copy the meeting link."
+                    );
+                }
+            },
+            [joinLink]
+        );
 
 
     // ========================================================
     // LOAD ROOM
     // ========================================================
 
-    const loadRoom = useCallback(
-        async () => {
-            if (
-                !isValidRoomId(
-                    meetingId
-                )
-            ) {
-                throw new Error(
-                    "Meeting ID is missing."
-                );
-            }
+    const loadRoom =
+        useCallback(
+            async () => {
+                if (
+                    !isValidRoomId(
+                        meetingId
+                    )
+                ) {
+                    throw new Error(
+                        "Meeting ID is missing."
+                    );
+                }
 
-            const {
-                data: {
-                    user,
-                },
-                error: userError,
-            } = await supabase.auth.getUser();
+                const {
+                    data: {
+                        user,
+                    },
+                    error: userError,
+                } =
+                    await supabase.auth.getUser();
 
-            if (userError) {
-                throw userError;
-            }
+                if (
+                    userError
+                ) {
+                    throw userError;
+                }
 
-            if (!user) {
-                throw new Error(
-                    "Your session has expired. Please login again."
-                );
-            }
+                if (!user) {
+                    throw new Error(
+                        "Your session has expired. Please login again."
+                    );
+                }
 
-            if (!mountedRef.current) {
-                return null;
-            }
+                if (
+                    !mountedRef.current
+                ) {
+                    return null;
+                }
 
-            currentUserIdRef.current =
-                normalizeId(user.id);
-
-            setCurrentUser(user);
-
-            const {
-                data: profileData,
-                error: profileError,
-            } = await supabase
-                .from("profiles")
-                .select(`
-                    id,
-                    full_name,
-                    school_id,
-                    role_id
-                `)
-                .eq("id", user.id)
-                .single();
-
-            if (profileError) {
-                throw profileError;
-            }
-
-            if (!profileData) {
-                throw new Error(
-                    "Your user profile was not found."
-                );
-            }
-
-            currentDisplayNameRef.current =
-                profileData.full_name ||
-                user.email ||
-                "Participant";
-
-            setProfile(
-                profileData
-            );
-
-            const rawMeetingId =
-                String(meetingId).trim();
-
-            let roomData = null;
-            let roomError = null;
-
-            // ------------------------------------------------
-            // First try the real numeric video_rooms.id.
-            // ------------------------------------------------
-
-            if (
-                /^\d+$/.test(
-                    rawMeetingId
-                )
-            ) {
-                const numericId =
-                    Number(
-                        rawMeetingId
+                currentUserIdRef.current =
+                    normalizeId(
+                        user.id
                     );
 
-                const result =
-                    await supabase
-                        .from(
-                            "video_rooms"
-                        )
-                        .select(`
-                            id,
-                            school_id,
-                            room_code,
-                            title,
-                            description,
-                            created_by,
-                            status,
-                            scheduled_start,
-                            scheduled_end,
-                            created_at,
-                            updated_at
-                        `)
-                        .eq(
-                            "id",
-                            numericId
-                        )
-                        .maybeSingle();
-
-                roomData =
-                    result.data;
-
-                roomError =
-                    result.error;
-            }
-
-            // ------------------------------------------------
-            // If id lookup failed, try room_code.
-            // ------------------------------------------------
-
-            if (
-                !roomData &&
-                !roomError
-            ) {
-                const result =
-                    await supabase
-                        .from(
-                            "video_rooms"
-                        )
-                        .select(`
-                            id,
-                            school_id,
-                            room_code,
-                            title,
-                            description,
-                            created_by,
-                            status,
-                            scheduled_start,
-                            scheduled_end,
-                            created_at,
-                            updated_at
-                        `)
-                        .eq(
-                            "room_code",
-                            rawMeetingId
-                        )
-                        .maybeSingle();
-
-                roomData =
-                    result.data;
-
-                roomError =
-                    result.error;
-            }
-
-            if (roomError) {
-                throw roomError;
-            }
-
-            if (!roomData) {
-                throw new Error(
-                    "This meeting could not be found. Check the meeting link or meeting ID."
-                );
-            }
-
-            const roomStatus =
-                String(
-                    roomData.status ||
-                        ""
-                ).toLowerCase();
-
-            if (
-                roomStatus ===
-                    "cancelled" ||
-                roomStatus ===
-                    "canceled" ||
-                roomStatus ===
-                    "ended"
-            ) {
-                throw new Error(
-                    "This meeting has already ended or was cancelled."
-                );
-            }
-
-            roomRef.current =
-                roomData;
-
-            setRoom(
-                roomData
-            );
-
-            // ------------------------------------------------
-            // Load persisted participant records.
-            // ------------------------------------------------
-
-            const {
-                data: participantRows,
-                error: participantsError,
-            } = await supabase
-                .from(
-                    "video_room_participants"
-                )
-                .select(`
-                    id,
-                    room_id,
-                    user_id,
-                    role,
-                    status,
-                    joined_at,
-                    left_at,
-                    created_at
-                `)
-                .eq(
-                    "room_id",
-                    roomData.id
-                )
-                .neq(
-                    "status",
-                    "removed"
+                setCurrentUser(
+                    user
                 );
 
-            if (participantsError) {
-                console.warn(
-                    "Meeting participant rows could not be loaded:",
-                    participantsError
-                );
-            }
-
-            const rows =
-                Array.isArray(
-                    participantRows
-                )
-                    ? participantRows
-                    : [];
-
-            const participantIds =
-                Array.from(
-                    new Set(
-                        rows
-                            .map(
-                                (
-                                    row
-                                ) =>
-                                    normalizeId(
-                                        row.user_id
-                                    )
-                            )
-                            .filter(
-                                Boolean
-                            )
-                    )
-                );
-
-            let profileMap =
-                new Map();
-
-            if (
-                participantIds.length
-            ) {
                 const {
-                    data:
-                        participantProfiles,
-                    error:
-                        participantProfilesError,
+                    data: profileData,
+                    error: profileError,
                 } =
                     await supabase
                         .from(
                             "profiles"
                         )
-                        .select(
-                            "id, full_name"
-                        )
-                        .in(
+                        .select(`
+                            id,
+                            full_name,
+                            school_id,
+                            role_id
+                        `)
+                        .eq(
                             "id",
-                            participantIds
+                            user.id
+                        )
+                        .single();
+
+                if (
+                    profileError
+                ) {
+                    throw profileError;
+                }
+
+                if (
+                    !profileData
+                ) {
+                    throw new Error(
+                        "Your user profile was not found."
+                    );
+                }
+
+                currentDisplayNameRef.current =
+                    profileData.full_name ||
+                    user.email ||
+                    "Participant";
+
+                setProfile(
+                    profileData
+                );
+
+                const rawMeetingId =
+                    String(
+                        meetingId
+                    ).trim();
+
+                let roomData =
+                    null;
+
+                let roomError =
+                    null;
+
+                if (
+                    /^\d+$/.test(
+                        rawMeetingId
+                    )
+                ) {
+                    const numericId =
+                        Number(
+                            rawMeetingId
+                        );
+
+                    const result =
+                        await supabase
+                            .from(
+                                "video_rooms"
+                            )
+                            .select(`
+                                id,
+                                school_id,
+                                room_code,
+                                title,
+                                description,
+                                created_by,
+                                status,
+                                scheduled_start,
+                                scheduled_end,
+                                created_at,
+                                updated_at
+                            `)
+                            .eq(
+                                "id",
+                                numericId
+                            )
+                            .maybeSingle();
+
+                    roomData =
+                        result.data;
+
+                    roomError =
+                        result.error;
+                }
+
+                if (
+                    !roomData &&
+                    !roomError
+                ) {
+                    const result =
+                        await supabase
+                            .from(
+                                "video_rooms"
+                            )
+                            .select(`
+                                id,
+                                school_id,
+                                room_code,
+                                title,
+                                description,
+                                created_by,
+                                status,
+                                scheduled_start,
+                                scheduled_end,
+                                created_at,
+                                updated_at
+                            `)
+                            .eq(
+                                "room_code",
+                                rawMeetingId
+                            )
+                            .maybeSingle();
+
+                    roomData =
+                        result.data;
+
+                    roomError =
+                        result.error;
+                }
+
+                if (
+                    roomError
+                ) {
+                    throw roomError;
+                }
+
+                if (
+                    !roomData
+                ) {
+                    throw new Error(
+                        "This meeting could not be found. Check the meeting link or meeting ID."
+                    );
+                }
+
+                const roomStatus =
+                    String(
+                        roomData.status ||
+                            ""
+                    ).toLowerCase();
+
+                if (
+                    roomStatus ===
+                        "cancelled" ||
+                    roomStatus ===
+                        "canceled" ||
+                    roomStatus ===
+                        "ended"
+                ) {
+                    throw new Error(
+                        "This meeting has already ended or was cancelled."
+                    );
+                }
+
+                roomRef.current =
+                    roomData;
+
+                setRoom(
+                    roomData
+                );
+
+                const {
+                    data: participantRows,
+                    error:
+                        participantsError,
+                } =
+                    await supabase
+                        .from(
+                            "video_room_participants"
+                        )
+                        .select(`
+                            id,
+                            room_id,
+                            user_id,
+                            role,
+                            status,
+                            joined_at,
+                            left_at,
+                            created_at
+                        `)
+                        .eq(
+                            "room_id",
+                            roomData.id
+                        )
+                        .neq(
+                            "status",
+                            "removed"
                         );
 
                 if (
-                    participantProfilesError
+                    participantsError
                 ) {
                     console.warn(
-                        "Participant profile names could not be loaded:",
-                        participantProfilesError
+                        "Meeting participant rows could not be loaded:",
+                        participantsError
                     );
-                } else {
-                    profileMap =
-                        new Map(
-                            (
-                                participantProfiles ||
-                                []
-                            ).map(
-                                (
-                                    item
-                                ) => [
-                                    normalizeId(
-                                        item.id
-                                    ),
-                                    item.full_name ||
-                                        "Participant",
-                                ]
-                            )
-                        );
                 }
-            }
 
-            const localParticipantRow =
-                rows.find(
-                    (row) =>
-                        normalizeId(
-                            row.user_id
-                        ) ===
-                        normalizeId(
-                            user.id
+                const rows =
+                    Array.isArray(
+                        participantRows
+                    )
+                        ? participantRows
+                        : [];
+
+                const participantIds =
+                    Array.from(
+                        new Set(
+                            rows
+                                .map(
+                                    (
+                                        row
+                                    ) =>
+                                        normalizeId(
+                                            row.user_id
+                                        )
+                                )
+                                .filter(
+                                    Boolean
+                                )
                         )
-                );
+                    );
 
-            localParticipantJoinedAt.current =
-                localParticipantRow?.joined_at ||
-                null;
+                let profileMap =
+                    new Map();
 
-            setParticipants(
-                rows.map(
-                    (row) => ({
-                        user_id:
+                if (
+                    participantIds.length
+                ) {
+                    const {
+                        data:
+                            participantProfiles,
+                        error:
+                            participantProfilesError,
+                    } =
+                        await supabase
+                            .from(
+                                "profiles"
+                            )
+                            .select(
+                                "id, full_name"
+                            )
+                            .in(
+                                "id",
+                                participantIds
+                            );
+
+                    if (
+                        participantProfilesError
+                    ) {
+                        console.warn(
+                            "Participant profile names could not be loaded:",
+                            participantProfilesError
+                        );
+                    } else {
+                        profileMap =
+                            new Map(
+                                (
+                                    participantProfiles ||
+                                    []
+                                ).map(
+                                    (
+                                        item
+                                    ) => [
+                                        normalizeId(
+                                            item.id
+                                        ),
+                                        item.full_name ||
+                                            "Participant",
+                                    ]
+                                )
+                            );
+                    }
+                }
+
+                const localParticipantRow =
+                    rows.find(
+                        (row) =>
                             normalizeId(
                                 row.user_id
-                            ),
-                        display_name:
-                            profileMap.get(
-                                normalizeId(
-                                    row.user_id
-                                )
-                            ) ||
-                            (
-                                normalizeId(
-                                    row.user_id
-                                ) ===
-                                normalizeId(
-                                    user.id
-                                )
-                            ) ?
-                                profileData.full_name ||
-                                user.email ||
-                                "Participant"
-                                :
-                                "Participant",
-                        joined_at:
-                            row.joined_at,
-                        role:
-                            row.role,
-                        status:
-                            row.status,
-                        hand_raised:
-                            false,
-                        mic_enabled:
-                            true,
-                        camera_enabled:
-                            true,
-                    })
-                )
-            );
+                            ) ===
+                            normalizeId(
+                                user.id
+                            )
+                    );
 
-            return {
-                room:
-                    roomData,
-                user,
-                profile:
-                    profileData,
-            };
-        },
-        [meetingId]
-    );
+                localParticipantJoinedAt.current =
+                    localParticipantRow?.joined_at ||
+                    null;
+
+                setParticipants(
+                    rows.map(
+                        (row) => {
+                            const rowUserId =
+                                normalizeId(
+                                    row.user_id
+                                );
+
+                            return {
+                                user_id:
+                                    rowUserId,
+                                display_name:
+                                    profileMap.get(
+                                        rowUserId
+                                    ) ||
+                                    (
+                                        rowUserId ===
+                                        normalizeId(
+                                            user.id
+                                        )
+                                            ? profileData.full_name ||
+                                              user.email ||
+                                              "Participant"
+                                            : "Participant"
+                                    ),
+                                joined_at:
+                                    row.joined_at,
+                                role:
+                                    row.role,
+                                status:
+                                    row.status,
+                                hand_raised:
+                                    false,
+                                mic_enabled:
+                                    true,
+                                camera_enabled:
+                                    true,
+                            };
+                        }
+                    )
+                );
+
+                return {
+                    room:
+                        roomData,
+                    user,
+                    profile:
+                        profileData,
+                };
+            },
+            [meetingId]
+        );
 
 
     // ========================================================
@@ -2227,11 +2942,14 @@ function CommunicationMeeting() {
                 roomRef.current =
                     roomData;
 
+
                 // ====================================================
                 // REMOVE EXISTING CHANNEL
                 // ====================================================
 
-                if (channelRef.current) {
+                if (
+                    channelRef.current
+                ) {
                     try {
                         await supabase.removeChannel(
                             channelRef.current
@@ -2290,6 +3008,7 @@ function CommunicationMeeting() {
                     }
                 }
 
+
                 // ====================================================
                 // CREATE FRESH CHANNEL
                 // ====================================================
@@ -2312,6 +3031,7 @@ function CommunicationMeeting() {
 
                 channelRef.current =
                     channel;
+
 
                 // ====================================================
                 // BROADCAST LISTENERS
@@ -2383,6 +3103,7 @@ function CommunicationMeeting() {
                     "meeting-reaction"
                 );
 
+
                 // ====================================================
                 // PRESENCE SYNC
                 // ====================================================
@@ -2409,6 +3130,7 @@ function CommunicationMeeting() {
                         );
                     }
                 );
+
 
                 // ====================================================
                 // PRESENCE JOIN
@@ -2471,12 +3193,6 @@ function CommunicationMeeting() {
                                         localUserId
                                 );
 
-                        // ====================================================
-                        // DETERMINISTIC OFFER OWNERSHIP
-                        // The lexicographically lower user ID creates
-                        // the initial offer.
-                        // ====================================================
-
                         remoteIds.forEach(
                             (
                                 remoteId
@@ -2503,6 +3219,7 @@ function CommunicationMeeting() {
                         );
                     }
                 );
+
 
                 // ====================================================
                 // PRESENCE LEAVE
@@ -2555,7 +3272,9 @@ function CommunicationMeeting() {
                                     )
                             );
 
-                        if (key) {
+                        if (
+                            key
+                        ) {
                             leftIds.add(
                                 normalizeId(
                                     key
@@ -2581,6 +3300,7 @@ function CommunicationMeeting() {
                         );
                     }
                 );
+
 
                 // ====================================================
                 // SUBSCRIBE
@@ -2676,6 +3396,7 @@ function CommunicationMeeting() {
                     }
                 );
 
+
                 if (
                     !mountedRef.current ||
                     channelRef.current !==
@@ -2683,6 +3404,7 @@ function CommunicationMeeting() {
                 ) {
                     return;
                 }
+
 
                 // ====================================================
                 // TRACK PRESENCE
@@ -2718,6 +3440,7 @@ function CommunicationMeeting() {
                             ? "host"
                             : "participant",
                 });
+
 
                 // ====================================================
                 // PERSIST PARTICIPANT JOIN
@@ -2770,6 +3493,7 @@ function CommunicationMeeting() {
                         participantUpsertError
                     );
                 }
+
 
                 // ====================================================
                 // ONLY HOST CHANGES SCHEDULED -> LIVE
@@ -2839,6 +3563,7 @@ function CommunicationMeeting() {
                     }
                 }
 
+
                 // ====================================================
                 // INITIAL PRESENCE
                 // ====================================================
@@ -2870,6 +3595,7 @@ function CommunicationMeeting() {
                                         user.id
                                     )
                         );
+
 
                 // ====================================================
                 // CREATE OFFERS TO EXISTING PARTICIPANTS
@@ -2904,171 +3630,187 @@ function CommunicationMeeting() {
     // LEAVE MEETING
     // ========================================================
 
-    const leaveMeeting = useCallback(
-        async ({
-            endForEveryone = false,
-        } = {}) => {
-            if (endingMeeting) {
-                return;
-            }
-
-            setEndingMeeting(
-                true
-            );
-
-            const localUserId =
-                currentUserIdRef.current;
-
-            const activeRoom =
-                roomRef.current;
-
-            try {
-                const channel =
-                    channelRef.current;
-
+    const leaveMeeting =
+        useCallback(
+            async ({
+                endForEveryone = false,
+            } = {}) => {
                 if (
-                    channel &&
-                    localUserId
+                    endingMeeting
                 ) {
-                    await sendRealtime(
-                        "participant-left",
-                        {
-                            user_id:
-                                localUserId,
-                            from:
-                                localUserId,
-                        }
-                    );
+                    return;
                 }
-
-                if (
-                    activeRoom?.id &&
-                    localUserId
-                ) {
-                    const {
-                        error:
-                            participantError,
-                    } =
-                        await supabase
-                            .from(
-                                "video_room_participants"
-                            )
-                            .update(
-                                {
-                                    status:
-                                        "left",
-                                    left_at:
-                                        new Date().toISOString(),
-                                }
-                            )
-                            .eq(
-                                "room_id",
-                                activeRoom.id
-                            )
-                            .eq(
-                                "user_id",
-                                localUserId
-                            );
-
-                    if (
-                        participantError
-                    ) {
-                        console.warn(
-                            "Unable to update participant leave status:",
-                            participantError
-                        );
-                    }
-                }
-
-                const isHost =
-                    normalizeId(
-                        activeRoom?.created_by
-                    ) ===
-                    localUserId;
-
-                if (
-                    endForEveryone &&
-                    isHost &&
-                    activeRoom?.id
-                ) {
-                    const {
-                        error:
-                            endError,
-                    } =
-                        await supabase
-                            .from(
-                                "video_rooms"
-                            )
-                            .update(
-                                {
-                                    status:
-                                        "ended",
-                                    updated_at:
-                                        new Date().toISOString(),
-                                }
-                            )
-                            .eq(
-                                "id",
-                                activeRoom.id
-                            )
-                            .eq(
-                                "created_by",
-                                localUserId
-                            );
-
-                    if (
-                        endError
-                    ) {
-                        throw endError;
-                    }
-                }
-            } catch (
-                leaveError
-            ) {
-                console.warn(
-                    "Meeting leave cleanup warning:",
-                    leaveError
-                );
-            } finally {
-                try {
-                    if (
-                        channelRef.current
-                    ) {
-                        await supabase.removeChannel(
-                            channelRef.current
-                        );
-                    }
-                } catch {
-                    // Ignore channel removal errors.
-                }
-
-                channelRef.current =
-                    null;
-
-                closeAllPeerConnections();
-                stopAllMedia();
-
-                navigate(
-                    "/communication/meetings"
-                );
 
                 setEndingMeeting(
-                    false
+                    true
                 );
-            }
-        },
-        [
-            endingMeeting,
-            sendRealtime,
-            closeAllPeerConnections,
-            stopAllMedia,
-            navigate,
-        ]
-    );
+
+                const localUserId =
+                    currentUserIdRef.current;
+
+                const activeRoom =
+                    roomRef.current;
+
+                try {
+                    const channel =
+                        channelRef.current;
+
+                    if (
+                        channel &&
+                        localUserId
+                    ) {
+                        await sendRealtime(
+                            "participant-left",
+                            {
+                                user_id:
+                                    localUserId,
+                                from:
+                                    localUserId,
+                            }
+                        );
+                    }
+
+                    if (
+                        activeRoom?.id &&
+                        localUserId
+                    ) {
+                        const {
+                            error:
+                                participantError,
+                        } =
+                            await supabase
+                                .from(
+                                    "video_room_participants"
+                                )
+                                .update(
+                                    {
+                                        status:
+                                            "left",
+                                        left_at:
+                                            new Date().toISOString(),
+                                    }
+                                )
+                                .eq(
+                                    "room_id",
+                                    activeRoom.id
+                                )
+                                .eq(
+                                    "user_id",
+                                    localUserId
+                                );
+
+                        if (
+                            participantError
+                        ) {
+                            console.warn(
+                                "Unable to update participant leave status:",
+                                participantError
+                            );
+                        }
+                    }
+
+                    const isHost =
+                        normalizeId(
+                            activeRoom?.created_by
+                        ) ===
+                        localUserId;
+
+                    if (
+                        endForEveryone &&
+                        isHost &&
+                        activeRoom?.id
+                    ) {
+                        const {
+                            error:
+                                endError,
+                        } =
+                            await supabase
+                                .from(
+                                    "video_rooms"
+                                )
+                                .update(
+                                    {
+                                        status:
+                                            "ended",
+                                        updated_at:
+                                            new Date().toISOString(),
+                                    }
+                                )
+                                .eq(
+                                    "id",
+                                    activeRoom.id
+                                )
+                                .eq(
+                                    "created_by",
+                                    localUserId
+                                );
+
+                        if (
+                            endError
+                        ) {
+                            throw endError;
+                        }
+                    }
+                } catch (
+                    leaveError
+                ) {
+                    console.warn(
+                        "Meeting leave cleanup warning:",
+                        leaveError
+                    );
+                } finally {
+                    try {
+                        if (
+                            channelRef.current
+                        ) {
+                            await supabase.removeChannel(
+                                channelRef.current
+                            );
+                        }
+                    } catch {
+                        // Ignore channel removal errors.
+                    }
+
+                    channelRef.current =
+                        null;
+
+                    closeAllPeerConnections();
+
+                    stopAllMedia();
+
+                    navigate(
+                        "/communication/meetings"
+                    );
+
+                    setEndingMeeting(
+                        false
+                    );
+                }
+            },
+            [
+                endingMeeting,
+                sendRealtime,
+                closeAllPeerConnections,
+                stopAllMedia,
+                navigate,
+            ]
+        );
 
 
     // ========================================================
     // INITIALIZATION
+    //
+    // CRITICAL FIX:
+    //
+    // This effect MUST NOT depend on state-sensitive callback
+    // identities such as joinRealtimeRoom/handleBroadcast.
+    //
+    // Otherwise clicking a meeting control can cause React to
+    // run cleanup -> remove channel -> close peers -> stop media
+    // -> initialize the whole meeting again.
+    //
+    // Meeting initialization is therefore tied only to
+    // meetingId.
     // ========================================================
 
     useEffect(() => {
@@ -3178,6 +3920,7 @@ function CommunicationMeeting() {
             }
 
             closeAllPeerConnections();
+
             stopAllMedia();
 
             reactionTimersRef.current.forEach(
@@ -3190,14 +3933,12 @@ function CommunicationMeeting() {
 
             reactionTimersRef.current.clear();
         };
-    }, [
-        meetingId,
-        loadRoom,
-        startLocalMedia,
-        joinRealtimeRoom,
-        closeAllPeerConnections,
-        stopAllMedia,
-    ]);
+
+        // IMPORTANT:
+        // Do not add UI/control callback dependencies here.
+        // The meeting must not reconnect when state changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [meetingId]);
 
 
     // ========================================================
@@ -3205,9 +3946,6 @@ function CommunicationMeeting() {
     // ========================================================
 
     useEffect(() => {
-        // remoteStreamVersion is intentionally referenced here.
-        // It causes this effect to run whenever a WebRTC stream
-        // arrives.
         void remoteStreamVersion;
 
         participants.forEach(
@@ -3263,7 +4001,7 @@ function CommunicationMeeting() {
 
 
     // ========================================================
-    // UI DERIVED DATA
+    // REMOTE PARTICIPANTS
     // ========================================================
 
     const remoteParticipants =
@@ -3280,7 +4018,9 @@ function CommunicationMeeting() {
     // LOADING
     // ========================================================
 
-    if (loading) {
+    if (
+        loading
+    ) {
         return (
             <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-center shadow-2xl backdrop-blur">
@@ -3305,7 +4045,10 @@ function CommunicationMeeting() {
     // ERROR
     // ========================================================
 
-    if (error && !room) {
+    if (
+        error &&
+        !room
+    ) {
         return (
             <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
                 <div className="w-full max-w-xl rounded-3xl border border-red-400/20 bg-red-500/10 p-8 shadow-2xl">
@@ -3425,7 +4168,9 @@ function CommunicationMeeting() {
                     <div className="hidden items-center gap-2 lg:flex">
                         <button
                             type="button"
-                            onClick={copyJoinLink}
+                            onClick={
+                                copyJoinLink
+                            }
                             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
                         >
                             {copySuccess ? (
@@ -3497,11 +4242,12 @@ function CommunicationMeeting() {
                 ERROR BANNER
             ================================================== */}
 
-            {error && room && (
-                <div className="mx-4 mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 md:mx-6">
-                    {error}
-                </div>
-            )}
+            {error &&
+                room && (
+                    <div className="mx-4 mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 md:mx-6">
+                        {error}
+                    </div>
+                )}
 
 
             {/* ==================================================
@@ -3517,8 +4263,12 @@ function CommunicationMeeting() {
 
                     <section className="relative min-w-0 flex-1 overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
 
+                        {/* ==================================================
+                            REMOTE VIDEO AREA
+                        ================================================== */}
+
                         <div
-                            className={`grid h-full gap-3 p-3 ${
+                            className={`grid h-full gap-3 p-3 pb-24 ${
                                 remoteParticipants.length ===
                                 0
                                     ? "grid-cols-1"
@@ -3531,81 +4281,6 @@ function CommunicationMeeting() {
                                             : "grid-cols-2 lg:grid-cols-3"
                             }`}
                         >
-
-                            {/* ==================================================
-                                LOCAL TILE
-                            ================================================== */}
-
-                            <div className="group relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
-
-                                {cameraStarted &&
-                                localCameraEnabled ? (
-                                    <video
-                                        ref={
-                                            localVideoRef
-                                        }
-                                        autoPlay
-                                        muted
-                                        playsInline
-                                        className="h-full w-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
-                                        <div className="flex flex-col items-center gap-3 text-center">
-                                            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500/20 text-2xl font-bold text-indigo-200 ring-1 ring-indigo-400/20">
-                                                {getInitials(
-                                                    currentDisplayName
-                                                )}
-                                            </div>
-
-                                            <p className="text-sm font-semibold text-slate-200">
-                                                Camera is off
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-
-
-                                <div className="absolute left-3 top-3 flex items-center gap-2">
-                                    <span className="rounded-full border border-white/10 bg-slate-950/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
-                                        You
-                                    </span>
-
-                                    {raiseHandEnabled && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-100 backdrop-blur">
-                                            <Hand className="h-3.5 w-3.5" />
-                                            Hand raised
-                                        </span>
-                                    )}
-
-                                    {screenSharing && (
-                                        <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200 backdrop-blur">
-                                            Sharing screen
-                                        </span>
-                                    )}
-                                </div>
-
-
-                                <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                                    <span className="max-w-[200px] truncate rounded-full border border-white/10 bg-slate-950/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
-                                        {currentDisplayName}
-                                    </span>
-
-                                    {!localMicEnabled && (
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500/90 text-white">
-                                            <MicOff className="h-3.5 w-3.5" />
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-
-                            {/* ==================================================
-                                REMOTE TILES
-                                IMPORTANT:
-                                Render ALL connected participants even when
-                                their WebRTC stream has not arrived yet.
-                            ================================================== */}
 
                             {remoteParticipants.map(
                                 (
@@ -3741,6 +4416,68 @@ function CommunicationMeeting() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+
+
+                        {/* ==================================================
+                            SELF VIEW
+                            SMALL FLOATING TILE
+                        ================================================== */}
+
+                        <div className="absolute bottom-24 right-4 z-30 h-32 w-48 overflow-hidden rounded-2xl border border-white/20 bg-slate-900 shadow-2xl ring-1 ring-black/40 sm:h-36 sm:w-56 md:bottom-24 md:right-5 md:h-40 md:w-64">
+
+                            {cameraStarted &&
+                            localCameraEnabled ? (
+                                <video
+                                    ref={
+                                        localVideoRef
+                                    }
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
+                                    <div className="flex flex-col items-center gap-2 text-center">
+                                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500/20 text-lg font-bold text-indigo-200 ring-1 ring-indigo-400/20">
+                                            {getInitials(
+                                                currentDisplayName
+                                            )}
+                                        </div>
+
+                                        <p className="text-[11px] font-semibold text-slate-300">
+                                            Camera is off
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+
+                            <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
+                                <span className="rounded-full border border-white/10 bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">
+                                    You
+                                </span>
+
+                                {screenSharing && (
+                                    <span className="rounded-full border border-amber-400/20 bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-200 backdrop-blur">
+                                        Screen
+                                    </span>
+                                )}
+                            </div>
+
+
+                            <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2">
+                                <span className="max-w-[145px] truncate rounded-full border border-white/10 bg-slate-950/75 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
+                                    {currentDisplayName}
+                                </span>
+
+                                {!localMicEnabled && (
+                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-500/90 text-white">
+                                        <MicOff className="h-3 w-3" />
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
 
@@ -4457,7 +5194,7 @@ function CommunicationMeeting() {
             )}
         </div>
     );
-}
+};
 
 
 export default CommunicationMeeting;
