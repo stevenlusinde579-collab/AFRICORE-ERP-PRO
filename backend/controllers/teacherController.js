@@ -2525,3 +2525,463 @@ export const updateTeacher = async (
         });
     }
 };
+
+/**
+ * ============================================================
+ * DELETE / DEACTIVATE TEACHER / STAFF
+ * ============================================================
+ *
+ * DELETE /api/teachers/:id
+ *
+ * IMPORTANT:
+ *
+ * We DO NOT physically delete the teachers row.
+ *
+ * The ERP has historical tables that reference teachers,
+ * including duty_schedules and examination-related records.
+ *
+ * Therefore:
+ *
+ * 1. Delete Supabase Auth login account
+ * 2. Remove teachers.user_id
+ * 3. Set teachers.status = Inactive
+ * 4. Disable profile_roles
+ * 5. Preserve teachers row and historical records
+ *
+ * This means the staff member is removed from active login
+ * while historical ERP records remain safe.
+ *
+ * ============================================================
+ */
+
+export const deleteTeacher = async (
+    req,
+    res
+) => {
+
+    const teacherId =
+        Number(
+            req.params.id
+        );
+
+
+    /**
+     * ========================================================
+     * VALIDATE ID
+     * ========================================================
+     */
+
+    if (
+        !Number.isInteger(
+            teacherId
+        ) ||
+        teacherId <= 0
+    ) {
+
+        return res.status(400).json({
+
+            success: false,
+
+            message:
+                "Invalid Staff & Non-Staff member ID."
+
+        });
+
+    }
+
+
+    try {
+
+        /**
+         * ====================================================
+         * LOAD TEACHER
+         * ====================================================
+         */
+
+        const {
+            data: teacher,
+            error: teacherError
+        } = await supabase
+            .from("teachers")
+            .select(`
+                id,
+                school_id,
+                user_id,
+                employee_number,
+                first_name,
+                middle_name,
+                last_name,
+                status,
+                staff_type,
+                photo_url
+            `)
+            .eq(
+                "id",
+                teacherId
+            )
+            .maybeSingle();
+
+
+        if (teacherError) {
+
+            console.error(
+                "DELETE TEACHER LOAD ERROR:",
+                teacherError
+            );
+
+            return res.status(500).json({
+
+                success: false,
+
+                message:
+                    `Unable to load Staff & Non-Staff member: ${teacherError.message}`
+
+            });
+
+        }
+
+
+        /**
+         * ====================================================
+         * NOT FOUND
+         * ====================================================
+         */
+
+        if (!teacher) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Staff & Non-Staff member not found."
+
+            });
+
+        }
+
+
+        /**
+         * ====================================================
+         * PREVENT SELF DELETE
+         * ====================================================
+         */
+
+        if (
+            teacher.user_id &&
+            String(
+                teacher.user_id
+            ) ===
+            String(
+                req.user.id
+            )
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "You cannot delete your own Staff & Non-Staff account."
+
+            });
+
+        }
+
+
+        /**
+         * ====================================================
+         * AUTH USER ID
+         * ====================================================
+         */
+
+        const authUserId =
+            teacher.user_id ||
+            null;
+
+
+        /**
+         * ====================================================
+         * DELETE SUPABASE AUTH ACCOUNT
+         * ====================================================
+         *
+         * This removes the account used for future login.
+         */
+
+        if (
+            authUserId
+        ) {
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "AFRICORE STAFF AUTH DELETE"
+            );
+
+            console.log(
+                "Teacher ID:",
+                teacherId
+            );
+
+            console.log(
+                "Auth User ID:",
+                authUserId
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            const {
+                error:
+                    authDeleteError
+            } =
+                await supabase
+                    .auth
+                    .admin
+                    .deleteUser(
+                        authUserId
+                    );
+
+
+            if (
+                authDeleteError
+            ) {
+
+                console.error(
+                    "DELETE STAFF AUTH ERROR:",
+                    authDeleteError
+                );
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        `Unable to disable the Staff & Non-Staff login account: ${authDeleteError.message}`
+
+                });
+
+            }
+
+        }
+
+
+        /**
+         * ====================================================
+         * MARK TEACHER INACTIVE
+         * ====================================================
+         *
+         * DO NOT DELETE FROM teachers.
+         *
+         * This preserves:
+         *
+         * - duty schedules
+         * - examination history
+         * - timetables
+         * - assignments
+         * - subjects
+         * - availability
+         * - historical ERP records
+         */
+
+        const {
+            data:
+                deactivatedTeacher,
+            error:
+                deactivateError
+        } =
+            await supabase
+                .from("teachers")
+                .update({
+
+                    user_id:
+                        null,
+
+                    status:
+                        "Inactive"
+
+                })
+                .eq(
+                    "id",
+                    teacherId
+                )
+                .select("*")
+                .single();
+
+
+        if (
+            deactivateError
+        ) {
+
+            console.error(
+                "DEACTIVATE TEACHER ERROR:",
+                deactivateError
+            );
+
+            return res.status(500).json({
+
+                success: false,
+
+                auth_deleted:
+                    Boolean(
+                        authUserId
+                    ),
+
+                message:
+                    `Login account was removed, but the Staff & Non-Staff record could not be marked Inactive: ${deactivateError.message}`
+
+            });
+
+        }
+
+
+        /**
+         * ====================================================
+         * DISABLE PROFILE ROLES
+         * ====================================================
+         *
+         * We preserve the profile itself because it may be
+         * referenced by historical ERP records.
+         */
+
+        if (
+            authUserId
+        ) {
+
+            const {
+                error:
+                    profileRolesError
+            } =
+                await supabase
+                    .from("profile_roles")
+                    .update({
+
+                        is_active:
+                            false
+
+                    })
+                    .eq(
+                        "profile_id",
+                        authUserId
+                    );
+
+
+            if (
+                profileRolesError
+            ) {
+
+                console.warn(
+                    "PROFILE ROLE DEACTIVATION WARNING:",
+                    profileRolesError
+                );
+
+            }
+
+        }
+
+
+        /**
+         * ====================================================
+         * SUCCESS
+         * ====================================================
+         *
+         * IMPORTANT:
+         *
+         * There is NO:
+         *
+         * .from("teachers").delete()
+         *
+         * here.
+         */
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "AFRICORE STAFF DEACTIVATED"
+        );
+
+        console.log(
+            "Teacher ID:",
+            teacherId
+        );
+
+        console.log(
+            "Auth account deleted:",
+            Boolean(
+                authUserId
+            )
+        );
+
+        console.log(
+            "Teacher record preserved:",
+            true
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        return res.status(200).json({
+
+            success: true,
+
+            deleted: true,
+
+            inactive_only: true,
+
+            auth_deleted:
+                Boolean(
+                    authUserId
+                ),
+
+            historical_record_preserved:
+                true,
+
+            message:
+                "Staff & Non-Staff member has been removed from active management and the login account has been permanently disabled. Historical records have been preserved.",
+
+            teacher:
+                deactivatedTeacher
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            "DELETE / DEACTIVATE TEACHER ERROR"
+        );
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                error?.message ||
+                "Unable to remove Staff & Non-Staff member."
+
+        });
+
+    }
+
+};
