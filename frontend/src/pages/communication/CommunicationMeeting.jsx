@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
     useCallback,
     useEffect,
     useMemo,
@@ -1550,7 +1550,7 @@ const CommunicationMeeting = () => {
                     );
 
                     showFloatingReaction(
-                        "👏",
+                        "ðŸ‘",
                         displayName
                     );
 
@@ -1587,7 +1587,7 @@ const CommunicationMeeting = () => {
 
                     if (raised) {
                         showFloatingReaction(
-                            "✋",
+                            "âœ‹",
                             displayName
                         );
                     }
@@ -1609,13 +1609,7 @@ const CommunicationMeeting = () => {
                 const localUserId =
                     currentUserIdRef.current;
 
-                const channel =
-                    channelRef.current;
-
-                if (
-                    !localUserId ||
-                    !channel
-                ) {
+                if (!localUserId) {
                     return;
                 }
 
@@ -1644,43 +1638,6 @@ const CommunicationMeeting = () => {
                                     : participant
                         )
                 );
-
-                try {
-                    await channel.track({
-                        user_id:
-                            localUserId,
-                        display_name:
-                            currentDisplayNameRef.current,
-                        joined_at:
-                            localParticipantJoinedAt.current ||
-                            new Date().toISOString(),
-                        mic_enabled:
-                            localStreamRef.current
-                                ?.getAudioTracks?.()[0]
-                                ?.enabled !== false,
-                        camera_enabled:
-                            localStreamRef.current
-                                ?.getVideoTracks?.()[0]
-                                ?.enabled !== false,
-                        hand_raised:
-                            nextRaised,
-                        role:
-                            normalizeId(
-                                roomRef.current
-                                    ?.created_by
-                            ) ===
-                            localUserId
-                                ? "host"
-                                : "participant",
-                    });
-                } catch (
-                    presenceError
-                ) {
-                    console.warn(
-                        "Unable to update raised hand presence:",
-                        presenceError
-                    );
-                }
 
                 await sendRealtime(
                     "meeting-reaction",
@@ -1735,7 +1692,7 @@ const CommunicationMeeting = () => {
                 );
 
                 showFloatingReaction(
-                    "👏",
+                    "ðŸ‘",
                     currentDisplayNameRef.current
                 );
 
@@ -4147,7 +4104,7 @@ const CommunicationMeeting = () => {
                                 </span>
 
                                 <span>
-                                    •
+                                    â€¢
                                 </span>
 
                                 <span>
@@ -4621,7 +4578,7 @@ const CommunicationMeeting = () => {
                                     title="Applause / Support"
                                 >
                                     <span className="text-lg leading-none">
-                                        👏
+                                        ðŸ‘
                                     </span>
 
                                     {applauseCount >
