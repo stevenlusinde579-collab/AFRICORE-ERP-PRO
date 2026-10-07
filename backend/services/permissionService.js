@@ -5,47 +5,39 @@ import { supabase } from "../config/supabase.js";
  * AFRICORE ERP - PERMISSION SERVICE
  * ============================================================
  *
- * Central permission resolver.
+ * ACCESS MODEL
  *
- * Architecture:
+ * Super Admin
+ *  -> Full access to all schools
  *
- * Supabase Auth User
- *        ↓
- * profiles
- *        ↓
- * profile_roles
- *        ↓
- * roles
- *        ↓
- * role_permissions
- *        ↓
- * permissions
- *        ↓
- * role_permission_scopes
+ * Headmaster
+ *  -> Full access to his/her own school
+ *
+ * Other roles
+ *  -> Access according to assigned permissions
  *
  * IMPORTANT:
- * - profiles.role_id is retained for backward compatibility.
- * - profile_roles is the canonical multi-role source.
+ * - profiles.role_id remains for backward compatibility.
+ * - profile_roles is the canonical role source.
  * - Only active profile_roles are used.
- * - Permissions are collected from ALL active roles.
- * - Duplicate permissions are automatically removed.
+ * - Headmaster does not need individual permissions.
+ * - Headmaster is NOT treated as global Super Admin.
+ * - Headmaster remains restricted to profile.school_id.
  * ============================================================
  */
 
+const SUPER_ADMIN_ROLE = "Super Admin";
+const HEADMASTER_ROLE = "Headmaster";
 
 /**
  * ------------------------------------------------------------
  * GET PROFILE
  * ------------------------------------------------------------
  */
-export const getProfileByUserId = async (
-    userId
-) => {
+export const getProfileByUserId = async (userId) => {
 
     if (!userId) {
-        throw new Error(
-            "User ID is required."
-        );
+        throw new Error("User ID is required.");
     }
 
     const {
@@ -63,10 +55,7 @@ export const getProfileByUserId = async (
             employee_id,
             created_at
         `)
-        .eq(
-            "id",
-            userId
-        )
+        .eq("id", userId)
         .maybeSingle();
 
     if (error) {
@@ -88,14 +77,10 @@ export const getProfileByUserId = async (
  * GET ACTIVE PROFILE ROLES
  * ------------------------------------------------------------
  */
-export const getProfileRoles = async (
-    profileId
-) => {
+export const getProfileRoles = async (profileId) => {
 
     if (!profileId) {
-        throw new Error(
-            "Profile ID is required."
-        );
+        throw new Error("Profile ID is required.");
     }
 
     const {
@@ -112,26 +97,14 @@ export const getProfileRoles = async (
             is_active,
             created_at
         `)
-        .eq(
-            "profile_id",
-            profileId
-        )
-        .eq(
-            "is_active",
-            true
-        )
-        .order(
-            "is_primary",
-            {
-                ascending: false
-            }
-        )
-        .order(
-            "id",
-            {
-                ascending: true
-            }
-        );
+        .eq("profile_id", profileId)
+        .eq("is_active", true)
+        .order("is_primary", {
+            ascending: false
+        })
+        .order("id", {
+            ascending: true
+        });
 
     if (error) {
         throw new Error(
@@ -148,9 +121,7 @@ export const getProfileRoles = async (
  * GET ROLES
  * ------------------------------------------------------------
  */
-export const getRolesByIds = async (
-    roleIds
-) => {
+export const getRolesByIds = async (roleIds) => {
 
     if (
         !Array.isArray(roleIds) ||
@@ -170,10 +141,7 @@ export const getRolesByIds = async (
             description,
             created_at
         `)
-        .in(
-            "id",
-            roleIds
-        );
+        .in("id", roleIds);
 
     if (error) {
         throw new Error(
@@ -190,9 +158,7 @@ export const getRolesByIds = async (
  * GET ROLE PERMISSIONS
  * ------------------------------------------------------------
  */
-export const getRolePermissions = async (
-    roleIds
-) => {
+export const getRolePermissions = async (roleIds) => {
 
     if (
         !Array.isArray(roleIds) ||
@@ -212,10 +178,7 @@ export const getRolePermissions = async (
             permission_id,
             created_at
         `)
-        .in(
-            "role_id",
-            roleIds
-        );
+        .in("role_id", roleIds);
 
     if (error) {
         throw new Error(
@@ -232,9 +195,7 @@ export const getRolePermissions = async (
  * GET PERMISSIONS
  * ------------------------------------------------------------
  */
-export const getPermissionsByIds = async (
-    permissionIds
-) => {
+export const getPermissionsByIds = async (permissionIds) => {
 
     if (
         !Array.isArray(permissionIds) ||
@@ -254,10 +215,7 @@ export const getPermissionsByIds = async (
             module,
             created_at
         `)
-        .in(
-            "id",
-            permissionIds
-        );
+        .in("id", permissionIds);
 
     if (error) {
         throw new Error(
@@ -297,14 +255,8 @@ export const getPermissionScopes = async (
             is_active,
             created_at
         `)
-        .in(
-            "role_permission_id",
-            rolePermissionIds
-        )
-        .eq(
-            "is_active",
-            true
-        );
+        .in("role_permission_id", rolePermissionIds)
+        .eq("is_active", true);
 
     if (error) {
         throw new Error(
@@ -317,93 +269,64 @@ export const getPermissionScopes = async (
 
 
 /**
- * ------------------------------------------------------------
- * BUILD USER ACCESS
- * ------------------------------------------------------------
- *
- * This is the main function.
- *
- * It resolves:
- *
- * profile
- * roles
- * role permissions
- * permissions
- * scopes
- *
- * ------------------------------------------------------------
+ * ============================================================
+ * GET USER ACCESS
+ * ============================================================
  */
-export const getUserAccess = async (
-    userId
-) => {
+export const getUserAccess = async (userId) => {
 
     if (!userId) {
-        throw new Error(
-            "User ID is required."
-        );
+        throw new Error("User ID is required.");
     }
 
 
-    // --------------------------------------------------------
-    // 1. PROFILE
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 1. PROFILE
+     * --------------------------------------------------------
+     */
     const profile =
-        await getProfileByUserId(
-            userId
-        );
+        await getProfileByUserId(userId);
 
 
     if (!profile) {
 
         return {
             profile: null,
+            profile_roles: [],
             roles: [],
             permissions: [],
             scopes: [],
+            role_permissions: [],
             permissionMap: {},
             roleMap: {},
-            isSuperAdmin: false
+            isSuperAdmin: false,
+            isHeadmaster: false,
+            isSchoolAdmin: false,
+            schoolId: null
         };
+
     }
-
-
-    // --------------------------------------------------------
-    // 2. ACTIVE PROFILE ROLES
-    // --------------------------------------------------------
-
-    const profileRoles =
-        await getProfileRoles(
-            profile.id
-        );
 
 
     /**
      * --------------------------------------------------------
-     * BACKWARD COMPATIBILITY
-     * --------------------------------------------------------
-     *
-     * If profile_roles has no records but profiles.role_id
-     * exists, we temporarily use the legacy role.
-     *
-     * This prevents old users from suddenly losing access.
-     *
-     * Once migration is complete, this fallback can be
-     * removed.
+     * 2. ACTIVE PROFILE ROLES
      * --------------------------------------------------------
      */
+    const profileRoles =
+        await getProfileRoles(profile.id);
+
 
     let effectiveRoleIds =
         profileRoles
-            .map(
-                (item) =>
-                    item.role_id
-            )
-            .filter(
-                Boolean
-            );
+            .map((item) => item.role_id)
+            .filter(Boolean);
 
 
+    /**
+     * Backward compatibility
+     */
     if (
         effectiveRoleIds.length === 0 &&
         profile.role_id
@@ -412,61 +335,51 @@ export const getUserAccess = async (
         effectiveRoleIds = [
             profile.role_id
         ];
+
     }
 
 
+    effectiveRoleIds = [
+        ...new Set(effectiveRoleIds)
+    ];
+
+
     /**
-     * Remove duplicate role IDs.
+     * --------------------------------------------------------
+     * 3. ROLES
+     * --------------------------------------------------------
      */
-    effectiveRoleIds =
-        [
-            ...new Set(
-                effectiveRoleIds
-            )
-        ];
-
-
-    // --------------------------------------------------------
-    // 3. ROLES
-    // --------------------------------------------------------
-
     const roles =
         await getRolesByIds(
             effectiveRoleIds
         );
 
 
-    // --------------------------------------------------------
-    // 4. ROLE PERMISSIONS
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 4. ROLE PERMISSIONS
+     * --------------------------------------------------------
+     */
     const rolePermissions =
         await getRolePermissions(
             effectiveRoleIds
         );
 
 
-    // --------------------------------------------------------
-    // 5. PERMISSIONS
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 5. PERMISSIONS
+     * --------------------------------------------------------
+     */
     const permissionIds =
         rolePermissions
-            .map(
-                (item) =>
-                    item.permission_id
-            )
-            .filter(
-                Boolean
-            );
+            .map((item) => item.permission_id)
+            .filter(Boolean);
 
 
-    const uniquePermissionIds =
-        [
-            ...new Set(
-                permissionIds
-            )
-        ];
+    const uniquePermissionIds = [
+        ...new Set(permissionIds)
+    ];
 
 
     const permissions =
@@ -475,19 +388,15 @@ export const getUserAccess = async (
         );
 
 
-    // --------------------------------------------------------
-    // 6. SCOPES
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 6. SCOPES
+     * --------------------------------------------------------
+     */
     const rolePermissionIds =
         rolePermissions
-            .map(
-                (item) =>
-                    item.id
-            )
-            .filter(
-                Boolean
-            );
+            .map((item) => item.id)
+            .filter(Boolean);
 
 
     const scopes =
@@ -496,34 +405,29 @@ export const getUserAccess = async (
         );
 
 
-    // --------------------------------------------------------
-    // 7. BUILD ROLE MAP
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 7. ROLE MAP
+     * --------------------------------------------------------
+     */
     const roleMap = {};
 
+    for (const role of roles) {
 
-    for (
-        const role of roles
-    ) {
-
-        roleMap[
-            role.id
-        ] = role;
+        roleMap[role.id] = role;
 
     }
 
 
-    // --------------------------------------------------------
-    // 8. BUILD PERMISSION MAP
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 8. PERMISSION MAP
+     * --------------------------------------------------------
+     */
     const permissionMap = {};
 
 
-    for (
-        const permission of permissions
-    ) {
+    for (const permission of permissions) {
 
         const relatedRolePermissions =
             rolePermissions.filter(
@@ -548,13 +452,9 @@ export const getUserAccess = async (
             relatedRolePermissions
                 .map(
                     (rolePermission) =>
-                        roleMap[
-                            rolePermission.role_id
-                        ]
+                        roleMap[rolePermission.role_id]
                 )
-                .filter(
-                    Boolean
-                );
+                .filter(Boolean);
 
 
         permissionMap[
@@ -571,54 +471,62 @@ export const getUserAccess = async (
                 permission.module,
 
             roles:
-                relatedRoles.map(
-                    (role) => ({
-                        id:
-                            role.id,
-                        role_name:
-                            role.role_name
-                    })
-                ),
+                relatedRoles.map((role) => ({
+                    id: role.id,
+                    role_name: role.role_name
+                })),
 
             role_permission_ids:
                 relatedRolePermissions.map(
-                    (item) =>
-                        item.id
+                    (item) => item.id
                 ),
 
             scopes:
-                relatedScopes.map(
-                    (scope) => ({
-                        id:
-                            scope.id,
-                        role_permission_id:
-                            scope.role_permission_id,
-                        scope_type:
-                            scope.scope_type,
-                        is_active:
-                            scope.is_active
-                    })
-                )
+                relatedScopes.map((scope) => ({
+                    id: scope.id,
+                    role_permission_id:
+                        scope.role_permission_id,
+                    scope_type:
+                        scope.scope_type,
+                    is_active:
+                        scope.is_active
+                }))
         };
+
     }
 
 
-    // --------------------------------------------------------
-    // 9. SUPER ADMIN CHECK
-    // --------------------------------------------------------
-
+    /**
+     * --------------------------------------------------------
+     * 9. ACCESS LEVEL
+     * --------------------------------------------------------
+     */
     const isSuperAdmin =
         roles.some(
             (role) =>
                 role.role_name ===
-                "Super Admin"
+                SUPER_ADMIN_ROLE
         );
 
 
-    // --------------------------------------------------------
-    // 10. RETURN COMPLETE ACCESS OBJECT
-    // --------------------------------------------------------
+    const isHeadmaster =
+        roles.some(
+            (role) =>
+                role.role_name ===
+                HEADMASTER_ROLE
+        );
 
+
+    const isSchoolAdmin =
+        isSuperAdmin ||
+        isHeadmaster;
+
+
+    /**
+     * --------------------------------------------------------
+     * 10. RETURN
+     * --------------------------------------------------------
+     */
     return {
 
         profile,
@@ -639,16 +547,22 @@ export const getUserAccess = async (
 
         roleMap,
 
-        isSuperAdmin
+        isSuperAdmin,
 
+        isHeadmaster,
+
+        isSchoolAdmin,
+
+        schoolId:
+            profile.school_id
     };
 };
 
 
 /**
- * ------------------------------------------------------------
+ * ============================================================
  * HAS PERMISSION
- * ------------------------------------------------------------
+ * ============================================================
  */
 export const userHasPermission = async (
     userId,
@@ -664,16 +578,21 @@ export const userHasPermission = async (
 
 
     const access =
-        await getUserAccess(
-            userId
-        );
+        await getUserAccess(userId);
 
 
+    /**
+     * Super Admin = everything
+     *
+     * Headmaster = everything within own school
+     */
     if (
-        access.isSuperAdmin
+        access.isSuperAdmin ||
+        access.isHeadmaster
     ) {
 
         return true;
+
     }
 
 
@@ -686,9 +605,9 @@ export const userHasPermission = async (
 
 
 /**
- * ------------------------------------------------------------
+ * ============================================================
  * GET PERMISSION DETAILS
- * ------------------------------------------------------------
+ * ============================================================
  */
 export const getUserPermission = async (
     userId,
@@ -704,16 +623,20 @@ export const getUserPermission = async (
 
 
     const access =
-        await getUserAccess(
-            userId
-        );
+        await getUserAccess(userId);
 
 
+    /**
+     * --------------------------------------------------------
+     * SUPER ADMIN
+     * --------------------------------------------------------
+     */
     if (
         access.isSuperAdmin
     ) {
 
         return {
+
             permission_name:
                 permissionName,
 
@@ -721,30 +644,98 @@ export const getUserPermission = async (
                 null,
 
             roles:
-                access.roles.map(
-                    (role) => ({
-                        id:
-                            role.id,
-                        role_name:
-                            role.role_name
-                    })
-                ),
+                access.roles.map((role) => ({
+                    id: role.id,
+                    role_name: role.role_name
+                })),
 
             scopes: [
                 {
                     scope_type:
                         "ALL_SCHOOL",
+
                     is_active:
                         true
                 }
             ],
 
             isSuperAdmin:
-                true
+                true,
+
+            isHeadmaster:
+                false,
+
+            isSchoolAdmin:
+                true,
+
+            school_id:
+                null
         };
+
     }
 
 
+    /**
+     * --------------------------------------------------------
+     * HEADMASTER
+     * --------------------------------------------------------
+     *
+     * Headmaster gets every permission automatically.
+     *
+     * Scope remains the Headmaster's school.
+     */
+    if (
+        access.isHeadmaster
+    ) {
+
+        return {
+
+            permission_name:
+                permissionName,
+
+            module:
+                null,
+
+            roles:
+                access.roles.map((role) => ({
+                    id: role.id,
+                    role_name: role.role_name
+                })),
+
+            scopes: [
+                {
+                    scope_type:
+                        "SCHOOL",
+
+                    is_active:
+                        true,
+
+                    school_id:
+                        access.schoolId
+                }
+            ],
+
+            isSuperAdmin:
+                false,
+
+            isHeadmaster:
+                true,
+
+            isSchoolAdmin:
+                true,
+
+            school_id:
+                access.schoolId
+        };
+
+    }
+
+
+    /**
+     * --------------------------------------------------------
+     * NORMAL USER
+     * --------------------------------------------------------
+     */
     return (
         access.permissionMap[
             permissionName
@@ -759,14 +750,10 @@ export const getUserPermission = async (
  * GET USER ROLES
  * ------------------------------------------------------------
  */
-export const getUserRoles = async (
-    userId
-) => {
+export const getUserRoles = async (userId) => {
 
     const access =
-        await getUserAccess(
-            userId
-        );
+        await getUserAccess(userId);
 
     return access.roles || [];
 };
@@ -777,14 +764,10 @@ export const getUserRoles = async (
  * GET USER PERMISSIONS
  * ------------------------------------------------------------
  */
-export const getUserPermissions = async (
-    userId
-) => {
+export const getUserPermissions = async (userId) => {
 
     const access =
-        await getUserAccess(
-            userId
-        );
+        await getUserAccess(userId);
 
     return access.permissions || [];
 };
@@ -795,14 +778,36 @@ export const getUserPermissions = async (
  * GET USER SCOPES
  * ------------------------------------------------------------
  */
-export const getUserScopes = async (
-    userId
-) => {
+export const getUserScopes = async (userId) => {
 
     const access =
-        await getUserAccess(
-            userId
-        );
+        await getUserAccess(userId);
+
+
+    /**
+     * Headmaster:
+     * own school only.
+     */
+    if (
+        access.isHeadmaster &&
+        !access.isSuperAdmin
+    ) {
+
+        return [
+            {
+                scope_type:
+                    "SCHOOL",
+
+                is_active:
+                    true,
+
+                school_id:
+                    access.schoolId
+            }
+        ];
+
+    }
+
 
     return access.scopes || [];
 };
