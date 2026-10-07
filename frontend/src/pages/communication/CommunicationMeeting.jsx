@@ -1550,7 +1550,7 @@ const CommunicationMeeting = () => {
                     );
 
                     showFloatingReaction(
-                        "ðŸ‘",
+                        "applause",
                         displayName
                     );
 
@@ -1587,8 +1587,8 @@ const CommunicationMeeting = () => {
 
                     if (raised) {
                         showFloatingReaction(
-                            "âœ‹",
-                            displayName
+                        "raise_hand",
+                        displayName
                         );
                     }
                 }
@@ -4577,9 +4577,9 @@ const CommunicationMeeting = () => {
                                     className="relative flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-3 text-white transition hover:bg-white/15"
                                     title="Applause / Support"
                                 >
-                                    <span className="text-lg leading-none">
-                                        ðŸ‘
-                                    </span>
+                                    <span className="text-xl leading-none">👏</span>
+
+
 
                                     {applauseCount >
                                         0 && (
