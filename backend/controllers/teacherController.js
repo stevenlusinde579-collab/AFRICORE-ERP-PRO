@@ -2535,21 +2535,28 @@ export const updateTeacher = async (
  *
  * IMPORTANT:
  *
- * We DO NOT physically delete the teachers row.
+ * We DO NOT physically delete:
  *
- * The ERP has historical tables that reference teachers,
- * including duty_schedules and examination-related records.
+ * - teachers
+ * - profiles
+ * - messages
+ * - historical ERP records
  *
- * Therefore:
+ * Supabase Auth user is NOT deleted because the profile may
+ * already be referenced by historical communication records.
  *
- * 1. Delete Supabase Auth login account
+ * Instead:
+ *
+ * 1. Permanently-style BAN the Supabase Auth account
  * 2. Remove teachers.user_id
  * 3. Set teachers.status = Inactive
  * 4. Disable profile_roles
- * 5. Preserve teachers row and historical records
+ * 5. Preserve all historical records
  *
- * This means the staff member is removed from active login
- * while historical ERP records remain safe.
+ * Supabase supports ban_duration through
+ * auth.admin.updateUserById().
+ *
+ * 876000h = approximately 100 years.
  *
  * ============================================================
  */
@@ -2563,13 +2570,6 @@ export const deleteTeacher = async (
         Number(
             req.params.id
         );
-
-
-    /**
-     * ========================================================
-     * VALIDATE ID
-     * ========================================================
-     */
 
     if (
         !Number.isInteger(
@@ -2589,12 +2589,11 @@ export const deleteTeacher = async (
 
     }
 
-
     try {
 
         /**
          * ====================================================
-         * LOAD TEACHER
+         * LOAD TARGET STAFF MEMBER
          * ====================================================
          */
 
@@ -2641,12 +2640,6 @@ export const deleteTeacher = async (
         }
 
 
-        /**
-         * ====================================================
-         * NOT FOUND
-         * ====================================================
-         */
-
         if (!teacher) {
 
             return res.status(404).json({
@@ -2663,7 +2656,7 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * PREVENT SELF DELETE
+         * PREVENT SELF DEACTIVATION
          * ====================================================
          */
 
@@ -2689,12 +2682,6 @@ export const deleteTeacher = async (
         }
 
 
-        /**
-         * ====================================================
-         * AUTH USER ID
-         * ====================================================
-         */
-
         const authUserId =
             teacher.user_id ||
             null;
@@ -2702,10 +2689,26 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * DELETE SUPABASE AUTH ACCOUNT
+         * DISABLE SUPABASE AUTH LOGIN
          * ====================================================
          *
-         * This removes the account used for future login.
+         * IMPORTANT:
+         *
+         * DO NOT use:
+         *
+         * supabase.auth.admin.deleteUser()
+         *
+         * because this user's profile may be referenced by
+         * messages.sender_id, messages.receiver_id and other
+         * historical ERP records.
+         *
+         * Instead we ban the Auth account for approximately
+         * 100 years.
+         *
+         * This prevents normal login while preserving the
+         * Auth/Profile/history relationship.
+         *
+         * ====================================================
          */
 
         if (
@@ -2717,7 +2720,7 @@ export const deleteTeacher = async (
             );
 
             console.log(
-                "AFRICORE STAFF AUTH DELETE"
+                "AFRICORE STAFF AUTH BAN"
             );
 
             console.log(
@@ -2731,29 +2734,55 @@ export const deleteTeacher = async (
             );
 
             console.log(
+                "Ban Duration:",
+                "876000h"
+            );
+
+            console.log(
                 "========================================"
             );
 
 
             const {
+                data:
+                    bannedUser,
                 error:
-                    authDeleteError
+                    authBanError
             } =
                 await supabase
                     .auth
                     .admin
-                    .deleteUser(
-                        authUserId
+                    .updateUserById(
+                        authUserId,
+                        {
+                            ban_duration:
+                                "876000h"
+                        }
                     );
 
 
             if (
-                authDeleteError
+                authBanError
             ) {
 
                 console.error(
-                    "DELETE STAFF AUTH ERROR:",
-                    authDeleteError
+                    "DISABLE STAFF AUTH ERROR:",
+                    authBanError
+                );
+
+                console.error(
+                    "AUTH ERROR MESSAGE:",
+                    authBanError?.message
+                );
+
+                console.error(
+                    "AUTH ERROR STATUS:",
+                    authBanError?.status
+                );
+
+                console.error(
+                    "AUTH ERROR CODE:",
+                    authBanError?.code
                 );
 
                 return res.status(500).json({
@@ -2761,9 +2790,21 @@ export const deleteTeacher = async (
                     success: false,
 
                     message:
-                        `Unable to disable the Staff & Non-Staff login account: ${authDeleteError.message}`
+                        `Unable to disable the Staff & Non-Staff login account: ${authBanError?.message || "Supabase Auth account could not be disabled."}`
 
                 });
+
+            }
+
+
+            if (
+                !bannedUser?.user
+            ) {
+
+                console.warn(
+                    "AUTH BAN COMPLETED WITHOUT USER OBJECT:",
+                    bannedUser
+                );
 
             }
 
@@ -2772,20 +2813,13 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * MARK TEACHER INACTIVE
+         * REMOVE ACTIVE TEACHER -> AUTH LINK
          * ====================================================
          *
-         * DO NOT DELETE FROM teachers.
+         * The Auth account remains preserved but the active
+         * teacher record no longer points to it.
          *
-         * This preserves:
-         *
-         * - duty schedules
-         * - examination history
-         * - timetables
-         * - assignments
-         * - subjects
-         * - availability
-         * - historical ERP records
+         * ====================================================
          */
 
         const {
@@ -2826,13 +2860,13 @@ export const deleteTeacher = async (
 
                 success: false,
 
-                auth_deleted:
+                auth_disabled:
                     Boolean(
                         authUserId
                     ),
 
                 message:
-                    `Login account was removed, but the Staff & Non-Staff record could not be marked Inactive: ${deactivateError.message}`
+                    `Login was disabled, but the Staff & Non-Staff record could not be marked Inactive: ${deactivateError.message}`
 
             });
 
@@ -2841,11 +2875,8 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * DISABLE PROFILE ROLES
+         * DISABLE ALL ACTIVE PROFILE ROLES
          * ====================================================
-         *
-         * We preserve the profile itself because it may be
-         * referenced by historical ERP records.
          */
 
         if (
@@ -2886,16 +2917,8 @@ export const deleteTeacher = async (
 
         /**
          * ====================================================
-         * SUCCESS
+         * FINAL LOG
          * ====================================================
-         *
-         * IMPORTANT:
-         *
-         * There is NO:
-         *
-         * .from("teachers").delete()
-         *
-         * here.
          */
 
         console.log(
@@ -2912,7 +2935,7 @@ export const deleteTeacher = async (
         );
 
         console.log(
-            "Auth account deleted:",
+            "Auth account banned:",
             Boolean(
                 authUserId
             )
@@ -2924,9 +2947,20 @@ export const deleteTeacher = async (
         );
 
         console.log(
+            "Historical records preserved:",
+            true
+        );
+
+        console.log(
             "========================================"
         );
 
+
+        /**
+         * ====================================================
+         * RESPONSE
+         * ====================================================
+         */
 
         return res.status(200).json({
 
@@ -2936,7 +2970,12 @@ export const deleteTeacher = async (
 
             inactive_only: true,
 
-            auth_deleted:
+            auth_disabled:
+                Boolean(
+                    authUserId
+                ),
+
+            auth_banned:
                 Boolean(
                     authUserId
                 ),
