@@ -1,1512 +1,4502 @@
-﻿import crypto from "crypto";import{supabase}from "../config/supabase.js";import{readPDF}from "../services/pdfReader.js";import{askGemini}from "../services/gemini.service.js";const CONTROLLER_VERSION="MAIN-QUESTION-GROUPING-V10";const queue=[];let workerRunning=false;const text=(value)=>value==null?"":String(value).trim();const nullable=(value)=>text(value)||null;const number=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;const integer=(value,fallback=0)=>Math.max(0,Math.round(number(value,fallback)));const marks=(value)=>Math.max(0,number(value,0));const clamp100=(value,fallback=0)=>Math.max(0,Math.min(100,number(value,fallback)));const unique=(values=[])=>[...new Set(values.map(text).filter(Boolean)),];const normalizeConfidence=(value)=>{const n=Number(value);if(!Number.isFinite(n)){return 0;}if(n>0&&n<=1){return Math.round(n*100);}return Math.max(0,Math.min(100,Math.round(n)));};const supabaseError=(error,context)=>{if(!error){return;}const wrapped=new Error(`${context}:${error.message||"Supabase error"}`);wrapped.code=error.code||null;wrapped.details=error.details||null;wrapped.hint=error.hint||null;wrapped.status=error.status||500;throw wrapped;};const withTimeout=(promise,milliseconds,message)=>{let timer;const timeoutPromise=new Promise((_,reject)=>{timer=setTimeout(()=>{const error=new Error(message);error.status=504;error.code="OPERATION_TIMEOUT";reject(error);},milliseconds);});return Promise.race([Promise.resolve(promise).finally(()=>clearTimeout(timer)),timeoutPromise,]);};const fileHash=(buffer)=>crypto.createHash("sha256").update(buffer).digest("hex");const cleanPdf=(value)=>text(value).replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/[\t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();const parseAI=(value)=>{if(value&&typeof value==="object"){return value;}let raw=String(value||"").replace(/^\uFEFF/,"").replace(/```json/gi,"").replace(/```/g,"").trim();const positions=[raw.indexOf("{"),raw.indexOf("["),].filter((position)=>position>=0);if(positions.length===0){throw new Error("Gemini returned no JSON.");}raw=raw.slice(Math.min(...positions));const stack=[];let inString=false;let escaped=false;let end=-1;for(let i=0;i<raw.length;i++){const c=raw[i];if(inString){if(escaped){escaped=false;}else if(c==="\\"){escaped=true;}else if(c==='"'){inString=false;}continue;}if(c==='"'){inString=true;continue;}if(c==="{"||c==="["){stack.push(c);}else if(c==="}"||c==="]"){const expected=c==="}"?"{":"[";if(stack[stack.length-1]===expected){stack.pop();}if(stack.length===0){end=i+1;break;}}}const candidate=(end>0?raw.slice(0,end):raw).replace(/,\s*([}\]])/g,"$1");try{return JSON.parse(candidate);}catch(error){throw new Error(`Gemini returned invalid JSON:${error.message}`);}};const mainNumber=(value,fallback=0)=>{const match=text(value).match(/^(?:question\s*)?(\d{1,3})/i);if(match){return integer(match[1],fallback);}return integer(value,fallback);};const subLabel=(value)=>{const raw=text(value);let match=raw.match(/^(?:question\s*)?\d{1,3}\s*(?:\(\s*([a-z]+|[ivxlcdm]+|\d+)\s*\)|[.)\-:]\s*([a-z]+|[ivxlcdm]+|\d+))/i);if(match){return(match[1]||match[2]||"").toLowerCase().trim();}return "";};const roman=(numberValue)=>{const table=[[10,"x"],[9,"ix"],[8,"viii"],[7,"vii"],[6,"vi"],[5,"v"],[4,"iv"],[3,"iii"],[2,"ii"],[1,"i"],];let value=Math.max(1,numberValue);let result="";for(const[valueNumber,symbol,]of table){while(value>=valueNumber){result+=symbol;value-=valueNumber;}}return result;};const topLevelNumbersFromPdf=(pdf)=>{
-    const numbers=new Set();
+﻿import crypto from "crypto";
+import { supabase } from "../config/supabase.js";
+import { readPDF } from "../services/pdfReader.js";
+import { askGemini } from "../services/gemini.service.js";
 
-    const source=cleanPdf(pdf);
-    const lines=source.split("\n");
+// ============================================================
+// AI ANALYSIS LOCKS
+// ============================================================
 
-    const addNumber=(value)=>{
-        const n=integer(value,0);
-        if(n>0&&n<200){
-            numbers.add(n);
-        }
-    };
+const analysisLocks = new Map();
 
-    /*
-     * PASS 1
-     * Explicit Question headings.
-     *
-     * Examples:
-     * Question 1
-     * QUESTION 2.
-     * Question 11:
-     * Q3
-     */
-    for(const line of lines){
-        const trimmed=text(line);
+const ANALYSIS_LOCK_TIMEOUT =
+    15 * 60 * 1000;
 
-        let match=trimmed.match(
-            /^(?:question|ques|q)\s*\.?\s*(\d{1,3})(?:\s|[.)\-:]|$)/i
-        );
+const getAnalysisKey = (
+    examId,
+    examSubjectId
+) =>
+    `${Number(examId)}:${Number(examSubjectId)}`;
 
-        if(match){
-            addNumber(match[1]);
-        }
-    }
-
-    /*
-     * PASS 2
-     * Normal printed top-level formats.
-     *
-     * 1.
-     * 2)
-     * 3:
-     * 4-
-     *
-     * IMPORTANT:
-     * Do not accept 1(a), 1(i), 1(ii) etc.
-     */
-    for(const line of lines){
-        const trimmed=text(line);
-
-        const match=trimmed.match(
-            /^(\d{1,3})\s*[.)\-:]\s+(?!\([a-zivxlcdm0-9]+\))/i
-        );
-
-        if(match){
-            addNumber(match[1]);
-        }
-    }
-
-    /*
-     * PASS 3
-     * Standalone number on its own line.
-     *
-     * Example:
-     *
-     * 4
-     * Explain the importance of...
-     *
-     * This is common in OCR/PDF extraction.
-     */
-    for(let i=0;i<lines.length;i++){
-        const current=text(lines[i]);
-
-        if(!/^\d{1,3}$/.test(current)){
-            continue;
-        }
-
-        const n=integer(current,0);
-
-        if(n<=0||n>=200){
-            continue;
-        }
-
-        const nextLines=[];
-
-        for(let j=i+1;j<Math.min(lines.length,i+4);j++){
-            const next=text(lines[j]);
-
-            if(next){
-                nextLines.push(next);
-            }
-        }
-
-        const context=nextLines.join(" ");
-
-        /*
-         * Require actual question-like text.
-         * This avoids treating page numbers as questions.
-         */
-        const looksLikeQuestion=
-            context.length>=12 &&
-            (
-                /[?]$/.test(context) ||
-                /^(explain|define|state|mention|describe|discuss|outline|identify|calculate|differentiate|distinguish|give|list|write|what|why|how|compare|analyse|analyze|evaluate|assess|illustrate|describe|show|find|name|read|using|with|from|the|which|state)/i.test(context)
-            );
-
-        if(looksLikeQuestion){
-            addNumber(n);
-        }
-    }
-
-    /*
-     * PASS 4
-     * OCR joined-number format.
-     *
-     * Example:
-     * 4 Explain the importance of...
-     */
-    for(const line of lines){
-        const trimmed=text(line);
-
-        const match=trimmed.match(
-            /^(\d{1,3})\s+(?=[A-Za-zÀ-ÿ])/i
-        );
-
-        if(!match){
-            continue;
-        }
-
-        const n=integer(match[1],0);
-
-        if(n<=0||n>=200){
-            continue;
-        }
-
-        /*
-         * Never classify 1(i), 1(a), etc as a new main question.
-         */
-        if(/^\d{1,3}\s*\([a-zivxlcdm0-9]+\)/i.test(trimmed)){
-            continue;
-        }
-
-        const remainder=trimmed
-            .replace(/^\d{1,3}\s+/,"")
-            .trim();
-
-        if(remainder.length>=12){
-            addNumber(n);
-        }
-    }
-
-    /*
-     * PASS 5
-     * OCR explicit format:
-     *
-     * Question 4 Explain...
-     */
-    for(const line of lines){
-        const trimmed=text(line);
-
-        const match=trimmed.match(
-            /^(?:question|ques|q)\s*\.?\s*(\d{1,3})\s+(?=[A-Za-zÀ-ÿ])/i
-        );
-
-        if(match){
-            addNumber(match[1]);
-        }
-    }
-
-    /*
-     * STRUCTURAL SAFETY
-     *
-     * If a paper clearly contains a continuous sequence such as
-     * 1,2,3,5,6,7,9,10,11, the missing numbers are suspicious.
-     *
-     * We do NOT blindly invent them here.
-     * Instead we expose the observed range so the recovery pass
-     * can inspect the full PDF for the missing numbers.
-     */
-    const observed=[...numbers].sort((a,b)=>a-b);
-
-    if(observed.length>=3){
-        const maxObserved=Math.max(...observed);
-
-        if(maxObserved<=100){
-            for(let n=1;n<=maxObserved;n++){
-                if(!numbers.has(n)){
-                    /*
-                     * Only add a missing number when it is supported
-                     * by nearby observed question numbers.
-                     *
-                     * Example:
-                     * 1,2,3,5,6 -> candidate 4
-                     */
-                    const lower=numbers.has(n-1);
-                    const upper=numbers.has(n+1);
-
-                    if(lower&&upper){
-                        numbers.add(n);
-                    }
-                }
-            }
-        }
-    }
-
-    return [...numbers].sort((a,b)=>a-b);
-};const normalizeEvidenceText=(value)=>text(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();const questionTextEvidenceInPdf=(pdf,question)=>{const numberValue=integer(question?.question_number);if(!numberValue){return{found:false,source:"invalid_number",};}const normalizedPdf=normalizeEvidenceText(pdf);const escapedNumber=String(numberValue).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");const headingPattern=new RegExp(`(?:^|\\n|\\s)question\\s+${escapedNumber}(?:\\s|$|[.):\\-])`,"i");if(headingPattern.test(pdf)){return{found:true,source:"explicit_question_heading",};}const topLevelPattern=new RegExp(`(?:^|\\n)\\s*${escapedNumber}\\s*[.)\\-:]\\s+`,"i");if(topLevelPattern.test(pdf)){return{found:true,source:"top_level_number",};}const questionText=normalizeEvidenceText(question?.question_text);const words=questionText.split(" ").filter((word)=>word.length>=2).slice(0,10);if(words.length>=4){const phrase=words.join(" ");if(normalizedPdf.includes(phrase)){return{found:true,source:"question_text",};}const matched=words.filter((word)=>normalizedPdf.includes(word)).length;if(matched>=Math.max(4,Math.ceil(words.length*0.7))){return{found:true,source:"question_text_partial",};}}return{found:false,source:"no_pdf_evidence",};};const reconcileQuestionsWithPdf=(questions,pdf,detectedNumbers)=>{
-    const detected=new Set(
-        (detectedNumbers||[])
-            .map(integer)
-            .filter(Boolean)
-    );
-
-    const kept=[];
-    const rejected=[];
-
-    const sortedDetected=[...detected].sort((a,b)=>a-b);
-
-    const maxDetected=sortedDetected.length
-        ? Math.max(...sortedDetected)
-        : 0;
-
-    /*
-     * If the paper has a clear continuous examination range,
-     * numbers inside that range are treated as mandatory candidates.
-     *
-     * This is intentionally NOT based on subject name.
-     */
-    const denseExamRange=
-        sortedDetected.length>=3 &&
-        maxDetected<=100 &&
-        sortedDetected.every(
-            (value,index)=>{
-                if(index===0){
-                    return value===1;
-                }
-                return value===sortedDetected[index-1]+1;
-            }
-        );
-
-    const aiNumbers=new Set(
-        (questions||[])
-            .map(item=>integer(item?.question_number))
-            .filter(Boolean)
-    );
-
-    for(const question of questions||[]){
-        const numberValue=integer(question?.question_number);
-
-        if(!numberValue){
-            rejected.push({
-                question,
-                reason:"invalid_question_number"
-            });
-            continue;
-        }
-
-        /*
-         * Strongest evidence:
-         * PDF detector saw the same main question number.
-         */
-        if(detected.has(numberValue)){
-            kept.push({
-                ...question,
-                pdf_evidence:"top_level_detector"
-            });
-            continue;
-        }
-
-        /*
-         * Second evidence:
-         * Actual question text exists in the PDF.
-         */
-        const evidence=
-            questionTextEvidenceInPdf(
-                pdf,
-                question
-            );
-
-        if(evidence.found){
-            kept.push({
-                ...question,
-                pdf_evidence:evidence.source
-            });
-            continue;
-        }
-
-        /*
-         * If the PDF detector produced a complete 1..N range,
-         * preserve an AI question inside that range.
-         *
-         * This prevents post-processing from deleting a valid
-         * question merely because OCR formatting was unusual.
-         */
-        if(
-            denseExamRange &&
-            numberValue>=1 &&
-            numberValue<=maxDetected
-        ){
-            kept.push({
-                ...question,
-                pdf_evidence:"dense_exam_range"
-            });
-            continue;
-        }
-
-        /*
-         * Leading AI sequence protection.
-         */
-        const firstDetected=
-            detected.size
-                ? Math.min(...detected)
-                : 0;
-
-        let leadingSequence=false;
-
-        if(
-            firstDetected>1 &&
-            numberValue>0 &&
-            numberValue<firstDetected
-        ){
-            leadingSequence=true;
-
-            for(
-                let n=numberValue;
-                n<firstDetected;
-                n++
-            ){
-                if(!aiNumbers.has(n)){
-                    leadingSequence=false;
-                    break;
-                }
-            }
-        }
-
-        if(leadingSequence){
-            kept.push({
-                ...question,
-                pdf_evidence:"leading_ai_sequence"
-            });
-            continue;
-        }
-
-        rejected.push({
-            question,
-            reason:evidence.source
-        });
-    }
-
-    return {
-        questions:kept,
-        rejected
-    };
-};
-const recoverMissingQuestionsFromPdf=async({pdf,missingNumbers,existingQuestions,examName,subject,level,})=>{const missing=[...(missingNumbers||[]),].map(integer).filter(Boolean);if(!missing.length){return[];}const prompt=` You are performing a STRICT recovery pass for a Tanzanian examination paper.The first AI pass may have omitted some printed main questions.Recover ONLY the following main question numbers if they are actually present in the FULL PAPER below:MISSING NUMBERS:${JSON.stringify(missing)}ALREADY FOUND NUMBERS:${JSON.stringify((existingQuestions||[]).map((q)=>integer(q.question_number)).filter(Boolean).sort((a,b)=>a-b))}RULES:1.Return one object for each missing main question that is visibly present.2.Do not invent a question that is not in the paper.3.1(i),1(ii),1(a),1(b)are sub-items of Question 1,never new main questions.4.Preserve the exact printed main question number.5.Preserve sub-items inside sub_items.6.Determine marks from the printed paper,not from assumptions.7.If the question cannot be read reliably,still return its visible question text and set uncertain metadata to null/0 rather than inventing facts.EXAMINATION:${examName}SUBJECT:${subject}LEVEL:${level}RETURN ONLY JSON:{"questions":[{"question_number":4,"question_text":"","section":"B","section_type":"compulsory","max_marks":10,"mark_source":"printed_paper","mark_evidence":"","topic":"","sub_topic":"","difficulty_level":"","bloom_level":"","question_type":"","answer_expected":"","ai_confidence":90,"ai_explanation":"","is_selective":false,"selection_required":false,"selection_count":0,"selection_total":0,"selection_group":"","selection_instruction":"","sub_items":[]}]}FULL PAPER:${pdf}`;try{const raw=await withTimeout(askGemini(prompt),180000,"Missing-question recovery timed out.");const parsed=parseAI(raw);if(!Array.isArray(parsed?.questions)){return[];}const recoveredRows=[];parsed.questions.forEach((question,index)=>{const n=mainNumber(question?.question_number,0);if(!missing.includes(n)){return;}const parent=normalizeQuestion(question,index);recoveredRows.push(parent);if(Array.isArray(question?.sub_items)&&question.sub_items.length){question.sub_items.forEach((child,childIndex)=>{const label=text(child?.label??child?.sub_question_label??child?.question_number)||roman(childIndex+1);recoveredRows.push(normalizeQuestion({...child,question_number:`${n}(${label})`,section:child?.section||parent.section,section_type:child?.section_type||parent.section_type,selection_instruction:child?.selection_instruction||parent.selection_instruction,is_selective:child?.is_selective??parent.is_selective,selection_required:child?.selection_required??parent.selection_required,selection_count:child?.selection_count??parent.selection_count,selection_total:child?.selection_total??parent.selection_total,selection_group:child?.selection_group||parent.selection_group,},childIndex));});}});return groupMainQuestions(recoveredRows,{}).map((question)=>({...question,pdf_evidence:"targeted_ai_recovery",}));}catch(error){console.warn("TARGETED MISSING-QUESTION RECOVERY FAILED:",error.message);return[];}};const sectionTotalsFromPdf=(pdf)=>{const value=cleanPdf(pdf).replace(/\s+/g," ");const output={};for(const section of["A","B","C","D","E",]){const match=value.match(new RegExp(`SECTION\\s*${section}[\\s\\S]{0,300}?(\\d+(?:\\.\\d+)?)\\s*MARKS?`,"i"));if(match){output[section]=marks(match[1]);}}return output;};const selectionFromPdf=(pdf)=>{const value=cleanPdf(pdf).replace(/\s+/g," ");const sectionPattern=/SECTION\s+([A-Z])[\s\S]{0,400}?(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(\d+)\s+(?:questions?|items?)[\s\S]{0,120}?(?:from|out of)\s+(?:the\s+)?(\d+)/i;const globalPattern=/(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(\d+)\s+(?:questions?|items?)[\s\S]{0,120}?(?:from|out of)\s+(?:the\s+)?(\d+)/i;const sectionMatch=value.match(sectionPattern);if(sectionMatch){return{section:sectionMatch[1].toUpperCase(),count:integer(sectionMatch[2]),total:integer(sectionMatch[3]),instruction:sectionMatch[0],};}const globalMatch=value.match(globalPattern);if(globalMatch){return{section:null,count:integer(globalMatch[1]),total:integer(globalMatch[2]),instruction:globalMatch[0],};}return null;};const normalizeQuestion=(question,index)=>{const rawNumber=text(question?.question_number??question?.questionNumber??question?.number)||String(index+1);const numberValue=mainNumber(rawNumber,index+1);const instruction=nullable(question?.selection_instruction??question?.selectionInstruction??question?.instruction);const explicitSelective=question?.is_selective??question?.selective;const selective=typeof explicitSelective!=="undefined"?Boolean(explicitSelective):!!instruction&&/(?:answer|attempt|choose|select)\s+(?:any|only)?\s*(?:one|two|three|four|five|\d+)/i.test(instruction);return{question_number:numberValue,raw_question_number:rawNumber,sub_question_label:subLabel(rawNumber),question_text:text(question?.question_text??question?.questionText??question?.text??question?.question)||`Question ${numberValue}`,topic:nullable(question?.topic??question?.main_topic),sub_topic:nullable(question?.sub_topic??question?.subtopic??question?.subTopic),difficulty_level:nullable(question?.difficulty_level??question?.difficulty),bloom_level:nullable(question?.bloom_level??question?.blooms_level??question?.bloomsLevel),question_type:nullable(question?.question_type??question?.type),answer_expected:nullable(question?.answer_expected??question?.expected_answer??question?.answer),ai_confidence:normalizeConfidence(question?.ai_confidence??question?.confidence),ai_explanation:nullable(question?.ai_explanation??question?.explanation),max_marks:marks(question?.max_marks??question?.marks??question?.total_marks),mark_source:nullable(question?.mark_source)||"ai_detected",mark_evidence:nullable(question?.mark_evidence),section:nullable(question?.section),section_type:nullable(question?.section_type??question?.sectionType),is_selective:selective,selection_required:Boolean(question?.selection_required??question?.selectionRequired??selective),selection_count:integer(question?.selection_count??question?.selectionCount??question?.questions_to_answer),selection_total:integer(question?.selection_total??question?.selectionTotal??question?.total_group_questions),selection_group:nullable(question?.selection_group??question?.selectionGroup??question?.group),selection_instruction:instruction,};};const normalizeSubItem=(question,index)=>{let label=text(question?.label??question?.sub_question_label??question?.subQuestionLabel);if(!label){const raw=text(question?.question_number??question?.number);label=subLabel(raw);}if(!label){label=roman(index+1);}return{label:label.toLowerCase(),question_text:text(question?.question_text??question?.questionText??question?.text??question?.question)||null,answer_expected:nullable(question?.answer_expected??question?.expected_answer??question?.answer),topic:nullable(question?.topic??question?.main_topic),sub_topic:nullable(question?.sub_topic??question?.subtopic??question?.subTopic),difficulty_level:nullable(question?.difficulty_level??question?.difficulty),bloom_level:nullable(question?.bloom_level??question?.blooms_level??question?.bloomsLevel),question_type:nullable(question?.question_type??question?.type),ai_confidence:normalizeConfidence(question?.ai_confidence??question?.confidence),ai_explanation:nullable(question?.ai_explanation??question?.explanation),max_marks:marks(question?.max_marks??question?.marks??question?.total_marks),is_selective:Boolean(question?.is_selective??question?.selective),selection_required:Boolean(question?.selection_required??question?.selectionRequired),selection_count:integer(question?.selection_count??question?.selectionCount),selection_total:integer(question?.selection_total??question?.selectionTotal),selection_group:nullable(question?.selection_group??question?.selectionGroup??question?.group),selection_instruction:nullable(question?.selection_instruction??question?.selectionInstruction??question?.instruction),};};const groupMainQuestions = (
-    questions,
-    sectionTotals
+const lockAnalysis = (
+    examId,
+    examSubjectId
 ) => {
-    const groups = new Map();
+    const key =
+        getAnalysisKey(
+            examId,
+            examSubjectId
+        );
 
-    for (
-        const question of Array.isArray(questions)
-            ? questions
-            : []
-    ) {
-        const rawNumber =
-            question?.raw_question_number ??
-            question?.question_number ??
-            "";
+    const existing =
+        analysisLocks.get(key);
 
-        const numberValue =
-            mainNumber(
-                rawNumber,
-                0
-            );
-
-        if (!numberValue) {
-            continue;
+    if (existing) {
+        if (
+            Date.now() -
+                existing.startedAt <
+            ANALYSIS_LOCK_TIMEOUT
+        ) {
+            return false;
         }
 
-        if (!groups.has(numberValue)) {
-            groups.set(
-                numberValue,
-                []
-            );
-        }
-
-        groups.get(numberValue).push({
-            ...question,
-            question_number: numberValue,
-            raw_question_number:
-                String(rawNumber),
-        });
+        analysisLocks.delete(key);
     }
 
-    return [
-        ...groups.entries(),
-    ]
-        .sort(
-            (a, b) =>
-                Number(a[0]) -
-                Number(b[0])
-        )
-        .map(
-            ([
-                numberValue,
-                items,
-            ]) => {
-                if (!items.length) {
-                    return null;
-                }
-
-                const parentItems =
-                    items.filter(
-                        (item) => {
-                            const raw =
-                                text(
-                                    item.raw_question_number
-                                );
-
-                            const label =
-                                text(
-                                    item.sub_question_label
-                                );
-
-                            const parsedLabel =
-                                subLabel(raw);
-
-                            return (
-                                !label &&
-                                !parsedLabel
-                            );
-                        }
-                    );
-
-                const parent =
-                    parentItems[0] ||
-                    null;
-
-                const explicitChildren =
-                    items.filter(
-                        (item) => {
-                            const raw =
-                                text(
-                                    item.raw_question_number
-                                );
-
-                            const label =
-                                text(
-                                    item.sub_question_label
-                                );
-
-                            const parsedLabel =
-                                subLabel(raw);
-
-                            return (
-                                Boolean(label) ||
-                                Boolean(parsedLabel)
-                            );
-                        }
-                    );
-
-                const childRows =
-                    explicitChildren.length
-                        ? explicitChildren
-                        : parent
-                            ? []
-                            : items;
-
-                const first =
-                    parent ||
-                    items[0];
-
-                const isMCQ =
-                    items.some(
-                        (question) =>
-                            /multiple\s*choice|mcq|objective/i.test(
-                                text(
-                                    question.question_type
-                                )
-                            )
-                    );
-
-                const multiple =
-                    childRows.length > 0 ||
-                    items.length > 1;
-
-                const subItems =
-                    childRows.map(
-                        (
-                            question,
-                            index
-                        ) => {
-                            return normalizeSubItem(
-                                question,
-                                index
-                            );
-                        }
-                    );
-
-                /*
-                 * DETERMINISTIC GROUPING MARK RULE
-                 *
-                 * We separate STRUCTURE from MARK RESOLUTION.
-                 *
-                 * The parent mark is preserved when it exists,
-                 * except for one specific MCQ corruption pattern:
-                 *
-                 *     parent = 16
-                 *     10 children = 1.6 each
-                 *
-                 * When the fractional child total exactly equals
-                 * the parent, this is treated as a distributed
-                 * section/question total rather than ten genuine
-                 * 1.6-mark MCQs.
-                 *
-                 * For every other case:
-                 *
-                 *   1. Parent mark > 0 => preserve it.
-                 *   2. Parent mark missing + child marks exist
-                 *      => sum actual child marks.
-                 *   3. No marks available + MCQ structure exists
-                 *      => use item count as fallback.
-                 *   4. Never modify genuine fractional child marks.
-                 */
-
-                const originalParentMarks =
-                    marks(
-                        first.max_marks
-                    );
-
-                let maxMarks =
-                    originalParentMarks;
-
-                let resolvedSubItems =
-                    subItems;
-
-                let isFractionalDistribution =
-                    false;
-
-                if (
-                    isMCQ &&
-                    subItems.length > 0
-                ) {
-                    const itemMarks =
-                        subItems.map(
-                            (item) =>
-                                marks(
-                                    item.max_marks
-                                )
-                        );
-
-                    const allItemsHaveMarks =
-                        itemMarks.length ===
-                            subItems.length &&
-                        itemMarks.every(
-                            (value) =>
-                                value > 0
-                        );
-
-                    const allFractionalBelowTwo =
-                        allItemsHaveMarks &&
-                        itemMarks.every(
-                            (value) =>
-                                value > 0 &&
-                                value < 2 &&
-                                !Number.isInteger(
-                                    value
-                                )
-                        );
-
-                    const childTotal =
-                        itemMarks.reduce(
-                            (
-                                sum,
-                                value
-                            ) =>
-                                sum + value,
-                            0
-                        );
-
-                    /*
-                     * Reject only the known fractional
-                     * distribution pattern.
-                     */
-                    isFractionalDistribution =
-                        allFractionalBelowTwo &&
-                        originalParentMarks > 0 &&
-                        Math.abs(
-                            childTotal -
-                            originalParentMarks
-                        ) < 0.000001 &&
-                        originalParentMarks >
-                            subItems.length;
-
-                    if (
-                        isFractionalDistribution
-                    ) {
-                        maxMarks =
-                            subItems.length;
-
-                        resolvedSubItems =
-                            subItems.map(
-                                (item) => ({
-                                    ...item,
-                                    max_marks: 1,
-                                    mark_source:
-                                        item?.mark_source ||
-                                        "derived_from_mcq_item_structure",
-                                    mark_evidence:
-                                        item?.mark_evidence ||
-                                        "Fractional distribution matched the parent total; one mark assigned per detected MCQ item.",
-                                })
-                            );
-                    } else if (
-                        originalParentMarks <= 0 &&
-                        allItemsHaveMarks &&
-                        childTotal > 0
-                    ) {
-                        /*
-                         * No parent mark exists.
-                         * Preserve the actual child marks.
-                         */
-                        maxMarks =
-                            childTotal;
-                    } else if (
-                        originalParentMarks <= 0 &&
-                        subItems.length > 0
-                    ) {
-                        /*
-                         * No parent and no child marks.
-                         * MCQ item count is only the final fallback.
-                         */
-                        maxMarks =
-                            subItems.length;
-
-                        resolvedSubItems =
-                            subItems.map(
-                                (item) => ({
-                                    ...item,
-                                    max_marks:
-                                        marks(
-                                            item.max_marks
-                                        ) > 0
-                                            ? marks(
-                                                item.max_marks
-                                            )
-                                            : 1,
-                                    mark_source:
-                                        item?.mark_source ||
-                                        "derived_from_mcq_item_structure",
-                                    mark_evidence:
-                                        item?.mark_evidence ||
-                                        "MCQ item-count fallback used because no reliable parent or sub-item mark was available.",
-                                })
-                            );
-                    }
-                } else if (
-                    subItems.length > 0
-                ) {
-                    const childTotal =
-                        subItems.reduce(
-                            (
-                                sum,
-                                item
-                            ) =>
-                                sum +
-                                marks(
-                                    item.max_marks
-                                ),
-                            0
-                        );
-
-                    /*
-                     * For structured/non-MCQ questions:
-                     *
-                     * Parent mark wins whenever it exists.
-                     * Child total is used only when parent is missing.
-                     */
-                    if (
-                        originalParentMarks <= 0 &&
-                        childTotal > 0
-                    ) {
-                        maxMarks =
-                            childTotal;
-                    }
-                }
-
-                const confidenceValues =
-                    (
-                        resolvedSubItems.length
-                            ? resolvedSubItems
-                            : [
-                                {
-                                    ai_confidence:
-                                        first.ai_confidence,
-                                },
-                            ]
-                    )
-                        .map(
-                            (item) =>
-                                normalizeConfidence(
-                                    item.ai_confidence
-                                )
-                        )
-                        .filter(
-                            (value) =>
-                                value > 0
-                        );
-
-                const averageConfidence =
-                    confidenceValues.length
-                        ? Math.round(
-                            confidenceValues.reduce(
-                                (
-                                    a,
-                                    b
-                                ) =>
-                                    a + b,
-                                0
-                            ) /
-                            confidenceValues.length
-                        )
-                        : 0;
-
-                const topics =
-                    unique(
-                        items.map(
-                            (item) =>
-                                text(
-                                    item.topic
-                                )
-                        )
-                    );
-
-                const subTopics =
-                    unique(
-                        items.map(
-                            (item) =>
-                                text(
-                                    item.sub_topic
-                                )
-                        )
-                    );
-
-                const difficulties =
-                    unique(
-                        items.map(
-                            (item) =>
-                                text(
-                                    item.difficulty_level
-                                )
-                        )
-                    );
-
-                const blooms =
-                    unique(
-                        items.map(
-                            (item) =>
-                                text(
-                                    item.bloom_level
-                                )
-                        )
-                    );
-
-                const questionTypes =
-                    unique(
-                        items.map(
-                            (item) =>
-                                text(
-                                    item.question_type
-                                )
-                        )
-                    );
-
-                const explanations =
-                    unique(
-                        items.map(
-                            (item) =>
-                                text(
-                                    item.ai_explanation
-                                )
-                        )
-                    );
-
-                let combinedQuestionText =
-                    text(
-                        first.question_text
-                    );
-
-                if (
-                    resolvedSubItems.length
-                ) {
-                    combinedQuestionText =
-                        resolvedSubItems
-                            .map(
-                                (item) =>
-                                    item.question_text
-                                        ? `(${item.label || ""})${item.question_text}`
-                                        : ""
-                            )
-                            .filter(Boolean)
-                            .join(" ");
-
-                    if (
-                        text(
-                            first.question_text
-                        ) &&
-                        !resolvedSubItems.some(
-                            (item) =>
-                                text(
-                                    item.question_text
-                                ) ===
-                                text(
-                                    first.question_text
-                                )
-                        )
-                    ) {
-                        combinedQuestionText =
-                            `${text(
-                                first.question_text
-                            )}${combinedQuestionText}`.trim();
-                    }
-                }
-
-                let combinedAnswers =
-                    first.answer_expected ??
-                    null;
-
-                if (
-                    resolvedSubItems.length
-                ) {
-                    const childAnswers =
-                        resolvedSubItems
-                            .map(
-                                (item) =>
-                                    item.answer_expected
-                                        ? `(${item.label || ""})${item.answer_expected}`
-                                        : ""
-                            )
-                            .filter(Boolean);
-
-                    combinedAnswers =
-                        childAnswers.join("|") ||
-                        first.answer_expected ||
-                        null;
-                }
-
-                return {
-                    ...first,
-                    question_number:
-                        numberValue,
-                    raw_question_number:
-                        String(
-                            numberValue
-                        ),
-                    question_text:
-                        combinedQuestionText ||
-                        `Question ${numberValue}`,
-                    answer_expected:
-                        combinedAnswers,
-                    topic:
-                        topics.join(";") ||
-                        first.topic ||
-                        null,
-                    sub_topic:
-                        subTopics.join(";") ||
-                        first.sub_topic ||
-                        null,
-                    difficulty_level:
-                        difficulties.join(";") ||
-                        first.difficulty_level ||
-                        null,
-                    bloom_level:
-                        blooms.join(";") ||
-                        first.bloom_level ||
-                        null,
-                    question_type:
-                        questionTypes.join(";") ||
-                        first.question_type ||
-                        null,
-                    ai_confidence:
-                        averageConfidence ||
-                        normalizeConfidence(
-                            first.ai_confidence
-                        ),
-                    ai_explanation:
-                        explanations.join(" ") ||
-                        first.ai_explanation ||
-                        null,
-                    max_marks:
-                        Number(
-                            maxMarks
-                        ) || 0,
-                    sub_items:
-                        resolvedSubItems,
-                    is_selective:
-                        items.some(
-                            (question) =>
-                                Boolean(
-                                    question.is_selective
-                                )
-                        ),
-                    selection_required:
-                        items.some(
-                            (question) =>
-                                Boolean(
-                                    question.selection_required
-                                )
-                        ),
-                    selection_count:
-                        Math.max(
-                            0,
-                            ...items.map(
-                                (question) =>
-                                    integer(
-                                        question.selection_count
-                                    )
-                            )
-                        ),
-                    selection_total:
-                        Math.max(
-                            0,
-                            ...items.map(
-                                (question) =>
-                                    integer(
-                                        question.selection_total
-                                    )
-                            )
-                        ),
-                    selection_group:
-                        unique(
-                            items.map(
-                                (question) =>
-                                    text(
-                                        question.selection_group
-                                    )
-                            )
-                        ).join(",") ||
-                        first.selection_group ||
-                        null,
-                    selection_instruction:
-                        unique(
-                            items.map(
-                                (question) =>
-                                    text(
-                                        question.selection_instruction
-                                    )
-                            )
-                        ).join(" ") ||
-                        first.selection_instruction ||
-                        null,
-
-                    /*
-                     * Preserve the original mark evidence.
-                     * Do not overwrite it merely because the
-                     * question happens to contain sub-items.
-                     */
-                    mark_source:
-                        isFractionalDistribution
-                            ? "derived_from_mcq_item_structure"
-                            : first.mark_source,
-
-                    mark_evidence:
-                        isFractionalDistribution
-                            ? `Question ${numberValue} contained ${subItems.length} MCQ items with a fractional distribution matching the parent total; the fractional distribution was rejected.`
-                            : first.mark_evidence,
-                };
-            }
-        )
-        .filter(Boolean);
-};
-const deriveConfidence=(question)=>{const fields=[question.topic,question.sub_topic,question.difficulty_level,question.bloom_level,question.question_type,question.max_marks>0,question.answer_expected,question.ai_explanation,];const filled=fields.filter(Boolean).length;return Math.min(98,50+Math.round((filled/fields.length)*48));};const deriveQuality=(questions)=>{if(!questions.length){return{score:0,explanation:"No main questions were identified.",};}const topicCoverage=(questions.filter((question)=>Boolean(text(question.topic))).length/questions.length)*100;const metadataCoverage=(questions.filter((question)=>Boolean(text(question.topic))&&Boolean(text(question.sub_topic))&&Boolean(text(question.difficulty_level))&&Boolean(text(question.bloom_level))&&Boolean(text(question.question_type))).length/questions.length)*100;const marksCoverage=(questions.filter((question)=>Number(question.max_marks)>0).length/questions.length)*100;const answerCoverage=(questions.filter((question)=>Boolean(text(question.answer_expected))).length/questions.length)*100;const confidenceValues=questions.map((question)=>normalizeConfidence(question.ai_confidence)).filter((value)=>value>0);const confidence=confidenceValues.length?confidenceValues.reduce((a,b)=>a+b,0)/confidenceValues.length:0;const score=Math.round(topicCoverage*0.25+metadataCoverage*0.25+marksCoverage*0.15+answerCoverage*0.15+confidence*0.20);return{score:clamp100(score),explanation:`Paper quality score ${score}/100.Topic detection ${Math.round(topicCoverage)}%,metadata completeness ${Math.round(metadataCoverage)}%,mark identification ${Math.round(marksCoverage)}%,expected-answer coverage ${Math.round(answerCoverage)}%,average AI confidence ${Math.round(confidence)}%.`,};};const deriveSyllabusCoverage=(questions)=>{if(!questions.length){return 0;}const questionsWithTopics=questions.filter((question)=>Boolean(text(question.topic))).length;const subItems=questions.flatMap((question)=>Array.isArray(question.sub_items)?question.sub_items:[]);const subItemsWithTopics=subItems.filter((item)=>Boolean(text(item.topic))).length;const totalItems=questions.length+subItems.length;const coveredItems=questionsWithTopics+subItemsWithTopics;return clamp100(totalItems?Math.round((coveredItems/totalItems)*100):0);};const buildPrimaryPrompt=({pdf,examName,subject,level,mainNumbers,sectionTotals,selection,})=>` You are an expert Tanzanian secondary-school examination analyst.READ THE ENTIRE PAPER CAREFULLY.Do not guess the paper structure.============================================================MANDATORY MAIN QUESTION RULES============================================================The paper's TOP-LEVEL question number is authoritative.1(i),1(ii),1(iii),1(iv)...1(x)are ONE main Question 1.4(a),4(b),4(c)are ONE main Question 4.DO NOT count Roman-numeral or lettered sub-items as new main questions.If Question 1 contains ten sub-items,return:Question 1 sub_items:i ii iii iv v vi vii viii ix x DO NOT return ten separate top-level questions.Only a NEW top-level number begins a new main question.Example:1(i)1(ii)1(iii)2 3(a)3(b)4 means exactly:Question 1 Question 2 Question 3 Question 4 NOT:Question 1 Question 1 Question 1 Question 2 Question 3 Question 3 Question 4============================================================QUESTION NUMBER ACCURACY============================================================The PDF-detected top-level numbers supplied below are STRUCTURAL EVIDENCE from the extracted paper.They are not permission to ignore question text that is visibly present elsewhere in the PDF.TOP LEVEL NUMBERS:${JSON.stringify(mainNumbers)}Do not invent missing top-level numbers.Do not create a new main question merely because a sub-item has a Roman numeral or letter.If a top-level number is not listed but the corresponding question text is clearly present in the FULL PAPER,retain and analyze that main question.The extracted-number list is evidence,not an instruction to delete valid questions.============================================================MARKING RULES============================================================Use the actual printed examination structure.If Question 1 has ten one-mark multiple-choice items:Question 1=10 marks.Do NOT divide a section total into strange fractions such as 1.6 marks per MCQ unless the paper explicitly says so.For structured questions,add the marks of the sub-parts.For selective questions:If candidates answer 2 of 3 questions worth 15 marks each:each optional question=15 marks;effective contribution=30 marks.Do not confuse:-number of questions printed-number of questions candidates must answer-effective marks============================================================EXPECTED ANSWERS============================================================Read the actual question and determine the expected answer.For MCQs:return the correct option and,where possible,the answer text.For structured questions:return a concise expected answer or marking-point summary.For calculation questions:return the expected final answer and important working/result where the paper provides enough information.Never invent an answer when the question text is unreadable.============================================================QUESTION METADATA============================================================For every MAIN question determine:-topic-sub-topic-difficulty-Bloom taxonomy level-question type-expected answer-AI confidence 0-100-AI explanation-maximum marks-mark evidence For sub-items,place their individual analysis inside sub_items.============================================================WHOLE PAPER ANALYSIS============================================================Determine:-summary-quality_score 0-100-quality_explanation-syllabus_coverage 0-100-difficulty-topics_found-weak_topics-strong_topics-blooms_distribution-recommendations-teacher_comments-instructions Quality must reflect the actual extracted paper data.Syllabus coverage must reflect how completely the paper's questions can be mapped to identifiable topics from the paper.============================================================EXAMINATION============================================================NAME:${examName}SUBJECT:${subject}LEVEL:${level}SECTION TOTALS:${JSON.stringify(sectionTotals)}SELECTION EVIDENCE:${JSON.stringify(selection||null)}============================================================RETURN ONLY JSON============================================================{"summary":"","quality_score":0,"quality_explanation":"","syllabus_coverage":0,"difficulty":"","topics_found":[],"weak_topics":[],"strong_topics":[],"recommendations":[],"teacher_comments":"","blooms_distribution":{},"instructions":[],"questions":[{"question_number":"1","question_text":"","section":"A","section_type":"compulsory","max_marks":10,"mark_source":"","mark_evidence":"","topic":"","sub_topic":"","difficulty_level":"","bloom_level":"","question_type":"Multiple Choice","answer_expected":"","ai_confidence":95,"ai_explanation":"","is_selective":false,"selection_required":false,"selection_count":0,"selection_total":0,"selection_group":"","selection_instruction":"","sub_items":[{"label":"i","question_text":"","answer_expected":"","topic":"","sub_topic":"","difficulty_level":"","bloom_level":"","question_type":"Multiple Choice","ai_confidence":95,"ai_explanation":"","max_marks":1}]}]}============================================================FULL PAPER============================================================${pdf}`;const buildMetadataPrompt=({pdf,questions,})=>` You are auditing the metadata of an examination paper.DO NOT create new main questions.DO NOT split:1(i),1(ii),1(iii)or 4(a),4(b),4(c).Each belongs to its parent main question.Return ONLY JSON.{"quality_score":0,"quality_explanation":"","syllabus_coverage":0,"topics_found":[],"weak_topics":[],"strong_topics":[],"teacher_comments":"","questions":[{"question_number":1,"topic":"","sub_topic":"","difficulty_level":"","bloom_level":"","question_type":"","answer_expected":"","ai_confidence":95,"ai_explanation":""}]}CURRENT MAIN QUESTIONS:${questions.map((question)=>`Q${question.question_number}:${question.question_text}`).join("\n")}FULL PAPER:${pdf}`;const loadExamSubject=async(id)=>{const{data,error,}=await supabase.from("exam_subjects").select("*").eq("id",id).maybeSingle();supabaseError(error,"Failed to load exam subject");if(!data){throw new Error(`Exam subject ${id}was not found.`);}return data;};const loadExam=async(id)=>{const{data,error,}=await supabase.from("exams").select("*").eq("id",id).maybeSingle();supabaseError(error,"Failed to load examination");if(!data){throw new Error(`Examination ${id}was not found.`);}return data;};const loadSubject=async(id)=>{if(!id){return null;}const{data,error,}=await supabase.from("subjects").select("*").eq("id",id).maybeSingle();supabaseError(error,"Failed to load subject");return(data||null);};const createPaper=async(examId,examSubjectId,file,hash)=>{const{data,error,}=await supabase.from("exam_papers").insert({exam_id:examId,exam_subject_id:examSubjectId,file_name:file.originalname,file_url:null,file_type:file.mimetype,file_hash:hash,ai_status:"Processing",status:"Processing",error_message:null,}).select("*").single();supabaseError(error,"Failed to create exam paper");return data;};const updatePaper=async(paperId,status,errorMessage=null)=>{const{error,}=await supabase.from("exam_papers").update({ai_status:status,status,error_message:errorMessage,}).eq("id",paperId);supabaseError(error,"Failed to update exam paper status");};const clearOldAnalysis=async(examId,examSubjectId)=>{const qa=await supabase.from("exam_question_analysis").delete().eq("exam_id",examId).eq("exam_subject_id",examSubjectId);supabaseError(qa.error,"Failed to clear question analysis");const eq=await supabase.from("exam_questions").delete().eq("exam_id",examId).eq("exam_subject_id",examSubjectId);supabaseError(eq.error,"Failed to clear exam questions");const ea=await supabase.from("exam_ai_analysis").delete().eq("exam_id",examId).eq("exam_subject_id",examSubjectId);supabaseError(ea.error,"Failed to clear AI analysis");};const saveAnalysis=async(payload)=>{const{data,error,}=await supabase.from("exam_ai_analysis").insert(payload).select("*").single();supabaseError(error,"Failed to save exam AI analysis");return data;};const saveQuestions=async({examId,examSubjectId,subjectId,paperId,questions,})=>{const questionAnalysisRows=questions.map((question)=>({exam_id:examId,exam_subject_id:examSubjectId,exam_paper_id:paperId,question_number:question.question_number,topic:question.topic,subtopic:question.sub_topic,difficulty:question.difficulty_level,blooms_level:question.bloom_level,marks:question.max_marks,question_text:question.question_text,answer_expected:question.answer_expected,ai_explanation:question.ai_explanation,max_marks:question.max_marks,section:question.section,section_type:question.section_type,is_selective:!!question.is_selective,selection_required:!!question.selection_required,selection_count:integer(question.selection_count),selection_total:integer(question.selection_total),selection_group:question.selection_group,selection_instruction:question.selection_instruction,ai_confidence:normalizeConfidence(question.ai_confidence),question_type:question.question_type,}));const examQuestionRows=questions.map((question)=>({exam_id:examId,subject_id:subjectId||null,exam_subject_id:examSubjectId,question_number:question.question_number,question_text:question.question_text,topic:question.topic,sub_topic:question.sub_topic,difficulty_level:question.difficulty_level,ai_confidence:normalizeConfidence(question.ai_confidence),bloom_level:question.bloom_level,question_type:question.question_type,ai_explanation:question.ai_explanation,ai_processed:true,max_marks:question.max_marks,section:question.section,section_type:question.section_type,is_selective:!!question.is_selective,selection_required:!!question.selection_required,selection_count:integer(question.selection_count),selection_total:integer(question.selection_total),selection_group:question.selection_group,selection_instruction:question.selection_instruction,}));const questionAnalysisInsert=await supabase.from("exam_question_analysis").insert(questionAnalysisRows);supabaseError(questionAnalysisInsert.error,"Failed to save AI question analysis");const examQuestionInsert=await supabase.from("exam_questions").insert(examQuestionRows);supabaseError(examQuestionInsert.error,"Failed to save exam questions");};const normalizeFinalQuestionMarks=(questions)=>{
-    return (Array.isArray(questions) ? questions : []).map((question)=>{
-        const isMCQ =
-            /multiple\s*choice|mcq|objective/i.test(
-                text(question?.question_type)
-            );
-
-        const subItems =
-            Array.isArray(question?.sub_items)
-                ? question.sub_items
-                : [];
-
-        if(!isMCQ || subItems.length===0){
-            return question;
-        }
-
-        const itemMarks =
-            subItems.map((item)=>marks(item?.max_marks));
-
-        const allValid =
-            itemMarks.length===subItems.length &&
-            itemMarks.every((value)=>Number(value)>0);
-
-        if(!allValid){
-            return question;
-        }
-
-        const total =
-            itemMarks.reduce(
-                (sum,value)=>sum+Number(value),
-                0
-            );
-
-        const questionMarks =
-            Number(question?.max_marks)||0;
-
-        /*
-         * Gemini sometimes interprets a section total as the
-         * total mark of an MCQ question and distributes it
-         * across the alternatives, e.g.:
-         *
-         * Section A = 16
-         * 10 MCQs = 1.6 each
-         * Q1 = 16
-         *
-         * That is structurally incorrect when the paper contains
-         * one-mark MCQ items.
-         *
-         * We therefore reject a fractional distributed total
-         * when every MCQ item has a fractional mark below 2.
-         * The main question mark becomes the number of MCQ items.
-         */
-        const allFractionalBelowTwo =
-            itemMarks.every(
-                (value)=>
-                    Number(value)>0 &&
-                    Number(value)<2 &&
-                    !Number.isInteger(Number(value))
-            );
-
-        if(
-            allFractionalBelowTwo &&
-            questionMarks>subItems.length &&
-            Math.abs(total-questionMarks)<0.000001
-        ){
-            return {
-                ...question,
-                max_marks:subItems.length,
-                sub_items:subItems.map((item)=>({
-                    ...item,
-                    max_marks:1,
-                    mark_source:
-                        item?.mark_source ||
-                        "derived_from_mcq_structure",
-                    mark_evidence:
-                        item?.mark_evidence ||
-                        "One mark per multiple-choice item derived from question structure.",
-                })),
-                mark_source:"derived_from_mcq_structure",
-                mark_evidence:
-                    `MCQ structure contains ${subItems.length} items; fractional section-total distribution was rejected.`,
-            };
-        }
-
-        return question;
+    analysisLocks.set(key, {
+        startedAt: Date.now(),
     });
+
+    return true;
 };
 
-const effectiveMarks=(questions)=>{const normal=questions.filter((question)=>!question.is_selective).reduce((sum,question)=>sum+marks(question.max_marks),0);const groups=new Map();for(const question of questions){if(!question.is_selective){continue;}const key=question.selection_group||"DEFAULT_SELECTIVE";if(!groups.has(key)){groups.set(key,{count:integer(question.selection_count,1)||1,marks:[],});}groups.get(key).marks.push(marks(question.max_marks));}let selective=0;for(const group of groups.values()){group.marks.sort((a,b)=>b-a);selective+=group.marks.slice(0,group.count).reduce((a,b)=>a+b,0);}return(normal+selective);};const processJob=async(job)=>{const examSubject=await loadExamSubject(job.examSubjectId);if(Number(examSubject.exam_id)!==Number(job.examId)){throw new Error("Exam subject does not belong to this examination.");}const exam=await loadExam(job.examId);const subject=await loadSubject(examSubject.subject_id);const subjectName=text(subject?.name||subject?.subject_name||subject?.title)||"Unknown Subject";const level=text(examSubject.level||examSubject.class_level||exam.level)||"Unknown Level";const examName=text(exam.name||exam.exam_name||exam.title)||`Examination ${job.examId}`;if(!Buffer.isBuffer(job.buffer)){throw new Error("Queued examination PDF buffer is invalid.");}console.log("AI PDF BUFFER LENGTH:",job.buffer.length);const pdfHeader=job.buffer.subarray(0,5).toString("utf8");console.log("AI PDF HEADER:",pdfHeader);if(pdfHeader!=="%PDF-"){console.warn("WARNING:Uploaded buffer does not begin with%PDF-.");}let pdf=await withTimeout(readPDF(job.buffer),180000,"PDF reading timed out.");pdf=cleanPdf(pdf);if(pdf.length<50){throw new Error("The PDF contains little or no readable text.");}console.log("AI FINAL PDF TEXT LENGTH:",pdf.length);const mainNumbers=topLevelNumbersFromPdf(pdf);const sectionTotals=sectionTotalsFromPdf(pdf);const selection=selectionFromPdf(pdf);console.log("PDF TOP LEVEL NUMBERS (V10 AUTHORITATIVE):",mainNumbers);console.log("PDF SECTION TOTALS:",sectionTotals);console.log("PDF SELECTION:",selection);const primaryRaw=await withTimeout(askGemini(buildPrimaryPrompt({pdf,examName,subject:subjectName,level,mainNumbers,sectionTotals,selection,})),180000,"AI analysis timed out after 180 seconds.");const primary=parseAI(primaryRaw);if(!Array.isArray(primary.questions)||!primary.questions.length){throw new Error("AI returned no examination questions.");}const normalizedRows=[];primary.questions.forEach((question,index)=>{const parent=normalizeQuestion(question,index);if(Array.isArray(question?.sub_items)&&question.sub_items.length){normalizedRows.push(parent);question.sub_items.forEach((child,childIndex)=>{const childLabel=text(child?.label??child?.sub_question_label??child?.question_number)||roman(childIndex+1);normalizedRows.push(normalizeQuestion({...child,question_number:`${parent.question_number}(${childLabel})`,section:child?.section||parent.section,section_type:child?.section_type||parent.section_type,selection_instruction:child?.selection_instruction||parent.selection_instruction,is_selective:child?.is_selective??parent.is_selective,selection_required:child?.selection_required??parent.selection_required,selection_count:child?.selection_count??parent.selection_count,selection_total:child?.selection_total??parent.selection_total,selection_group:child?.selection_group||parent.selection_group,},childIndex));});return;}normalizedRows.push(parent);});let questions=groupMainQuestions(normalizedRows,sectionTotals);if(!questions.length){throw new Error("No main examination questions could be constructed from the AI response.");}const reconciliation=reconcileQuestionsWithPdf(questions,pdf,mainNumbers);questions=reconciliation.questions;const currentNumbers=new Set(questions.map((question)=>integer(question.question_number)).filter(Boolean));const missingPdfNumbers=(mainNumbers||[]).filter((numberValue)=>!currentNumbers.has(integer(numberValue)));if(missingPdfNumbers.length){console.warn("PDF-DETECTED QUESTIONS MISSING FROM PRIMARY AI:",missingPdfNumbers);const recovered=await recoverMissingQuestionsFromPdf({pdf,missingNumbers:missingPdfNumbers,existingQuestions:questions,examName,subject:subjectName,level,});if(recovered.length){const combined=[...questions,...recovered,];const deduped=new Map();for(const question of combined){const n=mainNumber(question.question_number,0);if(!n)continue;const existing=deduped.get(n);if(!existing){deduped.set(n,question);continue;}const existingHasText=text(existing.question_text).length>15;const newHasText=text(question.question_text).length>15;if(!existingHasText&&newHasText){deduped.set(n,{...existing,...question,});}else{deduped.set(n,{...question,...existing,sub_items:(Array.isArray(existing.sub_items)&&existing.sub_items.length)?existing.sub_items:question.sub_items||[],});}}questions=[...deduped.values(),].sort((a,b)=>Number(a.question_number)-Number(b.question_number));}}const unresolvedPdfNumbers=(mainNumbers||[]).filter((numberValue)=>!questions.some((question)=>integer(question.question_number)===integer(numberValue)));console.log("============================================================");
-console.log("V10 AUTHORITATIVE PDF QUESTION STRUCTURE");
-console.log("============================================================");
-console.log("PDF MAIN QUESTION NUMBERS:",mainNumbers);
-console.log("AI FINAL QUESTION NUMBERS:",questions.map(
-    question=>integer(question.question_number)
-));
-console.log("UNRESOLVED PDF QUESTION NUMBERS:",unresolvedPdfNumbers);
-console.log("============================================================");
+const unlockAnalysis = (
+    examId,
+    examSubjectId
+) => {
+    const key =
+        getAnalysisKey(
+            examId,
+            examSubjectId
+        );
 
-if(unresolvedPdfNumbers.length){
-    console.warn(
-        "V10 WARNING: PDF MAIN QUESTIONS STILL UNRESOLVED:",
-        unresolvedPdfNumbers
-    );
-}console.log("PDF/AI RECONCILIATION KEPT:",questions.map((question)=>({question_number:question.question_number,pdf_evidence:question.pdf_evidence,})));if(reconciliation.rejected.length){console.warn("PDF/AI RECONCILIATION REJECTED:",reconciliation.rejected.map((item)=>({question_number:item.question?.question_number,reason:item.reason,})));}if(!questions.length){throw new Error("No valid main questions remained after PDF evidence reconciliation.");}let metadata=null;try{metadata=parseAI(await withTimeout(askGemini(buildMetadataPrompt({pdf,questions,})),120000,"AI metadata audit timed out."));}catch(error){console.warn("AI METADATA AUDIT FAILED:",error.message);}if(Array.isArray(metadata?.questions)){const metadataMap=new Map();metadata.questions.forEach((question)=>{const numberValue=mainNumber(question?.question_number,0);if(numberValue>0){metadataMap.set(numberValue,question);}});questions=questions.map((question)=>{const repair=metadataMap.get(question.question_number);if(!repair){return question;}return{...question,topic:nullable(repair.topic)||question.topic,sub_topic:nullable(repair.sub_topic)||question.sub_topic,difficulty_level:nullable(repair.difficulty_level)||question.difficulty_level,bloom_level:nullable(repair.bloom_level)||question.bloom_level,question_type:nullable(repair.question_type)||question.question_type,answer_expected:nullable(repair.answer_expected)||question.answer_expected,ai_confidence:normalizeConfidence(repair.ai_confidence)||normalizeConfidence(question.ai_confidence),ai_explanation:nullable(repair.ai_explanation)||question.ai_explanation,};});}questions=questions.map((question)=>({...question,ai_confidence:normalizeConfidence(question.ai_confidence)||deriveConfidence(question),sub_items:Array.isArray(question.sub_items)?question.sub_items.map((item)=>({...item,ai_confidence:normalizeConfidence(item.ai_confidence)||deriveConfidence(item),})):[],}));const finalQuestionMap=new Map();for(const question of questions){const numberValue=mainNumber(question.question_number,0);if(!numberValue){continue;}if(!finalQuestionMap.has(numberValue)){finalQuestionMap.set(numberValue,{...question,question_number:numberValue,raw_question_number:String(numberValue),sub_items:Array.isArray(question.sub_items)?question.sub_items:[],});continue;}const existing=finalQuestionMap.get(numberValue);const existingChildren=Array.isArray(existing.sub_items)?existing.sub_items:[];const duplicateChildren=Array.isArray(question.sub_items)?question.sub_items:[];const childKeys=new Set();const mergedChildren=[...existingChildren,...duplicateChildren,].filter((child)=>{const key=`${text(child.label)}|${text(child.question_text)}`;if(childKeys.has(key)){return false;}childKeys.add(key);return true;});finalQuestionMap.set(numberValue,{...existing,sub_items:mergedChildren,});}questions=[...finalQuestionMap.values(),];questions.sort((a,b)=>Number(a.question_number)-Number(b.question_number));console.log("============================================================");/*
- * V13 FINAL MARK RECONCILIATION
- *
- * GENERIC MARK RECONCILIATION
- *
- * Priority:
- *
- * 1. Multiple Choice structural item count
- * 2. Valid sub-item marks
- * 3. Existing parent marks
- *
- * IMPORTANT:
- * A section total is NOT a question total.
- *
- * Example:
- *
- * Section A = 16
- * Q1 = 10 MCQ items
- * Q2 = 6 marks
- *
- * Q1 must therefore be 10, not 16.
- */
+    analysisLocks.delete(key);
+};
 
-const getNumericMark = (
+// ============================================================
+// TIMEOUT
+// ============================================================
+
+const withTimeout = (
+    promise,
+    milliseconds,
+    message
+) => {
+    let timeoutId;
+
+    const timeoutPromise =
+        new Promise(
+            (_, reject) => {
+                timeoutId =
+                    setTimeout(() => {
+                        const error =
+                            new Error(
+                                message
+                            );
+
+                        error.code =
+                            "OPERATION_TIMEOUT";
+
+                        reject(error);
+                    }, milliseconds);
+            }
+        );
+
+    return Promise.race([
+        Promise.resolve(
+            promise
+        ).finally(() => {
+            clearTimeout(
+                timeoutId
+            );
+        }),
+        timeoutPromise,
+    ]);
+};
+
+// ============================================================
+// BASIC HELPERS
+// ============================================================
+
+const textOrNull = (
+    value
+) => {
+    if (
+        value === undefined ||
+        value === null
+    ) {
+        return null;
+    }
+
+    const text =
+        String(value).trim();
+
+    return text || null;
+};
+
+const integerOrZero = (
     value
 ) => {
     const number =
         Number(value);
 
-    return Number.isFinite(number) &&
-        number > 0
+    return Number.isInteger(
+        number
+    )
         ? number
         : 0;
 };
 
-const getSubItemMarkTotal = (
-    items
+const numberOrNull = (
+    value
 ) => {
     if (
-        !Array.isArray(items) ||
-        items.length === 0
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
+        return null;
+    }
+
+    const number =
+        Number(value);
+
+    return Number.isFinite(
+        number
+    )
+        ? number
+        : null;
+};
+
+const normalizeBoolean = (
+    value
+) => {
+    if (
+        value === true ||
+        value === 1 ||
+        value === "1" ||
+        value === "true" ||
+        value === "TRUE" ||
+        value === "yes" ||
+        value === "YES"
+    ) {
+        return true;
+    }
+
+    return false;
+};
+
+const normalizeMaxMarks = (
+    value
+) => {
+    const number =
+        Number(value);
+
+    if (
+        !Number.isFinite(
+            number
+        )
     ) {
         return 0;
     }
 
-    return items.reduce(
-        (
-            total,
-            item
-        ) => {
-            const directMark =
-                getNumericMark(
-                    item?.max_marks
+    return number;
+};
+
+const errorDetails = (
+    error
+) => ({
+    message:
+        error?.message ||
+        null,
+
+    code:
+        error?.code ||
+        null,
+
+    status:
+        error?.status ||
+        error?.statusCode ||
+        null,
+
+    details:
+        error?.details ||
+        null,
+
+    hint:
+        error?.hint ||
+        null,
+});
+
+const throwSupabaseError = (
+    error,
+    fallbackMessage
+) => {
+    if (!error) {
+        return;
+    }
+
+    const supabaseError =
+        new Error(
+            error.message ||
+                fallbackMessage
+        );
+
+    supabaseError.code =
+        error.code ||
+        null;
+
+    supabaseError.status =
+        error.status ||
+        500;
+
+    supabaseError.details =
+        error.details ||
+        null;
+
+    supabaseError.hint =
+        error.hint ||
+        null;
+
+    throw supabaseError;
+};
+
+// ============================================================
+// FILE HASH
+// ============================================================
+
+const calculateFileHash = (
+    buffer
+) =>
+    crypto
+        .createHash(
+            "sha256"
+        )
+        .update(buffer)
+        .digest("hex");
+
+// ============================================================
+// JSON CLEANING
+// ============================================================
+
+const normalizeAIJsonCharacters =
+    (value) => {
+        if (
+            typeof value !==
+            "string"
+        ) {
+            return value;
+        }
+
+        return value
+            .replace(
+                /[\u2018\u2019]/g,
+                "'"
+            )
+            .replace(
+                /[\u201C\u201D]/g,
+                '"'
+            )
+            .replace(
+                /\u00A0/g,
+                " "
+            )
+            .replace(
+                /\uFEFF/g,
+                ""
+            );
+    };
+
+const stripMarkdownJson = (
+    value
+) => {
+    let text =
+        normalizeAIJsonCharacters(
+            value
+        );
+
+    text =
+        text.trim();
+
+    text =
+        text.replace(
+            /^```(?:json)?\s*/i,
+            ""
+        );
+
+    text =
+        text.replace(
+            /\s*```$/i,
+            ""
+        );
+
+    return text.trim();
+};
+
+const extractCompleteJsonValue =
+    (text) => {
+        const source =
+            String(
+                text || ""
+            ).trim();
+
+        if (!source) {
+            return "";
+        }
+
+        const firstObject =
+            source.indexOf("{");
+
+        const firstArray =
+            source.indexOf("[");
+
+        let start = -1;
+
+        if (
+            firstObject === -1
+        ) {
+            start =
+                firstArray;
+        } else if (
+            firstArray === -1
+        ) {
+            start =
+                firstObject;
+        } else {
+            start =
+                Math.min(
+                    firstObject,
+                    firstArray
+                );
+        }
+
+        if (
+            start < 0
+        ) {
+            return source;
+        }
+
+        const opening =
+            source[start];
+
+        const closing =
+            opening === "{"
+                ? "}"
+                : "]";
+
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+
+        for (
+            let index = start;
+            index < source.length;
+            index++
+        ) {
+            const character =
+                source[index];
+
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                    continue;
+                }
+
+                if (
+                    character === "\\"
+                ) {
+                    escaped = true;
+                    continue;
+                }
+
+                if (
+                    character === '"'
+                ) {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (
+                character === '"'
+            ) {
+                inString = true;
+                continue;
+            }
+
+            if (
+                character === opening
+            ) {
+                depth++;
+            } else if (
+                character === closing
+            ) {
+                depth--;
+
+                if (
+                    depth === 0
+                ) {
+                    return source.slice(
+                        start,
+                        index + 1
+                    );
+                }
+            }
+        }
+
+        return source.slice(
+            start
+        );
+    };
+
+const repairCommonAIJsonErrors =
+    (value) => {
+        let text =
+            String(value || "");
+
+        text =
+            text.replace(
+                /,\s*([}\]])/g,
+                "$1"
+            );
+
+        text =
+            text.replace(
+                /:\s*undefined\b/g,
+                ": null"
+            );
+
+        text =
+            text.replace(
+                /:\s*NaN\b/g,
+                ": null"
+            );
+
+        text =
+            text.replace(
+                /([{[]\s*)'([A-Za-z_$][\w$]*)'\s*:/g,
+                '$1"$2":'
+            );
+
+        return text;
+    };
+
+const parseAIResult = (
+    aiRawResponse
+) => {
+    let rawText;
+
+    if (
+        typeof aiRawResponse ===
+        "string"
+    ) {
+        rawText =
+            aiRawResponse;
+    } else if (
+        aiRawResponse?.text
+    ) {
+        rawText =
+            aiRawResponse.text;
+    } else if (
+        aiRawResponse?.response
+    ) {
+        rawText =
+            typeof aiRawResponse.response ===
+            "string"
+                ? aiRawResponse.response
+                : JSON.stringify(
+                    aiRawResponse.response
+                );
+    } else {
+        rawText =
+            JSON.stringify(
+                aiRawResponse
+            );
+    }
+
+    rawText =
+        stripMarkdownJson(
+            rawText
+        );
+
+    let jsonText =
+        extractCompleteJsonValue(
+            rawText
+        );
+
+    jsonText =
+        repairCommonAIJsonErrors(
+            jsonText
+        );
+
+    try {
+        return JSON.parse(
+            jsonText
+        );
+    } catch (
+        firstError
+    ) {
+        try {
+            const cleaned =
+                jsonText.replace(
+                    /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,
+                    ""
+                );
+
+            return JSON.parse(
+                cleaned
+            );
+        } catch (
+            secondError
+        ) {
+            const error =
+                new Error(
+                    "Gemini returned an invalid JSON examination analysis."
+                );
+
+            error.code =
+                "INVALID_AI_JSON";
+
+            error.details = {
+                firstError:
+                    firstError.message,
+
+                secondError:
+                    secondError.message,
+
+                responsePreview:
+                    rawText.slice(
+                        0,
+                        2000
+                    ),
+            };
+
+            throw error;
+        }
+    }
+};
+
+// ============================================================
+// DISPLAY HELPERS
+// ============================================================
+
+const getDisplayName = (
+    value
+) => {
+    if (!value) {
+        return null;
+    }
+
+    if (
+        typeof value ===
+        "string"
+    ) {
+        return (
+            value.trim() ||
+            null
+        );
+    }
+
+    return (
+        value.name ||
+        value.subject_name ||
+        value.title ||
+        value.display_name ||
+        value.label ||
+        null
+    );
+};
+
+// ============================================================
+// PDF HELPERS
+// ============================================================
+
+const normalizePdfText = (
+    value
+) => {
+    return String(
+        value || ""
+    )
+        .replace(
+            /\r\n/g,
+            "\n"
+        )
+        .replace(
+            /\r/g,
+            "\n"
+        )
+        .replace(
+            /[ \t]+/g,
+            " "
+        )
+        .replace(
+            /\n{3,}/g,
+            "\n\n"
+        )
+        .trim();
+};
+
+const numberWords = {
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+};
+
+const parseNumberToken = (
+    value
+) => {
+    if (
+        value === undefined ||
+        value === null
+    ) {
+        return null;
+    }
+
+    const text =
+        String(value)
+            .trim()
+            .toLowerCase();
+
+    const numeric =
+        Number(
+            text.replace(
+                /,/g,
+                ""
+            )
+        );
+
+    if (
+        Number.isFinite(
+            numeric
+        )
+    ) {
+        return numeric;
+    }
+
+    if (
+        Object.prototype.hasOwnProperty.call(
+            numberWords,
+            text
+        )
+    ) {
+        return numberWords[
+            text
+        ];
+    }
+
+    return null;
+};
+
+// ============================================================
+// PDF STRUCTURAL EVIDENCE
+// ============================================================
+
+const extractSectionTotals = (
+    pdfText
+) => {
+    const sections = [];
+
+    const patterns = [
+        {
+            name: "A",
+            regex:
+                /(?:SECTION|PART)\s*A[\s\S]{0,180}?\b(\d+(?:\.\d+)?)\s*MARKS?\b/i,
+        },
+        {
+            name: "B",
+            regex:
+                /(?:SECTION|PART)\s*B[\s\S]{0,180}?\b(\d+(?:\.\d+)?)\s*MARKS?\b/i,
+        },
+        {
+            name: "C",
+            regex:
+                /(?:SECTION|PART)\s*C[\s\S]{0,180}?\b(\d+(?:\.\d+)?)\s*MARKS?\b/i,
+        },
+        {
+            name: "D",
+            regex:
+                /(?:SECTION|PART)\s*D[\s\S]{0,180}?\b(\d+(?:\.\d+)?)\s*MARKS?\b/i,
+        },
+        {
+            name: "E",
+            regex:
+                /(?:SECTION|PART)\s*E[\s\S]{0,180}?\b(\d+(?:\.\d+)?)\s*MARKS?\b/i,
+        },
+    ];
+
+    for (
+        const item of patterns
+    ) {
+        const match =
+            pdfText.match(
+                item.regex
+            );
+
+        if (match) {
+            const marks =
+                parseNumberToken(
+                    match[1]
                 );
 
             if (
-                directMark > 0
+                marks !== null &&
+                marks > 0
             ) {
-                return (
-                    total +
-                    directMark
-                );
+                sections.push({
+                    section:
+                        item.name,
+
+                    marks,
+                });
             }
-
-            return (
-                total +
-                getSubItemMarkTotal(
-                    item?.sub_items
-                )
-            );
-        },
-        0
-    );
-};
-
-const reconcileQuestionMarks = (
-    question
-) => {
-    const currentMarks =
-        getNumericMark(
-            question?.max_marks
-        );
-
-    const subItems =
-        Array.isArray(
-            question?.sub_items
-        )
-            ? question.sub_items
-            : [];
-
-    const isMCQ =
-        /multiple\s*choice|mcq|objective/i.test(
-            text(question?.question_type)
-        );
-
-    /*
-     * DETERMINISTIC MARK RULE
-     *
-     * 1. A valid parent mark is authoritative.
-     * 2. Never replace a valid parent mark with a sub-item total.
-     * 3. Never convert fractional marks automatically.
-     * 4. Child marks are used only when the parent mark is missing.
-     * 5. MCQ item count is only a final structural fallback when
-     *    neither parent nor child marks exist.
-     */
-
-    if (currentMarks > 0) {
-        return {
-            ...question,
-            max_marks: currentMarks,
-            mark_source:
-                question?.mark_source ||
-                "explicit_question_mark",
-            mark_evidence:
-                question?.mark_evidence ||
-                "Existing question mark preserved during deterministic reconciliation.",
-        };
+        }
     }
 
-    if (subItems.length > 0) {
-        const itemMarks =
-            subItems.map(
-                (item) =>
-                    getNumericMark(
-                        item?.max_marks
-                    )
-            );
+    return sections;
+};
 
-        const allItemsHaveMarks =
-            itemMarks.length === subItems.length &&
-            itemMarks.every(
-                (value) => value > 0
-            );
+const extractExpectedQuestionCount =
+    (pdfText) => {
+        const patterns = [
+            /\banswer\s+(?:all|the)\s+(\d+)\s+questions?\b/i,
+            /\battempt\s+(?:all|the)\s+(\d+)\s+questions?\b/i,
+            /\b(\d+)\s+questions?\s+(?:are\s+)?required\b/i,
+            /\btotal\s+(?:of\s+)?(\d+)\s+questions?\b/i,
+            /\bthere\s+are\s+(\d+)\s+questions?\b/i,
+        ];
 
-        /*
-         * If every sub-item has a real mark and the parent
-         * has no mark, derive the parent from the actual
-         * sub-item marks.
-         *
-         * Fractional values are preserved exactly.
-         */
-        if (allItemsHaveMarks) {
-            const subItemTotal =
-                itemMarks.reduce(
-                    (sum, value) =>
-                        sum + value,
-                    0
+        for (
+            const regex of patterns
+        ) {
+            const match =
+                pdfText.match(
+                    regex
                 );
 
-            if (subItemTotal > 0) {
+            if (match) {
+                const count =
+                    Number(
+                        match[1]
+                    );
+
+                if (
+                    Number.isInteger(
+                        count
+                    ) &&
+                    count > 0
+                ) {
+                    return count;
+                }
+            }
+        }
+
+        return 0;
+    };
+
+const extractGlobalSelection = (
+    pdfText
+) => {
+    const patterns = [
+        /answer\s+any\s+(\d+)\s+out\s+of\s+(\d+)/i,
+        /attempt\s+any\s+(\d+)\s+out\s+of\s+(\d+)/i,
+        /choose\s+any\s+(\d+)\s+from\s+(\d+)/i,
+        /answer\s+(\d+)\s+questions?\s+from\s+(\d+)/i,
+    ];
+
+    for (
+        const regex of patterns
+    ) {
+        const match =
+            pdfText.match(
+                regex
+            );
+
+        if (match) {
+            const required =
+                Number(
+                    match[1]
+                );
+
+            const available =
+                Number(
+                    match[2]
+                );
+
+            if (
+                Number.isInteger(
+                    required
+                ) &&
+                Number.isInteger(
+                    available
+                ) &&
+                required > 0 &&
+                available > 0 &&
+                required <=
+                    available
+            ) {
                 return {
-                    ...question,
-                    max_marks: subItemTotal,
-                    mark_source:
-                        "derived_from_sub_item_marks",
-                    mark_evidence:
-                        `Parent mark derived from ${subItems.length} detected sub-items. ` +
-                        `Sub-item total: ${subItemTotal}.`,
+                    required,
+                    available,
+                    source:
+                        match[0],
                 };
             }
         }
+    }
 
-        /*
-         * MCQ structural fallback.
-         *
-         * This is allowed ONLY when both parent and child
-         * marks are unavailable.
-         */
-        if (
-            isMCQ &&
-            subItems.every(
-                (item) =>
-                    getNumericMark(
-                        item?.max_marks
-                    ) <= 0
+    return null;
+};
+
+const extractQuestionBlocks = (
+    pdfText
+) => {
+    const lines =
+        String(
+            pdfText || ""
+        )
+            .split("\n")
+            .map(
+                (line) =>
+                    line.trim()
             )
-        ) {
-            return {
-                ...question,
-                max_marks: subItems.length,
-                sub_items:
-                    subItems.map(
-                        (item) => ({
-                            ...item,
-                            max_marks: 1,
-                            mark_source:
-                                item?.mark_source ||
-                                "derived_from_mcq_item_structure",
-                            mark_evidence:
-                                item?.mark_evidence ||
-                                "One mark per MCQ item inferred only because no explicit item or parent marks were available.",
-                        })
+            .filter(
+                Boolean
+            );
+
+    const questionRegex =
+        /^\s*(?:question\s*)?(\d{1,3})\s*[.)\-:]\s*(.*)$/i;
+
+    const questions = [];
+
+    let current = null;
+
+    for (
+        const line of lines
+    ) {
+        const match =
+            line.match(
+                questionRegex
+            );
+
+        if (match) {
+            if (current) {
+                questions.push(
+                    current
+                );
+            }
+
+            current = {
+                question_number:
+                    Number(
+                        match[1]
                     ),
-                mark_source:
-                    "derived_from_mcq_item_structure",
-                mark_evidence:
-                    `Detected ${subItems.length} MCQ items with no available ` +
-                    `parent or sub-item mark information; one mark per item ` +
-                    `used only as a structural fallback.`,
+
+                text:
+                    match[2] ||
+                    "",
             };
+
+            continue;
+        }
+
+        if (current) {
+            current.text =
+                `${current.text} ${line}`.trim();
         }
     }
 
-    /*
-     * Nothing reliable was found.
-     * Do NOT invent a mark.
-     */
-    return {
-        ...question,
-        max_marks: 0,
-        mark_source:
-            question?.mark_source ||
-            "mark_not_determined",
-        mark_evidence:
-            question?.mark_evidence ||
-            "No reliable parent or sub-item mark was available.",
-    };
+    if (current) {
+        questions.push(
+            current
+        );
+    }
+
+    return questions;
 };
-questions =
-    questions.map(
-        (
-            question
-        ) =>
-            reconcileQuestionMarks(
-                question
-            )
-    );
 
-const finalCalculatedMarks =
-    questions.reduce(
-        (
-            sum,
-            question
-        ) =>
-            sum +
-            (
-                Number(
-                    question?.max_marks
-                ) || 0
-            ),
-        0
-    );
+// ============================================================
+// GEMINI PROMPT
+// ============================================================
 
-console.log(
-    "FINAL MARK RECONCILIATION TOTAL:",
-    finalCalculatedMarks
-);
-
-console.log(
-    "FINAL MARK RECONCILIATION QUESTIONS:",
-    questions.map(
-        (
-            question
-        ) => ({
-            question:
-                question?.question_number,
-
-            max_marks:
-                question?.max_marks,
-
-            question_type:
-                question?.question_type,
-
-            sub_item_count:
-                Array.isArray(
-                    question?.sub_items
+const buildExamAnalysisPrompt =
+    ({
+        pdfText,
+        structuralQuestions,
+        subjectName,
+        level,
+        examName,
+    }) => {
+        const structuralEvidence =
+            structuralQuestions
+                .map(
+                    (question) =>
+                        `Q${question.question_number}: ${question.text}`
                 )
-                    ? question.sub_items.length
-                    : 0,
+                .join("\n");
 
-            mark_source:
-                question?.mark_source,
+        return `
+You are analyzing a complete examination paper.
 
-            sub_item_total:
-                getSubItemMarkTotal(
-                    question?.sub_items
-                ),
-        })
-    )
-);
-console.log("FINAL MAIN QUESTION STRUCTURE");console.log(JSON.stringify(questions.map((question)=>({question_number:question.question_number,sub_items:Array.isArray(question.sub_items)?question.sub_items.length:0,max_marks:question.max_marks,question_type:question.question_type,expected_answer:Boolean(text(question.answer_expected)),})),null,2));console.log("TOTAL MAIN QUESTIONS:",questions.length);console.log("============================================================");if(mainNumbers.length&&questions.length!==mainNumbers.length){console.warn("MAIN QUESTION COUNT DIFFERENCE:",{pdfNumbers:mainNumbers,detected:questions.map((question)=>question.question_number),});}const topicsFound=unique([...(Array.isArray(primary.topics_found)?primary.topics_found:[]),...(Array.isArray(metadata?.topics_found)?metadata.topics_found:[]),...questions.flatMap((question)=>[...String(question.topic||"").split(/[,;|]/),...(Array.isArray(question.sub_items)?question.sub_items.flatMap((item)=>String(item.topic||"").split(/[,;|]/)):[]),]),]);const derivedQuality=deriveQuality(questions);const evidenceCoverage=questions.length?(questions.filter((question)=>question.pdf_evidence==="top_level_detector"||question.pdf_evidence==="explicit_question_heading"||question.pdf_evidence==="question_text"||question.pdf_evidence==="question_text_partial").length/questions.length)*100:0;const markEvidenceCoverage=questions.length?(questions.filter((question)=>Number(question.max_marks)>0&&(text(question.mark_evidence)||question.pdf_evidence)).length/questions.length)*100:0;const structuralQuality=Math.round(evidenceCoverage*0.55+markEvidenceCoverage*0.45);const baseFinalQualityScore=Math.round(derivedQuality.score*0.75+structuralQuality*0.25);const expectedNumberSet=new Set((mainNumbers||[]).map(integer).filter(Boolean));const actualNumberSet=new Set(questions.map((question)=>integer(question.question_number)).filter(Boolean));const missingStructureCount=[...expectedNumberSet].filter((n)=>!actualNumberSet.has(n)).length;const unexpectedStructureCount=[...actualNumberSet].filter((n)=>expectedNumberSet.size>0&&!expectedNumberSet.has(n)).length;const structuralMismatchCount=missingStructureCount+unexpectedStructureCount;const structuralPenalty=Math.min(50,structuralMismatchCount*10);const markMismatchPenalty=0;
+EXAMINATION:
+${examName}
 
-/*
- * V10 MARK / STRUCTURE VALIDATION
- *
- * IMPORTANT:
- * These values MUST be calculated before they are used
- * by the final quality-score calculation.
- */
-const totalMarksFromStructure=effectiveMarks(questions);
+SUBJECT:
+${subjectName}
 
-/*
- * DETERMINISTIC EXAMINATION TOTAL MARK
- *
- * Priority:
- *
- * 1. Explicit TOTAL MARKS / TOTAL SCORE printed on the paper.
- *    This is the authoritative examination total.
- *
- * 2. If the paper does not contain an explicit printed total,
- *    use the total calculated from the reconciled question structure.
- *
- * IMPORTANT:
- * - No percentage tolerance.
- * - No arbitrary +/- adjustment.
- * - No silent replacement based on "close enough".
- * - Individual question marks remain controlled by the
- *   deterministic question-mark reconciliation logic above.
- */
-const totalMarker=pdf.match(
-    /TOTAL\s+(?:MARKS?|SCORE)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i
-);
+LEVEL:
+${level}
 
-const printedTotalMarks=
-    totalMarker
-        ? marks(totalMarker[1])
-        : 0;
+IMPORTANT:
+Analyze the WHOLE examination paper.
 
-let totalMarks=0;
+Do not invent questions, marks, answers, sections, topics, or selection rules.
 
-if(printedTotalMarks>0){
-    totalMarks=printedTotalMarks;
-}else if(totalMarksFromStructure>0){
-    totalMarks=totalMarksFromStructure;
+A main examination question must remain ONE question even if it contains subparts such as:
+(a), (b), (c), (i), (ii), etc.
+
+Do NOT convert every subpart into a separate main question.
+
+Use the printed examination paper as the primary evidence.
+
+Determine marks from the actual paper whenever possible.
+
+If a mark value is not explicitly visible, infer it only when the structure of the paper provides strong evidence.
+
+Never invent arbitrary marks.
+
+If a question is selective, preserve the exact selection structure.
+
+For example:
+
+"Answer any 2 out of 3 questions, each carrying 10 marks"
+
+means:
+selection_required = true
+selection_count = 2
+selection_total = 3
+selection_group = the relevant group
+and the effective contribution is 20 marks.
+
+Do not treat the printed 30 marks as the effective student-answer total.
+
+RETURN STRICT JSON ONLY.
+
+Do not wrap the JSON in markdown.
+
+Expected JSON structure:
+
+{
+  "summary": "",
+  "total_questions": 0,
+  "total_marks": 0,
+  "difficulty": "",
+  "quality_score": 0,
+  "syllabus_coverage": 0,
+  "sections": [],
+  "topics_found": [],
+  "weak_topics": [],
+  "strong_topics": [],
+  "recommendations": [],
+  "teacher_comments": "",
+  "blooms_distribution": {},
+  "questions": [
+    {
+      "question_number": 1,
+      "question_text": "",
+      "section": "",
+      "section_type": "",
+      "max_marks": 0,
+      "mark_source": "",
+      "mark_evidence": "",
+      "topic": "",
+      "sub_topic": "",
+      "difficulty_level": "",
+      "bloom_level": "",
+      "question_type": "",
+      "answer_expected": "",
+      "ai_confidence": 0,
+      "ai_explanation": "",
+      "is_selective": false,
+      "selection_required": false,
+      "selection_count": 0,
+      "selection_total": 0,
+      "selection_group": "",
+      "selection_instruction": ""
+    }
+  ]
 }
 
-if(totalMarks<=0){
-    throw new Error(
-        "Could not determine a valid examination total mark."
-    );
-}
+The question_text must represent the complete main question.
 
-const configuredFullMarks=
-    marks(examSubject.full_marks);
+The answer_expected field should contain the expected answer or marking expectation when it can reasonably be determined from the paper. Do not fabricate an answer when the paper does not provide enough evidence.
 
-const selectionType=
-    text(
-        examSubject.question_selection_type
-    ).toUpperCase();
+The AI confidence must be between 0 and 100.
 
-const fullMarksDifference=
-    configuredFullMarks>0
-        ? Math.abs(
-            totalMarks-
-            configuredFullMarks
-        )
-        : 0;
+SECTION ANALYSIS:
+Identify section names and section totals from the actual paper.
 
-const fullMarksMismatch=
-    configuredFullMarks>0 &&
-    fullMarksDifference>
-        Math.max(
-            1,
-            configuredFullMarks*0.05
+QUESTION NUMBERING:
+Preserve the actual main-question numbering.
+
+SELECTION:
+Detect explicit instructions such as:
+- Answer any 2 out of 3
+- Attempt any 4 questions
+- Choose any 3 from Section C
+- Answer all questions
+- Attempt all questions
+
+If no selection is present, set:
+is_selective = false
+selection_required = false
+selection_count = 0
+selection_total = 0
+
+STRUCTURAL EVIDENCE EXTRACTED FROM PDF:
+
+${structuralEvidence || "No reliable structural question list was extracted."}
+
+FULL PDF TEXT:
+
+${pdfText}
+`;
+    };
+
+// ============================================================
+// AI QUESTION NORMALIZATION
+// ============================================================
+
+const normalizeAIQuestion = (
+    question,
+    index
+) => {
+    const questionNumber =
+        Number(
+            question?.question_number
         );
 
-/*
- * V10 STRUCTURAL QUALITY RULE
- *
- * Missing PDF questions are a hard structural defect.
- * A paper with unresolved main questions must not receive
- * an artificially high quality score.
- */
-const unresolvedQuestionPenalty=
-    unresolvedPdfNumbers.length
-        ? Math.min(
-            60,
-            unresolvedPdfNumbers.length*15
-        )
-        : 0;
+    const maxMarks =
+        normalizeMaxMarks(
+            question?.max_marks
+        );
 
-const finalQualityScore=
-    Math.max(
-        0,
-        baseFinalQualityScore-
-        structuralPenalty-
-        markMismatchPenalty-
-        unresolvedQuestionPenalty
+    const selectionCount =
+        integerOrZero(
+            question?.selection_count
+        );
+
+    const selectionTotal =
+        integerOrZero(
+            question?.selection_total
+        );
+
+    const isSelective =
+        normalizeBoolean(
+            question?.is_selective
+        );
+
+    const selectionRequired =
+        normalizeBoolean(
+            question?.selection_required
+        ) ||
+        isSelective;
+
+    return {
+        question_number:
+            Number.isInteger(
+                questionNumber
+            ) &&
+            questionNumber > 0
+                ? questionNumber
+                : index + 1,
+
+        question_text:
+            textOrNull(
+                question?.question_text
+            ) ||
+            `Question ${index + 1}`,
+
+        section:
+            textOrNull(
+                question?.section
+            ),
+
+        section_type:
+            textOrNull(
+                question?.section_type
+            ),
+
+        max_marks:
+            maxMarks,
+
+        mark_source:
+            textOrNull(
+                question?.mark_source
+            ),
+
+        mark_evidence:
+            textOrNull(
+                question?.mark_evidence
+            ),
+
+        topic:
+            textOrNull(
+                question?.topic
+            ),
+
+        sub_topic:
+            textOrNull(
+                question?.sub_topic
+            ),
+
+        difficulty_level:
+            textOrNull(
+                question?.difficulty_level
+            ) ||
+            "Unknown",
+
+        bloom_level:
+            textOrNull(
+                question?.bloom_level
+            ) ||
+            "Unknown",
+
+        question_type:
+            textOrNull(
+                question?.question_type
+            ) ||
+            "Unknown",
+
+        answer_expected:
+            textOrNull(
+                question?.answer_expected
+            ),
+
+        ai_confidence:
+            Math.max(
+                0,
+                Math.min(
+                    100,
+                    numberOrNull(
+                        question?.ai_confidence
+                    ) ?? 0
+                )
+            ),
+
+        ai_explanation:
+            textOrNull(
+                question?.ai_explanation
+            ),
+
+        is_selective:
+            isSelective,
+
+        selection_required:
+            selectionRequired,
+
+        selection_count:
+            selectionCount,
+
+        selection_total:
+            selectionTotal,
+
+        selection_group:
+            textOrNull(
+                question?.selection_group
+            ),
+
+        selection_instruction:
+            textOrNull(
+                question?.selection_instruction
+            ),
+    };
+};
+
+// ============================================================
+// TEXTUAL SELECTION EVIDENCE
+// ============================================================
+
+const applyTextualSelectionEvidence = (
+    questions,
+    globalSelection
+) => {
+    if (
+        !Array.isArray(
+            questions
+        )
+    ) {
+        return [];
+    }
+
+    if (
+        !globalSelection
+    ) {
+        return questions;
+    }
+
+    const {
+        required,
+        available,
+        source,
+    } =
+        globalSelection;
+
+    return questions.map(
+        (question) => {
+            const text =
+                `${question.question_text || ""} ${
+                    question.selection_instruction || ""
+                }`;
+
+            const hasSelectionText =
+                /answer\s+any|attempt\s+any|choose\s+any|select\s+any/i.test(
+                    text
+                );
+
+            if (
+                hasSelectionText
+            ) {
+                return {
+                    ...question,
+
+                    is_selective:
+                        true,
+
+                    selection_required:
+                        true,
+
+                    selection_count:
+                        question.selection_count ||
+                        required,
+
+                    selection_total:
+                        question.selection_total ||
+                        available,
+
+                    selection_group:
+                        question.selection_group ||
+                        `GLOBAL-${required}-OF-${available}`,
+
+                    selection_instruction:
+                        question.selection_instruction ||
+                        source,
+                };
+            }
+
+            return question;
+        }
+    );
+};
+
+// ============================================================
+// SELECTIVE VALIDATION
+// ============================================================
+
+const validateSelectiveQuestions = (
+    questions
+) => {
+    const problems = [];
+
+    for (
+        const question of
+            questions
+    ) {
+        const isSelective =
+            Boolean(
+                question.is_selective
+            );
+
+        const selectionRequired =
+            Boolean(
+                question.selection_required
+            );
+
+        const selectionCount =
+            integerOrZero(
+                question.selection_count
+            );
+
+        const selectionTotal =
+            integerOrZero(
+                question.selection_total
+            );
+
+        if (
+            isSelective ||
+            selectionRequired
+        ) {
+            if (
+                selectionCount <=
+                0
+            ) {
+                problems.push(
+                    `Q${question.question_number}: selection_count must be greater than zero`
+                );
+            }
+
+            if (
+                selectionTotal <=
+                0
+            ) {
+                problems.push(
+                    `Q${question.question_number}: selection_total must be greater than zero`
+                );
+            }
+
+            if (
+                selectionCount >
+                selectionTotal
+            ) {
+                problems.push(
+                    `Q${question.question_number}: selection_count cannot exceed selection_total`
+                );
+            }
+        }
+    }
+
+    return {
+        valid:
+            problems.length ===
+            0,
+
+        problems,
+    };
+};
+
+// ============================================================
+// SECTION MARK VALIDATION
+// ============================================================
+
+const validateSectionMarks = ({
+    questions,
+    aiSections,
+    pdfText,
+}) => {
+    const problems = [];
+
+    const sections =
+        Array.isArray(
+            aiSections
+        )
+            ? aiSections
+            : [];
+
+    const pdfTotals =
+        extractSectionTotals(
+            pdfText
+        );
+
+    if (
+        pdfTotals.length ===
+        0
+    ) {
+        return {
+            valid: true,
+            problems: [],
+        };
+    }
+
+    for (
+        const pdfSection of
+            pdfTotals
+    ) {
+        const matchingQuestions =
+            questions.filter(
+                (question) =>
+                    String(
+                        question.section ||
+                            ""
+                    )
+                        .trim()
+                        .toUpperCase()
+                        .includes(
+                            String(
+                                pdfSection.section
+                            )
+                                .trim()
+                                .toUpperCase()
+                        )
+            );
+
+        if (
+            matchingQuestions.length ===
+            0
+        ) {
+            continue;
+        }
+
+        const questionMarks =
+            matchingQuestions.reduce(
+                (
+                    total,
+                    question
+                ) =>
+                    total +
+                    normalizeMaxMarks(
+                        question.max_marks
+                    ),
+                0
+            );
+
+        const hasSelective =
+            matchingQuestions.some(
+                (
+                    question
+                ) =>
+                    question.is_selective ||
+                    question.selection_required
+            );
+
+        if (
+            hasSelective
+        ) {
+            continue;
+        }
+
+        if (
+            Math.abs(
+                questionMarks -
+                    Number(
+                        pdfSection.marks
+                    )
+            ) >
+            0.01
+        ) {
+            problems.push(
+                `Section ${pdfSection.section}: PDF indicates ${pdfSection.marks} marks but AI questions total ${questionMarks} marks`
+            );
+        }
+    }
+
+    if (
+        sections.length >
+        0
+    ) {
+        for (
+            const section of
+                sections
+        ) {
+            if (
+                typeof section !==
+                "object"
+            ) {
+                continue;
+            }
+
+            const name =
+                textOrNull(
+                    section.section ||
+                        section.name ||
+                        section.title
+                );
+
+            const marks =
+                numberOrNull(
+                    section.marks ||
+                        section.total_marks ||
+                        section.max_marks
+                );
+
+            if (
+                !name ||
+                marks ===
+                    null
+            ) {
+                continue;
+            }
+
+            const matching =
+                pdfTotals.find(
+                    (item) =>
+                        String(
+                            item.section
+                        )
+                            .toUpperCase() ===
+                        String(
+                            name
+                        )
+                            .trim()
+                            .toUpperCase()
+                );
+
+            if (
+                matching &&
+                Math.abs(
+                    Number(
+                        matching.marks
+                    ) -
+                        Number(
+                            marks
+                        )
+                ) >
+                    0.01
+            ) {
+                problems.push(
+                    `Section ${name}: AI reported ${marks} marks while PDF evidence indicates ${matching.marks} marks`
+                );
+            }
+        }
+    }
+
+    return {
+        valid:
+            problems.length ===
+            0,
+
+        problems,
+    };
+};
+
+// ============================================================
+// EFFECTIVE MARK CALCULATIONS
+// ============================================================
+
+const calculateEffectiveSectionMarks =
+    (
+        questions
+    ) => {
+        const groups =
+            new Map();
+
+        for (
+            const question of
+                questions
+        ) {
+            const marks =
+                normalizeMaxMarks(
+                    question.max_marks
+                );
+
+            if (
+                marks <= 0
+            ) {
+                continue;
+            }
+
+            if (
+                !question.is_selective &&
+                !question.selection_required
+            ) {
+                const key =
+                    `QUESTION-${question.question_number}`;
+
+                groups.set(
+                    key,
+                    marks
+                );
+
+                continue;
+            }
+
+            const group =
+                question.selection_group ||
+                `SELECTIVE-${question.section || "UNKNOWN"}-${question.selection_count}-${question.selection_total}`;
+
+            if (
+                !groups.has(
+                    group
+                )
+            ) {
+                const count =
+                    integerOrZero(
+                        question.selection_count
+                    );
+
+                const effectiveMarks =
+                    count > 0
+                        ? marks * count
+                        : marks;
+
+                groups.set(
+                    group,
+                    effectiveMarks
+                );
+            }
+        }
+
+        return Array.from(
+            groups.values()
+        ).reduce(
+            (
+                total,
+                marks
+            ) =>
+                total + marks,
+            0
+        );
+    };
+
+const calculateEffectiveTotalMarks =
+    (
+        questions
+    ) =>
+        calculateEffectiveSectionMarks(
+            questions
+        );
+
+// ============================================================
+// SUPABASE HELPERS
+// ============================================================
+
+const loadExamSubject = async (
+    examSubjectId
+) => {
+    const {
+        data,
+        error,
+    } =
+        await supabase
+            .from(
+                "exam_subjects"
+            )
+            .select(
+                "*"
+            )
+            .eq(
+                "id",
+                examSubjectId
+            )
+            .maybeSingle();
+
+    throwSupabaseError(
+        error,
+        "Failed to load examination subject"
     );
 
-const finalQualityExplanation=
-    `${derivedQuality.explanation}`+
-    `Structural PDF evidence ${Math.round(evidenceCoverage)}%,`+
-    `mark/structure evidence ${Math.round(markEvidenceCoverage)}%.`+
-    `Structural mismatches:${structuralMismatchCount}`+
-    `(missing ${missingStructureCount},unexpected ${unexpectedStructureCount});`+
-    `penalty ${structuralPenalty} points.`+
-    `Configured full marks ${configuredFullMarks||"N/A"},`+
-    `calculated ${totalMarks};`+
-    `mark mismatch penalty ${markMismatchPenalty} points.`+
-    `Unresolved PDF question penalty ${unresolvedQuestionPenalty} points.`;
+    if (!data) {
+        const error =
+            new Error(
+                "Examination subject not found."
+            );
 
-console.log(
-    "STRUCTURAL EVIDENCE COVERAGE:",
-    evidenceCoverage
-);
+        error.status =
+            404;
 
-console.log(
-    "MARK EVIDENCE COVERAGE:",
-    markEvidenceCoverage
-);
+        error.code =
+            "EXAM_SUBJECT_NOT_FOUND";
 
-console.log(
-    "FINAL STRUCTURAL QUALITY:",
-    finalQualityScore
-);
+        throw error;
+    }
 
-console.log(
-    "STRUCTURAL MISMATCH COUNT:",
-    structuralMismatchCount
-);
+    return data;
+};
 
-console.log(
-    "FULL MARKS MISMATCH:",
-    fullMarksMismatch
-);
+const findExamPaperByHash = async (
+    examId,
+    examSubjectId,
+    fileHash
+) => {
+    const {
+        data,
+        error,
+    } =
+        await supabase
+            .from(
+                "exam_papers"
+            )
+            .select(
+                "*"
+            )
+            .eq(
+                "exam_id",
+                examId
+            )
+            .eq(
+                "exam_subject_id",
+                examSubjectId
+            )
+            .eq(
+                "file_hash",
+                fileHash
+            )
+            .order(
+                "id",
+                {
+                    ascending:
+                        false,
+                }
+            )
+            .limit(
+                1
+            )
+            .maybeSingle();
 
-const geminiMetadataScore=
-    Number.isFinite(
-        Number(metadata?.quality_score)
-    )
-        ? clamp100(metadata.quality_score)
-        : null;const geminiPrimaryScore=Number.isFinite(Number(primary?.quality_score))?clamp100(primary.quality_score):null;const quality={score:clamp100(finalQualityScore),explanation:finalQualityExplanation,};console.log("GEMINI PRIMARY QUALITY SCORE:",geminiPrimaryScore);console.log("GEMINI METADATA QUALITY SCORE:",geminiMetadataScore);console.log("DETERMINISTIC QUALITY SCORE:",quality.score);const calculatedSyllabusCoverage=deriveSyllabusCoverage(questions);const geminiSyllabus=Number.isFinite(Number(metadata?.syllabus_coverage))?clamp100(metadata.syllabus_coverage):Number.isFinite(Number(primary?.syllabus_coverage))?clamp100(primary.syllabus_coverage):null;const syllabusCoverage=calculatedSyllabusCoverage>0||questions.length?calculatedSyllabusCoverage:geminiSyllabus||0;console.log("GEMINI SYLLABUS COVERAGE:",geminiSyllabus);console.log("DETERMINISTIC SYLLABUS COVERAGE:",calculatedSyllabusCoverage);const difficulty=text(primary.difficulty)||"Unknown";if(fullMarksMismatch){console.warn("EXAM FULL-MARKS MISMATCH:",{configuredFullMarks,calculatedTotal:totalMarks,difference:fullMarksDifference,question_selection_type:selectionType,});}const blooms=primary.blooms_distribution&&typeof primary.blooms_distribution==="object"?primary.blooms_distribution:questions.reduce((output,question)=>{const key=text(question.bloom_level)||"Unknown";output[key]=(output[key]||0)+1;return output;},{});const weakTopics=unique([...(Array.isArray(metadata?.weak_topics)?metadata.weak_topics:[]),...(Array.isArray(primary.weak_topics)?primary.weak_topics:[]),]);const strongTopics=unique([...(Array.isArray(metadata?.strong_topics)?metadata.strong_topics:[]),...(Array.isArray(primary.strong_topics)?primary.strong_topics:[]),]);const recommendations=Array.isArray(primary.recommendations)?primary.recommendations.map(text).filter(Boolean):[];const averageConfidence=Math.round(questions.reduce((sum,question)=>sum+normalizeConfidence(question.ai_confidence),0)/Math.max(1,questions.length));const teacherComments=[text(metadata?.teacher_comments),text(primary.teacher_comments),quality.explanation,`Average AI confidence:${averageConfidence}%.`,].filter(Boolean).join("\n\n");const finalNumbers=questions.map((question)=>integer(question.question_number));const uniqueFinalNumbers=[...new Set(finalNumbers),];if(finalNumbers.length!==uniqueFinalNumbers.length){throw new Error("AI analysis contains duplicate main question numbers.");}if(!questions.length){throw new Error("AI analysis produced zero main questions.");}const questionsWithoutEvidence=questions.filter((question)=>!question.pdf_evidence);if(questionsWithoutEvidence.length){throw new Error(`Final validation failed:${questionsWithoutEvidence.length}main question(s)have no PDF evidence.`);}if(!Number.isFinite(quality.score)){throw new Error("AI quality score could not be calculated.");}if(!Number.isFinite(syllabusCoverage)){throw new Error("AI syllabus coverage could not be calculated.");}console.log("FINAL QUALITY SCORE:",quality.score);console.log("FINAL SYLLABUS COVERAGE:",syllabusCoverage);console.log("FINAL TOTAL MARKS:",totalMarks);await clearOldAnalysis(job.examId,job.examSubjectId);const analysis=await saveAnalysis({exam_id:job.examId,exam_subject_id:job.examSubjectId,exam_paper_id:job.paperId,analysis_status:"Processing",total_questions:questions.length,total_marks:totalMarks,topics_found:topicsFound,syllabus_coverage:syllabusCoverage,difficulty:difficulty,quality_score:quality.score,recommendations:recommendations.join("\n"),subject:subjectName,level:level,question_analysis:questions,weak_topics:weakTopics,strong_topics:strongTopics,blooms_distribution:blooms,teacher_comments:teacherComments,ai_summary:text(metadata?.summary||primary.summary)||`AI analysis completed for ${questions.length}main questions.`,instructions:Array.isArray(primary.instructions)?primary.instructions.join("\n"):text(primary.instructions),structural_expected_questions:mainNumbers,structural_detected_questions:questions.map((question)=>integer(question.question_number)),structural_missing_questions:unresolvedPdfNumbers,structural_mismatch_count:structuralMismatchCount,raw_response:primary,});await saveQuestions({examId:job.examId,examSubjectId:job.examSubjectId,subjectId:examSubject.subject_id,paperId:job.paperId,questions,});const verification=await supabase.from("exam_questions").select("id,question_number,max_marks").eq("exam_id",job.examId).eq("exam_subject_id",job.examSubjectId).order("question_number",{ascending:true,});supabaseError(verification.error,"Failed to verify saved examination questions");const savedRows=verification.data||[];const savedNumbers=savedRows.map((question)=>integer(question.question_number));const uniqueSavedNumbers=[...new Set(savedNumbers),];console.log("DATABASE SAVED QUESTION NUMBERS:",savedNumbers);console.log("DATABASE UNIQUE QUESTION NUMBERS:",uniqueSavedNumbers);if(savedRows.length!==questions.length||uniqueSavedNumbers.length!==questions.length){throw new Error(`Saved question verification failed.Expected ${questions.length}unique main questions;found ${savedRows.length}rows/${uniqueSavedNumbers.length}unique numbers.`);}const completed=await supabase.from("exam_ai_analysis").update({analysis_status:"Completed",}).eq("id",analysis.id);supabaseError(completed.error,"Failed to complete AI analysis");await updatePaper(job.paperId,"Completed",null);console.log("============================================================");console.log("AI ANALYSIS COMPLETED");console.log({controller_version:CONTROLLER_VERSION,exam:job.examId,exam_subject:job.examSubjectId,paper:job.paperId,main_questions:questions.length,total_marks:totalMarks,quality_score:quality.score,syllabus_coverage:syllabusCoverage,topics:topicsFound.length,confidence:averageConfidence,});console.log("============================================================");};const runWorker=async()=>{if(workerRunning){return;}workerRunning=true;while(queue.length){const job=queue.shift();try{await processJob(job);}catch(error){console.error("AI ANALYSIS JOB FAILED:",error);try{await updatePaper(job.paperId,"Failed",error.message||"AI analysis failed.");}catch(_){}try{await supabase.from("exam_ai_analysis").update({analysis_status:"Failed",}).eq("exam_paper_id",job.paperId);}catch(_){}}}workerRunning=false;};export const analyzePaper=async(req,res)=>{try{const examId=integer(req.body?.exam_id??req.query?.exam_id);const examSubjectId=integer(req.body?.exam_subject_id??req.query?.exam_subject_id);if(!examId||!examSubjectId){return res.status(400).json({success:false,message:"Valid exam_id and exam_subject_id are required.",});}if(!req.file){return res.status(400).json({success:false,message:"Examination paper PDF is required.",});}if(!Buffer.isBuffer(req.file.buffer)){return res.status(400).json({success:false,message:"Uploaded PDF buffer is invalid.",});}const hash=fileHash(req.file.buffer);const paper=await createPaper(examId,examSubjectId,req.file,hash);queue.push({examId,examSubjectId,paperId:paper.id,buffer:req.file.buffer,fileName:req.file.originalname,});void runWorker();return res.status(202).json({success:true,processing:true,status:"Processing",controller_version:CONTROLLER_VERSION,message:"Examination paper uploaded.AI analysis is processing.",exam_id:examId,exam_subject_id:examSubjectId,exam_paper_id:paper.id,file_hash:hash,});}catch(error){console.error("ANALYZE PAPER ERROR:",error);return res.status(Number(error.status)>=400?Number(error.status):500).json({success:false,code:error.code||"AI_ANALYSIS_FAILED",message:error.message||"AI paper analysis failed.",});}};const mergeSavedRows=(rows,analyses)=>{const byExact=new Map();for(const row of analyses||[]){const key=`${integer(row.question_number)}|${text(row.question_text).toLowerCase().replace(/\s+/g," ")}`;byExact.set(key,row);}const byNumber=new Map();for(const row of analyses||[]){byNumber.set(integer(row.question_number),row);}return(rows||[]).map((question)=>{const key=`${integer(question.question_number)}|${text(question.question_text).toLowerCase().replace(/\s+/g," ")}`;const match=byExact.get(key)||byNumber.get(integer(question.question_number));if(!match){return question;}return{...question,expected_answer:match.answer_expected||question.expected_answer||null,answer_expected:match.answer_expected||question.answer_expected||null,topic:match.topic||question.topic||null,sub_topic:match.subtopic||question.sub_topic||null,difficulty_level:match.difficulty||question.difficulty_level||null,bloom_level:match.blooms_level||question.bloom_level||null,question_type:match.question_type||question.question_type||null,ai_confidence:normalizeConfidence(match.ai_confidence||question.ai_confidence),ai_explanation:match.ai_explanation||question.ai_explanation||null,question_analysis:match,};});};export const getAIAnalysisByExamSubject=async(req,res)=>{try{const examId=integer(req.params.examId);const examSubjectId=integer(req.params.examSubjectId);if(!examId||!examSubjectId){return res.status(400).json({success:false,message:"Invalid exam ID or exam subject ID.",});}const examSubject=await loadExamSubject(examSubjectId);if(Number(examSubject.exam_id)!==Number(examId)){return res.status(400).json({success:false,message:"Exam subject does not belong to this examination.",});}const[analysisResult,questionsResult,questionAnalysisResult,paperResult,]=await Promise.all([supabase.from("exam_ai_analysis").select("*").eq("exam_id",examId).eq("exam_subject_id",examSubjectId).order("id",{ascending:false,}).limit(1).maybeSingle(),supabase.from("exam_questions").select("*").eq("exam_id",examId).eq("exam_subject_id",examSubjectId).order("question_number",{ascending:true,}),supabase.from("exam_question_analysis").select("*").eq("exam_id",examId).eq("exam_subject_id",examSubjectId).order("question_number",{ascending:true,}),supabase.from("exam_papers").select("*").eq("exam_id",examId).eq("exam_subject_id",examSubjectId).order("id",{ascending:false,}).limit(1).maybeSingle(),]);supabaseError(analysisResult.error,"Failed to load exam AI analysis");supabaseError(questionsResult.error,"Failed to load exam questions");supabaseError(questionAnalysisResult.error,"Failed to load exam question analysis");supabaseError(paperResult.error,"Failed to load exam paper");const analysis=analysisResult.data||null;const paper=paperResult.data||null;const questionAnalysis=questionAnalysisResult.data||[];const questions=mergeSavedRows(questionsResult.data||[],questionAnalysis);let status=text(analysis?.analysis_status||paper?.ai_status||paper?.status)||"Pending";if(/processing|pending|running|analyzing/i.test(status)){status="Processing";}else if(/failed|error/i.test(status)){status="Failed";}else if(/completed|complete|success/i.test(status)){status="Completed";}const normalizedAnalysis=analysis?{...analysis,status,analysis_status:status,summary:analysis.ai_summary||null,quality_explanation:text(analysis.teacher_comments||""),}:null;const structuredQuestions=Array.isArray(analysis?.question_analysis)?analysis.question_analysis:[];return res.status(200).json({success:true,controller_version:CONTROLLER_VERSION,exam_id:examId,exam_subject_id:examSubjectId,status,processing:status==="Processing"||status==="Pending",analysis:normalizedAnalysis,questions,question_analysis:structuredQuestions.length?structuredQuestions:questionAnalysis,paper,total_questions:structuredQuestions.length||questions.length,total_marks:Number(normalizedAnalysis?.total_marks)||effectiveMarks(structuredQuestions.length?structuredQuestions:questions),});}catch(error){console.error("GET AI ANALYSIS BY SUBJECT ERROR:",error);return res.status(Number(error.status)>=400?Number(error.status):500).json({success:false,message:error.message||"Failed to load AI analysis.",});}};export const getAIAnalysis=async(req,res)=>{try{const examId=integer(req.params.examId);if(!examId){return res.status(400).json({success:false,message:"Invalid exam ID.",});}const{data,error,}=await supabase.from("exam_ai_analysis").select("*").eq("exam_id",examId).order("id",{ascending:false,}).limit(1).maybeSingle();supabaseError(error,"Failed to load AI analysis");if(!data){return res.status(404).json({success:false,message:"No AI analysis found for this examination.",});}return res.status(200).json({success:true,controller_version:CONTROLLER_VERSION,data,analysis:{...data,status:data.analysis_status,summary:data.ai_summary||null,},});}catch(error){return res.status(Number(error.status)>=400?Number(error.status):500).json({success:false,message:error.message||"Failed to load AI analysis.",});}};export const aiHealthCheck=async(req,res)=>{return res.status(200).json({success:true,service:"AI Examination Analysis",controller_version:CONTROLLER_VERSION,status:"OK",timestamp:new Date().toISOString(),});};
+    throwSupabaseError(
+        error,
+        "Failed to find examination paper by hash"
+    );
 
+    return data || null;
+};
 
+const findExistingExamPaper =
+    async (
+        examId,
+        examSubjectId
+    ) => {
+        const {
+            data,
+            error,
+        } =
+            await supabase
+                .from(
+                    "exam_papers"
+                )
+                .select(
+                    "*"
+                )
+                .eq(
+                    "exam_id",
+                    examId
+                )
+                .eq(
+                    "exam_subject_id",
+                    examSubjectId
+                )
+                .order(
+                    "id",
+                    {
+                        ascending:
+                            false,
+                    }
+                )
+                .limit(
+                    1
+                )
+                .maybeSingle();
 
+        throwSupabaseError(
+            error,
+            "Failed to find existing examination paper"
+        );
 
+        return data || null;
+    };
 
+// ============================================================
+// RECORD SANITIZERS
+// ============================================================
 
+const sanitizeExamQuestionRecord =
+    (question) => ({
+        exam_id:
+            question.exam_id,
 
+        subject_id:
+            question.subject_id,
 
+        exam_subject_id:
+            question.exam_subject_id,
 
+        question_number:
+            integerOrZero(
+                question.question_number
+            ),
 
+        question_text:
+            textOrNull(
+                question.question_text
+            ),
 
+        topic:
+            textOrNull(
+                question.topic
+            ),
 
+        sub_topic:
+            textOrNull(
+                question.sub_topic
+            ),
 
+        difficulty_level:
+            textOrNull(
+                question.difficulty_level
+            ),
 
+        ai_confidence:
+            numberOrNull(
+                question.ai_confidence
+            ) ?? 0,
+
+        bloom_level:
+            textOrNull(
+                question.bloom_level
+            ),
+
+        question_type:
+            textOrNull(
+                question.question_type
+            ),
+
+        ai_explanation:
+            textOrNull(
+                question.ai_explanation
+            ),
+
+        max_marks:
+            normalizeMaxMarks(
+                question.max_marks
+            ),
+
+        section:
+            textOrNull(
+                question.section
+            ),
+
+        section_type:
+            textOrNull(
+                question.section_type
+            ),
+
+        is_selective:
+            normalizeBoolean(
+                question.is_selective
+            ),
+
+        selection_required:
+            normalizeBoolean(
+                question.selection_required
+            ),
+
+        selection_count:
+            integerOrZero(
+                question.selection_count
+            ),
+
+        selection_total:
+            integerOrZero(
+                question.selection_total
+            ),
+
+        selection_group:
+            textOrNull(
+                question.selection_group
+            ),
+
+        selection_instruction:
+            textOrNull(
+                question.selection_instruction
+            ),
+    });
+
+const sanitizeQuestionAnalysisRecord =
+    (question) => ({
+        exam_id:
+            question.exam_id,
+
+        question_number:
+            integerOrZero(
+                question.question_number
+            ),
+
+        topic:
+            textOrNull(
+                question.topic
+            ),
+
+        subtopic:
+            textOrNull(
+                question.subtopic
+            ),
+
+        difficulty:
+            textOrNull(
+                question.difficulty
+            ),
+
+        blooms_level:
+            textOrNull(
+                question.blooms_level
+            ),
+
+        marks:
+            normalizeMaxMarks(
+                question.marks
+            ),
+
+        question_text:
+            textOrNull(
+                question.question_text
+            ),
+
+        answer_expected:
+            textOrNull(
+                question.answer_expected
+            ),
+    });
+
+// ============================================================
+// PAPER STATUS
+// ============================================================
+
+const updatePaperStatus = async (
+    paperId,
+    {
+        status,
+        aiStatus,
+        errorMessage,
+    }
+) => {
+    const {
+        data,
+        error,
+    } =
+        await supabase
+            .from(
+                "exam_papers"
+            )
+            .update({
+                status,
+
+                ai_status:
+                    aiStatus,
+
+                error_message:
+                    errorMessage,
+            })
+            .eq(
+                "id",
+                paperId
+            )
+            .select(
+                "*"
+            )
+            .single();
+
+    throwSupabaseError(
+        error,
+        "Failed to update examination paper status"
+    );
+
+    return data;
+};
+
+// ============================================================
+// ANALYZE PAPER
+// ============================================================
+
+export const analyzePaper =
+    async (
+        req,
+        res
+    ) => {
+        const startedAt =
+            Date.now();
+
+        let examId =
+            Number(
+                req.body?.exam_id
+            );
+
+        let examSubjectId =
+            Number(
+                req.body?.exam_subject_id
+            );
+
+        let examPaperId =
+            null;
+
+        let lockAcquired =
+            false;
+
+        let reusedPaper =
+            false;
+
+        try {
+            if (
+                !Number.isInteger(
+                    examId
+                ) ||
+                examId <= 0
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Invalid exam ID.",
+                    });
+            }
+
+            if (
+                !Number.isInteger(
+                    examSubjectId
+                ) ||
+                examSubjectId <= 0
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Invalid exam subject ID.",
+                    });
+            }
+
+            if (
+                !req.file ||
+                !req.file.buffer
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Examination paper PDF is required.",
+                    });
+            }
+
+            lockAcquired =
+                lockAnalysis(
+                    examId,
+                    examSubjectId
+                );
+
+            if (
+                !lockAcquired
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "AI analysis for this examination subject is already running.",
+                    });
+            }
+
+            console.log(
+                "=========================================="
+            );
+
+            console.log(
+                "FULL-PAPER AI ANALYSIS STARTED"
+            );
+
+            console.log(
+                "EXAM:",
+                examId
+            );
+
+            console.log(
+                "EXAM SUBJECT:",
+                examSubjectId
+            );
+
+            console.log(
+                "FILE:",
+                req.file.originalname
+            );
+
+            const fileHash =
+                calculateFileHash(
+                    req.file.buffer
+                );
+
+            console.log(
+                "FILE HASH:",
+                fileHash
+            );
+
+            // ------------------------------------------------
+            // LOAD EXAMINATION DATA
+            // ------------------------------------------------
+
+            const [
+                examResult,
+                examSubject,
+                existingPaper,
+                hashPaper,
+            ] =
+                await Promise.all([
+                    supabase
+                        .from(
+                            "exams"
+                        )
+                        .select(
+                            "*"
+                        )
+                        .eq(
+                            "id",
+                            examId
+                        )
+                        .maybeSingle(),
+
+                    loadExamSubject(
+                        examSubjectId
+                    ),
+
+                    findExistingExamPaper(
+                        examId,
+                        examSubjectId
+                    ),
+
+                    findExamPaperByHash(
+                        examId,
+                        examSubjectId,
+                        fileHash
+                    ),
+                ]);
+
+            throwSupabaseError(
+                examResult.error,
+                "Failed to load examination"
+            );
+
+            const exam =
+                examResult.data;
+
+            if (!exam) {
+                const error =
+                    new Error(
+                        "Examination not found."
+                    );
+
+                error.status =
+                    404;
+
+                error.code =
+                    "EXAM_NOT_FOUND";
+
+                throw error;
+            }
+
+            if (
+                Number(
+                    examSubject.exam_id
+                ) !==
+                Number(
+                    examId
+                )
+            ) {
+                const error =
+                    new Error(
+                        "Exam subject does not belong to this examination."
+                    );
+
+                error.status =
+                    400;
+
+                error.code =
+                    "EXAM_SUBJECT_MISMATCH";
+
+                throw error;
+            }
+
+            // ------------------------------------------------
+            // SUBJECT
+            // ------------------------------------------------
+
+            const subjectId =
+                examSubject.subject_id
+                    ? Number(
+                        examSubject.subject_id
+                    )
+                    : null;
+
+            let subject =
+                null;
+
+            if (
+                subjectId
+            ) {
+                const {
+                    data,
+                    error,
+                } =
+                    await supabase
+                        .from(
+                            "subjects"
+                        )
+                        .select(
+                            "*"
+                        )
+                        .eq(
+                            "id",
+                            subjectId
+                        )
+                        .maybeSingle();
+
+                throwSupabaseError(
+                    error,
+                    "Failed to load subject"
+                );
+
+                subject =
+                    data;
+            }
+
+            const subjectName =
+                getDisplayName(
+                    subject
+                ) ||
+                examSubject.subject_name ||
+                examSubject.name ||
+                "Unknown Subject";
+
+            const level =
+                examSubject.level ||
+                examSubject.class_level ||
+                exam.level ||
+                "Unknown Level";
+
+            const examName =
+                exam.name ||
+                exam.exam_name ||
+                `Examination ${examId}`;
+
+            // ------------------------------------------------
+            // PAPER RECORD
+            // ------------------------------------------------
+
+            let examPaper =
+                null;
+
+            if (
+                hashPaper
+            ) {
+                const {
+                    data,
+                    error,
+                } =
+                    await supabase
+                        .from(
+                            "exam_papers"
+                        )
+                        .update({
+                            file_name:
+                                req.file
+                                    .originalname,
+
+                            file_type:
+                                req.file
+                                    .mimetype,
+
+                            file_hash:
+                                fileHash,
+
+                            status:
+                                "Processing",
+
+                            ai_status:
+                                "Processing",
+
+                            error_message:
+                                null,
+                        })
+                        .eq(
+                            "id",
+                            hashPaper.id
+                        )
+                        .select(
+                            "*"
+                        )
+                        .single();
+
+                throwSupabaseError(
+                    error,
+                    "Failed to reuse duplicate examination paper"
+                );
+
+                examPaper =
+                    data;
+
+                reusedPaper =
+                    true;
+            } else if (
+                existingPaper
+            ) {
+                const {
+                    data,
+                    error,
+                } =
+                    await supabase
+                        .from(
+                            "exam_papers"
+                        )
+                        .update({
+                            file_name:
+                                req.file
+                                    .originalname,
+
+                            file_type:
+                                req.file
+                                    .mimetype,
+
+                            file_hash:
+                                fileHash,
+
+                            status:
+                                "Processing",
+
+                            ai_status:
+                                "Processing",
+
+                            error_message:
+                                null,
+                        })
+                        .eq(
+                            "id",
+                            existingPaper.id
+                        )
+                        .select(
+                            "*"
+                        )
+                        .single();
+
+                throwSupabaseError(
+                    error,
+                    "Failed to update existing exam paper"
+                );
+
+                examPaper =
+                    data;
+
+                reusedPaper =
+                    true;
+            } else {
+                const {
+                    data,
+                    error,
+                } =
+                    await supabase
+                        .from(
+                            "exam_papers"
+                        )
+                        .insert({
+                            exam_id:
+                                examId,
+
+                            exam_subject_id:
+                                examSubjectId,
+
+                            file_name:
+                                req.file
+                                    .originalname,
+
+                            file_type:
+                                req.file
+                                    .mimetype,
+
+                            file_hash:
+                                fileHash,
+
+                            status:
+                                "Processing",
+
+                            ai_status:
+                                "Processing",
+
+                            error_message:
+                                null,
+                        })
+                        .select(
+                            "*"
+                        )
+                        .single();
+
+                throwSupabaseError(
+                    error,
+                    "Failed to create exam paper"
+                );
+
+                examPaper =
+                    data;
+
+                reusedPaper =
+                    false;
+            }
+
+            examPaperId =
+                examPaper.id;
+
+            console.log(
+                "EXAM PAPER ID:",
+                examPaperId
+            );
+
+            console.log(
+                "REUSED PAPER:",
+                reusedPaper
+            );
+
+            // ------------------------------------------------
+            // READ PDF
+            // ------------------------------------------------
+
+            console.log(
+                "READING COMPLETE PDF..."
+            );
+
+            const pdfStartedAt =
+                Date.now();
+
+            let pdfText =
+                "";
+
+            try {
+                pdfText =
+                    await withTimeout(
+                        readPDF(
+                            req.file
+                                .buffer
+                        ),
+                        30000,
+                        "PDF reading timed out after 30 seconds."
+                    );
+            } catch (
+                error
+            ) {
+                console.error(
+                    "PDF READING FAILED:",
+                    error
+                );
+
+                await updatePaperStatus(
+                    examPaperId,
+                    {
+                        status:
+                            "Failed",
+
+                        aiStatus:
+                            "Failed",
+
+                        errorMessage:
+                            "The examination paper was saved, but its PDF text could not be read.",
+                    }
+                );
+
+                return res
+                    .status(200)
+                    .json({
+                        success:
+                            true,
+
+                        paper_saved:
+                            true,
+
+                        analysis_completed:
+                            false,
+
+                        ai_status:
+                            "Failed",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        exam_paper_id:
+                            examPaperId,
+
+                        reused_paper:
+                            reusedPaper,
+
+                        message:
+                            "The examination paper was saved, but AI analysis could not be completed because the PDF could not be read.",
+                    });
+            }
+
+            pdfText =
+                normalizePdfText(
+                    pdfText
+                );
+
+            console.log(
+                "PDF READ TIME:",
+                `${Date.now() - pdfStartedAt}ms`
+            );
+
+            if (
+                pdfText.length <
+                50
+            ) {
+                await updatePaperStatus(
+                    examPaperId,
+                    {
+                        status:
+                            "Failed",
+
+                        aiStatus:
+                            "Failed",
+
+                        errorMessage:
+                            "The examination paper was saved, but the PDF contains little or no readable text.",
+                    }
+                );
+
+                return res
+                    .status(200)
+                    .json({
+                        success:
+                            true,
+
+                        paper_saved:
+                            true,
+
+                        analysis_completed:
+                            false,
+
+                        ai_status:
+                            "Failed",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        exam_paper_id:
+                            examPaperId,
+
+                        reused_paper:
+                            reusedPaper,
+
+                        message:
+                            "The examination paper was saved, but AI analysis could not be completed because the PDF contains little or no readable text.",
+                    });
+            }
+
+            console.log(
+                "PDF TEXT LENGTH:",
+                pdfText.length
+            );
+
+            // ------------------------------------------------
+            // PDF STRUCTURAL EVIDENCE
+            // ------------------------------------------------
+
+            const sectionTotals =
+                extractSectionTotals(
+                    pdfText
+                );
+
+            const expectedQuestionCount =
+                extractExpectedQuestionCount(
+                    pdfText
+                );
+
+            const globalSelection =
+                extractGlobalSelection(
+                    pdfText
+                );
+
+            const structuralQuestions =
+                extractQuestionBlocks(
+                    pdfText
+                );
+
+            console.log(
+                "PDF SECTION TOTALS:",
+                sectionTotals
+            );
+
+            console.log(
+                "EXPECTED QUESTIONS:",
+                expectedQuestionCount
+            );
+
+            console.log(
+                "GLOBAL SELECTION:",
+                globalSelection
+            );
+
+            console.log(
+                "PARTIAL PDF QUESTIONS:",
+                structuralQuestions.length
+            );
+
+            // ------------------------------------------------
+            // BUILD PROMPT
+            // ------------------------------------------------
+
+            const prompt =
+                buildExamAnalysisPrompt({
+                    pdfText,
+
+                    structuralQuestions,
+
+                    subjectName,
+
+                    level,
+
+                    examName,
+                });
+
+            console.log(
+                "PROMPT LENGTH:",
+                prompt.length
+            );
+
+            console.log(
+                "SENDING WHOLE EXAMINATION PAPER TO GEMINI..."
+            );
+
+            // ------------------------------------------------
+            // GEMINI
+            //
+            // IMPORTANT:
+            // Gemini errors NEVER delete the saved paper.
+            // The frontend receives only a safe message.
+            // ------------------------------------------------
+
+            const aiStartedAt =
+                Date.now();
+
+            let aiRawResponse;
+
+            try {
+                aiRawResponse =
+                    await withTimeout(
+                        askGemini(
+                            prompt
+                        ),
+                        120000,
+                        "AI analysis timed out."
+                    );
+            } catch (
+                error
+            ) {
+                console.error(
+                    "GEMINI ANALYSIS ERROR:",
+                    error
+                );
+
+                const rawMessage =
+                    String(
+                        error?.message ||
+                            ""
+                    );
+
+                const isQuotaError =
+                    error?.status ===
+                        429 ||
+                    error?.statusCode ===
+                        429 ||
+                    error?.code ===
+                        429 ||
+                    /429/i.test(
+                        rawMessage
+                    ) ||
+                    /quota/i.test(
+                        rawMessage
+                    ) ||
+                    /resource.?exhausted/i.test(
+                        rawMessage
+                    ) ||
+                    /gemini_quota_exceeded/i.test(
+                        rawMessage
+                    );
+
+                const safeMessage =
+                    isQuotaError
+                        ? "The examination paper was saved successfully, but AI analysis is temporarily unavailable. Please try the AI analysis again later."
+                        : "The examination paper was saved successfully, but AI analysis could not be completed. Please try again.";
+
+                try {
+                    await updatePaperStatus(
+                        examPaperId,
+                        {
+                            status:
+                                "Failed",
+
+                            aiStatus:
+                                "Failed",
+
+                            errorMessage:
+                                safeMessage,
+                        }
+                    );
+                } catch (
+                    statusError
+                ) {
+                    console.error(
+                        "FAILED TO UPDATE PAPER AFTER GEMINI ERROR:",
+                        statusError
+                    );
+                }
+
+                return res
+                    .status(200)
+                    .json({
+                        success:
+                            true,
+
+                        paper_saved:
+                            true,
+
+                        analysis_completed:
+                            false,
+
+                        ai_status:
+                            "Failed",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        exam_paper_id:
+                            examPaperId,
+
+                        reused_paper:
+                            reusedPaper,
+
+                        message:
+                            safeMessage,
+                    });
+            }
+
+            console.log(
+                "GEMINI RESPONSE RECEIVED"
+            );
+
+            console.log(
+                "AI RESPONSE TIME:",
+                `${Date.now() - aiStartedAt}ms`
+            );
+
+            // ------------------------------------------------
+            // PARSE AI
+            // ------------------------------------------------
+
+            let aiResult;
+
+            try {
+                aiResult =
+                    parseAIResult(
+                        aiRawResponse
+                    );
+            } catch (
+                error
+            ) {
+                console.error(
+                    "AI JSON PARSE ERROR:",
+                    error
+                );
+
+                const safeMessage =
+                    "The examination paper was saved successfully, but the AI response could not be processed. Please try the AI analysis again.";
+
+                await updatePaperStatus(
+                    examPaperId,
+                    {
+                        status:
+                            "Failed",
+
+                        aiStatus:
+                            "Failed",
+
+                        errorMessage:
+                            safeMessage,
+                    }
+                );
+
+                return res
+                    .status(200)
+                    .json({
+                        success:
+                            true,
+
+                        paper_saved:
+                            true,
+
+                        analysis_completed:
+                            false,
+
+                        ai_status:
+                            "Failed",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        exam_paper_id:
+                            examPaperId,
+
+                        reused_paper:
+                            reusedPaper,
+
+                        message:
+                            safeMessage,
+                    });
+            }
+
+            const rawQuestions =
+                Array.isArray(
+                    aiResult.questions
+                )
+                    ? aiResult.questions
+                    : [];
+
+            if (
+                rawQuestions.length ===
+                0
+            ) {
+                const safeMessage =
+                    "The examination paper was saved successfully, but AI could not identify the examination questions. Please try the AI analysis again.";
+
+                await updatePaperStatus(
+                    examPaperId,
+                    {
+                        status:
+                            "Failed",
+
+                        aiStatus:
+                            "Failed",
+
+                        errorMessage:
+                            safeMessage,
+                    }
+                );
+
+                return res
+                    .status(200)
+                    .json({
+                        success:
+                            true,
+
+                        paper_saved:
+                            true,
+
+                        analysis_completed:
+                            false,
+
+                        ai_status:
+                            "Failed",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        exam_paper_id:
+                            examPaperId,
+
+                        reused_paper:
+                            reusedPaper,
+
+                        message:
+                            safeMessage,
+                    });
+            }
+
+            console.log(
+                "AI QUESTIONS RECEIVED:",
+                rawQuestions.length
+            );
+
+            // ------------------------------------------------
+            // NORMALIZE
+            // ------------------------------------------------
+
+            let questions =
+                rawQuestions.map(
+                    (
+                        question,
+                        index
+                    ) =>
+                        normalizeAIQuestion(
+                            question,
+                            index
+                        )
+                );
+
+            // ------------------------------------------------
+            // APPLY TEXTUAL SELECTION EVIDENCE
+            // ------------------------------------------------
+
+            questions =
+                applyTextualSelectionEvidence(
+                    questions,
+                    globalSelection
+                );
+
+            // ------------------------------------------------
+            // REMOVE DUPLICATES
+            // ------------------------------------------------
+
+            const questionMap =
+                new Map();
+
+            for (
+                const question of
+                    questions
+            ) {
+                const number =
+                    Number(
+                        question.question_number
+                    );
+
+                if (
+                    !Number.isInteger(
+                        number
+                    ) ||
+                    number <= 0
+                ) {
+                    continue;
+                }
+
+                if (
+                    !questionMap.has(
+                        number
+                    )
+                ) {
+                    questionMap.set(
+                        number,
+                        question
+                    );
+                }
+            }
+
+            questions =
+                Array.from(
+                    questionMap.values()
+                ).sort(
+                    (a, b) =>
+                        a.question_number -
+                        b.question_number
+                );
+
+            // ------------------------------------------------
+            // QUESTION COUNT VALIDATION
+            // ------------------------------------------------
+
+            if (
+                expectedQuestionCount >
+                    0 &&
+                questions.length !==
+                    expectedQuestionCount
+            ) {
+                throw new Error(
+                    `AI identified ${questions.length} main questions, but the examination instructions indicate ${expectedQuestionCount} questions.`
+                );
+            }
+
+            // ------------------------------------------------
+            // QUESTION NUMBER VALIDATION
+            // ------------------------------------------------
+
+            if (
+                expectedQuestionCount >
+                    0
+            ) {
+                const actualNumbers =
+                    questions.map(
+                        (
+                            question
+                        ) =>
+                            Number(
+                                question.question_number
+                            )
+                    );
+
+                const hasSequentialNumbering =
+                    actualNumbers.every(
+                        (
+                            number,
+                            index
+                        ) =>
+                            number ===
+                            index + 1
+                    );
+
+                if (
+                    !hasSequentialNumbering
+                ) {
+                    throw new Error(
+                        `AI did not correctly reconstruct the examination question numbering. Detected: ${actualNumbers.join(", ")}.`
+                    );
+                }
+            }
+
+            // ------------------------------------------------
+            // SELECTIVE VALIDATION
+            // ------------------------------------------------
+
+            const selectiveValidation =
+                validateSelectiveQuestions(
+                    questions
+                );
+
+            if (
+                !selectiveValidation.valid
+            ) {
+                throw new Error(
+                    `Invalid selective-question structure: ${selectiveValidation.problems.join(
+                        " | "
+                    )}`
+                );
+            }
+
+            // ------------------------------------------------
+            // MARK VALIDATION
+            // ------------------------------------------------
+
+            const questionsWithoutMarks =
+                questions.filter(
+                    (
+                        question
+                    ) =>
+                        normalizeMaxMarks(
+                            question.max_marks
+                        ) <= 0
+                );
+
+            if (
+                questionsWithoutMarks.length >
+                0
+            ) {
+                console.error(
+                    "QUESTIONS WITHOUT AI-DETERMINED MARKS:",
+                    questionsWithoutMarks.map(
+                        (
+                            question
+                        ) => ({
+                            question:
+                                question.question_number,
+
+                            marks:
+                                question.max_marks,
+
+                            source:
+                                question.mark_source,
+
+                            evidence:
+                                question.mark_evidence,
+                        })
+                    )
+                );
+
+                throw new Error(
+                    `AI could not reliably determine marks for: ${questionsWithoutMarks
+                        .map(
+                            (q) =>
+                                `Q${q.question_number}`
+                        )
+                        .join(
+                            ", "
+                        )}.`
+                );
+            }
+
+            // ------------------------------------------------
+            // SECTION VALIDATION
+            // ------------------------------------------------
+
+            const sectionValidation =
+                validateSectionMarks({
+                    questions,
+
+                    aiSections:
+                        aiResult.sections,
+
+                    pdfText,
+                });
+
+            console.log(
+                "SECTION VALIDATION:",
+                sectionValidation
+            );
+
+            if (
+                !sectionValidation.valid
+            ) {
+                throw new Error(
+                    `AI mark structure does not agree with the examination paper: ${sectionValidation.problems.join(
+                        " | "
+                    )}`
+                );
+            }
+
+            // ------------------------------------------------
+            // TOTAL MARKS
+            // ------------------------------------------------
+
+            const effectiveCalculatedMarks =
+                calculateEffectiveTotalMarks(
+                    questions
+                );
+
+            const rawQuestionMarks =
+                questions.reduce(
+                    (
+                        total,
+                        question
+                    ) =>
+                        total +
+                        normalizeMaxMarks(
+                            question.max_marks
+                        ),
+                    0
+                );
+
+            const totalMarks =
+                effectiveCalculatedMarks;
+
+            if (
+                totalMarks <= 0
+            ) {
+                throw new Error(
+                    "The examination paper does not provide enough evidence to determine a valid effective total mark."
+                );
+            }
+
+            console.log(
+                "RAW QUESTION MARKS:",
+                rawQuestionMarks
+            );
+
+            console.log(
+                "EFFECTIVE TOTAL MARKS:",
+                totalMarks
+            );
+
+            // ------------------------------------------------
+            // AI SUMMARY FIELDS
+            // ------------------------------------------------
+
+            const topicsFound =
+                Array.isArray(
+                    aiResult.topics_found
+                )
+                    ? aiResult.topics_found
+                    : [];
+
+            const weakTopics =
+                Array.isArray(
+                    aiResult.weak_topics
+                )
+                    ? aiResult.weak_topics
+                    : [];
+
+            const strongTopics =
+                Array.isArray(
+                    aiResult.strong_topics
+                )
+                    ? aiResult.strong_topics
+                    : [];
+
+            const recommendations =
+                Array.isArray(
+                    aiResult.recommendations
+                )
+                    ? aiResult.recommendations
+                    : [];
+
+            const bloomsDistribution =
+                aiResult.blooms_distribution &&
+                typeof aiResult.blooms_distribution ===
+                    "object"
+                    ? aiResult.blooms_distribution
+                    : {};
+
+            const qualityScore =
+                Math.max(
+                    0,
+                    Math.min(
+                        100,
+                        numberOrNull(
+                            aiResult.quality_score
+                        ) ?? 0
+                    )
+                );
+
+            const syllabusCoverage =
+                Math.max(
+                    0,
+                    Math.min(
+                        100,
+                        numberOrNull(
+                            aiResult.syllabus_coverage
+                        ) ?? 0
+                    )
+                );
+
+            const difficulty =
+                textOrNull(
+                    aiResult.difficulty
+                ) ||
+                "Unknown";
+
+            const summary =
+                textOrNull(
+                    aiResult.summary
+                ) ||
+                "AI analysis completed.";
+
+            const teacherComments =
+                textOrNull(
+                    aiResult.teacher_comments
+                );
+
+            // ------------------------------------------------
+            // BUILD AI ANALYSIS RECORD
+            // ------------------------------------------------
+
+            const analysisRecord = {
+                exam_id:
+                    examId,
+
+                exam_subject_id:
+                    examSubjectId,
+
+                exam_paper_id:
+                    examPaperId,
+
+                analysis_status:
+                    "Completed",
+
+                total_questions:
+                    questions.length,
+
+                total_marks:
+                    totalMarks,
+
+                topics_found:
+                    topicsFound,
+
+                syllabus_coverage:
+                    syllabusCoverage,
+
+                difficulty:
+                    difficulty,
+
+                quality_score:
+                    qualityScore,
+
+                recommendations:
+                    recommendations.join(
+                        "\n"
+                    ),
+
+                subject:
+                    subjectName,
+
+                level:
+                    level,
+
+                question_analysis:
+                    questions,
+
+                weak_topics:
+                    weakTopics,
+
+                strong_topics:
+                    strongTopics,
+
+                blooms_distribution:
+                    bloomsDistribution,
+
+                teacher_comments:
+                    teacherComments,
+
+                ai_summary:
+                    summary,
+
+                raw_response:
+                    typeof aiRawResponse ===
+                    "string"
+                        ? aiRawResponse
+                        : JSON.stringify(
+                            aiRawResponse
+                        ),
+            };
+
+            // ------------------------------------------------
+            // QUESTION ANALYSIS RECORDS
+            // ------------------------------------------------
+
+            const questionAnalysisRecords =
+                questions.map(
+                    (
+                        question
+                    ) =>
+                        sanitizeQuestionAnalysisRecord({
+                            exam_id:
+                                examId,
+
+                            question_number:
+                                question.question_number,
+
+                            topic:
+                                question.topic,
+
+                            subtopic:
+                                question.sub_topic,
+
+                            difficulty:
+                                question.difficulty_level,
+
+                            blooms_level:
+                                question.bloom_level,
+
+                            marks:
+                                question.max_marks,
+
+                            question_text:
+                                question.question_text,
+
+                            answer_expected:
+                                question.answer_expected,
+                        })
+                );
+
+            // ------------------------------------------------
+            // EXAM QUESTION RECORDS
+            // ------------------------------------------------
+
+            const examQuestionRecords =
+                questions.map(
+                    (
+                        question
+                    ) =>
+                        sanitizeExamQuestionRecord({
+                            exam_id:
+                                examId,
+
+                            subject_id:
+                                subjectId,
+
+                            exam_subject_id:
+                                examSubjectId,
+
+                            question_number:
+                                question.question_number,
+
+                            question_text:
+                                question.question_text,
+
+                            topic:
+                                question.topic,
+
+                            sub_topic:
+                                question.sub_topic,
+
+                            difficulty_level:
+                                question.difficulty_level,
+
+                            ai_confidence:
+                                question.ai_confidence,
+
+                            bloom_level:
+                                question.bloom_level,
+
+                            question_type:
+                                question.question_type,
+
+                            ai_explanation:
+                                question.ai_explanation,
+
+                            max_marks:
+                                question.max_marks,
+
+                            section:
+                                question.section,
+
+                            section_type:
+                                question.section_type,
+
+                            is_selective:
+                                question.is_selective,
+
+                            selection_required:
+                                question.selection_required,
+
+                            selection_count:
+                                question.selection_count,
+
+                            selection_total:
+                                question.selection_total,
+
+                            selection_group:
+                                question.selection_group,
+
+                            selection_instruction:
+                                question.selection_instruction,
+                        })
+                );
+
+            // ------------------------------------------------
+            // FINAL VALIDATION
+            // ------------------------------------------------
+
+            for (
+                const row of
+                    examQuestionRecords
+            ) {
+                if (
+                    !Number.isInteger(
+                        row.question_number
+                    ) ||
+                    row.question_number <=
+                        0
+                ) {
+                    throw new Error(
+                        "Invalid question number detected."
+                    );
+                }
+
+                if (
+                    !Number.isFinite(
+                        Number(
+                            row.max_marks
+                        )
+                    ) ||
+                    Number(
+                        row.max_marks
+                    ) <= 0
+                ) {
+                    throw new Error(
+                        `Invalid max_marks for Q${row.question_number}.`
+                    );
+                }
+
+                if (
+                    typeof row.is_selective !==
+                    "boolean"
+                ) {
+                    throw new Error(
+                        `Invalid is_selective for Q${row.question_number}.`
+                    );
+                }
+
+                if (
+                    typeof row.selection_required !==
+                    "boolean"
+                ) {
+                    throw new Error(
+                        `Invalid selection_required for Q${row.question_number}.`
+                    );
+                }
+
+                if (
+                    !Number.isInteger(
+                        row.selection_count
+                    )
+                ) {
+                    throw new Error(
+                        `Invalid selection_count for Q${row.question_number}.`
+                    );
+                }
+
+                if (
+                    !Number.isInteger(
+                        row.selection_total
+                    )
+                ) {
+                    throw new Error(
+                        `Invalid selection_total for Q${row.question_number}.`
+                    );
+                }
+
+                if (
+                    row.is_selective
+                ) {
+                    if (
+                        row.selection_count <=
+                            0
+                    ) {
+                        throw new Error(
+                            `Selective Q${row.question_number} has invalid selection_count.`
+                        );
+                    }
+
+                    if (
+                        row.selection_total <=
+                            0
+                    ) {
+                        throw new Error(
+                            `Selective Q${row.question_number} has invalid selection_total.`
+                        );
+                    }
+
+                    if (
+                        row.selection_count >
+                        row.selection_total
+                    ) {
+                        throw new Error(
+                            `Selective Q${row.question_number} has selection_count greater than selection_total.`
+                        );
+                    }
+                }
+            }
+
+            // ------------------------------------------------
+            // FINAL QUESTION MARKS
+            // ------------------------------------------------
+
+            const finalRawQuestionMarks =
+                examQuestionRecords.reduce(
+                    (
+                        total,
+                        row
+                    ) =>
+                        total +
+                        Number(
+                            row.max_marks
+                        ),
+                    0
+                );
+
+            if (
+                !Number.isFinite(
+                    finalRawQuestionMarks
+                ) ||
+                finalRawQuestionMarks <=
+                    0
+            ) {
+                throw new Error(
+                    "Final question marks are invalid."
+                );
+            }
+
+            // ------------------------------------------------
+            // LOG FINAL STRUCTURE
+            // ------------------------------------------------
+
+            console.log(
+                "=========================================="
+            );
+
+            console.log(
+                "FINAL AI EXAM STRUCTURE"
+            );
+
+            console.log(
+                "QUESTIONS:",
+                examQuestionRecords.length
+            );
+
+            console.log(
+                "RAW QUESTION MARKS:",
+                finalRawQuestionMarks
+            );
+
+            console.log(
+                "EFFECTIVE EXAM MARKS:",
+                totalMarks
+            );
+
+            for (
+                const question of
+                    examQuestionRecords
+            ) {
+                console.log(
+                    `Q${question.question_number}`,
+                    {
+                        section:
+                            question.section,
+
+                        marks:
+                            question.max_marks,
+
+                        selective:
+                            question.is_selective,
+
+                        selection_count:
+                            question.selection_count,
+
+                        selection_total:
+                            question.selection_total,
+
+                        selection_group:
+                            question.selection_group,
+
+                        selection_instruction:
+                            question.selection_instruction,
+                    }
+                );
+            }
+
+            console.log(
+                "=========================================="
+            );
+
+            // ------------------------------------------------
+            // DELETE OLD AI DATA
+            // ------------------------------------------------
+
+            console.log(
+                "REMOVING OLD AI DATA..."
+            );
+
+            const [
+                deleteQuestionAnalysis,
+                deleteQuestions,
+                deleteAnalysis,
+            ] =
+                await Promise.all([
+                    supabase
+                        .from(
+                            "exam_question_analysis"
+                        )
+                        .delete()
+                        .eq(
+                            "exam_id",
+                            examId
+                        ),
+
+                    supabase
+                        .from(
+                            "exam_questions"
+                        )
+                        .delete()
+                        .eq(
+                            "exam_id",
+                            examId
+                        )
+                        .eq(
+                            "exam_subject_id",
+                            examSubjectId
+                        ),
+
+                    supabase
+                        .from(
+                            "exam_ai_analysis"
+                        )
+                        .delete()
+                        .eq(
+                            "exam_id",
+                            examId
+                        )
+                        .eq(
+                            "exam_subject_id",
+                            examSubjectId
+                        ),
+                ]);
+
+            throwSupabaseError(
+                deleteQuestionAnalysis.error,
+                "Failed to delete old question analysis"
+            );
+
+            throwSupabaseError(
+                deleteQuestions.error,
+                "Failed to delete old exam questions"
+            );
+
+            throwSupabaseError(
+                deleteAnalysis.error,
+                "Failed to delete old AI analysis"
+            );
+
+            // ------------------------------------------------
+            // SAVE NEW AI DATA
+            // ------------------------------------------------
+
+            console.log(
+                "SAVING NEW AI ANALYSIS..."
+            );
+
+            const [
+                analysisInsert,
+                questionAnalysisInsert,
+                questionsInsert,
+            ] =
+                await Promise.all([
+                    supabase
+                        .from(
+                            "exam_ai_analysis"
+                        )
+                        .insert(
+                            analysisRecord
+                        )
+                        .select(
+                            "*"
+                        )
+                        .single(),
+
+                    questionAnalysisRecords.length >
+                        0
+                        ? supabase
+                            .from(
+                                "exam_question_analysis"
+                            )
+                            .insert(
+                                questionAnalysisRecords
+                            )
+                        : Promise.resolve({
+                            data: [],
+                            error:
+                                null,
+                        }),
+
+                    supabase
+                        .from(
+                            "exam_questions"
+                        )
+                        .insert(
+                            examQuestionRecords
+                        )
+                        .select(
+                            "*"
+                        ),
+                ]);
+
+            throwSupabaseError(
+                analysisInsert.error,
+                "Failed to save exam AI analysis"
+            );
+
+            throwSupabaseError(
+                questionAnalysisInsert.error,
+                "Failed to save question analysis"
+            );
+
+            throwSupabaseError(
+                questionsInsert.error,
+                "Failed to save exam questions"
+            );
+
+            const savedAnalysis =
+                analysisInsert.data;
+
+            // ------------------------------------------------
+            // VERIFY SAVED QUESTIONS
+            // ------------------------------------------------
+
+            const {
+                data:
+                    verifiedQuestions,
+                error:
+                    verifyError,
+            } =
+                await supabase
+                    .from(
+                        "exam_questions"
+                    )
+                    .select(
+                        "*"
+                    )
+                    .eq(
+                        "exam_id",
+                        examId
+                    )
+                    .eq(
+                        "exam_subject_id",
+                        examSubjectId
+                    )
+                    .order(
+                        "question_number",
+                        {
+                            ascending:
+                                true,
+                        }
+                    );
+
+            throwSupabaseError(
+                verifyError,
+                "Failed to verify saved exam questions"
+            );
+
+            if (
+                !verifiedQuestions ||
+                verifiedQuestions.length ===
+                    0
+            ) {
+                throw new Error(
+                    "AI analysis completed but no exam questions were saved."
+                );
+            }
+
+            for (
+                const question of
+                    verifiedQuestions
+            ) {
+                const marks =
+                    Number(
+                        question.max_marks
+                    );
+
+                if (
+                    !Number.isFinite(
+                        marks
+                    ) ||
+                    marks <= 0
+                ) {
+                    throw new Error(
+                        `Database returned invalid max_marks for Q${question.question_number}.`
+                    );
+                }
+            }
+
+            // ------------------------------------------------
+            // COMPLETE PAPER
+            // ------------------------------------------------
+
+            await updatePaperStatus(
+                examPaperId,
+                {
+                    status:
+                        "Completed",
+
+                    aiStatus:
+                        "Completed",
+
+                    errorMessage:
+                        null,
+                }
+            );
+
+            // ------------------------------------------------
+            // SUCCESS
+            // ------------------------------------------------
+
+            const processingTime =
+                Date.now() -
+                startedAt;
+
+            console.log(
+                "=========================================="
+            );
+
+            console.log(
+                "FULL-PAPER AI ANALYSIS COMPLETED"
+            );
+
+            console.log(
+                "EXAM:",
+                examId
+            );
+
+            console.log(
+                "EXAM SUBJECT:",
+                examSubjectId
+            );
+
+            console.log(
+                "PAPER:",
+                examPaperId
+            );
+
+            console.log(
+                "FILE HASH:",
+                fileHash
+            );
+
+            console.log(
+                "QUESTIONS:",
+                verifiedQuestions.length
+            );
+
+            console.log(
+                "RAW MARKS:",
+                finalRawQuestionMarks
+            );
+
+            console.log(
+                "EFFECTIVE TOTAL MARKS:",
+                totalMarks
+            );
+
+            console.log(
+                "REUSED:",
+                reusedPaper
+            );
+
+            console.log(
+                "PROCESSING TIME:",
+                `${processingTime}ms`
+            );
+
+            console.log(
+                "=========================================="
+            );
+
+            return res
+                .status(200)
+                .json({
+                    success:
+                        true,
+
+                    message:
+                        "Examination paper analyzed successfully using full-paper AI structure analysis.",
+
+                    exam_id:
+                        examId,
+
+                    exam_subject_id:
+                        examSubjectId,
+
+                    exam_paper_id:
+                        examPaperId,
+
+                    file_hash:
+                        fileHash,
+
+                    analysis_id:
+                        savedAnalysis?.id ||
+                        null,
+
+                    total_questions:
+                        verifiedQuestions.length,
+
+                    raw_question_marks:
+                        finalRawQuestionMarks,
+
+                    total_marks:
+                        totalMarks,
+
+                    questions:
+                        verifiedQuestions,
+
+                    analysis:
+                        savedAnalysis,
+
+                    reused:
+                        reusedPaper,
+                });
+        } catch (
+            error
+        ) {
+            console.error(
+                "=========================================="
+            );
+
+            console.error(
+                "FULL-PAPER AI ANALYSIS FAILED"
+            );
+
+            console.error(
+                error
+            );
+
+            console.error(
+                "ERROR DETAILS:",
+                errorDetails(
+                    error
+                )
+            );
+
+            console.error(
+                "=========================================="
+            );
+
+            if (
+                examPaperId
+            ) {
+                try {
+                    await updatePaperStatus(
+                        examPaperId,
+                        {
+                            status:
+                                "Failed",
+
+                            aiStatus:
+                                "Failed",
+
+                            errorMessage:
+                                error?.message ||
+                                "AI analysis failed.",
+                        }
+                    );
+                } catch (
+                    statusError
+                ) {
+                    console.error(
+                        "FAILED TO UPDATE PAPER STATUS:",
+                        statusError
+                    );
+                }
+
+                return res
+                    .status(200)
+                    .json({
+                        success:
+                            true,
+
+                        paper_saved:
+                            true,
+
+                        analysis_completed:
+                            false,
+
+                        ai_status:
+                            "Failed",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        exam_paper_id:
+                            examPaperId,
+
+                        message:
+                            "The examination paper was saved successfully, but AI analysis could not be completed. Please try the AI analysis again.",
+                    });
+            }
+
+            const status =
+                Number(
+                    error?.status
+                );
+
+            const httpStatus =
+                Number.isInteger(
+                    status
+                ) &&
+                status >= 400 &&
+                status <= 599
+                    ? status
+                    : 500;
+
+            return res
+                .status(
+                    httpStatus
+                )
+                .json({
+                    success:
+                        false,
+
+                    code:
+                        error?.code ||
+                        "AI_ANALYSIS_FAILED",
+
+                    message:
+                        error?.message ||
+                        "AI paper analysis failed.",
+
+                    error:
+                        errorDetails(
+                            error
+                        ),
+
+                    exam_id:
+                        examId,
+
+                    exam_subject_id:
+                        examSubjectId,
+
+                    exam_paper_id:
+                        examPaperId,
+                });
+        } finally {
+            if (
+                lockAcquired
+            ) {
+                unlockAnalysis(
+                    examId,
+                    examSubjectId
+                );
+            }
+        }
+    };
+
+// ============================================================
+// GET AI ANALYSIS BY EXAM ID
+// ============================================================
+
+export const getAIAnalysis =
+    async (
+        req,
+        res
+    ) => {
+        try {
+            const examId =
+                Number(
+                    req.params.examId
+                );
+
+            if (
+                !Number.isInteger(
+                    examId
+                ) ||
+                examId <= 0
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Invalid exam ID.",
+                    });
+            }
+
+            const {
+                data,
+                error,
+            } =
+                await supabase
+                    .from(
+                        "exam_ai_analysis"
+                    )
+                    .select(
+                        "*"
+                    )
+                    .eq(
+                        "exam_id",
+                        examId
+                    )
+                    .order(
+                        "id",
+                        {
+                            ascending:
+                                false,
+                        }
+                    )
+                    .limit(
+                        1
+                    )
+                    .maybeSingle();
+
+            throwSupabaseError(
+                error,
+                "Failed to load AI analysis"
+            );
+
+            if (!data) {
+                return res
+                    .status(404)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "No AI analysis found for this examination.",
+
+                        exam_id:
+                            examId,
+                    });
+            }
+
+            return res
+                .status(200)
+                .json({
+                    success:
+                        true,
+
+                    data,
+                });
+        } catch (
+            error
+        ) {
+            console.error(
+                "GET AI ANALYSIS ERROR:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+
+                    message:
+                        error?.message ||
+                        "Failed to load AI analysis.",
+                });
+        }
+    };
+
+// ============================================================
+// GET AI ANALYSIS BY EXAM + SUBJECT
+// ============================================================
+
+export const getAIAnalysisByExamSubject =
+    async (
+        req,
+        res
+    ) => {
+        try {
+            const examId =
+                Number(
+                    req.params.examId
+                );
+
+            const examSubjectId =
+                Number(
+                    req.params.examSubjectId
+                );
+
+            if (
+                !Number.isInteger(
+                    examId
+                ) ||
+                examId <= 0
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Invalid exam ID.",
+                    });
+            }
+
+            if (
+                !Number.isInteger(
+                    examSubjectId
+                ) ||
+                examSubjectId <= 0
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Invalid exam subject ID.",
+                    });
+            }
+
+            const examSubject =
+                await loadExamSubject(
+                    examSubjectId
+                );
+
+            if (
+                Number(
+                    examSubject.exam_id
+                ) !==
+                Number(
+                    examId
+                )
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "Exam subject does not belong to this examination.",
+                    });
+            }
+
+            const [
+                analysisResult,
+                questionsResult,
+                paperResult,
+            ] =
+                await Promise.all([
+                    supabase
+                        .from(
+                            "exam_ai_analysis"
+                        )
+                        .select(
+                            "*"
+                        )
+                        .eq(
+                            "exam_id",
+                            examId
+                        )
+                        .eq(
+                            "exam_subject_id",
+                            examSubjectId
+                        )
+                        .order(
+                            "id",
+                            {
+                                ascending:
+                                    false,
+                            }
+                        )
+                        .limit(
+                            1
+                        )
+                        .maybeSingle(),
+
+                    supabase
+                        .from(
+                            "exam_questions"
+                        )
+                        .select(
+                            "*"
+                        )
+                        .eq(
+                            "exam_id",
+                            examId
+                        )
+                        .eq(
+                            "exam_subject_id",
+                            examSubjectId
+                        )
+                        .order(
+                            "question_number",
+                            {
+                                ascending:
+                                    true,
+                            }
+                        ),
+
+                    supabase
+                        .from(
+                            "exam_papers"
+                        )
+                        .select(
+                            "*"
+                        )
+                        .eq(
+                            "exam_id",
+                            examId
+                        )
+                        .eq(
+                            "exam_subject_id",
+                            examSubjectId
+                        )
+                        .order(
+                            "id",
+                            {
+                                ascending:
+                                    false,
+                            }
+                        )
+                        .limit(
+                            1
+                        )
+                        .maybeSingle(),
+                ]);
+
+            throwSupabaseError(
+                analysisResult.error,
+                "Failed to load exam AI analysis"
+            );
+
+            throwSupabaseError(
+                questionsResult.error,
+                "Failed to load exam questions"
+            );
+
+            throwSupabaseError(
+                paperResult.error,
+                "Failed to load exam paper"
+            );
+
+            const analysis =
+                analysisResult.data ||
+                null;
+
+            const questions =
+                questionsResult.data ||
+                [];
+
+            const paper =
+                paperResult.data ||
+                null;
+
+            if (!analysis) {
+                return res
+                    .status(404)
+                    .json({
+                        success:
+                            false,
+
+                        message:
+                            "No AI analysis found for this examination subject.",
+
+                        exam_id:
+                            examId,
+
+                        exam_subject_id:
+                            examSubjectId,
+
+                        questions,
+
+                        paper,
+                    });
+            }
+
+            return res
+                .status(200)
+                .json({
+                    success:
+                        true,
+
+                    exam_id:
+                        examId,
+
+                    exam_subject_id:
+                        examSubjectId,
+
+                    analysis,
+
+                    questions,
+
+                    paper,
+
+                    total_questions:
+                        questions.length,
+
+                    total_marks:
+                        Number(
+                            analysis.total_marks
+                        ) ||
+                        calculateEffectiveTotalMarks(
+                            questions
+                        ),
+                });
+        } catch (
+            error
+        ) {
+            console.error(
+                "GET AI ANALYSIS BY SUBJECT ERROR:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+
+                    message:
+                        error?.message ||
+                        "Failed to load AI analysis.",
+                });
+        }
+    };
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
+export const aiHealthCheck =
+    async (
+        req,
+        res
+    ) => {
+        return res
+            .status(200)
+            .json({
+                success:
+                    true,
+
+                service:
+                    "AI Examination Analysis",
+
+                status:
+                    "OK",
+
+                timestamp:
+                    new Date().toISOString(),
+            });
+    };
