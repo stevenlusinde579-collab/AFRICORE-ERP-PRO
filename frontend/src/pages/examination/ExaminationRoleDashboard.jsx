@@ -55,18 +55,42 @@ function isApprovedStatus(status) {
 }
 
 /**
- * Accept actual boolean values and common explicit truthy database values.
- * In particular, Boolean("false") must not count as an approval.
+ * Approval fields may contain:
+ * - boolean true/false
+ * - numeric values
+ * - string boolean values
+ * - approver IDs or UUIDs
+ *
+ * A non-empty approver ID/UUID means the approval was recorded.
  */
 function isApprovalComplete(value) {
-    if (value === true || value === 1) {
-        return true;
+    if (value === null || value === undefined) {
+        return false;
+    }
+
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    if (typeof value === "number") {
+        return value > 0;
     }
 
     if (typeof value === "string") {
-        return ["true", "1", "yes"].includes(
-            value.trim().toLowerCase()
-        );
+        const normalized = value.trim().toLowerCase();
+
+        if (
+            normalized === "" ||
+            normalized === "false" ||
+            normalized === "null" ||
+            normalized === "undefined" ||
+            normalized === "0" ||
+            normalized === "no"
+        ) {
+            return false;
+        }
+
+        return true;
     }
 
     return false;
@@ -131,113 +155,138 @@ function ExaminationRoleDashboard() {
         return null;
     }, [selectedRole, activeRole, role, roles]);
 
-    const loadApprovalQueue = useCallback(async (currentProfile, currentRole) => {
-        if (!currentProfile?.school_id) {
-            setQueue([]);
-            return;
-        }
-
-        const { data: exams, error: examsError } = await supabase
-            .from("exams")
-            .select(`
-                id,
-                exam_name,
-                exam_type,
-                term,
-                start_date,
-                end_date,
-                status
-            `)
-            .eq("school_id", currentProfile.school_id)
-            .order("created_at", { ascending: false });
-
-        if (examsError) throw examsError;
-
-        const examRows = exams || [];
-        const examIds = examRows.map((row) => row.id).filter(Boolean);
-
-        if (!examIds.length) {
-            setQueue([]);
-            return;
-        }
-
-        const { data: examSubjects, error: subjectError } = await supabase
-            .from("exam_subjects")
-            .select(`
-                id,
-                exam_id,
-                subject_id,
-                class_id,
-                approved_by_academic,
-                approved_by_deputy,
-                approved_by_headmaster
-            `)
-            .in("exam_id", examIds);
-
-        if (subjectError) throw subjectError;
-
-        const pending = (examSubjects || []).filter((row) => {
-            const academic = isApprovalComplete(row.approved_by_academic);
-            const deputy = isApprovalComplete(row.approved_by_deputy);
-            const headmaster = isApprovalComplete(row.approved_by_headmaster);
-
-            if (currentRole === 3) {
-                return academic && !deputy && !headmaster;
+    const loadApprovalQueue = useCallback(
+        async (currentProfile, currentRole) => {
+            if (!currentProfile?.school_id) {
+                setQueue([]);
+                return;
             }
 
-            return academic && deputy && !headmaster;
-        });
+            const { data: exams, error: examsError } = await supabase
+                .from("exams")
+                .select(`
+                    id,
+                    exam_name,
+                    exam_type,
+                    term,
+                    start_date,
+                    end_date,
+                    status
+                `)
+                .eq("school_id", currentProfile.school_id)
+                .order("created_at", { ascending: false });
 
-        if (!pending.length) {
-            setQueue([]);
-            return;
-        }
+            if (examsError) throw examsError;
 
-        const subjectIds = [
-            ...new Set(pending.map((row) => row.subject_id).filter(Boolean)),
-        ];
-        const classIds = [
-            ...new Set(pending.map((row) => row.class_id).filter(Boolean)),
-        ];
+            const examRows = exams || [];
+            const examIds = examRows.map((row) => row.id).filter(Boolean);
 
-        const [subjectResult, classResult] = await Promise.all([
-            subjectIds.length
-                ? supabase
-                    .from("subjects")
-                    .select("id, subject_name, subject_code")
-                    .in("id", subjectIds)
-                : Promise.resolve({ data: [], error: null }),
+            if (!examIds.length) {
+                setQueue([]);
+                return;
+            }
 
-            classIds.length
-                ? supabase
-                    .from("classes")
-                    .select("id, class_name, short_name")
-                    .in("id", classIds)
-                : Promise.resolve({ data: [], error: null }),
-        ]);
+            const { data: examSubjects, error: subjectError } =
+                await supabase
+                    .from("exam_subjects")
+                    .select(`
+                        id,
+                        exam_id,
+                        subject_id,
+                        class_id,
+                        approved_by_academic,
+                        approved_by_deputy,
+                        approved_by_headmaster
+                    `)
+                    .in("exam_id", examIds);
 
-        if (subjectResult.error) throw subjectResult.error;
-        if (classResult.error) throw classResult.error;
+            if (subjectError) throw subjectError;
 
-        const examMap = new Map(
-            examRows.map((row) => [String(row.id), row])
-        );
-        const subjectMap = new Map(
-            (subjectResult.data || []).map((row) => [String(row.id), row])
-        );
-        const classMap = new Map(
-            (classResult.data || []).map((row) => [String(row.id), row])
-        );
+            const pending = (examSubjects || []).filter((row) => {
+                const academic = isApprovalComplete(
+                    row.approved_by_academic
+                );
+                const deputy = isApprovalComplete(
+                    row.approved_by_deputy
+                );
+                const headmaster = isApprovalComplete(
+                    row.approved_by_headmaster
+                );
 
-        setQueue(
-            pending.map((row) => ({
-                ...row,
-                exam: examMap.get(String(row.exam_id)) || null,
-                subject: subjectMap.get(String(row.subject_id)) || null,
-                classRow: classMap.get(String(row.class_id)) || null,
-            }))
-        );
-    }, []);
+                if (currentRole === 3) {
+                    return academic && !deputy && !headmaster;
+                }
+
+                return academic && deputy && !headmaster;
+            });
+
+            if (!pending.length) {
+                setQueue([]);
+                return;
+            }
+
+            const subjectIds = [
+                ...new Set(
+                    pending.map((row) => row.subject_id).filter(Boolean)
+                ),
+            ];
+
+            const classIds = [
+                ...new Set(
+                    pending.map((row) => row.class_id).filter(Boolean)
+                ),
+            ];
+
+            const [subjectResult, classResult] = await Promise.all([
+                subjectIds.length
+                    ? supabase
+                        .from("subjects")
+                        .select("id, subject_name, subject_code")
+                        .in("id", subjectIds)
+                    : Promise.resolve({ data: [], error: null }),
+
+                classIds.length
+                    ? supabase
+                        .from("classes")
+                        .select("id, class_name, short_name")
+                        .in("id", classIds)
+                    : Promise.resolve({ data: [], error: null }),
+            ]);
+
+            if (subjectResult.error) throw subjectResult.error;
+            if (classResult.error) throw classResult.error;
+
+            const examMap = new Map(
+                examRows.map((row) => [String(row.id), row])
+            );
+
+            const subjectMap = new Map(
+                (subjectResult.data || []).map((row) => [
+                    String(row.id),
+                    row,
+                ])
+            );
+
+            const classMap = new Map(
+                (classResult.data || []).map((row) => [
+                    String(row.id),
+                    row,
+                ])
+            );
+
+            setQueue(
+                pending.map((row) => ({
+                    ...row,
+                    exam: examMap.get(String(row.exam_id)) || null,
+                    subject:
+                        subjectMap.get(String(row.subject_id)) || null,
+                    classRow:
+                        classMap.get(String(row.class_id)) || null,
+                }))
+            );
+        },
+        []
+    );
 
     const loadRole = useCallback(async () => {
         try {
@@ -282,7 +331,9 @@ function ExaminationRoleDashboard() {
             }
         } catch (err) {
             console.error("EXAMINATION ROLE DASHBOARD ERROR:", err);
-            setError(err?.message || "Failed to load examination access.");
+            setError(
+                err?.message || "Failed to load examination access."
+            );
         } finally {
             setLoading(false);
         }
@@ -347,6 +398,7 @@ function RoleSpecificDashboard({ roleId, profile, queue }) {
     const roleName = ROLE_LABELS[roleId] || "User";
 
     const title = "Examination Approval Console";
+
     const description =
         roleId === 2
             ? "Review examinations that have completed Academic and Deputy approval and are waiting for final approval."
@@ -371,6 +423,7 @@ function RoleSpecificDashboard({ roleId, profile, queue }) {
                                 Signed in as {profile?.full_name || roleName} • {roleName}
                             </p>
                         </div>
+
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
                             <FaClipboardCheck className="text-2xl" />
                         </div>
@@ -450,6 +503,7 @@ function RoleSpecificDashboard({ roleId, profile, queue }) {
                                         <p className="font-bold text-slate-900">
                                             {row.exam?.exam_name || "Examination"}
                                         </p>
+
                                         <p className="mt-1 text-sm text-slate-700">
                                             {row.subject?.subject_name ||
                                                 row.subject?.subject_code ||
@@ -459,10 +513,12 @@ function RoleSpecificDashboard({ roleId, profile, queue }) {
                                                 row.classRow?.short_name ||
                                                 `Class ${row.class_id}`}
                                         </p>
+
                                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
                                             <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
                                                 Academic Approved
                                             </span>
+
                                             {roleId === 2 && (
                                                 <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
                                                     Deputy Approved
@@ -470,12 +526,18 @@ function RoleSpecificDashboard({ roleId, profile, queue }) {
                                             )}
                                         </div>
                                     </div>
+
                                     <button
                                         type="button"
                                         onClick={() =>
-                                            navigate(`/examination/${row.exam_id}/approval`, {
-                                                state: { examSubjectId: row.id },
-                                            })
+                                            navigate(
+                                                `/examination/${row.exam_id}/approval`,
+                                                {
+                                                    state: {
+                                                        examSubjectId: row.id,
+                                                    },
+                                                }
+                                            )
                                         }
                                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"
                                     >
@@ -499,116 +561,135 @@ function SubjectTeacherDashboard({ profile }) {
     const [error, setError] = useState("");
     const [workItems, setWorkItems] = useState([]);
 
-    const loadTeacherWork = useCallback(async (isRefresh = false) => {
-        try {
-            if (isRefresh) {
-                setRefreshing(true);
-            } else {
-                setLoading(true);
-            }
+    const loadTeacherWork = useCallback(
+        async (isRefresh = false) => {
+            try {
+                if (isRefresh) {
+                    setRefreshing(true);
+                } else {
+                    setLoading(true);
+                }
 
-            setError("");
+                setError("");
 
-            if (!profile?.school_id || !profile?.teacher_id) {
-                throw new Error(
-                    "Your profile is not linked to a school and teacher record."
+                if (!profile?.school_id || !profile?.teacher_id) {
+                    throw new Error(
+                        "Your profile is not linked to a school and teacher record."
+                    );
+                }
+
+                const {
+                    data: assignments,
+                    error: assignmentError,
+                } = await supabase
+                    .from("teacher_assignments")
+                    .select("id, subject_id, class_id")
+                    .eq("school_id", profile.school_id)
+                    .eq("teacher_id", profile.teacher_id);
+
+                if (assignmentError) throw assignmentError;
+
+                const assignmentRows = assignments || [];
+
+                if (!assignmentRows.length) {
+                    setWorkItems([]);
+                    return;
+                }
+
+                const pairs = new Set();
+
+                assignmentRows.forEach((assignment) => {
+                    const key = makePairKey(
+                        assignment.subject_id,
+                        assignment.class_id
+                    );
+
+                    if (key) pairs.add(key);
+                });
+
+                if (!pairs.size) {
+                    setWorkItems([]);
+                    return;
+                }
+
+                const subjectIds = [
+                    ...new Set(
+                        assignmentRows
+                            .map((row) => row.subject_id)
+                            .filter(
+                                (id) => id !== null && id !== undefined
+                            )
+                    ),
+                ];
+
+                const classIds = [
+                    ...new Set(
+                        assignmentRows
+                            .map((row) => row.class_id)
+                            .filter(
+                                (id) => id !== null && id !== undefined
+                            )
+                    ),
+                ];
+
+                const {
+                    data: examSubjects,
+                    error: examSubjectError,
+                } = await supabase
+                    .from("exam_subjects")
+                    .select(`
+                        id,
+                        exam_id,
+                        subject_id,
+                        class_id,
+                        full_marks,
+                        pass_marks,
+                        question_selection_type,
+                        questions_to_answer,
+                        approved_by_academic,
+                        approved_by_deputy,
+                        approved_by_headmaster
+                    `)
+                    .in("subject_id", subjectIds)
+                    .in("class_id", classIds);
+
+                if (examSubjectError) throw examSubjectError;
+
+                const matching = (examSubjects || []).filter((row) =>
+                    pairs.has(makePairKey(row.subject_id, row.class_id))
                 );
-            }
 
-            const { data: assignments, error: assignmentError } = await supabase
-                .from("teacher_assignments")
-                .select("id, subject_id, class_id")
-                .eq("school_id", profile.school_id)
-                .eq("teacher_id", profile.teacher_id);
+                if (!matching.length) {
+                    setWorkItems([]);
+                    return;
+                }
 
-            if (assignmentError) throw assignmentError;
+                const examIds = [
+                    ...new Set(
+                        matching
+                            .map((row) => row.exam_id)
+                            .filter(
+                                (id) => id !== null && id !== undefined
+                            )
+                    ),
+                ];
 
-            const assignmentRows = assignments || [];
+                const examSubjectIds = [
+                    ...new Set(
+                        matching
+                            .map((row) => row.id)
+                            .filter(
+                                (id) => id !== null && id !== undefined
+                            )
+                    ),
+                ];
 
-            if (!assignmentRows.length) {
-                setWorkItems([]);
-                return;
-            }
-
-            const pairs = new Set();
-
-            assignmentRows.forEach((assignment) => {
-                const key = makePairKey(
-                    assignment.subject_id,
-                    assignment.class_id
-                );
-
-                if (key) pairs.add(key);
-            });
-
-            if (!pairs.size) {
-                setWorkItems([]);
-                return;
-            }
-
-            const subjectIds = [
-                ...new Set(
-                    assignmentRows
-                        .map((row) => row.subject_id)
-                        .filter((id) => id !== null && id !== undefined)
-                ),
-            ];
-
-            const classIds = [
-                ...new Set(
-                    assignmentRows
-                        .map((row) => row.class_id)
-                        .filter((id) => id !== null && id !== undefined)
-                ),
-            ];
-
-            const { data: examSubjects, error: examSubjectError } = await supabase
-                .from("exam_subjects")
-                .select(`
-                    id,
-                    exam_id,
-                    subject_id,
-                    class_id,
-                    full_marks,
-                    pass_marks,
-                    question_selection_type,
-                    questions_to_answer,
-                    approved_by_academic,
-                    approved_by_deputy,
-                    approved_by_headmaster
-                `)
-                .in("subject_id", subjectIds)
-                .in("class_id", classIds);
-
-            if (examSubjectError) throw examSubjectError;
-
-            const matching = (examSubjects || []).filter((row) =>
-                pairs.has(makePairKey(row.subject_id, row.class_id))
-            );
-
-            if (!matching.length) {
-                setWorkItems([]);
-                return;
-            }
-
-            const examIds = [
-                ...new Set(
-                    matching
-                        .map((row) => row.exam_id)
-                        .filter((id) => id !== null && id !== undefined)
-                ),
-            ];
-
-            const examSubjectIds = [
-                ...new Set(
-                    matching
-                        .map((row) => row.id)
-                        .filter((id) => id !== null && id !== undefined)
-                ),
-            ];
-
-            const [examResult, subjectResult, classResult, paperResult] =
-                await Promise.all([
+                const [
+                    examResult,
+                    subjectResult,
+                    classResult,
+                    paperResult,
+                ] = await Promise.all([
                     examIds.length
                         ? supabase
                             .from("exams")
@@ -622,21 +703,30 @@ function SubjectTeacherDashboard({ profile }) {
                                 status
                             `)
                             .in("id", examIds)
-                        : Promise.resolve({ data: [], error: null }),
+                        : Promise.resolve({
+                            data: [],
+                            error: null,
+                        }),
 
                     subjectIds.length
                         ? supabase
                             .from("subjects")
                             .select("id, subject_name, subject_code")
                             .in("id", subjectIds)
-                        : Promise.resolve({ data: [], error: null }),
+                        : Promise.resolve({
+                            data: [],
+                            error: null,
+                        }),
 
                     classIds.length
                         ? supabase
                             .from("classes")
                             .select("id, class_name, short_name")
                             .in("id", classIds)
-                        : Promise.resolve({ data: [], error: null }),
+                        : Promise.resolve({
+                            data: [],
+                            error: null,
+                        }),
 
                     examSubjectIds.length
                         ? supabase
@@ -651,61 +741,84 @@ function SubjectTeacherDashboard({ profile }) {
                             `)
                             .in("exam_subject_id", examSubjectIds)
                             .order("created_at", { ascending: false })
-                        : Promise.resolve({ data: [], error: null }),
+                        : Promise.resolve({
+                            data: [],
+                            error: null,
+                        }),
                 ]);
 
-            if (examResult.error) throw examResult.error;
-            if (subjectResult.error) throw subjectResult.error;
-            if (classResult.error) throw classResult.error;
-            if (paperResult.error) throw paperResult.error;
+                if (examResult.error) throw examResult.error;
+                if (subjectResult.error) throw subjectResult.error;
+                if (classResult.error) throw classResult.error;
+                if (paperResult.error) throw paperResult.error;
 
-            const examMap = new Map(
-                (examResult.data || []).map((row) => [String(row.id), row])
-            );
-            const subjectMap = new Map(
-                (subjectResult.data || []).map((row) => [String(row.id), row])
-            );
-            const classMap = new Map(
-                (classResult.data || []).map((row) => [String(row.id), row])
-            );
+                const examMap = new Map(
+                    (examResult.data || []).map((row) => [
+                        String(row.id),
+                        row,
+                    ])
+                );
 
-            const paperMap = new Map();
+                const subjectMap = new Map(
+                    (subjectResult.data || []).map((row) => [
+                        String(row.id),
+                        row,
+                    ])
+                );
 
-            (paperResult.data || []).forEach((paper) => {
-                const key = String(paper.exam_subject_id);
+                const classMap = new Map(
+                    (classResult.data || []).map((row) => [
+                        String(row.id),
+                        row,
+                    ])
+                );
 
-                if (!paperMap.has(key)) {
-                    paperMap.set(key, paper);
-                }
-            });
+                const paperMap = new Map();
 
-            const normalized = matching.map((row) => ({
-                ...row,
-                exam: examMap.get(String(row.exam_id)) || null,
-                subject: subjectMap.get(String(row.subject_id)) || null,
-                classRow: classMap.get(String(row.class_id)) || null,
-                paper: paperMap.get(String(row.id)) || null,
-            }));
+                (paperResult.data || []).forEach((paper) => {
+                    const key = String(paper.exam_subject_id);
 
-            const unique = Array.from(
-                new Map(
-                    normalized
-                        .filter((row) => Boolean(row.exam))
-                        .map((row) => [String(row.id), row])
-                ).values()
-            );
+                    if (!paperMap.has(key)) {
+                        paperMap.set(key, paper);
+                    }
+                });
 
-            setWorkItems(unique);
-        } catch (err) {
-            console.error("SUBJECT TEACHER WORKLOAD ERROR:", err);
-            setError(
-                err?.message || "Failed to load your examination work."
-            );
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, [profile]);
+                const normalized = matching.map((row) => ({
+                    ...row,
+                    exam: examMap.get(String(row.exam_id)) || null,
+                    subject:
+                        subjectMap.get(String(row.subject_id)) || null,
+                    classRow:
+                        classMap.get(String(row.class_id)) || null,
+                    paper: paperMap.get(String(row.id)) || null,
+                }));
+
+                const unique = Array.from(
+                    new Map(
+                        normalized
+                            .filter((row) => Boolean(row.exam))
+                            .map((row) => [String(row.id), row])
+                    ).values()
+                );
+
+                setWorkItems(unique);
+            } catch (err) {
+                console.error(
+                    "SUBJECT TEACHER WORKLOAD ERROR:",
+                    err
+                );
+
+                setError(
+                    err?.message ||
+                    "Failed to load your examination work."
+                );
+            } finally {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        },
+        [profile]
+    );
 
     useEffect(() => {
         loadTeacherWork();
@@ -717,32 +830,56 @@ function SubjectTeacherDashboard({ profile }) {
         return () => clearInterval(timer);
     }, [loadTeacherWork]);
 
-    const counts = useMemo(() => ({
-        total: workItems.length,
-        awaitingUpload: workItems.filter((row) => !row.paper?.file_name).length,
-        uploaded: workItems.filter((row) => Boolean(row.paper?.file_name)).length,
-        approved: workItems.filter((row) =>
-            isApprovalComplete(row.approved_by_academic) &&
-            isApprovalComplete(row.approved_by_deputy) &&
-            isApprovalComplete(row.approved_by_headmaster)
-        ).length,
-    }), [workItems]);
+    const counts = useMemo(
+        () => ({
+            total: workItems.length,
+
+            awaitingUpload: workItems.filter(
+                (row) => !row.paper?.file_name
+            ).length,
+
+            uploaded: workItems.filter(
+                (row) => Boolean(row.paper?.file_name)
+            ).length,
+
+            approved: workItems.filter(
+                (row) =>
+                    isApprovalComplete(row.approved_by_academic) &&
+                    isApprovalComplete(row.approved_by_deputy) &&
+                    isApprovalComplete(row.approved_by_headmaster)
+            ).length,
+        }),
+        [workItems]
+    );
 
     const approvalSummary = useMemo(() => {
         return workItems.map((row) => ({
             id: row.id,
+
             examName: row.exam?.exam_name || "Examination",
+
             subjectName:
                 row.subject?.subject_name ||
                 row.subject?.subject_code ||
                 `Subject ${row.subject_id}`,
+
             className:
                 row.classRow?.class_name ||
                 row.classRow?.short_name ||
                 `Class ${row.class_id}`,
-            academic: isApprovalComplete(row.approved_by_academic),
-            deputy: isApprovalComplete(row.approved_by_deputy),
-            headmaster: isApprovalComplete(row.approved_by_headmaster),
+
+            academic: isApprovalComplete(
+                row.approved_by_academic
+            ),
+
+            deputy: isApprovalComplete(
+                row.approved_by_deputy
+            ),
+
+            headmaster: isApprovalComplete(
+                row.approved_by_headmaster
+            ),
+
             examStatus: row.exam?.status || "Unknown",
             examApproved: isApprovedStatus(row.exam?.status),
         }));
@@ -768,12 +905,15 @@ function SubjectTeacherDashboard({ profile }) {
                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
                                 Subject Teacher
                             </p>
+
                             <h1 className="mt-1 text-3xl font-extrabold text-slate-900">
                                 My Examination Work
                             </h1>
+
                             <p className="mt-1 text-sm text-slate-500">
                                 Your assigned subjects, approval progress, paper analysis and marks entry.
                             </p>
+
                             <p className="mt-3 text-xs font-semibold text-slate-400">
                                 {profile?.full_name || "Subject Teacher"}
                             </p>
@@ -785,7 +925,9 @@ function SubjectTeacherDashboard({ profile }) {
                             disabled={refreshing}
                             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                         >
-                            <FaSyncAlt className={refreshing ? "animate-spin" : ""} />
+                            <FaSyncAlt
+                                className={refreshing ? "animate-spin" : ""}
+                            />
                             Refresh
                         </button>
                     </div>
@@ -794,6 +936,7 @@ function SubjectTeacherDashboard({ profile }) {
                 {error && (
                     <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                         {error}
+
                         <button
                             type="button"
                             onClick={() => loadTeacherWork()}
@@ -810,10 +953,12 @@ function SubjectTeacherDashboard({ profile }) {
                             <h2 className="text-lg font-extrabold text-slate-900">
                                 Examination Approval Flow
                             </h2>
+
                             <p className="mt-1 text-sm text-slate-500">
                                 Approval status refreshes automatically every 30 seconds.
                             </p>
                         </div>
+
                         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
                             Academic Master → Deputy Headmaster → Headmaster
                         </span>
@@ -827,9 +972,18 @@ function SubjectTeacherDashboard({ profile }) {
                         <div className="mt-4 space-y-3">
                             {approvalSummary.map((item) => {
                                 const steps = [
-                                    { label: "Academic Master", approved: item.academic },
-                                    { label: "Deputy Headmaster", approved: item.deputy },
-                                    { label: "Headmaster", approved: item.headmaster },
+                                    {
+                                        label: "Academic Master",
+                                        approved: item.academic,
+                                    },
+                                    {
+                                        label: "Deputy Headmaster",
+                                        approved: item.deputy,
+                                    },
+                                    {
+                                        label: "Headmaster",
+                                        approved: item.headmaster,
+                                    },
                                 ];
 
                                 return (
@@ -841,6 +995,7 @@ function SubjectTeacherDashboard({ profile }) {
                                             <p className="font-bold text-slate-900">
                                                 {item.examName}
                                             </p>
+
                                             <p className="mt-1 text-sm text-slate-600">
                                                 {item.subjectName} • {item.className}
                                             </p>
@@ -861,21 +1016,27 @@ function SubjectTeacherDashboard({ profile }) {
                                                     ) : (
                                                         <FaLock className="shrink-0" />
                                                     )}
+
                                                     <span className="font-semibold">
                                                         {step.label}
                                                     </span>
+
                                                     <span className="ml-auto text-xs font-bold">
-                                                        {step.approved ? "Approved" : "Pending"}
+                                                        {step.approved
+                                                            ? "Approved"
+                                                            : "Pending"}
                                                     </span>
                                                 </div>
                                             ))}
                                         </div>
 
-                                        <p className={`mt-3 text-xs font-semibold ${
-                                            item.examApproved
-                                                ? "text-emerald-700"
-                                                : "text-slate-500"
-                                        }`}>
+                                        <p
+                                            className={`mt-3 text-xs font-semibold ${
+                                                item.examApproved
+                                                    ? "text-emerald-700"
+                                                    : "text-slate-500"
+                                            }`}
+                                        >
                                             Examination status: {item.examStatus}
                                         </p>
                                     </div>
@@ -886,13 +1047,24 @@ function SubjectTeacherDashboard({ profile }) {
                 </section>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Metric label="Assigned" value={counts.total} icon={<FaTasks />} />
+                    <Metric
+                        label="Assigned"
+                        value={counts.total}
+                        icon={<FaTasks />}
+                    />
+
                     <Metric
                         label="Awaiting Upload"
                         value={counts.awaitingUpload}
                         icon={<FaCloudUploadAlt />}
                     />
-                    <Metric label="Uploaded" value={counts.uploaded} icon={<FaFilePdf />} />
+
+                    <Metric
+                        label="Uploaded"
+                        value={counts.uploaded}
+                        icon={<FaFilePdf />}
+                    />
+
                     <Metric
                         label="Fully Approved"
                         value={counts.approved}
@@ -905,6 +1077,7 @@ function SubjectTeacherDashboard({ profile }) {
                         <h2 className="text-lg font-bold text-slate-900">
                             My Examination Assignments
                         </h2>
+
                         <p className="mt-1 text-sm text-slate-500">
                             Only examination subjects matching your assigned subject and class are displayed.
                         </p>
@@ -913,9 +1086,11 @@ function SubjectTeacherDashboard({ profile }) {
                     {workItems.length === 0 ? (
                         <div className="px-6 py-14 text-center">
                             <FaLock className="mx-auto text-4xl text-slate-300" />
+
                             <h3 className="mt-4 text-lg font-bold text-slate-800">
                                 No examination work assigned
                             </h3>
+
                             <p className="mt-1 text-sm text-slate-500">
                                 No examination currently contains your assigned subject and class combination.
                             </p>
@@ -926,9 +1101,11 @@ function SubjectTeacherDashboard({ profile }) {
                                 const academicApproved = isApprovalComplete(
                                     row.approved_by_academic
                                 );
+
                                 const deputyApproved = isApprovalComplete(
                                     row.approved_by_deputy
                                 );
+
                                 const headmasterApproved = isApprovalComplete(
                                     row.approved_by_headmaster
                                 );
@@ -938,8 +1115,8 @@ function SubjectTeacherDashboard({ profile }) {
                                     deputyApproved &&
                                     headmasterApproved;
 
-                                // Enter Marks depends on the three subject approvals only.
-                                // The overall exam status (e.g. DRAFT) is not an extra UI lock.
+                                // The dashboard uses subject-level approvals.
+                                // The exam's overall status is not an extra UI lock.
                                 const canEnterMarks = approvalsComplete;
 
                                 const approvalSteps = [
@@ -969,7 +1146,11 @@ function SubjectTeacherDashboard({ profile }) {
                                                     {row.subject?.subject_name ||
                                                         row.subject?.subject_code ||
                                                         `Subject ${row.subject_id}`}
-                                                    <span className="mx-2 text-slate-300">•</span>
+
+                                                    <span className="mx-2 text-slate-300">
+                                                        •
+                                                    </span>
+
                                                     {row.classRow?.class_name ||
                                                         row.classRow?.short_name ||
                                                         `Class ${row.class_id}`}
@@ -1019,11 +1200,15 @@ function SubjectTeacherDashboard({ profile }) {
                                                                 ) : (
                                                                     <FaLock className="shrink-0" />
                                                                 )}
+
                                                                 <span className="font-semibold">
                                                                     {step.label}
                                                                 </span>
+
                                                                 <span className="ml-auto text-xs font-bold">
-                                                                    {step.approved ? "Approved" : "Pending"}
+                                                                    {step.approved
+                                                                        ? "Approved"
+                                                                        : "Pending"}
                                                                 </span>
                                                             </div>
                                                         ))}
@@ -1040,26 +1225,44 @@ function SubjectTeacherDashboard({ profile }) {
                                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:w-64 xl:shrink-0">
                                                 <ActionButton
                                                     icon={<FaCloudUploadAlt />}
-                                                    label={row.paper?.file_name ? "Manage Paper" : "Upload Paper"}
+                                                    label={
+                                                        row.paper?.file_name
+                                                            ? "Manage Paper"
+                                                            : "Upload Paper"
+                                                    }
                                                     onClick={() =>
                                                         navigate(
-                                                            `/examination/${row.exam_id}/subject-upload?examSubjectId=${encodeURIComponent(row.id)}`
+                                                            `/examination/${row.exam_id}/subject-upload?examSubjectId=${encodeURIComponent(
+                                                                row.id
+                                                            )}`
                                                         )
                                                     }
                                                     variant="blue"
                                                 />
 
                                                 <ActionButton
-                                                    icon={canEnterMarks ? <FaPen /> : <FaLock />}
+                                                    icon={
+                                                        canEnterMarks
+                                                            ? <FaPen />
+                                                            : <FaLock />
+                                                    }
                                                     label="Enter Marks"
                                                     disabled={!canEnterMarks}
                                                     onClick={() =>
                                                         navigate(
                                                             `/examination/${row.exam_id}/marks`,
-                                                            { state: { examSubjectId: row.id } }
+                                                            {
+                                                                state: {
+                                                                    examSubjectId: row.id,
+                                                                },
+                                                            }
                                                         )
                                                     }
-                                                    variant={canEnterMarks ? "green" : "disabled"}
+                                                    variant={
+                                                        canEnterMarks
+                                                            ? "green"
+                                                            : "disabled"
+                                                    }
                                                 />
 
                                                 <ActionButton
@@ -1068,7 +1271,11 @@ function SubjectTeacherDashboard({ profile }) {
                                                     onClick={() =>
                                                         navigate(
                                                             `/examination/${row.exam_id}/results-analysis`,
-                                                            { state: { examSubjectId: row.id } }
+                                                            {
+                                                                state: {
+                                                                    examSubjectId: row.id,
+                                                                },
+                                                            }
                                                         )
                                                     }
                                                     variant="indigo"
@@ -1079,7 +1286,9 @@ function SubjectTeacherDashboard({ profile }) {
                                                     label="AI Paper Analysis"
                                                     onClick={() =>
                                                         navigate(
-                                                            `/examination/${row.exam_id}/ai-analysis?examSubjectId=${encodeURIComponent(row.id)}`
+                                                            `/examination/${row.exam_id}/ai-analysis?examSubjectId=${encodeURIComponent(
+                                                                row.id
+                                                            )}`
                                                         )
                                                     }
                                                     variant="slate"
@@ -1096,10 +1305,12 @@ function SubjectTeacherDashboard({ profile }) {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                     <div className="flex items-start gap-3">
                         <FaLock className="mt-0.5 text-slate-500" />
+
                         <div>
                             <h3 className="font-bold text-slate-800">
                                 Your Examination Boundaries
                             </h3>
+
                             <p className="mt-1 text-sm text-slate-600">
                                 You only see examination subjects matching your assigned subject and class. You cannot create examinations, change examination structure, manage other subjects or classes, or approve examinations. Marks entry remains locked until Academic Master, Deputy Headmaster, and Headmaster approvals are complete.
                             </p>
@@ -1111,7 +1322,13 @@ function SubjectTeacherDashboard({ profile }) {
     );
 }
 
-function ActionButton({ icon, label, onClick, disabled = false, variant = "blue" }) {
+function ActionButton({
+    icon,
+    label,
+    onClick,
+    disabled = false,
+    variant = "blue",
+}) {
     const variants = {
         blue: "border-blue-600 bg-blue-600 text-white hover:bg-blue-700",
         indigo: "border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700",
@@ -1125,7 +1342,9 @@ function ActionButton({ icon, label, onClick, disabled = false, variant = "blue"
             type="button"
             onClick={onClick}
             disabled={disabled}
-            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition disabled:cursor-not-allowed ${variants[disabled ? "disabled" : variant]}`}
+            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition disabled:cursor-not-allowed ${
+                variants[disabled ? "disabled" : variant]
+            }`}
         >
             {icon}
             {label}
@@ -1141,10 +1360,12 @@ function Metric({ label, value, icon }) {
                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                         {label}
                     </p>
+
                     <p className="mt-2 text-3xl font-extrabold text-slate-900">
                         {value}
                     </p>
                 </div>
+
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
                     {icon}
                 </div>
