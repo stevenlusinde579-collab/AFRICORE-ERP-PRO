@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -700,19 +699,17 @@ function SubjectTeacherDashboard({ profile }) {
         return () => clearInterval(timer);
     }, [loadTeacherWork]);
 
-    const counts = useMemo(() => {
-        return {
-            total: workItems.length,
-            awaitingUpload: workItems.filter((row) => !row.paper?.file_name).length,
-            uploaded: workItems.filter((row) => Boolean(row.paper?.file_name)).length,
-            approved: workItems.filter((row) =>
-                row.approved_by_academic &&
-                row.approved_by_deputy &&
-                row.approved_by_headmaster &&
-                isApprovedStatus(row.exam?.status)
-            ).length,
-        };
-    }, [workItems]);
+    const counts = useMemo(() => ({
+        total: workItems.length,
+        awaitingUpload: workItems.filter((row) => !row.paper?.file_name).length,
+        uploaded: workItems.filter((row) => Boolean(row.paper?.file_name)).length,
+        approved: workItems.filter((row) =>
+            Boolean(row.approved_by_academic) &&
+            Boolean(row.approved_by_deputy) &&
+            Boolean(row.approved_by_headmaster) &&
+            isApprovedStatus(row.exam?.status)
+        ).length,
+    }), [workItems]);
 
     const approvalSummary = useMemo(() => {
         return workItems.map((row) => ({
@@ -789,7 +786,6 @@ function SubjectTeacherDashboard({ profile }) {
                     </div>
                 )}
 
-                {/* Approval flow summary at the top of the Subject Teacher dashboard */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
