@@ -112,6 +112,8 @@ import AI from "../pages/ai/AI";
 
 import Settings from "../pages/settings/Settings";
 
+import SystemManual from "../pages/manual/SystemManual";
+
 
 /* ============================================================
    CURRENT ROLE CHECK
@@ -819,6 +821,10 @@ export default function AppRoutes() {
                         element={<CommunicationAnnouncements />}
                     />
 
+                     <Route
+    path="/system-manual"
+    element={<SystemManual />}
+/>
                     <Route
                         path="communication/suggestions"
                         element={<SuggestionBox />}
