@@ -2400,7 +2400,7 @@ function Settings() {
 
                         </div>
 
-                    ) : Number(profile?.role_id) !== 1 ? (
+                    ) : !canManageSchoolSettings ? (
 
                         <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
                             <p className="font-semibold text-blue-800">
