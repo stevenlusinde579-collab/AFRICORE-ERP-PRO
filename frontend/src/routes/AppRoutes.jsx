@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 
 import {
     Routes,
@@ -255,6 +255,11 @@ export default function AppRoutes() {
             <Route
                 path="/access-denied"
                 element={<AccessDenied />}
+            />
+            {/* PUBLIC SYSTEM MANUAL — WITHOUT APPLICATION SIDEBAR */}
+            <Route
+                path="/system-manual"
+                element={<SystemManual />}
             />
 
             {/* AUTH TEST */}
@@ -820,11 +825,6 @@ export default function AppRoutes() {
                         path="communication/announcements"
                         element={<CommunicationAnnouncements />}
                     />
-
-                     <Route
-    path="/system-manual"
-    element={<SystemManual />}
-/>
                     <Route
                         path="communication/suggestions"
                         element={<SuggestionBox />}
