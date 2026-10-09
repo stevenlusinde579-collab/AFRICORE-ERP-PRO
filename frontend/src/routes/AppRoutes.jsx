@@ -1,3 +1,4 @@
+
 import React from "react";
 
 import {
@@ -118,7 +119,6 @@ import Settings from "../pages/settings/Settings";
 ============================================================ */
 
 function useCurrentRoleCheck() {
-
     const {
         loading: roleLoading,
         selectedRoleId,
@@ -127,7 +127,6 @@ function useCurrentRoleCheck() {
     } = useRole();
 
     return {
-
         loading: roleLoading,
 
         roleId:
@@ -136,11 +135,9 @@ function useCurrentRoleCheck() {
                 ? null
                 : Number(selectedRoleId),
 
-        profileRoleId:
-            selectedProfileRoleId,
+        profileRoleId: selectedProfileRoleId,
 
-        roleName:
-            selectedRoleName,
+        roleName: selectedRoleName,
     };
 }
 
@@ -154,7 +151,6 @@ function SuperAdminOrPermissionRoute({
     permissions,
     requireAny = false,
 }) {
-
     const {
         loading,
         roleId
@@ -172,20 +168,14 @@ function SuperAdminOrPermissionRoute({
         <PermissionRoute
             {...(
                 permission
-                    ? {
-                        permission
-                    }
+                    ? { permission }
                     : {}
             )}
-
             {...(
                 permissions
-                    ? {
-                        permissions
-                    }
+                    ? { permissions }
                     : {}
             )}
-
             requireAny={requireAny}
         />
     );
@@ -200,7 +190,6 @@ function SuperAdminOrAllowedRoleRoute({
     allowedRoles = [],
     allowedRoleNames = [],
 }) {
-
     const {
         loading,
         roleId,
@@ -211,37 +200,24 @@ function SuperAdminOrAllowedRoleRoute({
         return null;
     }
 
-    const currentRoleId =
-        Number(roleId);
+    const currentRoleId = Number(roleId);
 
-    const currentRoleName =
-        String(roleName || "")
-            .trim()
-            .toLowerCase();
+    const currentRoleName = String(roleName || "")
+        .trim()
+        .toLowerCase();
 
-    const allowedById =
-        allowedRoles
-            .map(Number)
-            .includes(
-                currentRoleId
-            );
+    const allowedById = allowedRoles
+        .map(Number)
+        .includes(currentRoleId);
 
-    const allowedByName =
-        allowedRoleNames
-            .some(
-                (name) =>
-                    String(name || "")
-                        .trim()
-                        .toLowerCase() ===
-                    currentRoleName
-            );
+    const allowedByName = allowedRoleNames.some(
+        (name) =>
+            String(name || "")
+                .trim()
+                .toLowerCase() === currentRoleName
+    );
 
-    const allowed =
-        allowedById ||
-        allowedByName;
-
-    if (!allowed) {
-
+    if (!allowedById && !allowedByName) {
         return (
             <Navigate
                 to="/access-denied"
@@ -259,141 +235,73 @@ function SuperAdminOrAllowedRoleRoute({
 ============================================================ */
 
 export default function AppRoutes() {
-
     return (
-
         <Routes>
 
-            {/* =================================================
-                LANDING PAGE
-
-                /
-                ↓
-                LandingPage
-            ================================================= */}
-
+            {/* LANDING PAGE */}
             <Route
                 path="/"
-                element={
-                    <LandingPage />
-                }
+                element={<LandingPage />}
             />
 
-
-            {/* =================================================
-                LOGIN
-            ================================================= */}
-
+            {/* LOGIN */}
             <Route
                 path="/login"
-                element={
-                    <Login />
-                }
+                element={<Login />}
             />
 
-
-            {/* =================================================
-                ACCESS DENIED
-            ================================================= */}
-
+            {/* ACCESS DENIED */}
             <Route
                 path="/access-denied"
-                element={
-                    <AccessDenied />
-                }
+                element={<AccessDenied />}
             />
 
-
-            {/* =================================================
-                AUTH TEST
-            ================================================= */}
-
+            {/* AUTH TEST */}
             <Route
                 path="/auth-test"
-                element={
-                    <AuthTest />
-                }
+                element={<AuthTest />}
             />
 
-
-            {/* =================================================
-                ACCESS SCOPE TEST
-            ================================================= */}
-
+            {/* ACCESS SCOPE TEST */}
             <Route
                 path="/access-scope-test"
-                element={
-                    <AccessScopeTest />
-                }
+                element={<AccessScopeTest />}
             />
 
-
-            {/* =================================================
-                MAIN APPLICATION LAYOUT
-
-                Dashboard is ONLY:
-
-                /dashboard
-            ================================================= */}
-
+            {/* MAIN APPLICATION */}
             <Route
                 path="/"
-                element={
-                    <Layout />
-                }
+                element={<Layout />}
             >
 
-                {/* =================================================
-                    DASHBOARD
-
-                    /dashboard
-                ================================================= */}
-
+                {/* DASHBOARD */}
                 <Route
                     path="dashboard"
-                    element={
-                        <Dashboard />
-                    }
+                    element={<Dashboard />}
                 />
 
-
-                {/* =================================================
-                    CLASS TEACHER
-                ================================================= */}
-
+                {/* CLASS TEACHER */}
                 <Route
                     path="class-teacher/attendance"
-                    element={
-                        <ClassTeacherAttendance />
-                    }
+                    element={<ClassTeacherAttendance />}
                 />
 
                 <Route
                     path="attendance"
-                    element={
-                        <ClassTeacherAttendance />
-                    }
+                    element={<ClassTeacherAttendance />}
                 />
 
                 <Route
                     path="class-teacher/subject-teachers"
-                    element={
-                        <ClassTeacherSubjectTeachers />
-                    }
+                    element={<ClassTeacherSubjectTeachers />}
                 />
 
                 <Route
                     path="class-teacher/subjects"
-                    element={
-                        <ClassTeacherSubjectTeachers />
-                    }
+                    element={<ClassTeacherSubjectTeachers />}
                 />
 
-
-                {/* =================================================
-                    STUDENTS
-                ================================================= */}
-
+                {/* STUDENTS VIEW */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -401,24 +309,18 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="students"
-                        element={
-                            <Students />
-                        }
+                        element={<Students />}
                     />
 
                     <Route
                         path="students/profile/:id"
-                        element={
-                            <StudentProfile />
-                        }
+                        element={<StudentProfile />}
                     />
-
                 </Route>
 
-
+                {/* STUDENTS CREATE */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -426,17 +328,13 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="students/add"
-                        element={
-                            <AddStudent />
-                        }
+                        element={<AddStudent />}
                     />
-
                 </Route>
 
-
+                {/* STUDENTS EDIT */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -444,192 +342,119 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="students/edit/:id"
-                        element={
-                            <EditStudent />
-                        }
+                        element={<EditStudent />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    TEACHERS
-                ================================================= */}
-
+                {/* TEACHERS */}
                 <Route
                     path="teachers"
-                    element={
-                        <Teachers />
-                    }
+                    element={<Teachers />}
                 />
 
                 <Route
                     path="teachers/add"
-                    element={
-                        <AddTeacher />
-                    }
+                    element={<AddTeacher />}
                 />
 
                 <Route
                     path="teachers/edit/:id"
-                    element={
-                        <EditTeacher />
-                    }
+                    element={<EditTeacher />}
                 />
 
                 <Route
                     path="teachers/profile/:id"
-                    element={
-                        <TeacherProfile />
-                    }
+                    element={<TeacherProfile />}
                 />
 
-
-                {/* =================================================
-                    SUBJECTS
-                ================================================= */}
-
+                {/* SUBJECTS */}
                 <Route
                     path="subjects"
-                    element={
-                        <Subjects />
-                    }
+                    element={<Subjects />}
                 />
 
                 <Route
                     path="subjects/add"
-                    element={
-                        <AddSubject />
-                    }
+                    element={<AddSubject />}
                 />
 
                 <Route
                     path="subjects/edit/:id"
-                    element={
-                        <EditSubject />
-                    }
+                    element={<EditSubject />}
                 />
 
                 <Route
                     path="subjects/profile/:id"
-                    element={
-                        <SubjectProfile />
-                    }
+                    element={<SubjectProfile />}
                 />
 
-
-                {/* =================================================
-                    CLASSES
-                ================================================= */}
-
+                {/* CLASSES */}
                 <Route
                     path="classes"
-                    element={
-                        <Classes />
-                    }
+                    element={<Classes />}
                 />
 
                 <Route
                     path="classes/add"
-                    element={
-                        <Addclass />
-                    }
+                    element={<Addclass />}
                 />
 
                 <Route
                     path="classes/edit/:id"
-                    element={
-                        <EditClass />
-                    }
+                    element={<EditClass />}
                 />
 
                 <Route
                     path="classes/profile/:id"
-                    element={
-                        <ClassProfile />
-                    }
+                    element={<ClassProfile />}
                 />
 
-
-                {/* =================================================
-                    ACADEMICS
-                ================================================= */}
-
+                {/* ACADEMICS */}
                 <Route
                     path="academics"
-                    element={
-                        <Academics />
-                    }
+                    element={<Academics />}
                 />
 
                 <Route
                     path="academic-years"
-                    element={
-                        <AcademicYears />
-                    }
+                    element={<AcademicYears />}
                 />
 
-
-                {/* =================================================
-                    TEACHER ASSIGNMENT
-                ================================================= */}
-
+                {/* TEACHER ASSIGNMENT */}
                 <Route
                     path="teacher-assignment"
-                    element={
-                        <TeacherAssignment />
-                    }
+                    element={<TeacherAssignment />}
                 />
 
                 <Route
                     path="teacher-assignment/add"
-                    element={
-                        <AssignmentForm />
-                    }
+                    element={<AssignmentForm />}
                 />
 
                 <Route
                     path="teacher-assignment/edit/:id"
-                    element={
-                        <EditAssignment />
-                    }
+                    element={<EditAssignment />}
                 />
 
                 <Route
                     path="teacher-assignment/profile/:id"
-                    element={
-                        <AssignmentProfile />
-                    }
+                    element={<AssignmentProfile />}
                 />
 
-
-                {/* =================================================
-                    PERIODS
-                ================================================= */}
-
+                {/* PERIODS */}
                 <Route
                     path="periods"
-                    element={
-                        <Periods />
-                    }
+                    element={<Periods />}
                 />
 
-
-                {/* =================================================
-                    TIMETABLE
-                ================================================= */}
-
+                {/* TIMETABLE */}
                 <Route
                     path="timetable"
-                    element={
-                        <Timetable />
-                    }
+                    element={<Timetable />}
                 />
 
-
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -637,75 +462,28 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="timetable/add"
-                        element={
-                            <AddTimetable />
-                        }
+                        element={<AddTimetable />}
                     />
-
-                </Route>
-
-
-                <Route
-                    element={
-                        <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[1, 2, 3, 4]}
-                        />
-                    }
-                >
 
                     <Route
                         path="timetable/edit/:id"
-                        element={
-                            <EditTimetable />
-                        }
+                        element={<EditTimetable />}
                     />
-
-                </Route>
-
-
-                <Route
-                    element={
-                        <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[1, 2, 3, 4]}
-                        />
-                    }
-                >
 
                     <Route
                         path="timetable/settings"
-                        element={
-                            <TimetableSettings />
-                        }
+                        element={<TimetableSettings />}
                     />
-
-                </Route>
-
-
-                <Route
-                    element={
-                        <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[1, 2, 3, 4]}
-                        />
-                    }
-                >
 
                     <Route
                         path="timetable/duty-schedule"
-                        element={
-                            <DutyScheduleManager />
-                        }
+                        element={<DutyScheduleManager />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    EXAMINATION DASHBOARD
-                ================================================= */}
-
+                {/* EXAMINATION DASHBOARD */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -713,21 +491,13 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="examination"
-                        element={
-                            <ExaminationRoleDashboard />
-                        }
+                        element={<ExaminationRoleDashboard />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    EXAMINATION VIEW
-                ================================================= */}
-
+                {/* EXAMINATION VIEW */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -735,7 +505,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <SuperAdminOrPermissionRoute
@@ -743,37 +512,24 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/list"
-                            element={
-                                <ExamList />
-                            }
+                            element={<ExamList />}
                         />
 
                         <Route
                             path="examination/:examId"
-                            element={
-                                <ViewExam />
-                            }
+                            element={<ViewExam />}
                         />
 
                         <Route
                             path="examination/:examId/subjects"
-                            element={
-                                <ExamSubjects />
-                            }
+                            element={<ExamSubjects />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    EXAMINATION CREATE / EDIT / UPLOAD
-                ================================================= */}
-
+                {/* EXAMINATION CREATE / EDIT / UPLOAD */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -781,7 +537,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <SuperAdminOrPermissionRoute
@@ -789,16 +544,11 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/create"
-                            element={
-                                <AddExam />
-                            }
+                            element={<AddExam />}
                         />
-
                     </Route>
-
 
                     <Route
                         element={
@@ -807,23 +557,16 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/edit"
-                            element={
-                                <EditExam />
-                            }
+                            element={<EditExam />}
                         />
 
                         <Route
                             path="examination/:examId/add-subject"
-                            element={
-                                <AddExamSubject />
-                            }
+                            element={<AddExamSubject />}
                         />
-
                     </Route>
-
 
                     <Route
                         element={
@@ -832,23 +575,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/upload"
-                            element={
-                                <ExamUpload />
-                            }
+                            element={<ExamUpload />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    AI EXAMINATION ANALYSIS
-                ================================================= */}
-
+                {/* AI EXAMINATION ANALYSIS */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -856,7 +590,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <PermissionRoute
@@ -868,23 +601,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/ai-analysis"
-                            element={
-                                <AIAnalysisDashboard />
-                            }
+                            element={<AIAnalysisDashboard />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    EXAMINATION APPROVAL
-                ================================================= */}
-
+                {/* EXAMINATION APPROVAL */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -892,7 +616,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <PermissionRoute
@@ -905,23 +628,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/approval"
-                            element={
-                                <ExamApproval />
-                            }
+                            element={<ExamApproval />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    ENTER MARKS
-                ================================================= */}
-
+                {/* ENTER MARKS */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -929,7 +643,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <SuperAdminOrPermissionRoute
@@ -937,23 +650,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/marks"
-                            element={
-                                <EnterMarks />
-                            }
+                            element={<EnterMarks />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    RESULTS ANALYSIS
-                ================================================= */}
-
+                {/* RESULTS ANALYSIS */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -961,7 +665,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <SuperAdminOrPermissionRoute
@@ -969,23 +672,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/results-analysis"
-                            element={
-                                <ResultsAnalysis />
-                            }
+                            element={<ResultsAnalysis />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    SUBJECT TEACHER UPLOAD
-                ================================================= */}
-
+                {/* SUBJECT TEACHER UPLOAD */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -993,7 +687,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <SuperAdminOrPermissionRoute
@@ -1001,23 +694,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/:examId/subject-upload"
-                            element={
-                                <SubjectTeacherExamUpload />
-                            }
+                            element={<SubjectTeacherExamUpload />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    EXAM PRINTING UNIT
-                ================================================= */}
-
+                {/* EXAM PRINTING UNIT */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -1025,7 +709,6 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         element={
                             <SuperAdminOrPermissionRoute
@@ -1033,23 +716,14 @@ export default function AppRoutes() {
                             />
                         }
                     >
-
                         <Route
                             path="examination/printing-unit"
-                            element={
-                                <ExamPrintingUnit />
-                            }
+                            element={<ExamPrintingUnit />}
                         />
-
                     </Route>
-
                 </Route>
 
-
-                {/* =================================================
-                    FINANCE VIEW
-                ================================================= */}
-
+                {/* FINANCE VIEW */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -1057,47 +731,29 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="finance"
-                        element={
-                            <Finance />
-                        }
+                        element={<Finance />}
                     />
 
                     <Route
                         path="finance/dashboard"
-                        element={
-                            <FinanceDashboard />
-                        }
+                        element={<FinanceDashboard />}
                     />
 
                     <Route
                         path="finance/class-fee-collection"
-                        element={
-                            <ClassFeeCollection />
-                        }
+                        element={<ClassFeeCollection />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    FINANCIAL STATEMENTS
-                ================================================= */}
-
+                {/* FINANCIAL STATEMENTS */}
                 <Route
                     path="finance/financial-statements"
-                    element={
-                        <FinancialStatements />
-                    }
+                    element={<FinancialStatements />}
                 />
 
-
-                {/* =================================================
-                    FINANCE MANAGEMENT
-                ================================================= */}
-
+                {/* FINANCE MANAGEMENT */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -1105,56 +761,38 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="finance/chart-of-accounts"
-                        element={
-                            <ChartOfAccounts />
-                        }
+                        element={<ChartOfAccounts />}
                     />
 
                     <Route
                         path="finance/record-payment"
-                        element={
-                            <RecordPayment />
-                        }
+                        element={<RecordPayment />}
                     />
 
                     <Route
                         path="finance/add-expense"
-                        element={
-                            <AddExpense />
-                        }
+                        element={<AddExpense />}
                     />
 
                     <Route
                         path="finance/general-ledger"
-                        element={
-                            <GeneralLedger />
-                        }
+                        element={<GeneralLedger />}
                     />
 
                     <Route
                         path="finance/record-receivable"
-                        element={
-                            <RecordReceivable />
-                        }
+                        element={<RecordReceivable />}
                     />
 
                     <Route
                         path="finance/record-payable"
-                        element={
-                            <RecordPayable />
-                        }
+                        element={<RecordPayable />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    COMMUNICATION
-                ================================================= */}
-
+                {/* COMMUNICATION */}
                 <Route
                     element={
                         <SuperAdminOrPermissionRoute
@@ -1162,185 +800,88 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="communication"
-                        element={
-                            <Communication />
-                        }
+                        element={<Communication />}
                     />
 
                     <Route
                         path="communication/chat"
-                        element={
-                            <CommunicationChat />
-                        }
+                        element={<CommunicationChat />}
                     />
 
                     <Route
                         path="communication/notifications"
-                        element={
-                            <CommunicationNotifications />
-                        }
+                        element={<CommunicationNotifications />}
                     />
 
                     <Route
                         path="communication/announcements"
-                        element={
-                            <CommunicationAnnouncements />
-                        }
+                        element={<CommunicationAnnouncements />}
                     />
 
                     <Route
                         path="communication/suggestions"
-                        element={
-                            <SuggestionBox />
-                        }
+                        element={<SuggestionBox />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    COMMUNICATION MEETINGS
-
-                    IMPORTANT:
-
-                    The MEETING LIST must not require
-                    create_meeting.
-
-                    Users without create_meeting must still
-                    be able to open this page and join a meeting.
-
-                    The Create button itself will be controlled
-                    inside CommunicationMeetings.jsx using the
-                    existing create_meeting permission.
-
-                    Therefore:
-
-                    Super Admin
-                    Headmaster
-                    Second Master
-                    Academic Master
-                        → Create + Join
-
-                    Other authenticated users
-                        → Join + Copy Link
-
-                    Do NOT wrap this route with
-                    SuperAdminOrPermissionRoute.
-                ================================================= */}
-
+                {/* COMMUNICATION MEETINGS */}
                 <Route
                     path="communication/meetings"
-                    element={
-                        <CommunicationMeetings />
-                    }
+                    element={<CommunicationMeetings />}
                 />
 
-
-                {/* =================================================
-                    SINGLE VIDEO MEETING ROOM
-
-                    Any authenticated user who has the meeting
-                    link can enter the room.
-
-                    create_meeting permission is NOT required
-                    here.
-                ================================================= */}
-
+                {/* SINGLE VIDEO MEETING ROOM */}
                 <Route
                     path="communication/meeting/:meetingId"
-                    element={
-                        <CommunicationMeeting />
-                    }
+                    element={<CommunicationMeeting />}
                 />
 
-
-                {/* =================================================
-                    SOCIAL WELFARE
-                ================================================= */}
-
+                {/* SOCIAL WELFARE */}
                 <Route
                     path="social-welfare"
-                    element={
-                        <SocialWelfareDashboard />
-                    }
+                    element={<SocialWelfareDashboard />}
                 />
 
-
-                {/* =================================================
-                    PATRON / MATRON
-                ================================================= */}
-
+                {/* PATRON / MATRON */}
                 <Route
                     path="patron-matron"
-                    element={
-                        <PatronMatron />
-                    }
+                    element={<PatronMatron />}
                 />
 
-
-                {/* =================================================
-                    REPORTS
-                ================================================= */}
-
+                {/* REPORTS */}
                 <Route
                     path="report"
-                    element={
-                        <Report />
-                    }
+                    element={<Report />}
                 />
 
                 <Route
                     path="reports"
-                    element={
-                        <Report />
-                    }
+                    element={<Report />}
                 />
 
-
-                {/* =================================================
-                    AI
-                ================================================= */}
-
+                {/* AI */}
                 <Route
                     path="ai"
-                    element={
-                        <AI />
-                    }
+                    element={<AI />}
                 />
 
-
-                {/* =================================================
-                    SETTINGS
-                ================================================= */}
-
+                {/* SETTINGS: ROLES 1, 2, 3, 4 ONLY */}
                 <Route
-                    path="settings"
                     element={
-                        <Settings />
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 2, 3, 4]}
+                        />
                     }
-                />
+                >
+                    <Route
+                        path="settings"
+                        element={<Settings />}
+                    />
+                </Route>
 
-
-                {/* =================================================
-                    TEACHER ON DUTY
-
-                    /teacher-on-duty
-
-                    Available to teaching staff.
-
-                    CLASS TEACHER:
-                    Allowed explicitly by role name so the
-                    module does not depend on guessing the
-                    Class Teacher role ID.
-
-                    IMPORTANT:
-                    This is the ONLY route changed for the
-                    current fix.
-                ================================================= */}
-
+                {/* TEACHER ON DUTY */}
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
@@ -1351,21 +892,13 @@ export default function AppRoutes() {
                         />
                     }
                 >
-
                     <Route
                         path="teacher-on-duty"
-                        element={
-                            <TeacherOnDuty />
-                        }
+                        element={<TeacherOnDuty />}
                     />
-
                 </Route>
 
-
-                {/* =================================================
-                    UNKNOWN DASHBOARD ROUTES
-                ================================================= */}
-
+                {/* UNKNOWN DASHBOARD ROUTES */}
                 <Route
                     path="*"
                     element={
@@ -1377,7 +910,6 @@ export default function AppRoutes() {
                 />
 
             </Route>
-
         </Routes>
     );
 }
