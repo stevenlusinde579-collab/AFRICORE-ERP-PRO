@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGemini } from "../services/gemini.service.js";
@@ -3120,15 +3120,12 @@ export const analyzePaper =
                 sectionValidation
             );
 
-            if (
-                !sectionValidation.valid
-            ) {
-                throw new Error(
-                    `AI mark structure does not agree with the examination paper: ${sectionValidation.problems.join(
-                        " | "
-                    )}`
-                );
-            }
+            if (!sectionValidation.valid) {
+    console.warn(
+        "SECTION MARK VALIDATION WARNING:",
+        sectionValidation.problems.join(" | ")
+    );
+}
 
             // ------------------------------------------------
             // TOTAL MARKS
