@@ -54,6 +54,24 @@ function isApprovedStatus(status) {
     return String(status || "").trim().toLowerCase() === "approved";
 }
 
+/**
+ * Accept actual boolean values and common explicit truthy database values.
+ * In particular, Boolean("false") must not count as an approval.
+ */
+function isApprovalComplete(value) {
+    if (value === true || value === 1) {
+        return true;
+    }
+
+    if (typeof value === "string") {
+        return ["true", "1", "yes"].includes(
+            value.trim().toLowerCase()
+        );
+    }
+
+    return false;
+}
+
 function ExaminationRoleDashboard() {
     const { selectedRole, activeRole, role, roles } = useRole();
 
@@ -159,9 +177,9 @@ function ExaminationRoleDashboard() {
         if (subjectError) throw subjectError;
 
         const pending = (examSubjects || []).filter((row) => {
-            const academic = Boolean(row.approved_by_academic);
-            const deputy = Boolean(row.approved_by_deputy);
-            const headmaster = Boolean(row.approved_by_headmaster);
+            const academic = isApprovalComplete(row.approved_by_academic);
+            const deputy = isApprovalComplete(row.approved_by_deputy);
+            const headmaster = isApprovalComplete(row.approved_by_headmaster);
 
             if (currentRole === 3) {
                 return academic && !deputy && !headmaster;
@@ -704,10 +722,9 @@ function SubjectTeacherDashboard({ profile }) {
         awaitingUpload: workItems.filter((row) => !row.paper?.file_name).length,
         uploaded: workItems.filter((row) => Boolean(row.paper?.file_name)).length,
         approved: workItems.filter((row) =>
-            Boolean(row.approved_by_academic) &&
-            Boolean(row.approved_by_deputy) &&
-            Boolean(row.approved_by_headmaster) &&
-            isApprovedStatus(row.exam?.status)
+            isApprovalComplete(row.approved_by_academic) &&
+            isApprovalComplete(row.approved_by_deputy) &&
+            isApprovalComplete(row.approved_by_headmaster)
         ).length,
     }), [workItems]);
 
@@ -723,9 +740,10 @@ function SubjectTeacherDashboard({ profile }) {
                 row.classRow?.class_name ||
                 row.classRow?.short_name ||
                 `Class ${row.class_id}`,
-            academic: Boolean(row.approved_by_academic),
-            deputy: Boolean(row.approved_by_deputy),
-            headmaster: Boolean(row.approved_by_headmaster),
+            academic: isApprovalComplete(row.approved_by_academic),
+            deputy: isApprovalComplete(row.approved_by_deputy),
+            headmaster: isApprovalComplete(row.approved_by_headmaster),
+            examStatus: row.exam?.status || "Unknown",
             examApproved: isApprovedStatus(row.exam?.status),
         }));
     }, [workItems]);
@@ -858,7 +876,7 @@ function SubjectTeacherDashboard({ profile }) {
                                                 ? "text-emerald-700"
                                                 : "text-slate-500"
                                         }`}>
-                                            Examination status: {item.examApproved ? "Approved" : "Not Approved"}
+                                            Examination status: {item.examStatus}
                                         </p>
                                     </div>
                                 );
@@ -905,17 +923,24 @@ function SubjectTeacherDashboard({ profile }) {
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {workItems.map((row) => {
-                                const academicApproved = Boolean(row.approved_by_academic);
-                                const deputyApproved = Boolean(row.approved_by_deputy);
-                                const headmasterApproved = Boolean(row.approved_by_headmaster);
+                                const academicApproved = isApprovalComplete(
+                                    row.approved_by_academic
+                                );
+                                const deputyApproved = isApprovalComplete(
+                                    row.approved_by_deputy
+                                );
+                                const headmasterApproved = isApprovalComplete(
+                                    row.approved_by_headmaster
+                                );
 
                                 const approvalsComplete =
                                     academicApproved &&
                                     deputyApproved &&
                                     headmasterApproved;
 
-                                const examApproved = isApprovedStatus(row.exam?.status);
-                                const canEnterMarks = approvalsComplete && examApproved;
+                                // Enter Marks depends on the three subject approvals only.
+                                // The overall exam status (e.g. DRAFT) is not an extra UI lock.
+                                const canEnterMarks = approvalsComplete;
 
                                 const approvalSteps = [
                                     {
@@ -965,7 +990,7 @@ function SubjectTeacherDashboard({ profile }) {
 
                                                     <span
                                                         className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                                                            examApproved
+                                                            isApprovedStatus(row.exam?.status)
                                                                 ? "bg-emerald-50 text-emerald-700"
                                                                 : "bg-slate-100 text-slate-600"
                                                         }`}
@@ -1006,7 +1031,7 @@ function SubjectTeacherDashboard({ profile }) {
 
                                                     {!canEnterMarks && (
                                                         <p className="mt-3 text-xs text-amber-700">
-                                                            Enter Marks will unlock after all three approvals are complete and the examination status is Approved.
+                                                            Enter Marks will unlock after Academic Master, Deputy Headmaster, and Headmaster approvals are complete.
                                                         </p>
                                                     )}
                                                 </div>
@@ -1076,7 +1101,7 @@ function SubjectTeacherDashboard({ profile }) {
                                 Your Examination Boundaries
                             </h3>
                             <p className="mt-1 text-sm text-slate-600">
-                                You only see examination subjects matching your assigned subject and class. You cannot create examinations, change examination structure, manage other subjects or classes, or approve examinations. Marks entry remains locked until the complete approval chain and examination status requirements are satisfied.
+                                You only see examination subjects matching your assigned subject and class. You cannot create examinations, change examination structure, manage other subjects or classes, or approve examinations. Marks entry remains locked until Academic Master, Deputy Headmaster, and Headmaster approvals are complete.
                             </p>
                         </div>
                     </div>
