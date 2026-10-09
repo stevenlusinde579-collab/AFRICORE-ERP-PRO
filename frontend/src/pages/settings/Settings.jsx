@@ -145,9 +145,18 @@ function Settings() {
 
     const SCHOOL_SETTINGS_ROLE_IDS = [1, 2, 3, 4];
 
-    const currentRoleId = Number(profile?.role_id);
+    const currentRoleId =
+        profile?.role_id === null ||
+        profile?.role_id === undefined ||
+        String(profile.role_id).trim() === ""
+            ? null
+            : Number(profile.role_id);
 
     const canManageSchoolSettings =
+        profile !== null &&
+        profile !== undefined &&
+        currentRoleId !== null &&
+        Number.isInteger(currentRoleId) &&
         SCHOOL_SETTINGS_ROLE_IDS.includes(currentRoleId);
 
     const roleDisplayName = {
@@ -156,8 +165,9 @@ function Settings() {
         3: "Deputy Headmaster",
         4: "Academic Master",
     }[currentRoleId] || (
-        profile?.role_id
-            ? `Role #${profile.role_id}`
+        currentRoleId !== null &&
+        Number.isInteger(currentRoleId)
+            ? `Role #${currentRoleId}`
             : "No role assigned"
     );
 
@@ -372,8 +382,6 @@ function Settings() {
     const saveAcademicYear = async (event) => {
         event.preventDefault();
 
-        // UI-level authorization check.
-        // Database/RPC permissions must also enforce this policy.
         if (!canManageSchoolSettings) {
             setError(
                 "Only Super Admin, Headmaster, Deputy Headmaster and Academic Master can activate an academic year."
@@ -393,8 +401,6 @@ function Settings() {
                 );
             }
 
-            // Confirm that the current role is one of the four
-            // explicitly authorized management roles.
             const {
                 data: activationRoles,
                 error: activationRolesError,
@@ -415,7 +421,7 @@ function Settings() {
 
             const currentRole = (activationRoles || []).find(
                 (role) =>
-                    Number(role.id) === Number(profile?.role_id)
+                    Number(role.id) === currentRoleId
             );
 
             const normalizedRoleName = String(
@@ -746,7 +752,6 @@ function Settings() {
                 );
             }
 
-            // Verify the current password first.
             const { error: verifyError } =
                 await supabase.auth.signInWithPassword({
                     email,
@@ -759,7 +764,6 @@ function Settings() {
                 );
             }
 
-            // Update the authenticated user's password.
             const { error: updatePasswordError } =
                 await supabase.auth.updateUser({
                     password: newPassword,
@@ -871,7 +875,6 @@ function Settings() {
                 return;
             }
 
-            // Update an existing school.
             if (school?.id) {
                 const {
                     data,
@@ -907,7 +910,6 @@ function Settings() {
                     "School information updated successfully."
                 );
             } else {
-                // Create the initial school.
                 const {
                     data: { user: currentUser },
                     error: currentUserError,
@@ -1429,14 +1431,10 @@ function Settings() {
                         <form onSubmit={saveSchool} className="p-6">
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
 
-                                {/* SCHOOL NAME */}
-
                                 <div className="md:col-span-2">
                                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                                         School Name
-                                        <span className="ml-1 text-red-500">
-                                            *
-                                        </span>
+                                        <span className="ml-1 text-red-500">*</span>
                                     </label>
 
                                     <div className="relative">
@@ -1453,8 +1451,6 @@ function Settings() {
                                         />
                                     </div>
                                 </div>
-
-                                {/* REGISTRATION NUMBER */}
 
                                 <div>
                                     <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1475,8 +1471,6 @@ function Settings() {
                                     </div>
                                 </div>
 
-                                {/* PHONE */}
-
                                 <div>
                                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                                         Phone
@@ -1495,8 +1489,6 @@ function Settings() {
                                         />
                                     </div>
                                 </div>
-
-                                {/* ADDRESS */}
 
                                 <div>
                                     <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1517,8 +1509,6 @@ function Settings() {
                                     </div>
                                 </div>
 
-                                {/* EMAIL */}
-
                                 <div>
                                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                                         Email
@@ -1537,8 +1527,6 @@ function Settings() {
                                         />
                                     </div>
                                 </div>
-
-                                {/* LOGO URL */}
 
                                 <div className="md:col-span-2">
                                     <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1565,8 +1553,6 @@ function Settings() {
                                     </p>
                                 </div>
                             </div>
-
-                            {/* SAVE SCHOOL */}
 
                             <div className="mt-6 flex justify-end border-t border-slate-100 pt-6">
                                 <button
@@ -1641,9 +1627,7 @@ function Settings() {
                                             description="ON: documents use your school name. OFF: documents use AfriCore ERP."
                                             value={documentSettings.show_school_name}
                                             onChange={() =>
-                                                handleDocumentSettingChange(
-                                                    "show_school_name"
-                                                )
+                                                handleDocumentSettingChange("show_school_name")
                                             }
                                         />
 
@@ -1653,9 +1637,7 @@ function Settings() {
                                             description="Display the school logo on documents."
                                             value={documentSettings.show_logo}
                                             onChange={() =>
-                                                handleDocumentSettingChange(
-                                                    "show_logo"
-                                                )
+                                                handleDocumentSettingChange("show_logo")
                                             }
                                         />
 
@@ -1665,9 +1647,7 @@ function Settings() {
                                             description="Display the school registration number."
                                             value={documentSettings.show_registration_number}
                                             onChange={() =>
-                                                handleDocumentSettingChange(
-                                                    "show_registration_number"
-                                                )
+                                                handleDocumentSettingChange("show_registration_number")
                                             }
                                         />
 
@@ -1677,9 +1657,7 @@ function Settings() {
                                             description="Display the school address."
                                             value={documentSettings.show_address}
                                             onChange={() =>
-                                                handleDocumentSettingChange(
-                                                    "show_address"
-                                                )
+                                                handleDocumentSettingChange("show_address")
                                             }
                                         />
 
@@ -1689,9 +1667,7 @@ function Settings() {
                                             description="Display the school phone number."
                                             value={documentSettings.show_phone}
                                             onChange={() =>
-                                                handleDocumentSettingChange(
-                                                    "show_phone"
-                                                )
+                                                handleDocumentSettingChange("show_phone")
                                             }
                                         />
 
@@ -1701,14 +1677,10 @@ function Settings() {
                                             description="Display the school email address."
                                             value={documentSettings.show_email}
                                             onChange={() =>
-                                                handleDocumentSettingChange(
-                                                    "show_email"
-                                                )
+                                                handleDocumentSettingChange("show_email")
                                             }
                                         />
                                     </div>
-
-                                    {/* SAVE DOCUMENT SETTINGS */}
 
                                     <div className="mt-6 flex justify-end border-t border-slate-100 pt-6">
                                         <button
@@ -2240,8 +2212,6 @@ function DocumentSetting({
                     </p>
                 </div>
             </div>
-
-            {/* YES / NO SWITCH */}
 
             <button
                 type="button"
