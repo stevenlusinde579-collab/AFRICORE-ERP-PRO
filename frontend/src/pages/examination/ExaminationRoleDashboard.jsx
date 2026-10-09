@@ -545,10 +545,6 @@ function SubjectTeacherDashboard({ profile }) {
                 ),
             ];
 
-            /*
-             * Start from exam_subjects and match the exact subject + class pair.
-             * This avoids hiding examination subjects when exams.school_id is NULL.
-             */
             const { data: examSubjects, error: examSubjectError } = await supabase
                 .from("exam_subjects")
                 .select(`
@@ -718,6 +714,25 @@ function SubjectTeacherDashboard({ profile }) {
         };
     }, [workItems]);
 
+    const approvalSummary = useMemo(() => {
+        return workItems.map((row) => ({
+            id: row.id,
+            examName: row.exam?.exam_name || "Examination",
+            subjectName:
+                row.subject?.subject_name ||
+                row.subject?.subject_code ||
+                `Subject ${row.subject_id}`,
+            className:
+                row.classRow?.class_name ||
+                row.classRow?.short_name ||
+                `Class ${row.class_id}`,
+            academic: Boolean(row.approved_by_academic),
+            deputy: Boolean(row.approved_by_deputy),
+            headmaster: Boolean(row.approved_by_headmaster),
+            examApproved: isApprovedStatus(row.exam?.status),
+        }));
+    }, [workItems]);
+
     if (loading) {
         return (
             <div className="min-h-[500px] flex items-center justify-center bg-slate-50">
@@ -773,6 +788,88 @@ function SubjectTeacherDashboard({ profile }) {
                         </button>
                     </div>
                 )}
+
+                {/* Approval flow summary at the top of the Subject Teacher dashboard */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-extrabold text-slate-900">
+                                Examination Approval Flow
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Approval status refreshes automatically every 30 seconds.
+                            </p>
+                        </div>
+                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                            Academic Master → Deputy Headmaster → Headmaster
+                        </span>
+                    </div>
+
+                    {approvalSummary.length === 0 ? (
+                        <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                            No examination approval flow is available because no assigned examination subjects were found.
+                        </p>
+                    ) : (
+                        <div className="mt-4 space-y-3">
+                            {approvalSummary.map((item) => {
+                                const steps = [
+                                    { label: "Academic Master", approved: item.academic },
+                                    { label: "Deputy Headmaster", approved: item.deputy },
+                                    { label: "Headmaster", approved: item.headmaster },
+                                ];
+
+                                return (
+                                    <div
+                                        key={item.id}
+                                        className="rounded-xl border border-slate-200 p-4"
+                                    >
+                                        <div className="mb-3">
+                                            <p className="font-bold text-slate-900">
+                                                {item.examName}
+                                            </p>
+                                            <p className="mt-1 text-sm text-slate-600">
+                                                {item.subjectName} • {item.className}
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                                            {steps.map((step) => (
+                                                <div
+                                                    key={step.label}
+                                                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                                                        step.approved
+                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                                            : "border-amber-200 bg-amber-50 text-amber-800"
+                                                    }`}
+                                                >
+                                                    {step.approved ? (
+                                                        <FaCheckCircle className="shrink-0" />
+                                                    ) : (
+                                                        <FaLock className="shrink-0" />
+                                                    )}
+                                                    <span className="font-semibold">
+                                                        {step.label}
+                                                    </span>
+                                                    <span className="ml-auto text-xs font-bold">
+                                                        {step.approved ? "Approved" : "Pending"}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <p className={`mt-3 text-xs font-semibold ${
+                                            item.examApproved
+                                                ? "text-emerald-700"
+                                                : "text-slate-500"
+                                        }`}>
+                                            Examination status: {item.examApproved ? "Approved" : "Not Approved"}
+                                        </p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Metric label="Assigned" value={counts.total} icon={<FaTasks />} />
@@ -913,7 +1010,7 @@ function SubjectTeacherDashboard({ profile }) {
 
                                                     {!canEnterMarks && (
                                                         <p className="mt-3 text-xs text-amber-700">
-                                                            Enter Marks itafunguliwa baada ya approvals zote tatu kukamilika na examination status kuwa Approved.
+                                                            Enter Marks will unlock after all three approvals are complete and the examination status is Approved.
                                                         </p>
                                                     )}
                                                 </div>
@@ -929,6 +1026,19 @@ function SubjectTeacherDashboard({ profile }) {
                                                         )
                                                     }
                                                     variant="blue"
+                                                />
+
+                                                <ActionButton
+                                                    icon={canEnterMarks ? <FaPen /> : <FaLock />}
+                                                    label="Enter Marks"
+                                                    disabled={!canEnterMarks}
+                                                    onClick={() =>
+                                                        navigate(
+                                                            `/examination/${row.exam_id}/marks`,
+                                                            { state: { examSubjectId: row.id } }
+                                                        )
+                                                    }
+                                                    variant={canEnterMarks ? "green" : "disabled"}
                                                 />
 
                                                 <ActionButton
@@ -952,19 +1062,6 @@ function SubjectTeacherDashboard({ profile }) {
                                                         )
                                                     }
                                                     variant="slate"
-                                                />
-
-                                                <ActionButton
-                                                    icon={canEnterMarks ? <FaPen /> : <FaLock />}
-                                                    label="Enter Marks"
-                                                    disabled={!canEnterMarks}
-                                                    onClick={() =>
-                                                        navigate(
-                                                            `/examination/${row.exam_id}/marks`,
-                                                            { state: { examSubjectId: row.id } }
-                                                        )
-                                                    }
-                                                    variant={canEnterMarks ? "green" : "disabled"}
                                                 />
                                             </div>
                                         </div>
