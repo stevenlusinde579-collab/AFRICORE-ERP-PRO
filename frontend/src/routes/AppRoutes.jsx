@@ -1,4 +1,3 @@
-
 import React from "react";
 
 import {
@@ -867,19 +866,11 @@ export default function AppRoutes() {
                     element={<AI />}
                 />
 
-                {/* SETTINGS: ROLES 1, 2, 3, 4 ONLY */}
+                {/* SETTINGS: ALL USERS CAN OPEN THE PAGE */}
                 <Route
-                    element={
-                        <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[1, 2, 3, 4]}
-                        />
-                    }
-                >
-                    <Route
-                        path="settings"
-                        element={<Settings />}
-                    />
-                </Route>
+                    path="settings"
+                    element={<Settings />}
+                />
 
                 {/* TEACHER ON DUTY */}
                 <Route
