@@ -1,6 +1,7 @@
 import express from "express";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 import { requireSchoolContext, requireExamSchoolScope } from "../middleware/schoolContextMiddleware.js";
+import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 import {
 
@@ -107,6 +108,7 @@ router.get(
 
     "/",
 
+    requirePermission("EXAM_VIEW"),
     getExams
 
 );
@@ -121,6 +123,7 @@ router.post(
 
     "/",
 
+    requirePermission("EXAM_CREATE"),
     createExam
 
 );
@@ -135,6 +138,7 @@ router.post(
 
     "/marks",
 
+    requirePermission("EXAM_ENTER_MARKS"),
     saveExamMarks
 
 );
@@ -149,6 +153,7 @@ router.get(
 
     "/exam-subject/:examSubjectId/students",
 
+    requirePermission("EXAM_VIEW"),
     getStudentsForExamSubject
 
 );
@@ -168,6 +173,7 @@ router.get(
 
     "/exam-subject/:examSubjectId/approval",
 
+    requirePermission("EXAM_VIEW"),
     getExamSubjectApproval
 
 );
@@ -190,6 +196,18 @@ router.post(
 
     "/exam-subject/:examSubjectId/approve",
 
+    (req, res, next) => {
+        const type = String(req.body?.type || "").trim().toLowerCase();
+        const permissions = {
+            academic: "EXAM_APPROVE_ACADEMIC",
+            deputy: "EXAM_APPROVE_SECOND_MASTER",
+            headmaster: "EXAM_APPROVE_HEADMASTER"
+        };
+        if (!permissions[type]) {
+            return res.status(400).json({ success: false, message: "Valid approval type is required." });
+        }
+        return requirePermission(permissions[type])(req, res, next);
+    },
     approveExamSubject
 
 );
@@ -211,6 +229,7 @@ router.post(
 
     "/exam-subject/:examSubjectId/reject",
 
+    requirePermission("EXAM_APPROVE_HEADMASTER"),
     rejectExamSubject
 
 );
@@ -226,6 +245,7 @@ router.post(
 
     "/exam-subject/:examSubjectId/reset-approval",
 
+    requirePermission("EXAM_MANAGE_PERMISSION"),
     resetExamSubjectApproval
 
 );
@@ -244,6 +264,7 @@ router.get(
 
     "/:examId/approval-statuses",
 
+    requirePermission("EXAM_VIEW"),
     getExamApprovalStatuses
 
 );
@@ -261,6 +282,7 @@ router.get(
 
     "/papers/history",
 
+    requirePermission("EXAM_VIEW"),
     getExamPapersHistory
 
 );
@@ -276,6 +298,7 @@ router.delete(
 
     "/papers/:paperId",
 
+    requirePermission("EXAM_UPLOAD_PAPER"),
     deleteExamPaper
 
 );
@@ -291,6 +314,7 @@ router.get(
 
     "/:id/subjects",
 
+    requirePermission("EXAM_VIEW"),
     getExamSubjects
 
 );
@@ -306,6 +330,7 @@ router.get(
 
     "/:id/ai-analysis",
 
+    requirePermission("EXAM_VIEW_AI_REPORT"),
     analyzeExamWithAI
 
 );
@@ -321,6 +346,7 @@ router.get(
 
     "/:id/results-analysis",
 
+    requirePermission("EXAM_VIEW"),
     getExamResultsAnalysis
 
 );
@@ -341,6 +367,7 @@ router.post(
 
     "/:id/reject",
 
+    requirePermission("EXAM_APPROVE_HEADMASTER"),
     rejectExam
 
 );
@@ -356,6 +383,7 @@ router.get(
 
     "/:id",
 
+    requirePermission("EXAM_VIEW"),
     getExamById
 
 );
@@ -371,6 +399,7 @@ router.put(
 
     "/:id",
 
+    requirePermission("EXAM_EDIT"),
     updateExam
 
 );
@@ -386,6 +415,7 @@ router.delete(
 
     "/:id",
 
+    requirePermission("EXAM_DELETE"),
     deleteExam
 
 );
