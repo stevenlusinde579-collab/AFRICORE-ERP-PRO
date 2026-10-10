@@ -100,6 +100,7 @@ function SchoolManagement() {
         let duplicateQuery = supabase
             .from("schools")
             .select("id, school_name, registration_number, email")
+            .eq("is_active", true)
             .neq("id", editingId ?? -1);
 
         if (registrationNumber) {
