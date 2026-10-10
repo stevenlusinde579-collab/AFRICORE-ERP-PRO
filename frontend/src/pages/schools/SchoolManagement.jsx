@@ -40,7 +40,8 @@ function SchoolManagement() {
         setNotice(null);
         const { data, error } = await supabase
             .from("schools")
-            .select("id, school_name, registration_number, address, phone, email, created_at")
+            .select("id, school_name, registration_number, address, phone, email, created_at, is_active")
+            .eq("is_active", true)
             .order("id", { ascending: true });
 
         if (error) {
