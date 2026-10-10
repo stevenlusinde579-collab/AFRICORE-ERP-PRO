@@ -252,6 +252,44 @@ const throwSupabaseError = (
 };
 
 // ============================================================
+// SCHOOL OWNERSHIP CHECK FOR AI EXAMINATION DATA
+// ============================================================
+const verifyAIExamAccess = async (req, examId, examSubjectId = null) => {
+    let examQuery = supabase
+        .from("exams")
+        .select("id, school_id")
+        .eq("id", Number(examId));
+
+    if (!req.schoolContext?.isSuperAdmin) {
+        examQuery = examQuery.eq("school_id", Number(req.schoolContext?.schoolId));
+    } else if (req.query?.school_id) {
+        examQuery = examQuery.eq("school_id", Number(req.query.school_id));
+    }
+
+    const { data: exam, error: examError } = await examQuery.maybeSingle();
+    if (examError) throw examError;
+    if (!exam) {
+        return { ok: false, status: 404, message: "Examination not found in your school." };
+    }
+
+    if (examSubjectId != null) {
+        const { data: subject, error: subjectError } = await supabase
+            .from("exam_subjects")
+            .select("id, exam_id")
+            .eq("id", Number(examSubjectId))
+            .eq("exam_id", Number(examId))
+            .maybeSingle();
+
+        if (subjectError) throw subjectError;
+        if (!subject) {
+            return { ok: false, status: 404, message: "Exam subject not found in this examination." };
+        }
+    }
+
+    return { ok: true, exam };
+};
+
+// ============================================================
 // FILE HASH
 // ============================================================
 
@@ -2044,6 +2082,14 @@ export const analyzePaper =
                         message:
                             "Invalid exam subject ID.",
                     });
+            }
+
+            const accessCheck = await verifyAIExamAccess(req, examId, examSubjectId);
+            if (!accessCheck.ok) {
+                return res.status(accessCheck.status).json({
+                    success: false,
+                    message: accessCheck.message
+                });
             }
 
             if (
@@ -4135,6 +4181,14 @@ export const getAIAnalysis =
                     });
             }
 
+            const accessCheck = await verifyAIExamAccess(req, examId);
+            if (!accessCheck.ok) {
+                return res.status(accessCheck.status).json({
+                    success: false,
+                    message: accessCheck.message
+                });
+            }
+
             const {
                 data,
                 error,
@@ -4263,6 +4317,14 @@ export const getAIAnalysisByExamSubject =
                         message:
                             "Invalid exam subject ID.",
                     });
+            }
+
+            const accessCheck = await verifyAIExamAccess(req, examId, examSubjectId);
+            if (!accessCheck.ok) {
+                return res.status(accessCheck.status).json({
+                    success: false,
+                    message: accessCheck.message
+                });
             }
 
             const examSubject =
