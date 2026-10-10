@@ -37,6 +37,7 @@ function SchoolManagement() {
     const [creatingHeadmaster, setCreatingHeadmaster] = useState(false);
     const [form, setForm] = useState(emptyForm);
     const [search, setSearch] = useState("");
+    const [showInactive, setShowInactive] = useState(false);
     const [notice, setNotice] = useState(null);
 
     const loadSchools = useCallback(async () => {
@@ -45,7 +46,6 @@ function SchoolManagement() {
         const { data, error } = await supabase
             .from("schools")
             .select("id, school_name, registration_number, address, phone, email, created_at, is_active")
-            .eq("is_active", true)
             .order("id", { ascending: true });
 
         if (error) {
@@ -201,8 +201,35 @@ function SchoolManagement() {
         await loadSchools();
     };
 
+    const toggleSchoolStatus = async (school) => {
+        const nextActive = school.is_active !== true;
+        const action = nextActive ? "kuwasha" : "kusimamisha";
+        if (!window.confirm(`Unataka ${action} shule \"${school.school_name}\" (ID ${school.id})? Data zake hazitafutwa.`)) return;
+
+        setNotice(null);
+        const { error } = await supabase
+            .from("schools")
+            .update({ is_active: nextActive })
+            .eq("id", school.id);
+
+        if (error) {
+            console.error("SCHOOL STATUS UPDATE ERROR:", error);
+            setNotice({ type: "error", text: error.message || "Imeshindikana kubadilisha hali ya shule." });
+            return;
+        }
+
+        setNotice({
+            type: "success",
+            text: nextActive
+                ? `Shule ${school.school_name} imewashwa tena.`
+                : `Shule ${school.school_name} imesimamishwa bila kufuta data zake.`,
+        });
+        await loadSchools();
+    };
+
     const normalizedSearch = search.trim().toLowerCase();
     const filteredSchools = schools.filter((school) =>
+        (showInactive || school.is_active === true) &&
         [
             school.school_name,
             school.registration_number,
@@ -243,16 +270,16 @@ function SchoolManagement() {
 
                 <div className="grid gap-4 sm:grid-cols-3">
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <p className="text-sm font-semibold text-slate-500">Jumla ya shule</p>
+                        <p className="text-sm font-semibold text-slate-500">Shule active</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{schools.filter((school) => school.is_active === true).length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p className="text-sm font-semibold text-slate-500">Shule zilizosimamishwa</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{schools.filter((school) => school.is_active !== true).length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p className="text-sm font-semibold text-slate-500">Shule zote</p>
                         <p className="mt-2 text-3xl font-black text-slate-900">{schools.length}</p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <p className="text-sm font-semibold text-slate-500">Shule zenye usajili</p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">{schools.filter((school) => school.registration_number).length}</p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <p className="text-sm font-semibold text-slate-500">Shule bila namba ya usajili</p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">{schools.filter((school) => !school.registration_number).length}</p>
                     </div>
                 </div>
 
@@ -364,6 +391,11 @@ function SchoolManagement() {
                             <Search size={17} className="absolute left-3 top-3.5 text-slate-400" />
                             <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-600" placeholder="Tafuta jina, ID, usajili..." />
                         </div>
+                        <button type="button" onClick={() => setShowInactive((value) => !value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${showInactive ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-300 bg-white text-slate-700"}`}>
+                            {showInactive ? "Ficha shule zilizosimamishwa" : "Onyesha shule zilizosimamishwa"}
+                        </button>
+                        <div className="relative w-full sm:max-w-xs">
+                        </div>
                     </div>
                     {loading ? (
                         <div className="flex items-center justify-center gap-3 p-12 text-slate-500"><Loader2 className="animate-spin" size={22} /> Inapakia shule...</div>
@@ -390,6 +422,9 @@ function SchoolManagement() {
                                                     <div>
                                                         <p className="font-bold text-slate-900">{school.school_name}</p>
                                                         <p className="text-xs text-slate-500">School ID: {school.id}</p>
+                                                        <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${school.is_active === true ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                                                            {school.is_active === true ? "ACTIVE" : "INACTIVE"}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </td>
@@ -400,7 +435,7 @@ function SchoolManagement() {
                                             </td>
                                             <td className="max-w-xs whitespace-pre-wrap px-5 py-4 text-slate-600">{school.address || "—"}</td>
                                             <td className="px-5 py-4">
-                                                <div className="flex flex-wrap gap-2"><button type="button" onClick={() => startHeadmasterCreate(school)} className="rounded-lg border border-violet-300 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">Create Headmaster</button><button type="button" onClick={() => startEdit(school)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700">Edit details</button></div>
+                                                <div className="flex flex-wrap gap-2"><button type="button" disabled={school.is_active !== true} onClick={() => startHeadmasterCreate(school)} className="rounded-lg border border-violet-300 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40">Create Headmaster</button><button type="button" onClick={() => startEdit(school)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700">Edit details</button><button type="button" onClick={() => toggleSchoolStatus(school)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${school.is_active === true ? "border-amber-300 text-amber-800 hover:bg-amber-50" : "border-emerald-300 text-emerald-800 hover:bg-emerald-50"}`}>{school.is_active === true ? "Deactivate" : "Activate"}</button></div>
                                             </td>
                                         </tr>
                                     ))}
@@ -411,7 +446,7 @@ function SchoolManagement() {
                 </div>
 
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    <strong>Hatua inayofuata:</strong> Kuongeza shule hapa kunatengeneza rekodi ya shule tu. Akaunti ya Headmaster/Admin na kuanzisha madarasa, mwaka wa masomo na watumiaji wa shule hiyo vitafanywa katika hatua inayofuata; hakuna akaunti inayotengenezwa kimyakimya.
+                    <strong>Usalama wa data:</strong> Deactivate haisufi shule wala data zake. Shule zilizosimamishwa zinaweza kuonyeshwa kwa kitufe hapo juu na kuwashwa tena. Akaunti ya Headmaster inaweza kuundwa kwa shule active pekee.
                 </div>
             </div>
         </div>
