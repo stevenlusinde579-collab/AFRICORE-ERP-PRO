@@ -1,4 +1,6 @@
 import express from "express";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
 
 import {
 
@@ -89,6 +91,9 @@ import {
 
 const router =
     express.Router();
+
+// Finance endpoints must never run without verified school context.
+router.use(authenticateUser, requireSchoolContext);
 
 
 // ============================================================
