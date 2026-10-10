@@ -202,6 +202,15 @@ function SchoolManagement() {
     };
 
     const toggleSchoolStatus = async (school) => {
+        // School ID 3 is the existing production school and must remain intact.
+        if (Number(school.id) === 3 && school.is_active === true) {
+            setNotice({
+                type: "error",
+                text: "Shule hii ya msingi (School ID 3) imelindwa na haiwezi kusimamishwa kupitia School Management.",
+            });
+            return;
+        }
+
         const nextActive = school.is_active !== true;
         const action = nextActive ? "kuwasha" : "kusimamisha";
         if (!window.confirm(`Unataka ${action} shule \"${school.school_name}\" (ID ${school.id})? Data zake hazitafutwa.`)) return;
@@ -435,7 +444,7 @@ function SchoolManagement() {
                                             </td>
                                             <td className="max-w-xs whitespace-pre-wrap px-5 py-4 text-slate-600">{school.address || "—"}</td>
                                             <td className="px-5 py-4">
-                                                <div className="flex flex-wrap gap-2"><button type="button" disabled={school.is_active !== true} onClick={() => startHeadmasterCreate(school)} className="rounded-lg border border-violet-300 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40">Create Headmaster</button><button type="button" onClick={() => startEdit(school)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700">Edit details</button><button type="button" onClick={() => toggleSchoolStatus(school)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${school.is_active === true ? "border-amber-300 text-amber-800 hover:bg-amber-50" : "border-emerald-300 text-emerald-800 hover:bg-emerald-50"}`}>{school.is_active === true ? "Deactivate" : "Activate"}</button></div>
+                                                <div className="flex flex-wrap gap-2"><button type="button" disabled={school.is_active !== true} onClick={() => startHeadmasterCreate(school)} className="rounded-lg border border-violet-300 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40">Create Headmaster</button><button type="button" onClick={() => startEdit(school)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700">Edit details</button><button type="button" disabled={Number(school.id) === 3 && school.is_active === true} title={Number(school.id) === 3 && school.is_active === true ? "Shule hii ya msingi imelindwa" : undefined} onClick={() => toggleSchoolStatus(school)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${school.is_active === true ? "border-amber-300 text-amber-800 hover:bg-amber-50" : "border-emerald-300 text-emerald-800 hover:bg-emerald-50"} disabled:cursor-not-allowed disabled:opacity-40`}>{school.is_active === true ? "Deactivate" : "Activate"}</button></div>
                                             </td>
                                         </tr>
                                     ))}
