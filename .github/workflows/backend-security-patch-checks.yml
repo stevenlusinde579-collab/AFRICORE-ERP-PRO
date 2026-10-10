@@ -34,6 +34,9 @@ jobs:
           node --check routes/resultAnalysisRoutes.js
           node --check routes/financeRoutes.js
           node --check routes/communicationRoutes.js
+          node --check controllers/schoolManagementController.js
+          node --check routes/schoolManagementRoutes.js
+          node --check server.js
 
   frontend-build:
     runs-on: ubuntu-latest
