@@ -1,5 +1,7 @@
 import express from "express";
 import multer from "multer";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
 
 import {
     analyzePaper,
@@ -41,6 +43,8 @@ router.get(
 
 router.get(
     "/analysis/:examId/:examSubjectId",
+    authenticateUser,
+    requireSchoolContext,
     getAIAnalysisByExamSubject
 );
 
@@ -51,6 +55,8 @@ router.get(
 
 router.get(
     "/analysis/:examId",
+    authenticateUser,
+    requireSchoolContext,
     getAIAnalysis
 );
 
@@ -61,6 +67,8 @@ router.get(
 
 router.post(
     "/analyze-paper",
+    authenticateUser,
+    requireSchoolContext,
     upload.single("paper"),
     analyzePaper
 );
