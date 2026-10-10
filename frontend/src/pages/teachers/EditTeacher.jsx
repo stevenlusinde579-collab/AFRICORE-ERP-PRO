@@ -476,16 +476,16 @@ function EditStaffNonStaff() {
                 photo_url:
                     data.photo_url || "",
 
+                school_id:
+                    data.school_id ?? null
+
+            });
+
             setPhotoDisplayUrl(
                 data.photo_url
                     ? await resolveSchoolPhotoUrl("teacher-photos", data.photo_url)
                     : ""
             );
-
-                school_id:
-                    data.school_id ?? null
-
-            });
 
 
             // =================================================
