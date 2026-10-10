@@ -16,6 +16,7 @@ import {
     ShieldCheck,
 } from "lucide-react";
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 
 const emptyForm = {
     school_name: "",
@@ -31,6 +32,9 @@ function SchoolManagement() {
     const [saving, setSaving] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [headmasterSchool, setHeadmasterSchool] = useState(null);
+    const [headmasterForm, setHeadmasterForm] = useState({ full_name: "", email: "", phone: "", password: "" });
+    const [creatingHeadmaster, setCreatingHeadmaster] = useState(false);
     const [form, setForm] = useState(emptyForm);
     const [search, setSearch] = useState("");
     const [notice, setNotice] = useState(null);
@@ -76,6 +80,48 @@ function SchoolManagement() {
         });
         setNotice(null);
         setShowForm(true);
+    };
+
+    const startHeadmasterCreate = (school) => {
+        setHeadmasterSchool(school);
+        setHeadmasterForm({ full_name: "", email: "", phone: "", password: "" });
+        setNotice(null);
+    };
+
+    const updateHeadmasterField = (event) => {
+        const { name, value } = event.target;
+        setHeadmasterForm((current) => ({ ...current, [name]: value }));
+    };
+
+    const saveHeadmaster = async (event) => {
+        event.preventDefault();
+        if (!headmasterSchool) return;
+        setCreatingHeadmaster(true);
+        setNotice(null);
+
+        try {
+            const response = await api.post("/schools/headmaster", {
+                school_id: headmasterSchool.id,
+                full_name: headmasterForm.full_name.trim(),
+                email: headmasterForm.email.trim().toLowerCase(),
+                phone: headmasterForm.phone.trim(),
+                password: headmasterForm.password,
+            });
+
+            setHeadmasterSchool(null);
+            setHeadmasterForm({ full_name: "", email: "", phone: "", password: "" });
+            setNotice({
+                type: "success",
+                text: `Akaunti ya Headmaster ${response.data?.headmaster?.email || headmasterForm.email} imeundwa na kuunganishwa na ${headmasterSchool.school_name}. Mpe nenosiri kwa njia salama; halikutumwa kwa barua pepe.`,
+            });
+        } catch (error) {
+            setNotice({
+                type: "error",
+                text: error?.response?.data?.message || "Imeshindikana kuunda akaunti ya Headmaster.",
+            });
+        } finally {
+            setCreatingHeadmaster(false);
+        }
     };
 
     const updateField = (event) => {
@@ -266,6 +312,48 @@ function SchoolManagement() {
                     </div>
                 )}
 
+                {headmasterSchool && (
+                    <div className="rounded-2xl border border-violet-200 bg-white p-5 shadow-sm sm:p-6">
+                        <div className="mb-5 flex items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-extrabold text-slate-900">Create Headmaster Account</h2>
+                                <p className="mt-1 text-sm text-slate-600">
+                                    {headmasterSchool.school_name} · School ID: {headmasterSchool.id}
+                                </p>
+                                <p className="mt-2 text-xs text-amber-700">
+                                    Nenosiri halitatumwa kwa barua pepe. Tumia nenosiri la muda na mpe Headmaster kwa njia salama.
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => setHeadmasterSchool(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close Headmaster form"><X size={20} /></button>
+                        </div>
+                        <form onSubmit={saveHeadmaster} className="grid gap-4 sm:grid-cols-2">
+                            <label className="block sm:col-span-2">
+                                <span className="mb-1.5 block text-sm font-bold text-slate-700">Full name *</span>
+                                <input required name="full_name" value={headmasterForm.full_name} onChange={updateHeadmasterField} maxLength={180} className="w-full rounded-xl border border-slate-300 px-3 py-3 outline-none focus:border-blue-600" placeholder="Jina kamili la Headmaster" />
+                            </label>
+                            <label className="block">
+                                <span className="mb-1.5 block text-sm font-bold text-slate-700">Email / username *</span>
+                                <input required type="email" name="email" value={headmasterForm.email} onChange={updateHeadmasterField} maxLength={254} autoComplete="off" className="w-full rounded-xl border border-slate-300 px-3 py-3 outline-none focus:border-blue-600" placeholder="headmaster@school.ac.tz" />
+                            </label>
+                            <label className="block">
+                                <span className="mb-1.5 block text-sm font-bold text-slate-700">Phone</span>
+                                <input name="phone" value={headmasterForm.phone} onChange={updateHeadmasterField} maxLength={50} className="w-full rounded-xl border border-slate-300 px-3 py-3 outline-none focus:border-blue-600" placeholder="+255..." />
+                            </label>
+                            <label className="block sm:col-span-2">
+                                <span className="mb-1.5 block text-sm font-bold text-slate-700">Temporary password * (at least 8 characters)</span>
+                                <input required type="password" name="password" value={headmasterForm.password} onChange={updateHeadmasterField} minLength={8} maxLength={128} autoComplete="new-password" className="w-full rounded-xl border border-slate-300 px-3 py-3 outline-none focus:border-blue-600" placeholder="Tengeneza nenosiri la muda" />
+                            </label>
+                            <div className="flex justify-end gap-3 sm:col-span-2">
+                                <button type="button" onClick={() => setHeadmasterSchool(null)} className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                                <button type="submit" disabled={creatingHeadmaster} className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white hover:bg-violet-800 disabled:opacity-60">
+                                    {creatingHeadmaster ? <Loader2 size={17} className="animate-spin" /> : <ShieldCheck size={17} />}
+                                    {creatingHeadmaster ? "Creating account..." : "Create Headmaster"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -312,7 +400,7 @@ function SchoolManagement() {
                                             </td>
                                             <td className="max-w-xs whitespace-pre-wrap px-5 py-4 text-slate-600">{school.address || "—"}</td>
                                             <td className="px-5 py-4">
-                                                <button type="button" onClick={() => startEdit(school)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700">Edit details</button>
+                                                <div className="flex flex-wrap gap-2"><button type="button" onClick={() => startHeadmasterCreate(school)} className="rounded-lg border border-violet-300 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">Create Headmaster</button><button type="button" onClick={() => startEdit(school)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700">Edit details</button></div>
                                             </td>
                                         </tr>
                                     ))}
