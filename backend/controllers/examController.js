@@ -9,11 +9,16 @@ import { askGemini } from "../services/gemini.service.js";
 export const getExams = async (req, res) => {
     try {
         const { academic_year_id } = req.query;
-        const schoolId = req.schoolContext?.isSuperAdmin
-            ? Number(req.query.school_id)
+        const isSuperAdmin = req.schoolContext?.isSuperAdmin === true;
+        const schoolId = isSuperAdmin
+            ? (req.query.school_id ? Number(req.query.school_id) : null)
             : Number(req.schoolContext?.schoolId);
-        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+
+        if (!isSuperAdmin && (!Number.isInteger(schoolId) || schoolId <= 0)) {
             return res.status(400).json({ success: false, message: "A valid school must be selected." });
+        }
+        if (isSuperAdmin && req.query.school_id && (!Number.isInteger(schoolId) || schoolId <= 0)) {
+            return res.status(400).json({ success: false, message: "Invalid school ID." });
         }
 
         if (!academic_year_id) {
@@ -29,7 +34,9 @@ export const getExams = async (req, res) => {
             .eq("academic_year_id", Number(academic_year_id))
             .order("created_at", { ascending: false });
 
-        query = query.eq("school_id", schoolId);
+        if (schoolId) {
+            query = query.eq("school_id", schoolId);
+        }
 
         const { data, error } = await query;
 
