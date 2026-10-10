@@ -2914,8 +2914,30 @@ export const getExamPapersHistory = async (
             });
         }
 
-        const rows =
-            papers || [];
+        let rows = papers || [];
+
+        // The service-role client bypasses RLS, so scope paper history explicitly.
+        if (!req.schoolContext?.isSuperAdmin) {
+            const schoolId = Number(req.schoolContext?.schoolId);
+            const { data: ownedExams, error: ownedExamsError } = await supabase
+                .from("exams")
+                .select("id")
+                .eq("school_id", schoolId);
+
+            if (ownedExamsError) throw ownedExamsError;
+            const ownedExamIds = new Set((ownedExams || []).map(exam => Number(exam.id)));
+            rows = rows.filter(paper => ownedExamIds.has(Number(paper.exam_id)));
+        } else if (req.query?.school_id) {
+            const schoolId = Number(req.query.school_id);
+            const { data: ownedExams, error: ownedExamsError } = await supabase
+                .from("exams")
+                .select("id")
+                .eq("school_id", schoolId);
+
+            if (ownedExamsError) throw ownedExamsError;
+            const ownedExamIds = new Set((ownedExams || []).map(exam => Number(exam.id)));
+            rows = rows.filter(paper => ownedExamIds.has(Number(paper.exam_id)));
+        }
 
         if (
             rows.length === 0
