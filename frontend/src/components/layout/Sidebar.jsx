@@ -18,6 +18,7 @@ import {
   FaChartBar,
   FaPrint,
   FaBed,
+  FaBuilding,
 } from "react-icons/fa";
 
 import { useRole } from "../../context/RoleContext";
@@ -28,7 +29,6 @@ import { useRole } from "../../context/RoleContext";
 ========================================================= */
 
 const normalizeRole = (roleName) => {
-
   if (!roleName) {
     return "";
   }
@@ -37,7 +37,6 @@ const normalizeRole = (roleName) => {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
-
 };
 
 
@@ -46,15 +45,13 @@ const normalizeRole = (roleName) => {
 ========================================================= */
 
 function Sidebar() {
-
   const {
     loadingRoles = true,
     selectedRoleName = "",
     selectedRoleId = null,
-    selectedRole = null,
-    roles: availableRoles = [],
     isSuperAdmin = false,
     selectedRoleIsSuperAdmin = false,
+    roles: availableRoles = [],
   } = useRole();
 
 
@@ -62,23 +59,11 @@ function Sidebar() {
      CURRENT ROLE
   ======================================================= */
 
-  const currentRole = normalizeRole(
-    selectedRoleName
-  );
+  const currentRole = normalizeRole(selectedRoleName);
 
 
   /* =======================================================
      SUPER ADMIN DETECTION
-
-     We intentionally check:
-
-     1. RoleContext isSuperAdmin
-     2. selectedRoleIsSuperAdmin
-     3. role ID = 1
-     4. normalized role name
-
-     This prevents the sidebar from disappearing because
-     of a role-name mismatch.
   ======================================================= */
 
   const superAdmin =
@@ -94,11 +79,6 @@ function Sidebar() {
   ======================================================= */
 
   const allMenu = useMemo(() => [
-
-    /* =====================================================
-       DASHBOARD
-    ===================================================== */
-
     {
       name: "Dashboard",
       path: "/dashboard",
@@ -123,10 +103,14 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       STAFF & NON-STAFF
-    ===================================================== */
+    /* SCHOOL MANAGEMENT — SUPER ADMIN ONLY */
+    {
+      name: "School Management",
+      path: "/school-management",
+      icon: <FaBuilding />,
+      roles: ["super admin"],
+      superAdminOnly: true
+    },
 
     {
       name: "Staff & Non-Staff",
@@ -140,11 +124,6 @@ function Sidebar() {
         "secretary"
       ]
     },
-
-
-    /* =====================================================
-       STUDENTS
-    ===================================================== */
 
     {
       name: "Students",
@@ -160,11 +139,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       CLASSES
-    ===================================================== */
-
     {
       name: "Classes",
       path: "/classes",
@@ -179,11 +153,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       SUBJECTS
-    ===================================================== */
-
     {
       name: "Subjects",
       path: "/subjects",
@@ -195,11 +164,6 @@ function Sidebar() {
         "subject teacher"
       ]
     },
-
-
-    /* =====================================================
-       TIMETABLE
-    ===================================================== */
 
     {
       name: "Timetable",
@@ -214,11 +178,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       EXAMINATION
-    ===================================================== */
-
     {
       name: "Examination",
       path: "/examination",
@@ -232,11 +191,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       PRINTING UNIT
-    ===================================================== */
-
     {
       name: "Printing Unit",
       path: "/examination/printing-unit",
@@ -249,11 +203,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       FINANCE
-    ===================================================== */
-
     {
       name: "Finance",
       path: "/finance",
@@ -265,11 +214,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       SOCIAL WELFARE
-    ===================================================== */
-
     {
       name: "Social Welfare",
       path: "/social-welfare",
@@ -280,11 +224,6 @@ function Sidebar() {
         "social welfare manager"
       ]
     },
-
-
-    /* =====================================================
-       PATRON & MATRON MANAGEMENT
-    ===================================================== */
 
     {
       name: "Patron & Matron Management",
@@ -299,23 +238,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       TEACHER ON DUTY
-
-       AVAILABLE TO ALL TEACHING STAFF
-
-       - Headmaster
-       - Deputy Headmaster
-       - Academic Master
-       - Subject Teacher
-       - Class Teacher
-       - Teacher on Duty
-
-       Super Admin automatically gets this because
-       Super Admin receives allMenu.
-    ===================================================== */
-
     {
       name: "Teacher on Duty",
       path: "/teacher-on-duty",
@@ -329,11 +251,6 @@ function Sidebar() {
         "teacher on duty"
       ]
     },
-
-
-    /* =====================================================
-       COMMUNICATION
-    ===================================================== */
 
     {
       name: "Communication",
@@ -359,11 +276,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       AI
-    ===================================================== */
-
     {
       name: "AI",
       path: "/ai",
@@ -376,11 +288,6 @@ function Sidebar() {
       ]
     },
 
-
-    /* =====================================================
-       REPORTS
-    ===================================================== */
-
     {
       name: "Reports",
       path: "/reports",
@@ -392,11 +299,6 @@ function Sidebar() {
         "accountant"
       ]
     },
-
-
-    /* =====================================================
-       SETTINGS
-    ===================================================== */
 
     {
       name: "Settings",
@@ -427,51 +329,24 @@ function Sidebar() {
 
   /* =======================================================
      VISIBLE MENU
-
-     IMPORTANT:
-
-     Super Admin gets ALL menu items.
-
-     Other roles continue using the normal role filter.
   ======================================================= */
 
   const visibleMenu = useMemo(() => {
-
-    /* -----------------------------------------------
-       SUPER ADMIN
-
-       Full system access.
-    ----------------------------------------------- */
-
     if (superAdmin) {
-
       return allMenu;
-
     }
-
-
-    /* -----------------------------------------------
-       NO ROLE
-    ----------------------------------------------- */
 
     if (!currentRole) {
-
       return [];
-
     }
 
+    return allMenu.filter((item) => {
+      if (item.superAdminOnly) {
+        return false;
+      }
 
-    /* -----------------------------------------------
-       NORMAL ROLE
-    ----------------------------------------------- */
-
-    return allMenu.filter(
-      (item) =>
-        item.roles.includes(
-          currentRole
-        )
-    );
-
+      return item.roles.includes(currentRole);
+    });
   }, [
     allMenu,
     currentRole,
@@ -484,13 +359,9 @@ function Sidebar() {
   ======================================================= */
 
   if (loadingRoles) {
-
     return (
-
       <aside className="w-64 min-h-screen bg-slate-900 text-white p-5">
-
         <div className="mb-8">
-
           <h1 className="text-2xl font-bold">
             AfriCore ERP PRO
           </h1>
@@ -498,28 +369,18 @@ function Sidebar() {
           <p className="text-sm text-gray-400">
             School Management System
           </p>
-
         </div>
-
 
         <div className="space-y-3">
-
-          <div className="h-10 bg-slate-800 rounded-lg animate-pulse" />
-
-          <div className="h-10 bg-slate-800 rounded-lg animate-pulse" />
-
-          <div className="h-10 bg-slate-800 rounded-lg animate-pulse" />
-
-          <div className="h-10 bg-slate-800 rounded-lg animate-pulse" />
-
-          <div className="h-10 bg-slate-800 rounded-lg animate-pulse" />
-
+          {[1, 2, 3, 4, 5].map((item) => (
+            <div
+              key={item}
+              className="h-10 bg-slate-800 rounded-lg animate-pulse"
+            />
+          ))}
         </div>
-
       </aside>
-
     );
-
   }
 
 
@@ -528,13 +389,9 @@ function Sidebar() {
   ======================================================= */
 
   if (!selectedRoleName && !superAdmin) {
-
     return (
-
       <aside className="w-64 min-h-screen bg-slate-900 text-white p-5">
-
         <div className="mb-8">
-
           <h1 className="text-2xl font-bold">
             AfriCore ERP PRO
           </h1>
@@ -542,36 +399,23 @@ function Sidebar() {
           <p className="text-sm text-gray-400">
             School Management System
           </p>
-
         </div>
 
-
         <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4">
-
           <div className="flex items-center gap-2 text-yellow-400 mb-2">
-
             <FaUserShield />
 
             <span className="font-semibold">
               No Role Assigned
             </span>
-
           </div>
 
-
           <p className="text-xs text-gray-400">
-
-            Your account does not have an active
-            system role.
-
+            Your account does not have an active system role.
           </p>
-
         </div>
-
       </aside>
-
     );
-
   }
 
 
@@ -579,10 +423,9 @@ function Sidebar() {
      DISPLAY ROLE
   ======================================================= */
 
-  const displayRole =
-    superAdmin
-      ? "Super Admin"
-      : selectedRoleName;
+  const displayRole = superAdmin
+    ? "Super Admin"
+    : selectedRoleName;
 
 
   /* =======================================================
@@ -590,15 +433,10 @@ function Sidebar() {
   ======================================================= */
 
   return (
-
     <aside className="w-64 min-h-screen bg-slate-900 text-white p-5">
 
-      {/* =================================================
-          BRAND
-      ================================================= */}
-
+      {/* BRAND */}
       <div className="mb-8">
-
         <h1 className="text-2xl font-bold">
           AfriCore ERP PRO
         </h1>
@@ -606,27 +444,17 @@ function Sidebar() {
         <p className="text-sm text-gray-400">
           School Management System
         </p>
-
       </div>
 
 
-      {/* =================================================
-          CURRENT ROLE
-      ================================================= */}
-
+      {/* CURRENT ROLE */}
       <div className="mb-6 bg-slate-800 rounded-xl p-3">
-
         <div className="flex items-center gap-3">
-
           <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
-
             <FaUserShield />
-
           </div>
 
-
           <div className="min-w-0">
-
             <p className="text-xs text-gray-400">
               Current Role
             </p>
@@ -634,130 +462,91 @@ function Sidebar() {
             <p className="text-sm font-semibold text-white truncate">
               {displayRole}
             </p>
-
           </div>
-
         </div>
-
       </div>
 
 
-      {/* =================================================
-          NAVIGATION
-      ================================================= */}
-
+      {/* NAVIGATION */}
       <nav className="space-y-2">
+        {visibleMenu.map((item) => (
+          <NavLink
+            key={item.name}
+            to={item.path}
+            className={({ isActive }) => `
+              flex items-center gap-3
+              px-4 py-3
+              rounded-lg
+              transition-all
+              duration-200
+              ${
+                isActive
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-300 hover:bg-slate-800 hover:text-white"
+              }
+            `}
+          >
+            <span className="text-lg">
+              {item.icon}
+            </span>
 
-        {visibleMenu.map(
-          (item) => (
-
-            <NavLink
-              key={item.name}
-              to={item.path}
-              className={({ isActive }) => `
-                flex items-center gap-3
-                px-4 py-3
-                rounded-lg
-                transition-all
-                duration-200
-
-                ${
-                  isActive
-                    ? "bg-blue-600 text-white shadow-lg"
-                    : "text-gray-300 hover:bg-slate-800 hover:text-white"
-                }
-              `}
-            >
-
-              <span className="text-lg">
-                {item.icon}
-              </span>
-
-              <span>
-                {item.name}
-              </span>
-
-            </NavLink>
-
-          )
-        )}
-
+            <span>
+              {item.name}
+            </span>
+          </NavLink>
+        ))}
       </nav>
 
 
-      {/* =================================================
-          MULTI ROLE
-      ================================================= */}
-
+      {/* MULTI ROLE */}
       {availableRoles.length > 1 && (
-
         <div className="mt-8 pt-5 border-t border-slate-800">
-
           <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">
             Active Roles
           </p>
 
-
           <div className="space-y-2">
+            {availableRoles.map((role) => {
+              const roleName =
+                role.role_name ??
+                role.name ??
+                "";
 
-            {availableRoles.map(
-              (role) => {
+              const isPrimary = role.is_primary === true;
 
-                const roleName =
-                  role.role_name ??
-                  role.name ??
-                  "";
+              const profileRoleId =
+                role.profileRoleId ??
+                role.profile_role_id ??
+                role.id ??
+                role.role_id;
 
-                const isPrimary =
-                  role.is_primary === true;
+              return (
+                <div
+                  key={profileRoleId}
+                  className={`
+                    text-xs
+                    px-3
+                    py-2
+                    rounded-lg
+                    ${
+                      isPrimary
+                        ? "bg-blue-900/50 text-blue-300"
+                        : "bg-slate-800 text-gray-400"
+                    }
+                  `}
+                >
+                  {roleName}
 
-                const profileRoleId =
-                  role.profileRoleId ??
-                  role.profile_role_id ??
-                  role.id ??
-                  role.role_id;
-
-
-                return (
-
-                  <div
-                    key={profileRoleId}
-                    className={`
-                      text-xs
-                      px-3
-                      py-2
-                      rounded-lg
-                      ${
-                        isPrimary
-                          ? "bg-blue-900/50 text-blue-300"
-                          : "bg-slate-800 text-gray-400"
-                      }
-                    `}
-                  >
-
-                    {roleName}
-
-                    {isPrimary &&
-                      " • Primary"}
-
-                  </div>
-
-                );
-
-              }
-            )}
-
+                  {isPrimary && " • Primary"}
+                </div>
+              );
+            })}
           </div>
-
         </div>
-
       )}
 
     </aside>
-
   );
-
 }
-
 
 export default Sidebar;

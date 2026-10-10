@@ -23,6 +23,9 @@ import Dashboard from "../pages/dashboard/Dashboard";
 import TeacherOnDutyDashboard from "../pages/dashboard/TeacherOnDutyDashboard";
 import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
+/* SCHOOL MANAGEMENT */
+import SchoolManagement from "../pages/school-management/SchoolManagement";
+
 import Students from "../pages/students/Students";
 import AddStudent from "../pages/students/AddStudent";
 import EditStudent from "../pages/students/EditStudent";
@@ -256,7 +259,8 @@ export default function AppRoutes() {
                 path="/access-denied"
                 element={<AccessDenied />}
             />
-            {/* PUBLIC SYSTEM MANUAL — WITHOUT APPLICATION SIDEBAR */}
+
+            {/* PUBLIC SYSTEM MANUAL */}
             <Route
                 path="/system-manual"
                 element={<SystemManual />}
@@ -285,6 +289,20 @@ export default function AppRoutes() {
                     path="dashboard"
                     element={<Dashboard />}
                 />
+
+                {/* SCHOOL MANAGEMENT — SUPER ADMIN ONLY */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1]}
+                        />
+                    }
+                >
+                    <Route
+                        path="school-management"
+                        element={<SchoolManagement />}
+                    />
+                </Route>
 
                 {/* CLASS TEACHER */}
                 <Route
@@ -825,6 +843,7 @@ export default function AppRoutes() {
                         path="communication/announcements"
                         element={<CommunicationAnnouncements />}
                     />
+
                     <Route
                         path="communication/suggestions"
                         element={<SuggestionBox />}
@@ -872,7 +891,7 @@ export default function AppRoutes() {
                     element={<AI />}
                 />
 
-                {/* SETTINGS: ALL USERS CAN OPEN THE PAGE */}
+                {/* SETTINGS */}
                 <Route
                     path="settings"
                     element={<Settings />}
