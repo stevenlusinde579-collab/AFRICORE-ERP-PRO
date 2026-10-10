@@ -2,6 +2,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { supabase } from "../../services/supabase";
+import { resolveSchoolPhotoUrl } from "../../utils/schoolPhotoUrl";
 
 const API_URL =
     import.meta.env.VITE_API_URL ||
@@ -26,6 +27,8 @@ function EditStaffNonStaff() {
     const [message, setMessage] = useState("");
 
     const [messageType, setMessageType] = useState("success");
+
+    const [photoDisplayUrl, setPhotoDisplayUrl] = useState("");
 
 
     // =====================================================
@@ -472,6 +475,12 @@ function EditStaffNonStaff() {
 
                 photo_url:
                     data.photo_url || "",
+
+            setPhotoDisplayUrl(
+                data.photo_url
+                    ? await resolveSchoolPhotoUrl("teacher-photos", data.photo_url)
+                    : ""
+            );
 
                 school_id:
                     data.school_id ?? null
@@ -1291,24 +1300,19 @@ function EditStaffNonStaff() {
             }
 
 
-            const {
-                data
-            } = supabase.storage
-
-                .from("teacher-photos")
-
-                .getPublicUrl(
-                    fileName
-                );
-
+            const signedPhotoUrl = await resolveSchoolPhotoUrl(
+                "teacher-photos",
+                fileName
+            );
 
             setTeacher(
                 previous => ({
                     ...previous,
-                    photo_url:
-                        data.publicUrl
+                    // Store the school-folder object path, never a public URL.
+                    photo_url: fileName
                 })
             );
+            setPhotoDisplayUrl(signedPhotoUrl);
 
 
             setMessage(
@@ -2025,7 +2029,7 @@ function EditStaffNonStaff() {
 
                     {/* PHOTO */}
 
-                    {teacher.photo_url && (
+                    {photoDisplayUrl && (
 
                         <div className="mt-5">
 
@@ -2037,7 +2041,7 @@ function EditStaffNonStaff() {
 
 
                             <img
-                                src={teacher.photo_url}
+                                src={photoDisplayUrl}
                                 alt="Staff member"
                                 className="w-32 h-32 rounded-full object-cover border"
                             />
