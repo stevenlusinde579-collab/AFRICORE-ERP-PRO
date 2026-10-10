@@ -385,16 +385,16 @@ function SchoolManagement() {
                     <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h2 className="font-extrabold text-slate-900">Shule zilizosajiliwa</h2>
-                            <p className="mt-1 text-xs text-slate-500">Taarifa zilizopo kwenye database kuu.</p>
+                            <p className="mt-1 text-xs text-slate-500">Taarifa za shule active na zilizosimamishwa.</p>
                         </div>
-                        <div className="relative w-full sm:max-w-xs">
-                            <Search size={17} className="absolute left-3 top-3.5 text-slate-400" />
-                            <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-600" placeholder="Tafuta jina, ID, usajili..." />
-                        </div>
-                        <button type="button" onClick={() => setShowInactive((value) => !value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${showInactive ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-300 bg-white text-slate-700"}`}>
-                            {showInactive ? "Ficha shule zilizosimamishwa" : "Onyesha shule zilizosimamishwa"}
-                        </button>
-                        <div className="relative w-full sm:max-w-xs">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <div className="relative w-full sm:max-w-xs">
+                                <Search size={17} className="absolute left-3 top-3.5 text-slate-400" />
+                                <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-600" placeholder="Tafuta jina, ID, usajili..." />
+                            </div>
+                            <button type="button" onClick={() => setShowInactive((value) => !value)} className={`whitespace-nowrap rounded-xl border px-3 py-3 text-xs font-bold ${showInactive ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-300 bg-white text-slate-700"}`}>
+                                {showInactive ? "Ficha shule zilizosimamishwa" : "Onyesha shule zilizosimamishwa"}
+                            </button>
                         </div>
                     </div>
                     {loading ? (
