@@ -69,23 +69,27 @@ export const getExamById = async (req, res) => {
             });
         }
 
-        const {
-            data,
-            error
-        } = await supabase
+        let examQuery = supabase
             .from("exams")
             .select("*")
-            .eq("id", id)
-            .maybeSingle();
+            .eq("id", id);
 
-        if (error) {
-            throw error;
+        if (!req.schoolContext?.isSuperAdmin) {
+            examQuery = examQuery.eq("school_id", Number(req.schoolContext?.schoolId));
+        } else if (req.query?.school_id) {
+            examQuery = examQuery.eq("school_id", Number(req.query.school_id));
         }
 
-        return res.json({
-            success: true,
-            exam: data
-        });
+        const { data, error } = await examQuery.maybeSingle();
+        if (error) throw error;
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Examination not found in your school."
+            });
+        }
+
+        return res.json({ success: true, exam: data });
 
     } catch (error) {
         console.error("GET EXAM BY ID ERROR:", error);
@@ -233,6 +237,12 @@ export const updateExam = async (req, res) => {
 
         if (error) {
             throw error;
+        }
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Examination not found in your school."
+            });
         }
 
         return res.json({
