@@ -10,6 +10,7 @@ import authRoutes from "./routes/authRoutes.js";
 import teacherRoutes from "./routes/teacherRoutes.js";
 import communicationRoutes from "./routes/communicationRoutes.js";
 import financeRoutes from "./routes/financeRoutes.js";
+import schoolManagementRoutes from "./routes/schoolManagementRoutes.js";
 
 /* =========================================================
    APP
@@ -97,6 +98,11 @@ app.use(
 app.use(
     "/api/teachers",
     teacherRoutes
+);
+
+app.use(
+    "/api/schools",
+    schoolManagementRoutes
 );
 
 

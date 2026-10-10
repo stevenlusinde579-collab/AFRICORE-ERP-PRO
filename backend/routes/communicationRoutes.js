@@ -3,6 +3,8 @@ import express from "express";
 import twilio from "twilio";
 import { Resend } from "resend";
 import { supabase } from "../config/supabase.js";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
 
 const router = express.Router();
 
@@ -253,7 +255,7 @@ router.get("/", async (req, res) => {
    SEND PARENT RESULT COMMUNICATION
 ========================================================= */
 
-router.post("/parent-result", async (req, res) => {
+router.post("/parent-result", authenticateUser, requireSchoolContext, async (req, res) => {
   const {
     school_id,
     student_id,
@@ -264,6 +266,63 @@ router.post("/parent-result", async (req, res) => {
     subject,
     message,
   } = req.body || {};
+
+  const verifiedSchoolId = req.schoolContext?.isSuperAdmin
+    ? Number(school_id)
+    : Number(req.schoolContext?.schoolId);
+
+  if (!Number.isInteger(verifiedSchoolId) || verifiedSchoolId <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "A valid school is required."
+    });
+  }
+
+  const studentIdNumber = Number(student_id);
+  const examIdNumber = Number(exam_id);
+  if (!Number.isInteger(studentIdNumber) || studentIdNumber <= 0 ||
+      !Number.isInteger(examIdNumber) || examIdNumber <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Valid student and examination IDs are required."
+    });
+  }
+
+  try {
+    const [
+      studentResult,
+      examResult
+    ] = await Promise.all([
+      supabase
+        .from("students")
+        .select("id, school_id")
+        .eq("id", studentIdNumber)
+        .eq("school_id", verifiedSchoolId)
+        .maybeSingle(),
+      supabase
+        .from("exams")
+        .select("id, school_id")
+        .eq("id", examIdNumber)
+        .eq("school_id", verifiedSchoolId)
+        .maybeSingle()
+    ]);
+
+    if (studentResult.error) throw studentResult.error;
+    if (examResult.error) throw examResult.error;
+
+    if (!studentResult.data || !examResult.data) {
+      return res.status(404).json({
+        success: false,
+        message: "Student or examination was not found in your school."
+      });
+    }
+  } catch (ownershipError) {
+    console.error("COMMUNICATION SCHOOL OWNERSHIP CHECK ERROR:", ownershipError);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to verify student and examination ownership."
+    });
+  }
 
   const normalizedChannel = String(channel || "")
     .trim()
@@ -325,9 +384,9 @@ router.post("/parent-result", async (req, res) => {
 
   try {
     history = await createCommunicationHistory({
-      school_id,
-      student_id,
-      exam_id,
+      school_id: verifiedSchoolId,
+      student_id: studentIdNumber,
+      exam_id: examIdNumber,
       parent_name,
       recipient: cleanRecipient,
       channel: normalizedChannel,

@@ -96,6 +96,17 @@ function Sidebar() {
   const allMenu = useMemo(() => [
 
     /* =====================================================
+       SCHOOL MANAGEMENT — SUPER ADMIN ONLY
+    ===================================================== */
+
+    {
+      name: "School Management",
+      path: "/schools",
+      icon: <FaSchool />,
+      roles: ["super admin"]
+    },
+
+    /* =====================================================
        DASHBOARD
     ===================================================== */
 

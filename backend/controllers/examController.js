@@ -8,7 +8,18 @@ import { askGemini } from "../services/gemini.service.js";
 
 export const getExams = async (req, res) => {
     try {
-        const { school_id, academic_year_id } = req.query;
+        const { academic_year_id } = req.query;
+        const isSuperAdmin = req.schoolContext?.isSuperAdmin === true;
+        const schoolId = isSuperAdmin
+            ? (req.query.school_id ? Number(req.query.school_id) : null)
+            : Number(req.schoolContext?.schoolId);
+
+        if (!isSuperAdmin && (!Number.isInteger(schoolId) || schoolId <= 0)) {
+            return res.status(400).json({ success: false, message: "A valid school must be selected." });
+        }
+        if (isSuperAdmin && req.query.school_id && (!Number.isInteger(schoolId) || schoolId <= 0)) {
+            return res.status(400).json({ success: false, message: "Invalid school ID." });
+        }
 
         if (!academic_year_id) {
             return res.status(400).json({
@@ -23,8 +34,8 @@ export const getExams = async (req, res) => {
             .eq("academic_year_id", Number(academic_year_id))
             .order("created_at", { ascending: false });
 
-        if (school_id) {
-            query = query.eq("school_id", Number(school_id));
+        if (schoolId) {
+            query = query.eq("school_id", schoolId);
         }
 
         const { data, error } = await query;
@@ -65,23 +76,27 @@ export const getExamById = async (req, res) => {
             });
         }
 
-        const {
-            data,
-            error
-        } = await supabase
+        let examQuery = supabase
             .from("exams")
             .select("*")
-            .eq("id", id)
-            .single();
+            .eq("id", id);
 
-        if (error) {
-            throw error;
+        if (!req.schoolContext?.isSuperAdmin) {
+            examQuery = examQuery.eq("school_id", Number(req.schoolContext?.schoolId));
+        } else if (req.query?.school_id) {
+            examQuery = examQuery.eq("school_id", Number(req.query.school_id));
         }
 
-        return res.json({
-            success: true,
-            exam: data
-        });
+        const { data, error } = await examQuery.maybeSingle();
+        if (error) throw error;
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Examination not found in your school."
+            });
+        }
+
+        return res.json({ success: true, exam: data });
 
     } catch (error) {
         console.error("GET EXAM BY ID ERROR:", error);
@@ -110,9 +125,10 @@ export const createExam = async (req, res) => {
             });
         }
 
-        const schoolId = examData.school_id
-            ? Number(examData.school_id)
-            : null;
+        const requestedSchoolId = examData.school_id == null || examData.school_id === "" ? null : Number(examData.school_id);
+        const schoolId = req.schoolContext?.isSuperAdmin
+            ? (requestedSchoolId || Number(req.schoolContext?.schoolId))
+            : Number(req.schoolContext?.schoolId);
 
         const academicYearId = examData.academic_year_id
             ? Number(examData.academic_year_id)
@@ -206,42 +222,67 @@ export const createExam = async (req, res) => {
 
 export const updateExam = async (req, res) => {
     try {
-        const { id } = req.params;
-
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                message: "Exam ID is required"
-            });
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ success: false, message: "Valid Exam ID is required." });
         }
 
-        const {
-            data,
-            error
-        } = await supabase
+        let existingQuery = supabase
             .from("exams")
-            .update(req.body)
-            .eq("id", id)
-            .select()
-            .single();
+            .select("id, school_id, academic_year_id")
+            .eq("id", id);
 
-        if (error) {
-            throw error;
+        if (!req.schoolContext?.isSuperAdmin) {
+            existingQuery = existingQuery.eq("school_id", Number(req.schoolContext?.schoolId));
         }
 
-        return res.json({
-            success: true,
-            message: "Exam updated successfully",
-            exam: data
-        });
+        const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+        if (existingError) throw existingError;
+        if (!existing) {
+            return res.status(404).json({ success: false, message: "Examination not found in your school." });
+        }
 
+        const schoolId = Number(existing.school_id);
+        const updates = { ...(req.body || {}), school_id: schoolId };
+        delete updates.id;
+        delete updates.created_at;
+
+        if (updates.academic_year_id != null) {
+            const yearId = Number(updates.academic_year_id);
+            const { data: year, error: yearError } = await supabase
+                .from("academic_years")
+                .select("id, school_id")
+                .eq("id", yearId)
+                .eq("school_id", schoolId)
+                .maybeSingle();
+
+            if (yearError) throw yearError;
+            if (!year) {
+                return res.status(400).json({
+                    success: false,
+                    message: "The selected academic year does not belong to this school."
+                });
+            }
+            updates.academic_year_id = yearId;
+        }
+
+        const { data, error } = await supabase
+            .from("exams")
+            .update(updates)
+            .eq("id", id)
+            .eq("school_id", schoolId)
+            .select()
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+            return res.status(404).json({ success: false, message: "Examination not found in your school." });
+        }
+
+        return res.json({ success: true, message: "Exam updated successfully", exam: data });
     } catch (error) {
         console.error("UPDATE EXAM ERROR:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        return res.status(500).json({ success: false, message: "Unable to update examination." });
     }
 };
 
@@ -253,36 +294,38 @@ export const updateExam = async (req, res) => {
 
 export const deleteExam = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ success: false, message: "Valid Exam ID is required." });
+        }
 
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                message: "Exam ID is required"
-            });
+        let existingQuery = supabase
+            .from("exams")
+            .select("id, school_id")
+            .eq("id", id);
+
+        if (!req.schoolContext?.isSuperAdmin) {
+            existingQuery = existingQuery.eq("school_id", Number(req.schoolContext?.schoolId));
+        }
+
+        const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+        if (existingError) throw existingError;
+        if (!existing) {
+            return res.status(404).json({ success: false, message: "Examination not found in your school." });
         }
 
         const { error } = await supabase
             .from("exams")
             .delete()
-            .eq("id", id);
+            .eq("id", id)
+            .eq("school_id", Number(existing.school_id));
 
-        if (error) {
-            throw error;
-        }
+        if (error) throw error;
 
-        return res.json({
-            success: true,
-            message: "Exam deleted successfully"
-        });
-
+        return res.json({ success: true, message: "Exam deleted successfully" });
     } catch (error) {
         console.error("DELETE EXAM ERROR:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        return res.status(500).json({ success: false, message: "Unable to delete examination." });
     }
 };
 
@@ -2894,8 +2937,30 @@ export const getExamPapersHistory = async (
             });
         }
 
-        const rows =
-            papers || [];
+        let rows = papers || [];
+
+        // The service-role client bypasses RLS, so scope paper history explicitly.
+        if (!req.schoolContext?.isSuperAdmin) {
+            const schoolId = Number(req.schoolContext?.schoolId);
+            const { data: ownedExams, error: ownedExamsError } = await supabase
+                .from("exams")
+                .select("id")
+                .eq("school_id", schoolId);
+
+            if (ownedExamsError) throw ownedExamsError;
+            const ownedExamIds = new Set((ownedExams || []).map(exam => Number(exam.id)));
+            rows = rows.filter(paper => ownedExamIds.has(Number(paper.exam_id)));
+        } else if (req.query?.school_id) {
+            const schoolId = Number(req.query.school_id);
+            const { data: ownedExams, error: ownedExamsError } = await supabase
+                .from("exams")
+                .select("id")
+                .eq("school_id", schoolId);
+
+            if (ownedExamsError) throw ownedExamsError;
+            const ownedExamIds = new Set((ownedExams || []).map(exam => Number(exam.id)));
+            rows = rows.filter(paper => ownedExamIds.has(Number(paper.exam_id)));
+        }
 
         if (
             rows.length === 0

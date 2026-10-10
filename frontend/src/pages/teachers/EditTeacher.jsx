@@ -2,6 +2,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { supabase } from "../../services/supabase";
+import { resolveSchoolPhotoUrl } from "../../utils/schoolPhotoUrl";
 
 const API_URL =
     import.meta.env.VITE_API_URL ||
@@ -27,6 +28,8 @@ function EditStaffNonStaff() {
 
     const [messageType, setMessageType] = useState("success");
 
+    const [photoDisplayUrl, setPhotoDisplayUrl] = useState("");
+
 
     // =====================================================
     // STAFF & NON-STAFF
@@ -48,7 +51,7 @@ function EditStaffNonStaff() {
         specialization: "",
         status: "Active",
         photo_url: "",
-        school_id: 1
+        school_id: null
 
     });
 
@@ -474,9 +477,15 @@ function EditStaffNonStaff() {
                     data.photo_url || "",
 
                 school_id:
-                    data.school_id || 1
+                    data.school_id ?? null
 
             });
+
+            setPhotoDisplayUrl(
+                data.photo_url
+                    ? await resolveSchoolPhotoUrl("teacher-photos", data.photo_url)
+                    : ""
+            );
 
 
             // =================================================
@@ -1239,23 +1248,38 @@ function EditStaffNonStaff() {
             setMessageType("success");
 
 
-            const fileName =
-                `teachers/${Date.now()}-${file.name}`;
+            const currentSchoolId = Number(teacher.school_id);
 
+            if (!Number.isInteger(currentSchoolId) || currentSchoolId <= 0) {
+                setMessage("School ownership could not be verified. Reload the teacher record and try again.");
+                setMessageType("error");
+                return;
+            }
+
+            const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+            if (!allowedTypes.includes(file.type)) {
+                setMessage("Please upload a JPG, PNG or WEBP image.");
+                setMessageType("error");
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                setMessage("Photo must not exceed 5MB.");
+                setMessageType("error");
+                return;
+            }
+
+            const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+            const fileName = `${currentSchoolId}/teachers/${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
             const {
                 error: uploadError
             } = await supabase.storage
-
                 .from("teacher-photos")
-
-                .upload(
-                    fileName,
-                    file,
-                    {
-                        upsert: false
-                    }
-                );
+                .upload(fileName, file, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
 
 
             if (uploadError) {
@@ -1276,24 +1300,19 @@ function EditStaffNonStaff() {
             }
 
 
-            const {
-                data
-            } = supabase.storage
-
-                .from("teacher-photos")
-
-                .getPublicUrl(
-                    fileName
-                );
-
+            const signedPhotoUrl = await resolveSchoolPhotoUrl(
+                "teacher-photos",
+                fileName
+            );
 
             setTeacher(
                 previous => ({
                     ...previous,
-                    photo_url:
-                        data.publicUrl
+                    // Store the school-folder object path, never a public URL.
+                    photo_url: fileName
                 })
             );
+            setPhotoDisplayUrl(signedPhotoUrl);
 
 
             setMessage(
@@ -2010,7 +2029,7 @@ function EditStaffNonStaff() {
 
                     {/* PHOTO */}
 
-                    {teacher.photo_url && (
+                    {photoDisplayUrl && (
 
                         <div className="mt-5">
 
@@ -2022,7 +2041,7 @@ function EditStaffNonStaff() {
 
 
                             <img
-                                src={teacher.photo_url}
+                                src={photoDisplayUrl}
                                 alt="Staff member"
                                 className="w-32 h-32 rounded-full object-cover border"
                             />

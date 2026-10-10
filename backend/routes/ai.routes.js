@@ -1,5 +1,8 @@
 import express from "express";
 import multer from "multer";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
+import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 import {
     analyzePaper,
@@ -41,6 +44,9 @@ router.get(
 
 router.get(
     "/analysis/:examId/:examSubjectId",
+    authenticateUser,
+    requireSchoolContext,
+    requirePermission("EXAM_VIEW_AI_REPORT"),
     getAIAnalysisByExamSubject
 );
 
@@ -51,6 +57,9 @@ router.get(
 
 router.get(
     "/analysis/:examId",
+    authenticateUser,
+    requireSchoolContext,
+    requirePermission("EXAM_VIEW_AI_REPORT"),
     getAIAnalysis
 );
 
@@ -61,6 +70,9 @@ router.get(
 
 router.post(
     "/analyze-paper",
+    authenticateUser,
+    requireSchoolContext,
+    requirePermission("EXAM_GENERATE_AI_ANALYSIS"),
     upload.single("paper"),
     analyzePaper
 );

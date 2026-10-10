@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase.js";
+import { getUserAccess } from "../services/permissionService.js";
 
 
 // =====================================================
@@ -553,12 +554,26 @@ export const approveExamSubject = async (
             );
 
 
-        // -------------------------------------------------
-        // Determine current logged-in role if supplied.
-        // -------------------------------------------------
+        // Resolve the approval role from the authenticated user's database access.
+        // Never trust role or user_id supplied in the request body.
+        const actorAccess = await getUserAccess(req.user?.id);
+        if (!actorAccess || actorAccess.isSuperAdmin !== true) {
+            const roleNames = (actorAccess?.roles || []).map(item => normalizeRole(item.role_name));
+            const allowedRole = {
+                academic: roleNames.some(name => name.includes("academic master")),
+                deputy: roleNames.some(name => name.includes("deputy headmaster") || name.includes("second master")),
+                headmaster: roleNames.some(name => name === "headmaster")
+            };
 
-        const normalizedRole =
-            normalizeRole(role);
+            if (!allowedRole[approvalType]) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Your assigned role is not authorized for this approval stage."
+                });
+            }
+        }
+
+        const authenticatedUserId = req.user.id;
 
 
         // -------------------------------------------------
@@ -598,7 +613,7 @@ export const approveExamSubject = async (
                         "Pending Deputy",
 
                     approved_by_academic:
-                        user_id || null,
+                        authenticatedUserId,
 
                     rejection_reason:
                         null,
@@ -725,7 +740,7 @@ export const approveExamSubject = async (
                         "Pending Headmaster",
 
                     approved_by_deputy:
-                        user_id || null,
+                        authenticatedUserId,
 
                     rejection_reason:
                         null,
@@ -868,7 +883,7 @@ export const approveExamSubject = async (
                         "Approved",
 
                     approved_by_headmaster:
-                        user_id || null,
+                        authenticatedUserId,
 
                     approved_at:
                         new Date().toISOString(),
@@ -1007,10 +1022,8 @@ export const rejectExamSubject = async (
         } = req.params;
 
 
-        const {
-            reason,
-            rejected_by
-        } = req.body || {};
+        const { reason } = req.body || {};
+        const rejectedByUserId = req.user.id;
 
 
         if (!examSubjectId) {
@@ -1102,7 +1115,7 @@ export const rejectExamSubject = async (
                     cleanReason,
 
                 rejected_by:
-                    rejected_by || null,
+                    rejectedByUserId,
 
                 rejected_at:
                     new Date().toISOString()
