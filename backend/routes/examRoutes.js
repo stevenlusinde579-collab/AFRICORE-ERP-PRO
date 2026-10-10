@@ -1,4 +1,6 @@
 import express from "express";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
 
 import {
 
@@ -48,6 +50,9 @@ import {
 
 const router =
     express.Router();
+
+// Every examination endpoint requires a verified user and school context.
+router.use(authenticateUser, requireSchoolContext);
 
 
 // =====================================================
