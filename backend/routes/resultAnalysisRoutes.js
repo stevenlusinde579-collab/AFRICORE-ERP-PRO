@@ -1,4 +1,6 @@
 ﻿import express from "express";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
 
 import {
     getResultAnalysis
@@ -6,6 +8,8 @@ import {
 
 
 const router = express.Router();
+
+router.use(authenticateUser, requireSchoolContext);
 
 
 // =====================================================
