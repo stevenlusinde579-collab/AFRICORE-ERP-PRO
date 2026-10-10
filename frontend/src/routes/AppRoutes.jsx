@@ -111,6 +111,7 @@ import Report from "../pages/report/Report";
 import AI from "../pages/ai/AI";
 
 import Settings from "../pages/settings/Settings";
+import SchoolManagement from "../pages/schools/SchoolManagement";
 
 import SystemManual from "../pages/manual/SystemManual";
 
@@ -228,6 +229,25 @@ function SuperAdminOrAllowedRoleRoute({
     }
 
     return <Outlet />;
+}
+
+
+/* ============================================================
+   SUPER ADMIN ONLY ROUTE
+============================================================ */
+
+function SuperAdminOnlyRoute({ children }) {
+    const { loading, roleId } = useCurrentRoleCheck();
+
+    if (loading) {
+        return null;
+    }
+
+    if (Number(roleId) !== 1) {
+        return <Navigate to="/access-denied" replace />;
+    }
+
+    return children;
 }
 
 
@@ -870,6 +890,16 @@ export default function AppRoutes() {
                 <Route
                     path="ai"
                     element={<AI />}
+                />
+
+                {/* SCHOOL MANAGEMENT — SUPER ADMIN ONLY */}
+                <Route
+                    path="schools"
+                    element={
+                        <SuperAdminOnlyRoute>
+                            <SchoolManagement />
+                        </SuperAdminOnlyRoute>
+                    }
                 />
 
                 {/* SETTINGS: ALL USERS CAN OPEN THE PAGE */}
