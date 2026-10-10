@@ -8,7 +8,13 @@ import { askGemini } from "../services/gemini.service.js";
 
 export const getExams = async (req, res) => {
     try {
-        const { school_id, academic_year_id } = req.query;
+        const { academic_year_id } = req.query;
+        const schoolId = req.schoolContext?.isSuperAdmin
+            ? Number(req.query.school_id)
+            : Number(req.schoolContext?.schoolId);
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "A valid school must be selected." });
+        }
 
         if (!academic_year_id) {
             return res.status(400).json({
@@ -23,9 +29,7 @@ export const getExams = async (req, res) => {
             .eq("academic_year_id", Number(academic_year_id))
             .order("created_at", { ascending: false });
 
-        if (school_id) {
-            query = query.eq("school_id", Number(school_id));
-        }
+        query = query.eq("school_id", schoolId);
 
         const { data, error } = await query;
 
@@ -72,7 +76,7 @@ export const getExamById = async (req, res) => {
             .from("exams")
             .select("*")
             .eq("id", id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             throw error;
@@ -110,9 +114,10 @@ export const createExam = async (req, res) => {
             });
         }
 
-        const schoolId = examData.school_id
-            ? Number(examData.school_id)
-            : null;
+        const requestedSchoolId = examData.school_id == null || examData.school_id === "" ? null : Number(examData.school_id);
+        const schoolId = req.schoolContext?.isSuperAdmin
+            ? (requestedSchoolId || Number(req.schoolContext?.schoolId))
+            : Number(req.schoolContext?.schoolId);
 
         const academicYearId = examData.academic_year_id
             ? Number(examData.academic_year_id)
@@ -220,10 +225,11 @@ export const updateExam = async (req, res) => {
             error
         } = await supabase
             .from("exams")
-            .update(req.body)
+            .update({ ...(req.body || {}), ...(req.schoolContext?.isSuperAdmin ? {} : { school_id: Number(req.schoolContext?.schoolId) }) })
             .eq("id", id)
+            .eq("school_id", Number(req.schoolContext?.isSuperAdmin ? (req.body?.school_id || req.query?.school_id || 0) : req.schoolContext?.schoolId))
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) {
             throw error;
@@ -262,10 +268,14 @@ export const deleteExam = async (req, res) => {
             });
         }
 
-        const { error } = await supabase
-            .from("exams")
-            .delete()
-            .eq("id", id);
+        let deleteQuery = supabase.from("exams").delete().eq("id", id);
+        const deleteSchoolId = req.schoolContext?.isSuperAdmin
+            ? Number(req.query?.school_id || req.body?.school_id || 0)
+            : Number(req.schoolContext?.schoolId);
+        if (Number.isInteger(deleteSchoolId) && deleteSchoolId > 0) {
+            deleteQuery = deleteQuery.eq("school_id", deleteSchoolId);
+        }
+        const { error } = await deleteQuery;
 
         if (error) {
             throw error;
