@@ -49,21 +49,21 @@ export const getResultAnalysis = async (req, res) => {
         // GET EXAM
         // =================================================
 
+        let examQuery = supabase
+            .from("exams")
+            .select("*")
+            .eq("id", examIdNumber);
+
+        if (!req.schoolContext?.isSuperAdmin) {
+            examQuery = examQuery.eq("school_id", Number(req.schoolContext?.schoolId));
+        } else if (req.query?.school_id) {
+            examQuery = examQuery.eq("school_id", Number(req.query.school_id));
+        }
+
         const {
             data: exam,
             error: examError
-        } = await supabase
-
-            .from("exams")
-
-            .select("*")
-
-            .eq(
-                "id",
-                examIdNumber
-            )
-
-            .maybeSingle();
+        } = await examQuery.maybeSingle();
 
 
         if (examError) {
