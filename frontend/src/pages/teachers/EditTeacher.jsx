@@ -48,7 +48,7 @@ function EditStaffNonStaff() {
         specialization: "",
         status: "Active",
         photo_url: "",
-        school_id: 1
+        school_id: null
 
     });
 
@@ -474,7 +474,7 @@ function EditStaffNonStaff() {
                     data.photo_url || "",
 
                 school_id:
-                    data.school_id || 1
+                    data.school_id ?? null
 
             });
 
@@ -1239,23 +1239,38 @@ function EditStaffNonStaff() {
             setMessageType("success");
 
 
-            const fileName =
-                `teachers/${Date.now()}-${file.name}`;
+            const currentSchoolId = Number(teacher.school_id);
 
+            if (!Number.isInteger(currentSchoolId) || currentSchoolId <= 0) {
+                setMessage("School ownership could not be verified. Reload the teacher record and try again.");
+                setMessageType("error");
+                return;
+            }
+
+            const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+            if (!allowedTypes.includes(file.type)) {
+                setMessage("Please upload a JPG, PNG or WEBP image.");
+                setMessageType("error");
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                setMessage("Photo must not exceed 5MB.");
+                setMessageType("error");
+                return;
+            }
+
+            const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+            const fileName = `${currentSchoolId}/teachers/${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
             const {
                 error: uploadError
             } = await supabase.storage
-
                 .from("teacher-photos")
-
-                .upload(
-                    fileName,
-                    file,
-                    {
-                        upsert: false
-                    }
-                );
+                .upload(fileName, file, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
 
 
             if (uploadError) {
