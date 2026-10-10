@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import { resolveSchoolPhotoUrl } from "../../utils/schoolPhotoUrl";
 
 
 function TeacherProfile(){
@@ -11,6 +12,7 @@ const { id } = useParams();
 const navigate = useNavigate();
 
 const [teacher,setTeacher] = useState(null);
+const [photoDisplayUrl,setPhotoDisplayUrl] = useState("");
 const [loading,setLoading] = useState(true);
 
 
@@ -39,6 +41,11 @@ console.log("Teacher Error:",error);
 }else{
 
 setTeacher(data);
+setPhotoDisplayUrl(
+  data.photo_url
+    ? await resolveSchoolPhotoUrl("teacher-photos", data.photo_url)
+    : ""
+);
 
 }
 
@@ -112,11 +119,11 @@ Edit Teacher
 
 {
 
-teacher.photo_url &&
+photoDisplayUrl &&
 
 <img
 
-src={teacher.photo_url}
+src={photoDisplayUrl}
 
 alt="Teacher"
 
