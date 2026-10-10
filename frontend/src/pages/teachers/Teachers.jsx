@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { supabase } from "../../services/supabase";
+import { resolveSchoolPhotoUrl } from "../../utils/schoolPhotoUrl";
 
 function Teachers() {
   const navigate = useNavigate();
@@ -55,7 +56,16 @@ function Teachers() {
         return;
       }
 
-      setTeachers(data || []);
+      const teachersWithPhotoUrls = await Promise.all(
+        (data || []).map(async (teacher) => ({
+          ...teacher,
+          photo_display_url: teacher.photo_url
+            ? await resolveSchoolPhotoUrl("teacher-photos", teacher.photo_url)
+            : ""
+        }))
+      );
+
+      setTeachers(teachersWithPhotoUrls);
     } catch (error) {
       console.error(
         "LOAD STAFF EXCEPTION:",
@@ -367,7 +377,7 @@ function Teachers() {
                         {teacher.photo_url ? (
                           <img
                             src={
-                              teacher.photo_url
+                              teacher.photo_display_url
                             }
                             alt="Staff"
                             className="w-12 h-12 rounded-full object-cover"
