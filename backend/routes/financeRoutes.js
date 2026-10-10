@@ -1,6 +1,7 @@
 import express from "express";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 import { requireSchoolContext } from "../middleware/schoolContextMiddleware.js";
+import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 import {
 
@@ -92,8 +93,13 @@ import {
 const router =
     express.Router();
 
-// Finance endpoints must never run without verified school context.
+// Finance endpoints require a verified school and the appropriate role permission.
 router.use(authenticateUser, requireSchoolContext);
+router.use((req, res, next) => {
+    const isReadRequest = req.method === "GET" || req.method === "HEAD";
+    const permissionName = isReadRequest ? "view_finance" : "manage_finance";
+    return requirePermission(permissionName)(req, res, next);
+});
 
 
 // ============================================================
