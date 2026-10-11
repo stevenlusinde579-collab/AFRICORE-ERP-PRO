@@ -229,7 +229,7 @@ export const getHeadmasters = async (req, res) => {
         const { data: role, error: roleError } = await supabase
             .from("roles")
             .select("id,role_name")
-            .eq("role_name", "Headmaster")
+            .ilike("role_name", "Headmaster")
             .maybeSingle();
 
         if (roleError) throw roleError;
@@ -253,10 +253,33 @@ export const getHeadmasters = async (req, res) => {
 
         if (legacyError) throw legacyError;
 
+        const legacyIds = (legacyProfiles || []).map((profile) => profile.id);
+        let legacyActiveRoleRows = [];
+
+        if (legacyIds.length > 0) {
+            const { data, error } = await supabase
+                .from("profile_roles")
+                .select("profile_id,role_id")
+                .in("profile_id", legacyIds)
+                .eq("is_active", true);
+
+            if (error) throw error;
+            legacyActiveRoleRows = data || [];
+        }
+
+        // profile_roles is canonical. Use profiles.role_id only for legacy
+        // accounts that have no active profile_roles at all.
+        const profilesWithActiveRoles = new Set(
+            legacyActiveRoleRows.map((row) => row.profile_id)
+        );
+        const validLegacyProfiles = (legacyProfiles || []).filter(
+            (profile) => !profilesWithActiveRoles.has(profile.id)
+        );
+
         const ids = [
             ...new Set([
                 ...(roleRows || []).map((row) => row.profile_id),
-                ...(legacyProfiles || []).map((profile) => profile.id)
+                ...validLegacyProfiles.map((profile) => profile.id)
             ].filter(Boolean))
         ];
 
