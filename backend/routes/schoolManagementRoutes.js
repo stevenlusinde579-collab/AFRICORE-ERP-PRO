@@ -3,7 +3,9 @@ import express from "express";
 import {
     getSchools,
     createSchool,
-    updateSchool
+    updateSchool,
+    getHeadmasters,
+    assignHeadmaster
 } from "../controllers/schoolManagementController.js";
 
 import { authenticateUser } from "../middleware/authMiddleware.js";
@@ -13,6 +15,9 @@ const router = express.Router();
 
 // Every school-management endpoint is restricted to authenticated Super Admins.
 router.use(authenticateUser, requireSuperAdmin);
+
+router.get("/headmasters", getHeadmasters);
+router.patch("/headmasters/:profileId/school", assignHeadmaster);
 
 router.get("/", getSchools);
 router.post("/", createSchool);
