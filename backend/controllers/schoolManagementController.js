@@ -229,7 +229,7 @@ export const getHeadmasters = async (req, res) => {
         const { data: role, error: roleError } = await supabase
             .from("roles")
             .select("id,role_name")
-            .ilike("role_name", "Headmaster")
+            .eq("role_name", "Headmaster")
             .maybeSingle();
 
         if (roleError) throw roleError;
