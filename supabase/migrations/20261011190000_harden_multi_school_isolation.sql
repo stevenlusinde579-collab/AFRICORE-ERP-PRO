@@ -53,7 +53,10 @@ language plpgsql
 set search_path = public, pg_temp
 as $function$
 begin
-    if auth.uid() is not null
+    -- Backend service-role operations (including transactional Headmaster assignment)
+    -- may update tenant links. Authenticated school users may not.
+    if coalesce(auth.jwt() ->> 'role', '') <> 'service_role'
+       and auth.uid() is not null
        and not public.is_current_user_super_admin()
        and (
            new.role_id is distinct from old.role_id
