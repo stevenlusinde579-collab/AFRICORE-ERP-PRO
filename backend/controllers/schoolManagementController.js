@@ -318,114 +318,58 @@ export const assignHeadmaster = async (req, res) => {
             });
         }
 
+        // The database function updates profiles and profile_roles in one transaction.
+        const { data: headmaster, error: assignmentError } = await supabase
+            .rpc("assign_headmaster_to_school", {
+                p_profile_id: profileId,
+                p_school_id: schoolId
+            });
+
+        if (assignmentError) {
+            console.error(
+                "SCHOOL MANAGEMENT - HEADMASTER ASSIGNMENT ERROR:",
+                assignmentError
+            );
+
+            return res.status(400).json({
+                success: false,
+                message: assignmentError.message ||
+                    "Unable to assign the Headmaster to this school."
+            });
+        }
+
         const { data: school, error: schoolError } = await supabase
             .from("schools")
             .select("id,school_name")
             .eq("id", schoolId)
             .maybeSingle();
 
-        if (schoolError) throw schoolError;
-
-        if (!school) {
-            return res.status(404).json({
-                success: false,
-                message: "The selected school was not found."
-            });
-        }
-
-        const { data: headmasterRole, error: roleError } = await supabase
-            .from("roles")
-            .select("id")
-            .eq("role_name", "Headmaster")
-            .maybeSingle();
-
-        if (roleError) throw roleError;
-
-        if (!headmasterRole) {
+        if (schoolError) {
+            console.error(
+                "SCHOOL MANAGEMENT - ASSIGNED SCHOOL LOOKUP ERROR:",
+                schoolError
+            );
             return res.status(500).json({
                 success: false,
-                message: "The Headmaster role is not configured."
+                message: "Headmaster was assigned, but school details could not be loaded."
             });
-        }
-
-        const { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("id,full_name,phone,school_id,role_id")
-            .eq("id", profileId)
-            .maybeSingle();
-
-        if (profileError) throw profileError;
-
-        if (!profile) {
-            return res.status(404).json({
-                success: false,
-                message: "The selected Headmaster account was not found."
-            });
-        }
-
-        const { data: roleRow, error: roleRowError } = await supabase
-            .from("profile_roles")
-            .select("id,school_id")
-            .eq("profile_id", profileId)
-            .eq("role_id", headmasterRole.id)
-            .eq("is_active", true)
-            .limit(1)
-            .maybeSingle();
-
-        if (roleRowError) throw roleRowError;
-
-        if (!roleRow && Number(profile.role_id) !== Number(headmasterRole.id)) {
-            return res.status(400).json({
-                success: false,
-                message: "The selected account does not have an active Headmaster role."
-            });
-        }
-
-        const previousSchoolId = profile.school_id;
-
-        const { error: profileUpdateError } = await supabase
-            .from("profiles")
-            .update({ school_id: schoolId })
-            .eq("id", profileId);
-
-        if (profileUpdateError) throw profileUpdateError;
-
-        if (roleRow) {
-            const { error: roleUpdateError } = await supabase
-                .from("profile_roles")
-                .update({ school_id: schoolId })
-                .eq("profile_id", profileId)
-                .eq("role_id", headmasterRole.id)
-                .eq("is_active", true);
-
-            if (roleUpdateError) {
-                // Best-effort rollback of the profile's previous school assignment.
-                await supabase
-                    .from("profiles")
-                    .update({ school_id: previousSchoolId })
-                    .eq("id", profileId);
-
-                throw roleUpdateError;
-            }
         }
 
         return res.json({
             success: true,
             message: "Headmaster assigned to school successfully.",
-            headmaster: {
-                id: profile.id,
-                full_name: profile.full_name || "Headmaster",
-                phone: profile.phone || null,
-                school_id: schoolId
-            },
+            headmaster,
             school
         });
     } catch (error) {
-        console.error("SCHOOL MANAGEMENT - HEADMASTER ASSIGNMENT ERROR:", error);
+        console.error(
+            "SCHOOL MANAGEMENT - HEADMASTER ASSIGNMENT EXCEPTION:",
+            error
+        );
+
         return res.status(500).json({
             success: false,
-            message: "Unable to assign the Headmaster to this school.",
-            error: error.message
+            message: "Unexpected error while assigning the Headmaster."
         });
     }
 };
