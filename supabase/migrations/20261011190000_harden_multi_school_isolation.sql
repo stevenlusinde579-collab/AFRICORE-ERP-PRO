@@ -204,6 +204,7 @@ as $function$
 declare
     v_headmaster_role_id bigint;
     v_profile record;
+    v_has_active_roles boolean;
 begin
     if p_profile_id is null or p_school_id is null or p_school_id <= 0 then
         raise exception 'A valid Headmaster profile and school are required.';
@@ -236,16 +237,27 @@ begin
         raise exception 'The selected Headmaster account was not found.';
     end if;
 
-    if not (
-        coalesce(v_profile.role_id, 0) = v_headmaster_role_id
-        or exists (
+    select exists (
+        select 1
+        from public.profile_roles pr
+        where pr.profile_id = p_profile_id
+          and pr.is_active is true
+    )
+    into v_has_active_roles;
+
+    -- profile_roles is canonical when active rows exist; the legacy role_id
+    -- is used only for accounts that have no active profile_roles.
+    if v_has_active_roles then
+        if not exists (
             select 1
             from public.profile_roles pr
             where pr.profile_id = p_profile_id
               and pr.role_id = v_headmaster_role_id
               and pr.is_active is true
-        )
-    ) then
+        ) then
+            raise exception 'The selected account does not have an active Headmaster role.';
+        end if;
+    elsif coalesce(v_profile.role_id, 0) <> v_headmaster_role_id then
         raise exception 'The selected account does not have an active Headmaster role.';
     end if;
 
@@ -267,7 +279,6 @@ begin
     );
 end;
 $function$;
-
 revoke all on function public.assign_headmaster_to_school(uuid, bigint) from public;
 revoke all on function public.assign_headmaster_to_school(uuid, bigint) from anon;
 revoke all on function public.assign_headmaster_to_school(uuid, bigint) from authenticated;
