@@ -34,6 +34,10 @@ function displayError(error) {
 
 export default function SchoolManagement() {
     const [schools, setSchools] = useState([]);
+    const [headmasters, setHeadmasters] = useState([]);
+    const [selectedHeadmasters, setSelectedHeadmasters] = useState({});
+    const [headmasterError, setHeadmasterError] = useState("");
+    const [assigningSchoolId, setAssigningSchoolId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
@@ -54,6 +58,27 @@ export default function SchoolManagement() {
                 throw new Error("Backend haikurudisha orodha sahihi ya shule.");
             }
             setSchools(rows);
+
+            try {
+                const headmasterResponse = await api.get("/schools/headmasters");
+                const accounts = Array.isArray(headmasterResponse?.data?.headmasters)
+                    ? headmasterResponse.data.headmasters
+                    : [];
+                setHeadmasters(accounts);
+                setHeadmasterError("");
+                const assignments = {};
+                for (const account of accounts) {
+                    if (account.school_id !== null && account.school_id !== undefined) {
+                        const key = String(account.school_id);
+                        if (!assignments[key]) assignments[key] = String(account.id);
+                    }
+                }
+                setSelectedHeadmasters(assignments);
+            } catch (headmasterLoadError) {
+                setHeadmasters([]);
+                setSelectedHeadmasters({});
+                setHeadmasterError(displayError(headmasterLoadError));
+            }
         } catch (loadError) {
             setError(displayError(loadError));
         } finally {
@@ -193,6 +218,40 @@ export default function SchoolManagement() {
         }
     };
 
+    const assignHeadmasterToSchool = async (school) => {
+        const profileId = selectedHeadmasters[String(school.id)];
+        if (!profileId) {
+            setError("Chagua akaunti ya Headmaster kwanza.");
+            return;
+        }
+
+        const selected = headmasters.find((account) => String(account.id) === String(profileId));
+        const previousSchool = selected?.school_id;
+        const movingAccount = previousSchool && String(previousSchool) !== String(school.id);
+        const confirmed = window.confirm(
+            movingAccount
+                ? `Akaunti ya ${selected?.full_name || "Headmaster"} itahamishwa kutoka shule yake ya sasa kwenda "${school.school_name}". Unaendelea?`
+                : `Unataka kumkabidhi ${selected?.full_name || "Headmaster"} shule "${school.school_name}"?`
+        );
+        if (!confirmed) return;
+
+        setAssigningSchoolId(school.id);
+        setError("");
+        setNotice("");
+        try {
+            await api.patch(
+                `/schools/headmasters/${encodeURIComponent(profileId)}/school`,
+                { school_id: school.id }
+            );
+            setNotice("Akaunti ya Headmaster imeunganishwa na shule.");
+            await loadSchools();
+        } catch (assignmentError) {
+            setError(displayError(assignmentError));
+        } finally {
+            setAssigningSchoolId(null);
+        }
+    };
+
     const StatCard = ({ title, count, tone, filter, icon }) => (
         <button
             type="button"
@@ -297,12 +356,13 @@ export default function SchoolManagement() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[850px] text-left text-sm">
+                            <table className="w-full min-w-[1120px] text-left text-sm">
                                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                                     <tr>
                                         <th className="px-5 py-4">School</th>
                                         <th className="px-5 py-4">Registration / Code</th>
                                         <th className="px-5 py-4">Contact</th>
+                                        <th className="px-5 py-4">Headmaster Account</th>
                                         <th className="px-5 py-4">Status</th>
                                         <th className="px-5 py-4 text-right">Actions</th>
                                     </tr>
@@ -318,6 +378,33 @@ export default function SchoolManagement() {
                                             <td className="px-5 py-4">
                                                 <div className="text-slate-700">{school.phone || "—"}</div>
                                                 <div className="mt-1 text-xs text-slate-500">{school.email || "—"}</div>
+                                            </td>
+                                            <td className="px-5 py-4">
+                                                <div className="flex min-w-[230px] flex-col gap-2">
+                                                    <select
+                                                        value={selectedHeadmasters[String(school.id)] || ""}
+                                                        onChange={(event) => setSelectedHeadmasters((current) => ({ ...current, [String(school.id)]: event.target.value }))}
+                                                        className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                        aria-label={`Chagua Headmaster wa ${school.school_name}`}
+                                                    >
+                                                        <option value="">Chagua Headmaster...</option>
+                                                        {headmasters.map((account) => (
+                                                            <option key={account.id} value={String(account.id)}>
+                                                                {account.full_name}{account.phone ? ` — ${account.phone}` : ""}
+                                                                {account.school_id && String(account.school_id) !== String(school.id) ? " (atabadilishwa shule)" : ""}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => assignHeadmasterToSchool(school)}
+                                                        disabled={!selectedHeadmasters[String(school.id)] || assigningSchoolId === school.id || headmasters.length === 0}
+                                                        className="self-start rounded-md bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        {assigningSchoolId === school.id ? "Inahifadhi..." : "Assign Headmaster"}
+                                                    </button>
+                                                    {headmasterError && <span className="text-xs text-amber-700">Headmaster list: {headmasterError}</span>}
+                                                </div>
                                             </td>
                                             <td className="px-5 py-4">
                                                 <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${school.is_active === true ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
