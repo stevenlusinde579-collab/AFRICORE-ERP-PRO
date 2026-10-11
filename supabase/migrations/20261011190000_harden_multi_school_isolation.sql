@@ -441,4 +441,151 @@ with check (
     )
 );
 
+
+-- Finance periods and bank/cash accounts must not be readable across schools.
+drop policy if exists af_score_accounting_periods_tenant_guard on public.accounting_periods;
+create policy af_score_accounting_periods_tenant_guard
+on public.accounting_periods
+as restrictive
+for select
+to authenticated
+using (
+    public.is_current_user_super_admin()
+    or school_id = public.get_current_user_school_id()
+);
+
+drop policy if exists af_score_financial_accounts_tenant_guard on public.financial_accounts;
+create policy af_score_financial_accounts_tenant_guard
+on public.financial_accounts
+as restrictive
+for select
+to authenticated
+using (
+    public.is_current_user_super_admin()
+    or school_id = public.get_current_user_school_id()
+);
+
+-- Social-fund disbursements must match the user's school, event, and any
+-- linked financial account. Super Admin retains cross-school administration.
+drop policy if exists af_score_social_fund_disbursements_tenant_guard
+on public.social_fund_disbursements;
+create policy af_score_social_fund_disbursements_tenant_guard
+on public.social_fund_disbursements
+as restrictive
+for all
+to authenticated
+using (
+    public.is_current_user_super_admin()
+    or (
+        school_id = public.get_current_user_school_id()
+        and exists (
+            select 1 from public.social_fund_events e
+            where e.id = social_fund_disbursements.event_id
+              and e.school_id = public.get_current_user_school_id()
+        )
+        and (
+            financial_account_id is null
+            or exists (
+                select 1 from public.financial_accounts a
+                where a.id = social_fund_disbursements.financial_account_id
+                  and a.school_id = public.get_current_user_school_id()
+            )
+        )
+        and (
+            created_by is null
+            or exists (
+                select 1 from public.profiles p
+                where p.id = social_fund_disbursements.created_by
+                  and p.school_id = public.get_current_user_school_id()
+            )
+        )
+    )
+)
+with check (
+    public.is_current_user_super_admin()
+    or (
+        school_id = public.get_current_user_school_id()
+        and exists (
+            select 1 from public.social_fund_events e
+            where e.id = social_fund_disbursements.event_id
+              and e.school_id = public.get_current_user_school_id()
+        )
+        and (
+            financial_account_id is null
+            or exists (
+                select 1 from public.financial_accounts a
+                where a.id = social_fund_disbursements.financial_account_id
+                  and a.school_id = public.get_current_user_school_id()
+            )
+        )
+        and (
+            created_by is null
+            or exists (
+                select 1 from public.profiles p
+                where p.id = social_fund_disbursements.created_by
+                  and p.school_id = public.get_current_user_school_id()
+            )
+        )
+    )
+);
+
+-- Permit the existing legacy fee-payment row with NULL school_id to be read
+-- only through its matching student school. New writes require explicit school_id.
+drop policy if exists af_score_student_fee_payments_select_tenant_guard
+on public.student_fee_payments;
+create policy af_score_student_fee_payments_select_tenant_guard
+on public.student_fee_payments
+as restrictive
+for select
+to authenticated
+using (
+    public.is_current_user_super_admin()
+    or (
+        exists (
+            select 1 from public.students s
+            where s.id = student_fee_payments.student_id
+              and s.school_id = public.get_current_user_school_id()
+              and (
+                  student_fee_payments.school_id is null
+                  or student_fee_payments.school_id = s.school_id
+              )
+        )
+        and (
+            financial_account_id is null
+            or exists (
+                select 1 from public.financial_accounts a
+                where a.id = student_fee_payments.financial_account_id
+                  and a.school_id = public.get_current_user_school_id()
+            )
+        )
+    )
+);
+
+drop policy if exists af_score_student_fee_payments_insert_tenant_guard
+on public.student_fee_payments;
+create policy af_score_student_fee_payments_insert_tenant_guard
+on public.student_fee_payments
+as restrictive
+for insert
+to authenticated
+with check (
+    public.is_current_user_super_admin()
+    or (
+        school_id = public.get_current_user_school_id()
+        and exists (
+            select 1 from public.students s
+            where s.id = student_fee_payments.student_id
+              and s.school_id = public.get_current_user_school_id()
+        )
+        and (
+            financial_account_id is null
+            or exists (
+                select 1 from public.financial_accounts a
+                where a.id = student_fee_payments.financial_account_id
+                  and a.school_id = public.get_current_user_school_id()
+            )
+        )
+    )
+);
+
 commit;
