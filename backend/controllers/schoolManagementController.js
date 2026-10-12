@@ -56,6 +56,10 @@ export const getSchools = async (req, res) => {
  * Creates a school without deleting or changing existing school data.
  */
 export const createSchool = async (req, res) => {
+    let createdSchoolId = null;
+    let createdAcademicYearId = null;
+    let createdClassIds = [];
+
     try {
         const schoolName =
             typeof req.body?.school_name === "string"
@@ -86,31 +90,186 @@ export const createSchool = async (req, res) => {
                 : true
         };
 
-        const { data, error } = await supabase
+        const { data: school, error: schoolError } = await supabase
             .from("schools")
             .insert(payload)
             .select(SCHOOL_COLUMNS)
             .single();
 
-        if (error) {
-            console.error("SCHOOL MANAGEMENT - CREATE ERROR:", error);
+        if (schoolError) {
+            console.error("SCHOOL MANAGEMENT - CREATE ERROR:", schoolError);
             return res.status(400).json({
                 success: false,
                 message: "School could not be created.",
-                error: error.message
+                error: schoolError.message
             });
+        }
+
+        createdSchoolId = school.id;
+
+        // Every new school starts with the current calendar year and the
+        // standard Tanzanian education classes. These rows belong only to
+        // the newly created school.
+        const year = new Date().getFullYear();
+        const yearName = String(year);
+        const { data: academicYear, error: yearError } = await supabase
+            .from("academic_years")
+            .insert({
+                school_id: createdSchoolId,
+                year_name: yearName,
+                term: "ANNUAL",
+                start_date: `${year}-01-01`,
+                end_date: `${year}-12-31`,
+                is_active: true
+            })
+            .select("id")
+            .single();
+
+        if (yearError) throw yearError;
+        createdAcademicYearId = academicYear.id;
+
+        const defaultClasses = [
+            { class_name: "Baby Class", short_name: "BABY", academic_level: "Nursery" },
+            { class_name: "Pre Unit", short_name: "PRE", academic_level: "Nursery" },
+            { class_name: "KG 1", short_name: "KG1", academic_level: "Nursery" },
+            { class_name: "KG 2", short_name: "KG2", academic_level: "Nursery" },
+            ...Array.from({ length: 7 }, (_, i) => ({
+                class_name: `Standard ${i + 1}`,
+                short_name: `STD${i + 1}`,
+                academic_level: "Primary"
+            })),
+            ...Array.from({ length: 4 }, (_, i) => ({
+                class_name: `Form ${i + 1}`,
+                short_name: `FORM${i + 1}`,
+                academic_level: "Secondary"
+            })),
+            { class_name: "Form 5", short_name: "FORM5", academic_level: "Advanced" },
+            { class_name: "Form 6", short_name: "FORM6", academic_level: "Advanced" }
+        ].map((item) => ({
+            ...item,
+            school_id: createdSchoolId,
+            academic_year_id: createdAcademicYearId
+        }));
+
+        const { data: classes, error: classesError } = await supabase
+            .from("classes")
+            .insert(defaultClasses)
+            .select("id,class_name,academic_level");
+
+        if (classesError) throw classesError;
+        createdClassIds = (classes || []).map((item) => item.id);
+
+        // Subjects are shared curriculum records. Link the existing active
+        // TIE curriculum subjects to each new class through class_subjects.
+        const { data: subjects, error: subjectsError } = await supabase
+            .from("subjects")
+            .select("id,education_level,class_scope,is_active")
+            .eq("curriculum_id", 1)
+            .eq("is_active", true);
+
+        if (subjectsError) throw subjectsError;
+
+        const classSubjectRows = [];
+        for (const schoolClass of classes || []) {
+            const classNumber = Number(
+                String(schoolClass.class_name).match(/\d+/)?.[0] || 0
+            );
+
+            const matchingSubjects = (subjects || []).filter((subject) => {
+                if (subject.education_level !== schoolClass.academic_level) {
+                    return false;
+                }
+
+                const scope = String(subject.class_scope || "").trim();
+                if (!scope) return true;
+
+                // Curriculum scope such as "Form 1-4" or "Form 1-2"
+                // applies only to the specified secondary forms.
+                if (schoolClass.academic_level === "Secondary") {
+                    const match = scope.match(/Form\s*(\d+)\s*-\s*(\d+)/i);
+                    if (match) {
+                        return classNumber >= Number(match[1]) &&
+                            classNumber <= Number(match[2]);
+                    }
+                    return scope.toLowerCase().includes(
+                        String(schoolClass.class_name).toLowerCase()
+                    );
+                }
+
+                return true;
+            });
+
+            for (const subject of matchingSubjects) {
+                classSubjectRows.push({
+                    class_id: schoolClass.id,
+                    subject_id: subject.id
+                });
+            }
+        }
+
+        if (classSubjectRows.length > 0) {
+            const { error: mappingError } = await supabase
+                .from("class_subjects")
+                .upsert(classSubjectRows, {
+                    onConflict: "class_id,subject_id",
+                    ignoreDuplicates: true
+                });
+
+            if (mappingError) throw mappingError;
         }
 
         return res.status(201).json({
             success: true,
-            message: "School created successfully.",
-            school: data
+            message: "School created successfully with default classes and curriculum subjects.",
+            school,
+            setup: {
+                academic_year: yearName,
+                classes_created: (classes || []).length,
+                class_subject_links_created: classSubjectRows.length
+            }
         });
     } catch (error) {
-        console.error("SCHOOL MANAGEMENT - CREATE EXCEPTION:", error);
+        console.error("SCHOOL MANAGEMENT - CREATE/DEFAULT SETUP ERROR:", error);
+
+        // Compensate only records created by this request, so a failed setup
+        // does not leave a half-configured new school or touch other schools.
+        try {
+            if (createdClassIds.length > 0) {
+                await supabase
+                    .from("class_subjects")
+                    .delete()
+                    .in("class_id", createdClassIds);
+
+                await supabase
+                    .from("classes")
+                    .delete()
+                    .in("id", createdClassIds);
+            }
+
+            if (createdAcademicYearId !== null) {
+                await supabase
+                    .from("academic_years")
+                    .delete()
+                    .eq("id", createdAcademicYearId);
+            }
+
+            if (createdSchoolId !== null) {
+                await supabase
+                    .from("schools")
+                    .delete()
+                    .eq("id", createdSchoolId);
+            }
+        } catch (cleanupError) {
+            console.error(
+                "SCHOOL MANAGEMENT - DEFAULT SETUP CLEANUP ERROR:",
+                cleanupError
+            );
+        }
+
         return res.status(500).json({
             success: false,
-            message: "Unexpected error while creating the school."
+            message: "School setup failed. No new school should be used until setup is verified.",
+            error: error?.message || "Unknown setup error."
         });
     }
 };
