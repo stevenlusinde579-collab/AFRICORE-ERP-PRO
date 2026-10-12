@@ -37,6 +37,7 @@ import {
     Lightbulb,
 } from "lucide-react";
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
 
 const APPROVER_ROLE_IDS = [1, 2, 3, 4];
@@ -341,18 +342,14 @@ const Communication = () => {
         if (composer.channel === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(composer.recipient.trim())) return setSendResult({ type: "error", message: "Enter a valid email address." });
         try {
             setSending(true);
-            const response = await fetch("/api/communication/send", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    recipient: composer.recipient.trim(),
-                    channel: composer.channel,
-                    subject: composer.channel === "email" ? composer.subject.trim() : null,
-                    message: composer.message.trim(),
-                }),
+            const response = await api.post("/communication/send", {
+                recipient: composer.recipient.trim(),
+                channel: composer.channel,
+                subject: composer.channel === "email" ? composer.subject.trim() : null,
+                message: composer.message.trim(),
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok || !data?.success) throw new Error(data?.error || data?.message || "Communication request failed.");
+            const data = response?.data || {};
+            if (!data?.success) throw new Error(data?.error || data?.message || "Communication request failed.");
             setSendResult({ type: "success", message: data?.message || "Communication request accepted successfully.", provider: data?.provider || "", status: data?.status || "", history_id: data?.history_id || null });
             setComposer((previous) => ({ ...previous, recipient: "", message: "" }));
         } catch (err) {
