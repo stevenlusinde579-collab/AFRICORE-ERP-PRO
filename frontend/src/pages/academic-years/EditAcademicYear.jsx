@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import { ensureDefaultClasses } from "../../utils/ensureDefaultClasses";
 
 
 function EditAcademicYear(){
@@ -14,6 +15,7 @@ function EditAcademicYear(){
   const [loading,setLoading]=useState(false);
 
   const [message,setMessage]=useState("");
+  const [yearSchoolId,setYearSchoolId]=useState(null);
 
 
 
@@ -57,6 +59,8 @@ function EditAcademicYear(){
     }
 
 
+
+    setYearSchoolId(data.school_id ?? null);
 
     setForm({
 
@@ -165,9 +169,28 @@ function EditAcademicYear(){
 
 
 
-    setMessage(
-      "Academic Year updated successfully ✅"
-    );
+    if (form.is_active) {
+      try {
+        if (!yearSchoolId) {
+          throw new Error("This academic year is not linked to a school.");
+        }
+
+        const setup = await ensureDefaultClasses(yearSchoolId, Number(id));
+        setMessage(
+          `Academic Year updated successfully. ${setup.created} missing default classes added. ✅`
+        );
+      } catch (setupError) {
+        console.error("DEFAULT CLASS SETUP ERROR:", setupError);
+        setMessage(
+          "Academic Year was updated, but default classes could not be ensured: " +
+          (setupError?.message || "Unknown error")
+        );
+        setLoading(false);
+        return;
+      }
+    } else {
+      setMessage("Academic Year updated successfully ✅");
+    }
 
 
 

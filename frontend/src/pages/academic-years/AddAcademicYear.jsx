@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import { useSchool } from "../../context/SchoolContext";
+import { ensureDefaultClasses } from "../../utils/ensureDefaultClasses";
 
 
 function AddAcademicYear(){
 
   const navigate = useNavigate();
+  const { schoolId } = useSchool();
 
 
   const [loading,setLoading] = useState(false);
@@ -67,6 +70,12 @@ function AddAcademicYear(){
 
     setMessage("");
 
+    if (!schoolId) {
+      setMessage("School information is not available. Please refresh and try again.");
+      setLoading(false);
+      return;
+    }
+
 
 
 
@@ -74,9 +83,10 @@ function AddAcademicYear(){
 
       .from("academic_years")
 
-      .insert([form])
+      .insert([{ ...form, school_id: schoolId }])
 
-      .select();
+      .select()
+      .single();
 
 
 
@@ -105,9 +115,21 @@ function AddAcademicYear(){
 
 
 
-    setMessage(
-      "Academic Year saved successfully ✅"
-    );
+    try {
+      const setup = await ensureDefaultClasses(schoolId, data.id);
+      setMessage(
+        `Academic Year saved successfully. ${setup.created} default classes added; ${setup.total} standard classes are available. ✅`
+      );
+    } catch (setupError) {
+      console.error("DEFAULT CLASS SETUP ERROR:", setupError);
+      setMessage(
+        "Academic Year was saved, but default classes could not be created: " +
+        (setupError?.message || "Unknown error") +
+        ". Please retry setup before using this year."
+      );
+      setLoading(false);
+      return;
+    }
 
 
 
