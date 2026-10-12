@@ -783,6 +783,166 @@ router.post("/parent-result", async (req, res) => {
 });
 
 /* =========================================================
+   SIMPLE DIRECT COMMUNICATION
+   Does not require student_id or exam_id.
+========================================================= */
+
+router.post("/send", async (req, res) => {
+  const channel = String(req.body?.channel || "").trim().toLowerCase();
+  const recipient = String(req.body?.recipient || "").trim();
+  const message = cleanMessage(req.body?.message);
+  const subject = cleanSubject(req.body?.subject);
+
+  if (!["whatsapp", "email"].includes(channel)) {
+    return res.status(400).json({
+      success: false,
+      message: "Choose WhatsApp or Email.",
+    });
+  }
+
+  if (!recipient) {
+    return res.status(400).json({
+      success: false,
+      message: "Recipient is required.",
+    });
+  }
+
+  if (!message) {
+    return res.status(400).json({
+      success: false,
+      message: "Message is required.",
+    });
+  }
+
+  if (channel === "email" && !isValidEmail(recipient)) {
+    return res.status(400).json({
+      success: false,
+      message: "Enter a valid email address.",
+    });
+  }
+
+  if (channel === "email" && !subject) {
+    return res.status(400).json({
+      success: false,
+      message: "Email subject is required.",
+    });
+  }
+
+  try {
+    if (channel === "email") {
+      if (!resend || !RESEND_FROM_EMAIL) {
+        return res.status(503).json({
+          success: false,
+          message: "Email is not configured yet. Set RESEND_API_KEY and RESEND_FROM_EMAIL in the backend environment.",
+          code: "EMAIL_PROVIDER_NOT_CONFIGURED",
+        });
+      }
+
+      const result = await resend.emails.send({
+        from: RESEND_FROM_EMAIL,
+        to: [recipient],
+        subject,
+        text: message,
+      });
+
+      if (result?.error) {
+        throw new Error(result.error.message || "Email provider rejected the message.");
+      }
+
+      return res.json({
+        success: true,
+        message: "Email accepted by the email provider.",
+        channel: "email",
+        provider: "Resend",
+        status: "queued",
+        provider_message_id: result?.data?.id || result?.id || null,
+      });
+    }
+
+    const whatsappTo = normalizeTanzaniaPhone(recipient);
+    if (!whatsappTo || whatsappTo.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid WhatsApp number with Tanzania country code or a local number.",
+      });
+    }
+
+    // Prefer Meta WhatsApp Cloud API when configured. Twilio remains a fallback.
+    const metaToken = process.env.META_WHATSAPP_ACCESS_TOKEN;
+    const metaPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+    const metaApiVersion = process.env.META_WHATSAPP_API_VERSION || "v23.0";
+
+    if (metaToken && metaPhoneNumberId) {
+      const response = await fetch(
+        `https://graph.facebook.com/${metaApiVersion}/${metaPhoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${metaToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: whatsappTo,
+            type: "text",
+            text: { preview_url: false, body: message },
+          }),
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          result?.error?.message ||
+          result?.message ||
+          `Meta WhatsApp API returned HTTP ${response.status}.`
+        );
+      }
+
+      return res.json({
+        success: true,
+        message: "WhatsApp message accepted by Meta.",
+        channel: "whatsapp",
+        provider: "Meta WhatsApp Cloud API",
+        status: "queued",
+        provider_message_id: result?.messages?.[0]?.id || null,
+      });
+    }
+
+    if (twilioClient && TWILIO_WHATSAPP_FROM) {
+      const twilioMessage = await twilioClient.messages.create({
+        body: message,
+        from: normalizeWhatsAppFrom(TWILIO_WHATSAPP_FROM),
+        to: `whatsapp:+${whatsappTo}`,
+      });
+
+      return res.json({
+        success: true,
+        message: "WhatsApp message accepted by Twilio.",
+        channel: "whatsapp",
+        provider: "Twilio",
+        status: normalizeProviderStatus(twilioMessage?.status),
+        provider_message_id: twilioMessage?.sid || null,
+      });
+    }
+
+    return res.status(503).json({
+      success: false,
+      message: "WhatsApp is not configured yet. Set META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID in the backend environment.",
+      code: "WHATSAPP_PROVIDER_NOT_CONFIGURED",
+    });
+  } catch (error) {
+    console.error("DIRECT COMMUNICATION SEND ERROR:", error);
+    return res.status(502).json({
+      success: false,
+      message: channel === "whatsapp" ? "Failed to send WhatsApp message." : "Failed to send email.",
+      error: getProviderError(error),
+    });
+  }
+});
+
+/* =========================================================
    EXPORT
 ========================================================= */
 
