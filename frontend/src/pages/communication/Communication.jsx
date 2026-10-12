@@ -338,7 +338,7 @@ const Communication = () => {
         if (!composer.recipient.trim()) return setSendResult({ type: "error", message: composer.channel === "email" ? "Enter the recipient email address." : "Enter the recipient WhatsApp number." });
         if (!composer.message.trim()) return setSendResult({ type: "error", message: "Message is required." });
         if (composer.channel === "email" && !composer.subject.trim()) return setSendResult({ type: "error", message: "Email subject is required." });
-        if (composer.channel === "email" && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(composer.recipient.trim())) return setSendResult({ type: "error", message: "Enter a valid email address." });
+        if (composer.channel === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(composer.recipient.trim())) return setSendResult({ type: "error", message: "Enter a valid email address." });
         try {
             setSending(true);
             const response = await fetch("/api/communication/send", {
