@@ -3970,9 +3970,6 @@ function TraceModal({
                                 <button disabled={sendingChannel !== ""} onClick={() => shareStudentResult(data, "email")} className="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={data.parent_email ? `Email: ${data.parent_email}` : "Parent email haijawekwa"}>
                                     <FaEnvelope /> {sendingChannel === "email" ? "Sending..." : "Email"}
                                 </button>
-                                <button disabled={sendingChannel !== ""} onClick={() => shareStudentResult(data, "sms")} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={data.parent_phone ? `SMS: ${data.parent_phone}` : "Parent phone haijawekwa"}>
-                                    <FaSms /> {sendingChannel === "sms" ? "Sending..." : "SMS"}
-                                </button>
                                 <button disabled={sendingChannel !== ""} onClick={() => shareStudentResult(data, "whatsapp")} className="px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-bold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={data.parent_phone ? `WhatsApp: ${data.parent_phone}` : "Parent phone haijawekwa"}>
                                     <FaWhatsapp /> {sendingChannel === "whatsapp" ? "Sending..." : "WhatsApp"}
                                 </button>
