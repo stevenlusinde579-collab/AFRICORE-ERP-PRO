@@ -112,16 +112,18 @@ create policy "Manage subjects for own combinations"
 insert into public.subject_combinations
   (school_id, combination_code, combination_name, level_scope, suggested_subjects, description, is_system_default)
 values
-  (null, 'PCM', 'Physics, Chemistry and Mathematics', 'Both', array['Physics','Chemistry','Basic Applied Mathematics'], 'Common Advanced-level starting template; confirm subjects against your school curriculum.', true),
-  (null, 'PCB', 'Physics, Chemistry and Biology', 'Both', array['Physics','Chemistry','Biology'], 'Common Advanced-level starting template; confirm subjects against your school curriculum.', true),
-  (null, 'PGM', 'Physics, Geography and Mathematics', 'Both', array['Physics','Geography','Basic Applied Mathematics'], 'Common Advanced-level starting template; confirm subjects against your school curriculum.', true),
-  (null, 'CBG', 'Chemistry, Biology and Geography', 'Both', array['Chemistry','Biology','Geography'], 'Common Advanced-level starting template; confirm subjects against your school curriculum.', true),
-  (null, 'EGM', 'Economics, Geography and Mathematics', 'Both', array['Economics','Geography','Basic Applied Mathematics'], 'Common Advanced-level starting template; confirm subjects against your school curriculum.', true),
-  (null, 'HGL', 'History, Geography and Language', 'Both', array['History','Geography','English Language'], 'Template subjects can be adjusted by the school.', true),
-  (null, 'HGK', 'History, Geography and Kiswahili', 'Both', array['History','Geography','Kiswahili'], 'Template subjects can be adjusted by the school.', true),
-  (null, 'HKL', 'History, Kiswahili and English Language', 'Both', array['History','Kiswahili','English Language'], 'Template subjects can be adjusted by the school.', true),
-  (null, 'HGE', 'History, Geography and Economics', 'Both', array['History','Geography','Economics'], 'Common Advanced-level starting template; confirm subjects against your school curriculum.', true),
-  (null, 'ECA', 'Economics, Commerce and Accountancy', 'Both', array['Economics','Commerce','Accountancy'], 'Template subjects can be adjusted by the school.', true),
-  (null, 'ECG', 'Economics, Commerce and Geography', 'Both', array['Economics','Commerce','Geography'], 'Template subjects can be adjusted by the school.', true),
-  (null, 'HGEc', 'History, Geography and Economics', 'Both', array['History','Geography','Economics'], 'Alternative school-defined code; edit to match your approved curriculum if needed.', true)
+  (null, 'PCM', 'Physics, Chemistry and Mathematics', 'Both', array['Physics','Chemistry','Advanced Mathematics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'PCB', 'Physics, Chemistry and Biology', 'Both', array['Physics','Chemistry','Biology'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'PGM', 'Physics, Geography and Mathematics', 'Both', array['Physics','Geography','Advanced Mathematics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'EGM', 'Economics, Geography and Mathematics', 'Both', array['Economics','Geography','Advanced Mathematics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'CBG', 'Chemistry, Biology and Geography', 'Both', array['Chemistry','Biology','Geography'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'CBA', 'Chemistry, Biology and Agriculture', 'Both', array['Chemistry','Biology','Agriculture'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'CBN', 'Chemistry, Biology and Food and Human Nutrition', 'Both', array['Chemistry','Biology','Food and Human Nutrition'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'HGL', 'History, Geography and English Language', 'Both', array['History','Geography','English Language'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'HGK', 'History, Geography and Kiswahili', 'Both', array['History','Geography','Kiswahili'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'HKL', 'History, Kiswahili and English Language', 'Both', array['History','Kiswahili','English Language'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'KLF', 'Kiswahili, English Language and French', 'Both', array['Kiswahili','English Language','French'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'ECA', 'Economics, Commerce and Accountancy', 'Both', array['Economics','Commerce','Accountancy'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'HGE', 'History, Geography and Economics', 'Both', array['History','Geography','Economics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
+  (null, 'PMC', 'Physics, Mathematics and Computer Science', 'Both', array['Physics','Advanced Mathematics','Computer Science'], 'Listed in the Tanzania Institute of Education Form V-VI curriculum; confirm availability in your school.', true)
 on conflict do nothing;
