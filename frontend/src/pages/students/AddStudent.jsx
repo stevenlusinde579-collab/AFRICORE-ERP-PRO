@@ -1096,6 +1096,8 @@ function AddStudent() {
     subjectId
   ) => {
 
+    setSelectedCombinationId("");
+
     const numericSubjectId =
       Number(subjectId);
 
@@ -1137,6 +1139,8 @@ function AddStudent() {
 
   const selectAllSubjects = () => {
 
+    setSelectedCombinationId("");
+
     const allSubjectIds =
       subjects.map(
         subject =>
@@ -1156,6 +1160,8 @@ function AddStudent() {
   // =====================================================
 
   const clearSubjects = () => {
+
+    setSelectedCombinationId("");
 
     setSelectedSubjects([]);
 
