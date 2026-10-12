@@ -137,6 +137,7 @@ as $$
 declare
   v_combination_school_id bigint;
   v_combination_active boolean;
+  v_combination_is_system_default boolean;
   v_class_school_id bigint;
   v_class_level text;
 begin
@@ -144,8 +145,8 @@ begin
     return new;
   end if;
 
-  select c.school_id, c.is_active
-    into v_combination_school_id, v_combination_active
+  select c.school_id, c.is_active, c.is_system_default
+    into v_combination_school_id, v_combination_active, v_combination_is_system_default
   from public.subject_combinations c
   where c.id = new.combination_id;
 
@@ -153,8 +154,10 @@ begin
     raise exception 'The selected Advanced combination does not exist or is not accessible.';
   end if;
 
-  if v_combination_school_id is null
-     or v_combination_school_id <> new.school_id then
+  -- Global system templates (school_id IS NULL) are intentionally reusable
+  -- by every school. School-owned combinations must match the student's school.
+  if (v_combination_school_id is null and v_combination_is_system_default is distinct from true)
+     or (v_combination_school_id is not null and v_combination_school_id <> new.school_id) then
     raise exception 'The selected combination does not belong to this school.';
   end if;
 
