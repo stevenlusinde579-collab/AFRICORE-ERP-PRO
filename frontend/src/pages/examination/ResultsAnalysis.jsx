@@ -1815,6 +1815,21 @@ export default function ResultsAnalysis() {
                 return parts.join("\n");
             }
 
+            // Prefer the provider's specific error when the backend also sends
+            // a generic message such as "Failed to send WhatsApp message."
+            if (typeof providerError === "string" && providerError.trim()) {
+                const normalizedProviderError = providerError.trim();
+                const normalizedMessage = String(messageValue || "").trim().toLowerCase();
+                if (
+                    !normalizedMessage ||
+                    normalizedMessage === "failed to send whatsapp message." ||
+                    normalizedMessage === "failed to send email." ||
+                    normalizedMessage === "failed to send communication."
+                ) {
+                    return normalizedProviderError;
+                }
+            }
+
             if (typeof messageValue === "string" && messageValue.trim()) {
                 return messageValue;
             }
