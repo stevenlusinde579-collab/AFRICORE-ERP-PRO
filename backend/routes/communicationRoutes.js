@@ -337,6 +337,78 @@ router.post("/parent-result", async (req, res) => {
   }
 
   /* =======================================================
+     USE THE PARENT/GUARDIAN CONTACT SAVED IN STUDENT REGISTRATION
+     Never send to a recipient typed or supplied by the client.
+  ======================================================= */
+
+  let registeredStudent;
+
+  try {
+    const { data: student, error: studentError } = await supabase
+      .from("students")
+      .select("id, school_id, parent_name, parent_phone, parent_email")
+      .eq("id", student_id)
+      .maybeSingle();
+
+    if (studentError) {
+      console.error("Student recipient lookup failed:", studentError);
+      return res.status(500).json({
+        success: false,
+        message: "Could not verify the student's registered parent/guardian contact.",
+      });
+    }
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student was not found. Check the Student ID.",
+      });
+    }
+
+    if (
+      school_id &&
+      String(student.school_id) !== String(school_id)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Student does not belong to the selected school.",
+      });
+    }
+
+    registeredStudent = student;
+  } catch (lookupError) {
+    console.error("Student recipient lookup exception:", lookupError);
+    return res.status(500).json({
+      success: false,
+      message: "Could not verify the student's registered parent/guardian contact.",
+    });
+  }
+
+  const registeredRecipient =
+    normalizedChannel === "email"
+      ? String(registeredStudent.parent_email || "").trim()
+      : String(registeredStudent.parent_phone || "").trim();
+
+  if (!registeredRecipient) {
+    return res.status(400).json({
+      success: false,
+      channel: normalizedChannel,
+      message:
+        normalizedChannel === "email"
+          ? "This student has no parent/guardian email in Student Registration. Update the student's details first."
+          : "This student has no parent/guardian phone number in Student Registration. Update the student's details first.",
+      code: "REGISTERED_PARENT_CONTACT_MISSING",
+    });
+  }
+
+  const verifiedRecipient = registeredRecipient;
+  const verifiedParentName =
+    String(registeredStudent.parent_name || "").trim() ||
+    String(parent_name || "").trim() ||
+    "Parent/Guardian";
+  const verifiedSchoolId = registeredStudent.school_id;
+
+  /* =======================================================
      CREATE HISTORY RECORD FIRST
   ======================================================= */
 
@@ -344,11 +416,11 @@ router.post("/parent-result", async (req, res) => {
 
   try {
     history = await createCommunicationHistory({
-      school_id,
+      school_id: verifiedSchoolId,
       student_id,
       exam_id,
-      parent_name,
-      recipient: cleanRecipient,
+      parent_name: verifiedParentName,
+      recipient: verifiedRecipient,
       channel: normalizedChannel,
       subject: cleanSub,
       message: cleanMsg,
