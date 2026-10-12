@@ -16,6 +16,7 @@ import {
 } from "react-router-dom";
 
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 
 
 const Login = () => {
@@ -134,6 +135,58 @@ const Login = () => {
                     "Login failed. No active session was created."
                 );
 
+            }
+
+            /*
+            ====================================================
+            VERIFY SCHOOL ACCESS BEFORE OPENING THE DASHBOARD
+            ====================================================
+            Supabase password authentication alone does not check
+            whether the user's school is active. Ask the protected
+            backend profile endpoint before allowing navigation.
+            */
+
+            try {
+                const accessResponse = await api.get("/auth/profile");
+
+                if (
+                    accessResponse?.data?.success !== true ||
+                    !accessResponse?.data?.profile
+                ) {
+                    throw new Error(
+                        "Unable to verify your AfriCore school access."
+                    );
+                }
+            } catch (accessError) {
+                // Do not leave an authenticated session for a blocked user.
+                await supabase.auth.signOut();
+
+                const status = accessError?.response?.status;
+                const code = accessError?.response?.data?.code;
+                const serverMessage = accessError?.response?.data?.message;
+
+                if (status === 403 && code === "SCHOOL_INACTIVE") {
+                    throw new Error(
+                        "Your school is inactive. Please contact the system administrator."
+                    );
+                }
+
+                if (status === 403) {
+                    throw new Error(
+                        serverMessage ||
+                        "Access denied. Please contact the system administrator."
+                    );
+                }
+
+                if (status === 503) {
+                    throw new Error(
+                        "School status could not be verified. Please try again later."
+                    );
+                }
+
+                throw new Error(
+                    "Unable to verify your school access. Please try again."
+                );
             }
 
 
