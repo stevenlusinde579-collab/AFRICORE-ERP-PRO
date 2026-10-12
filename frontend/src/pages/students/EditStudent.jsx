@@ -1148,6 +1148,7 @@ function EditStudent() {
       // =================================================
 
       const {
+        data: updatedStudent,
         error: studentError
       } = await supabase
 
@@ -1159,7 +1160,7 @@ function EditStudent() {
 
         .eq(
           "id",
-          id
+          Number(id)
         )
 
         .eq(
@@ -1170,7 +1171,18 @@ function EditStudent() {
         .eq(
           "academic_year_id",
           currentAcademicYearId
-        );
+        )
+
+        .select(`
+          id,
+          school_id,
+          academic_year_id,
+          parent_name,
+          parent_phone,
+          parent_email
+        `)
+
+        .maybeSingle();
 
 
       if (
@@ -1184,6 +1196,37 @@ function EditStudent() {
 
         throw studentError;
 
+      }
+
+
+      // Supabase can return no error when zero rows match
+      // an UPDATE filter. Never report success unless the
+      // student row was actually updated and returned.
+      if (!updatedStudent) {
+        throw new Error(
+          "Student details were not saved because no matching student record was updated. Refresh the page and confirm the active school and academic year."
+        );
+      }
+
+
+      // Confirm the parent details returned by the database
+      // match the values submitted by the form.
+      const parentFields = [
+        "parent_name",
+        "parent_phone",
+        "parent_email"
+      ];
+
+      const parentSaveMismatch = parentFields.some(
+        field =>
+          (updatedStudent[field] ?? null) !==
+          (studentPayload[field] ?? null)
+      );
+
+      if (parentSaveMismatch) {
+        throw new Error(
+          "The student record was updated, but the parent details returned by the database do not match the submitted values. Please reload the student and try again."
+        );
       }
 
 
