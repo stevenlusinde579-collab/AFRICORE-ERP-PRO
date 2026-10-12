@@ -354,7 +354,7 @@ const Communication = () => {
             setComposer((previous) => ({ ...previous, recipient: "", message: "" }));
         } catch (err) {
             console.error("EXTERNAL COMMUNICATION ERROR:", err);
-            setSendResult({ type: "error", message: err?.message || "Failed to send communication." });
+            setSendResult({ type: "error", message: err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to send communication." });
         } finally { setSending(false); }
     };
 
