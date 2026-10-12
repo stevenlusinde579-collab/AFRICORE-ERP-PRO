@@ -206,16 +206,35 @@ function AdvancedCombinations() {
 
   const deleteCombination = async (row) => {
     if (row.is_system_default || Number(row.school_id) !== Number(schoolId)) return;
-    if (!window.confirm("Delete " + row.combination_code + "? This does not delete subjects or marks.")) return;
-    const { error: deleteError } = await supabase
-      .from("subject_combinations")
-      .delete()
-      .eq("id", row.id)
-      .eq("school_id", Number(schoolId));
-    if (deleteError) setError(deleteError.message);
-    else {
-      setMessage("Combination deleted. Existing student records and marks were not deleted.");
+    setError("");
+    setMessage("");
+
+    try {
+      const { count, error: countError } = await supabase
+        .from("students")
+        .select("id", { count: "exact", head: true })
+        .eq("school_id", Number(schoolId))
+        .eq("combination_id", Number(row.id));
+
+      if (countError) throw countError;
+      if ((count || 0) > 0) {
+        setError("This combination is assigned to " + count + " student(s). Deactivate it instead of deleting it.");
+        return;
+      }
+
+      if (!window.confirm("Delete " + row.combination_code + "? This cannot be undone.")) return;
+
+      const { error: deleteError } = await supabase
+        .from("subject_combinations")
+        .delete()
+        .eq("id", row.id)
+        .eq("school_id", Number(schoolId));
+
+      if (deleteError) throw deleteError;
+      setMessage("Combination deleted successfully.");
       await loadData();
+    } catch (deleteError) {
+      setError(deleteError?.message || "Unable to delete this combination.");
     }
   };
 
