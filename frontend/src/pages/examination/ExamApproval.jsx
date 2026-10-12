@@ -113,7 +113,7 @@ const ExamApproval = () => {
 
     const [showNotificationPanel, setShowNotificationPanel] = useState(false);
     const [notificationType, setNotificationType] = useState("");
-    const [notificationChannels, setNotificationChannels] = useState(["sms"]);
+    const [notificationChannels, setNotificationChannels] = useState(["whatsapp", "email"]);
     const [notificationSending, setNotificationSending] = useState(false);
     const [notificationResult, setNotificationResult] = useState(null);
     const [notificationReason, setNotificationReason] = useState("");
@@ -2507,7 +2507,7 @@ const ExamApproval = () => {
         setNotificationType(type);
         setNotificationReason(reason || "");
         setNotificationResult(null);
-        setNotificationChannels(["sms"]);
+        setNotificationChannels(["whatsapp", "email"]);
         setShowNotificationPanel(true);
     };
 
@@ -2517,7 +2517,7 @@ const ExamApproval = () => {
         setNotificationResult(null);
         setNotificationType("");
         setNotificationReason("");
-        setNotificationChannels(["sms"]);
+        setNotificationChannels(["whatsapp", "email"]);
     };
 
     const sendExamSubjectNotification = async () => {
@@ -4052,8 +4052,8 @@ const ExamApproval = () => {
                                 </div>
                                 <div>
                                     <p className="text-sm font-bold text-gray-700 mb-3">Notification Channels</p>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        {[["sms","ðŸ“±","SMS"],["whatsapp","ðŸ’¬","WhatsApp"],["email","âœ‰ï¸","Email"]].map(([value, icon, label]) => (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[["whatsapp","ðŸ’¬","WhatsApp"],["email","âœ‰ï¸","Email"]].map(([value, icon, label]) => (
                                             <button key={value} type="button" onClick={() => toggleNotificationChannel(value)} disabled={notificationSending} className={notificationChannels.includes(value) ? "border-2 border-blue-600 bg-blue-50 text-blue-700 rounded-xl p-4 font-bold" : "border-2 border-gray-200 bg-white text-gray-700 rounded-xl p-4 font-semibold"}>
                                                 <div className="text-2xl">{icon}</div>
                                                 <div className="mt-1 text-sm">{label}</div>
