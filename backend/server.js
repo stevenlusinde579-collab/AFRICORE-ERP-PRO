@@ -69,28 +69,6 @@ app.get("/", (req, res) => {
 ========================================================= */
 
 app.use(
-    "/api/exams",
-    examRoutes
-);
-
-app.use(
-    "/api/finance",
-    financeRoutes
-);
-
-app.use(
-    "/api/ai",
-    aiRoutes
-);
-
-
-app.use(
-    "/api/result-analysis",
-    resultAnalysisRoutes
-);
-
-
-app.use(
     "/api/auth",
     authRoutes
 );
@@ -115,6 +93,28 @@ app.use("/api", (req, res, next) => {
 
     return authenticateUser(req, res, next);
 });
+
+
+app.use(
+    "/api/exams",
+    examRoutes
+);
+
+app.use(
+    "/api/finance",
+    financeRoutes
+);
+
+app.use(
+    "/api/ai",
+    aiRoutes
+);
+
+
+app.use(
+    "/api/result-analysis",
+    resultAnalysisRoutes
+);
 
 
 app.use(
