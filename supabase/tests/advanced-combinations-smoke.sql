@@ -43,7 +43,7 @@ WHERE school_id IS NULL
   AND is_system_default = true
   AND combination_code = 'PCM';
 
-DO $
+DO $body$
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -57,7 +57,7 @@ BEGIN
     RAISE EXCEPTION 'Global PCM template could not be assigned to another school';
   END IF;
 END
-$;
+$body$;
 
 -- A valid school-owned combination can be assigned to an Advanced class.
 INSERT INTO public.subject_combinations
