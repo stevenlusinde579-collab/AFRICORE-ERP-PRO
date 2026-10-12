@@ -603,7 +603,7 @@ router.post("/parent-result", async (req, res) => {
       }
 
       const whatsappTo =
-        normalizeWhatsAppNumber(cleanRecipient);
+        normalizeWhatsAppNumber(verifiedRecipient);
 
       const whatsappFrom =
         normalizeWhatsAppFrom(
