@@ -28,7 +28,7 @@ create table if not exists public.combination_subjects (
 
 alter table public.students
   add column if not exists combination_id bigint null
-  references public.subject_combinations(id) on delete set null;
+  references public.subject_combinations(id) on delete restrict;
 
 alter table public.subject_combinations enable row level security;
 alter table public.combination_subjects enable row level security;
