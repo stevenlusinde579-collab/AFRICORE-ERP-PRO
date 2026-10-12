@@ -1056,12 +1056,16 @@ function AddStudent() {
 
 
       // -----------------------------------------------
-      // Clear previous subjects
+      // Clear previous class-specific subjects/combo
       // -----------------------------------------------
 
       setSelectedSubjects([]);
 
       setSubjects([]);
+
+      setAdvancedCombinations([]);
+
+      setSelectedCombinationId("");
 
 
       loadSubjectsForClass(
@@ -1390,6 +1394,48 @@ function AddStudent() {
           "One or more selected subjects are no longer available for this class."
         );
 
+      }
+
+      // Verify the selected combination and its mapped subjects again
+      // immediately before saving; do not trust stale dropdown state.
+      const isAdvancedClass =
+        String(selectedClassForSave.academic_level || "").trim().toLowerCase() === "advanced";
+
+      if (isAdvancedClass && selectedCombinationId) {
+        const { data: combinationRow, error: combinationCheckError } = await supabase
+          .from("subject_combinations")
+          .select("id,school_id,is_active")
+          .eq("id", Number(selectedCombinationId))
+          .eq("school_id", currentSchoolId)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (combinationCheckError) throw combinationCheckError;
+        if (!combinationRow) {
+          throw new Error("The selected combination is no longer active for your school. Choose it again.");
+        }
+
+        const { data: combinationLinks, error: combinationLinksError } = await supabase
+          .from("combination_subjects")
+          .select("subject_id")
+          .eq("combination_id", Number(selectedCombinationId));
+
+        if (combinationLinksError) throw combinationLinksError;
+
+        const expectedIds = (combinationLinks || [])
+          .map((item) => Number(item.subject_id))
+          .sort((a, b) => a - b);
+        const actualIds = selectedSubjects
+          .map((id) => Number(id))
+          .sort((a, b) => a - b);
+
+        if (
+          expectedIds.length === 0 ||
+          expectedIds.length !== actualIds.length ||
+          expectedIds.some((id, index) => id !== actualIds[index])
+        ) {
+          throw new Error("The selected subjects do not match this combination. Select the combination again.");
+        }
       }
 
 
