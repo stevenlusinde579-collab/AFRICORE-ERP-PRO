@@ -712,7 +712,7 @@ router.post("/parent-result", async (req, res) => {
   }
 
   /* =======================================================
-     EMAIL - RESEND
+     EMAIL - GMAIL SMTP
   ======================================================= */
 
   if (normalizedChannel === "email") {
