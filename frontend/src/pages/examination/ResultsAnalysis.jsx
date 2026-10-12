@@ -11,7 +11,7 @@ import {
 } from "react";
 
 import { createPortal } from "react-dom";
-import axios from "axios";
+import api from "../../services/api";
 
 import {
     useNavigate,
@@ -52,7 +52,7 @@ import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 
-const API_URL = "https://africore-erp-pro.onrender.com/api";
+
 
 
 // ============================================================
@@ -1815,6 +1815,21 @@ export default function ResultsAnalysis() {
                 return parts.join("\n");
             }
 
+            // Prefer the provider's specific error when the backend also sends
+            // a generic message such as "Failed to send WhatsApp message."
+            if (typeof providerError === "string" && providerError.trim()) {
+                const normalizedProviderError = providerError.trim();
+                const normalizedMessage = String(messageValue || "").trim().toLowerCase();
+                if (
+                    !normalizedMessage ||
+                    normalizedMessage === "failed to send whatsapp message." ||
+                    normalizedMessage === "failed to send email." ||
+                    normalizedMessage === "failed to send communication."
+                ) {
+                    return normalizedProviderError;
+                }
+            }
+
             if (typeof messageValue === "string" && messageValue.trim()) {
                 return messageValue;
             }
@@ -1844,7 +1859,7 @@ export default function ResultsAnalysis() {
         try {
             setSendingChannel(channel);
 
-            const response = await axios.post(`${API_URL}/communication/parent-result`, {
+            const response = await api.post("/communication/parent-result", {
                 school_id: report.school_id || null,
                 student_id: report.id,
                 exam_id: exam?.id || examId,
