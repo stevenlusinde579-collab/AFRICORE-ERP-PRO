@@ -24,6 +24,11 @@ const resend = RESEND_API_KEY
   ? new Resend(RESEND_API_KEY)
   : null;
 
+// WhatsApp and Email remain enabled. SMS stays disabled until its provider is paid.
+const SMS_ENABLED = false;
+const WHATSAPP_ENABLED = true;
+const EMAIL_ENABLED = true;
+
 /* =========================================================
    HELPERS
 ========================================================= */
@@ -230,6 +235,8 @@ router.get("/", async (req, res) => {
       sms: {
         provider: "eSMS Africa",
         configured: Boolean(ESMS_API_KEY),
+        enabled: SMS_ENABLED,
+        message: "SMS is paused until its provider is funded.",
       },
 
       whatsapp: {
@@ -237,6 +244,7 @@ router.get("/", async (req, res) => {
         configured: Boolean(
           twilioClient && TWILIO_WHATSAPP_FROM
         ),
+        enabled: WHATSAPP_ENABLED,
       },
 
       email: {
@@ -244,6 +252,7 @@ router.get("/", async (req, res) => {
         configured: Boolean(
           resend && RESEND_FROM_EMAIL
         ),
+        enabled: EMAIL_ENABLED,
       },
     },
   });
@@ -314,6 +323,16 @@ router.post("/parent-result", async (req, res) => {
       success: false,
       message:
         "Invalid communication channel. Use sms, whatsapp or email.",
+    });
+  }
+
+  // Enforce the temporary SMS pause on the server, not just in the UI.
+  if (normalizedChannel === "sms" && !SMS_ENABLED) {
+    return res.status(503).json({
+      success: false,
+      channel: normalizedChannel,
+      message: "SMS is temporarily paused until the SMS provider is funded.",
+      code: "CHANNEL_TEMPORARILY_DISABLED",
     });
   }
 
