@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import twilio from "twilio";
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { supabase } from "../config/supabase.js";
 
 const router = express.Router();
@@ -10,8 +10,9 @@ const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
   TWILIO_WHATSAPP_FROM,
-  RESEND_API_KEY,
-  RESEND_FROM_EMAIL,
+  GMAIL_USER,
+  GMAIL_APP_PASSWORD,
+  GMAIL_FROM_EMAIL,
   ESMS_API_KEY,
 } = process.env;
 
@@ -20,9 +21,16 @@ const twilioClient =
     ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     : null;
 
-const resend = RESEND_API_KEY
-  ? new Resend(RESEND_API_KEY)
-  : null;
+const emailTransporter =
+  GMAIL_USER && GMAIL_APP_PASSWORD
+    ? nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: GMAIL_USER,
+          pass: GMAIL_APP_PASSWORD,
+        },
+      })
+    : null;
 
 // WhatsApp and Email remain enabled. SMS stays disabled until its provider is paid.
 const SMS_ENABLED = false;
@@ -316,9 +324,9 @@ router.get("/", async (req, res) => {
       },
 
       email: {
-        provider: "Resend",
+        provider: "Gmail SMTP",
         configured: Boolean(
-          resend && RESEND_FROM_EMAIL
+          emailTransporter && GMAIL_USER && GMAIL_APP_PASSWORD
         ),
         enabled: EMAIL_ENABLED,
       },
@@ -709,9 +717,9 @@ router.post("/parent-result", async (req, res) => {
 
   if (normalizedChannel === "email") {
     try {
-      if (!resend || !RESEND_FROM_EMAIL) {
+      if (!emailTransporter || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
         throw new Error(
-          "Resend email configuration is incomplete."
+          "Gmail email is not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD in the backend environment."
         );
       }
 
@@ -721,27 +729,14 @@ router.post("/parent-result", async (req, res) => {
         );
       }
 
-      const emailResult =
-        await resend.emails.send({
-          from: RESEND_FROM_EMAIL,
-          to: [verifiedRecipient],
-          subject:
-            cleanSub ||
-            "Student Examination Results",
-          text: cleanMsg,
-        });
+      const emailResult = await emailTransporter.sendMail({
+        from: GMAIL_FROM_EMAIL || GMAIL_USER,
+        to: verifiedRecipient,
+        subject: cleanSub || "Student Examination Results",
+        text: cleanMsg,
+      });
 
-      if (emailResult?.error) {
-        throw new Error(
-          emailResult.error.message ||
-            "Resend rejected the email."
-        );
-      }
-
-      const providerMessageId =
-        emailResult?.data?.id ||
-        emailResult?.id ||
-        null;
+      const providerMessageId = emailResult?.messageId || null;
 
       await updateCommunicationHistory(
         history.id,
@@ -762,11 +757,11 @@ router.post("/parent-result", async (req, res) => {
       return res.json({
         success: true,
         message:
-          "Email accepted by Resend.",
+          "Email accepted by Gmail SMTP.",
         history_id: history.id,
         channel: "email",
         status: "queued",
-        provider: "Resend",
+        provider: "Gmail SMTP",
         provider_message_id:
           providerMessageId,
       });
@@ -846,32 +841,28 @@ router.post("/send", async (req, res) => {
 
   try {
     if (channel === "email") {
-      if (!resend || !RESEND_FROM_EMAIL) {
+      if (!emailTransporter || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
         return res.status(503).json({
           success: false,
-          message: "Email is not configured yet. Set RESEND_API_KEY and RESEND_FROM_EMAIL in the backend environment.",
+          message: "Gmail is not configured yet. Set GMAIL_USER and GMAIL_APP_PASSWORD in the backend environment.",
           code: "EMAIL_PROVIDER_NOT_CONFIGURED",
         });
       }
 
-      const result = await resend.emails.send({
-        from: RESEND_FROM_EMAIL,
-        to: [recipient],
+      const result = await emailTransporter.sendMail({
+        from: GMAIL_FROM_EMAIL || GMAIL_USER,
+        to: recipient,
         subject,
         text: message,
       });
 
-      if (result?.error) {
-        throw new Error(result.error.message || "Email provider rejected the message.");
-      }
-
       return res.json({
         success: true,
-        message: "Email accepted by the email provider.",
+        message: "Email accepted by Gmail SMTP.",
         channel: "email",
-        provider: "Resend",
+        provider: "Gmail SMTP",
         status: "queued",
-        provider_message_id: result?.data?.id || result?.id || null,
+        provider_message_id: result?.messageId || null,
       });
     }
 
