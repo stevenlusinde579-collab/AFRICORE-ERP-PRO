@@ -35,6 +35,30 @@ BEGIN
 END
 $$;
 
+-- Global system templates must be usable by any school's Advanced class.
+INSERT INTO public.students (school_id, current_class_id, combination_id)
+SELECT 2, 2, id
+FROM public.subject_combinations
+WHERE school_id IS NULL
+  AND is_system_default = true
+  AND combination_code = 'PCM';
+
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.students s
+    JOIN public.subject_combinations c ON c.id = s.combination_id
+    WHERE s.school_id = 2
+      AND s.current_class_id = 2
+      AND c.school_id IS NULL
+      AND c.combination_code = 'PCM'
+  ) THEN
+    RAISE EXCEPTION 'Global PCM template could not be assigned to another school';
+  END IF;
+END
+$;
+
 -- A valid school-owned combination can be assigned to an Advanced class.
 INSERT INTO public.subject_combinations
   (school_id, combination_code, combination_name, is_system_default)
