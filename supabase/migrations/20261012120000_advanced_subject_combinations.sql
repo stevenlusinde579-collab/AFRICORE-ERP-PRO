@@ -127,3 +127,65 @@ values
   (null, 'HGE', 'History, Geography and Economics', 'Both', array['History','Geography','Economics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
   (null, 'PMC', 'Physics, Mathematics and Computer Science', 'Both', array['Physics','Advanced Mathematics','Computer Science'], 'Listed in the Tanzania Institute of Education Form V-VI curriculum; confirm availability in your school.', true)
 on conflict do nothing;
+
+-- Enforce combination ownership and Advanced-class consistency at database level.
+-- This prevents a client from assigning another school's combination by changing the request.
+create or replace function public.validate_student_advanced_combination()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_combination_school_id bigint;
+  v_combination_active boolean;
+  v_class_school_id bigint;
+  v_class_level text;
+begin
+  if new.combination_id is null then
+    return new;
+  end if;
+
+  select c.school_id, c.is_active
+    into v_combination_school_id, v_combination_active
+  from public.subject_combinations c
+  where c.id = new.combination_id;
+
+  if not found then
+    raise exception 'The selected Advanced combination does not exist or is not accessible.';
+  end if;
+
+  if v_combination_school_id is null
+     or v_combination_school_id <> new.school_id then
+    raise exception 'The selected combination does not belong to this school.';
+  end if;
+
+  if v_combination_active is distinct from true then
+    raise exception 'The selected combination is inactive.';
+  end if;
+
+  select cl.school_id, cl.academic_level
+    into v_class_school_id, v_class_level
+  from public.classes cl
+  where cl.id = new.current_class_id;
+
+  if not found
+     or v_class_school_id is distinct from new.school_id then
+    raise exception 'The selected class does not belong to this school.';
+  end if;
+
+  if lower(trim(coalesce(v_class_level, ''))) <> 'advanced' then
+    raise exception 'Advanced combinations can only be assigned to Advanced classes.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_validate_student_advanced_combination on public.students;
+create trigger trg_validate_student_advanced_combination
+before insert or update of combination_id, school_id, current_class_id
+on public.students
+for each row
+execute function public.validate_student_advanced_combination();
+
+revoke all on function public.validate_student_advanced_combination() from public, anon, authenticated;
