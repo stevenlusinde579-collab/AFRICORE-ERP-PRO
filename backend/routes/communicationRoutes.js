@@ -603,7 +603,7 @@ router.post("/parent-result", async (req, res) => {
       }
 
       const whatsappTo =
-        normalizeWhatsAppNumber(cleanRecipient);
+        normalizeWhatsAppNumber(verifiedRecipient);
 
       const whatsappFrom =
         normalizeWhatsAppFrom(
@@ -699,7 +699,7 @@ router.post("/parent-result", async (req, res) => {
         );
       }
 
-      if (!isValidEmail(cleanRecipient)) {
+      if (!isValidEmail(verifiedRecipient)) {
         throw new Error(
           "Invalid email address."
         );
@@ -708,7 +708,7 @@ router.post("/parent-result", async (req, res) => {
       const emailResult =
         await resend.emails.send({
           from: RESEND_FROM_EMAIL,
-          to: [cleanRecipient],
+          to: [verifiedRecipient],
           subject:
             cleanSub ||
             "Student Examination Results",
