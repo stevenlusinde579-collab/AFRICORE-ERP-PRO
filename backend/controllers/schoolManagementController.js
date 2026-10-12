@@ -56,6 +56,9 @@ export const getSchools = async (req, res) => {
  * Creates a school without deleting or changing existing school data.
  */
 export const createSchool = async (req, res) => {
+    let createdSchoolId = null;
+    let createdClassIds = [];
+
     try {
         const schoolName =
             typeof req.body?.school_name === "string"
@@ -86,31 +89,103 @@ export const createSchool = async (req, res) => {
                 : true
         };
 
-        const { data, error } = await supabase
+        const { data: school, error: schoolError } = await supabase
             .from("schools")
             .insert(payload)
             .select(SCHOOL_COLUMNS)
             .single();
 
-        if (error) {
-            console.error("SCHOOL MANAGEMENT - CREATE ERROR:", error);
+        if (schoolError) {
+            console.error("SCHOOL MANAGEMENT - CREATE ERROR:", schoolError);
             return res.status(400).json({
                 success: false,
                 message: "School could not be created.",
-                error: error.message
+                error: schoolError.message
             });
         }
 
+        createdSchoolId = school.id;
+
+        // The existing academic-year setup creates the school's active year.
+        // Reuse it; do not create duplicate years or duplicate subjects.
+        const { data: academicYear, error: yearError } = await supabase
+            .from("academic_years")
+            .select("id,year_name")
+            .eq("school_id", createdSchoolId)
+            .eq("is_active", true)
+            .order("id", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (yearError) throw yearError;
+
+        if (!academicYear) {
+            return res.status(500).json({
+                success: false,
+                message: "School was created, but no active academic year was found. Create/activate an academic year before adding classes.",
+                school
+            });
+        }
+
+        const defaultClasses = [
+            { class_name: "Baby Class", short_name: "BABY", academic_level: "Nursery" },
+            { class_name: "Pre Unit", short_name: "PRE", academic_level: "Nursery" },
+            { class_name: "KG 1", short_name: "KG1", academic_level: "Nursery" },
+            { class_name: "KG 2", short_name: "KG2", academic_level: "Nursery" },
+            ...Array.from({ length: 7 }, (_, i) => ({
+                class_name: `Standard ${i + 1}`,
+                short_name: `STD${i + 1}`,
+                academic_level: "Primary"
+            })),
+            ...Array.from({ length: 4 }, (_, i) => ({
+                class_name: `Form ${i + 1}`,
+                short_name: `FORM${i + 1}`,
+                academic_level: "Secondary"
+            })),
+            { class_name: "Form 5", short_name: "FORM5", academic_level: "Advanced" },
+            { class_name: "Form 6", short_name: "FORM6", academic_level: "Advanced" }
+        ].map((item) => ({
+            ...item,
+            school_id: createdSchoolId,
+            academic_year_id: academicYear.id
+        }));
+
+        const { data: classes, error: classesError } = await supabase
+            .from("classes")
+            .insert(defaultClasses)
+            .select("id,class_name,academic_level");
+
+        if (classesError) throw classesError;
+        createdClassIds = (classes || []).map((item) => item.id);
+
         return res.status(201).json({
             success: true,
-            message: "School created successfully.",
-            school: data
+            message: "School created successfully with default classes.",
+            school,
+            setup: {
+                academic_year: academicYear.year_name,
+                classes_created: (classes || []).length
+            }
         });
     } catch (error) {
-        console.error("SCHOOL MANAGEMENT - CREATE EXCEPTION:", error);
+        console.error("SCHOOL MANAGEMENT - CREATE/DEFAULT CLASSES ERROR:", error);
+
+        if (createdClassIds.length > 0) {
+            const { error: cleanupError } = await supabase
+                .from("classes")
+                .delete()
+                .in("id", createdClassIds);
+
+            if (cleanupError) {
+                console.error("SCHOOL MANAGEMENT - CLASS CLEANUP ERROR:", cleanupError);
+            }
+        }
+
         return res.status(500).json({
             success: false,
-            message: "Unexpected error while creating the school."
+            message: "School setup failed while creating its default classes.",
+            error: error?.message || "Unknown setup error.",
+            school_id: createdSchoolId
         });
     }
 };
