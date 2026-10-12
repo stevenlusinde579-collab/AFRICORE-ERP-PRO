@@ -340,12 +340,34 @@ const Communication = () => {
         if (!composer.message.trim()) return setSendResult({ type: "error", message: "Message is required." });
         if (composer.channel === "email" && !composer.subject.trim()) return setSendResult({ type: "error", message: "Email subject is required." });
         if (composer.channel === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(composer.recipient.trim())) return setSendResult({ type: "error", message: "Enter a valid email address." });
+
+        // WhatsApp link mode: open WhatsApp with the message pre-filled.
+        // The user confirms delivery by pressing Send in WhatsApp.
+        if (composer.channel === "whatsapp") {
+            let phoneNumber = composer.recipient.trim().replace(/[^\d]/g, "");
+            if (phoneNumber.startsWith("00")) phoneNumber = phoneNumber.slice(2);
+            if (phoneNumber.startsWith("0")) phoneNumber = "255" + phoneNumber.slice(1);
+            else if (!phoneNumber.startsWith("255") && /^[67]\d{8}$/.test(phoneNumber)) phoneNumber = "255" + phoneNumber;
+
+            if (!/^\d{8,15}$/.test(phoneNumber)) {
+                return setSendResult({ type: "error", message: "Enter a valid WhatsApp number with country code, e.g. 0712345678 or 255712345678." });
+            }
+
+            const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(composer.message.trim())}`;
+            const whatsappWindow = window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+            if (!whatsappWindow) {
+                window.location.href = whatsappUrl;
+            }
+            setSendResult({ type: "success", message: "WhatsApp imefunguliwa na ujumbe umejazwa. Bonyeza Send ndani ya WhatsApp ili ujumbe utumwe." });
+            return;
+        }
+
         try {
             setSending(true);
             const response = await api.post("/communication/send", {
                 recipient: composer.recipient.trim(),
                 channel: composer.channel,
-                subject: composer.channel === "email" ? composer.subject.trim() : null,
+                subject: composer.subject.trim(),
                 message: composer.message.trim(),
             });
             const data = response?.data || {};
@@ -538,12 +560,12 @@ const Composer = ({ composer, setComposer, sendResult, sending, onSubmit }) => {
         <form onSubmit={onSubmit} className="space-y-5 p-5 text-slate-900">
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
                 <p className="text-sm font-bold text-indigo-900">{capitalize(composer.channel)} Communication</p>
-                <p className="mt-1 text-xs leading-5 text-indigo-700">Enter a phone number or email address and your message. Student ID and Exam ID are not required.</p>
+                <p className="mt-1 text-xs leading-5 text-indigo-700">Enter a phone number or email address and your message. WhatsApp opens with your message ready; you press Send there.</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
                 <FormField label={composer.channel === "email" ? "Recipient Email" : "Recipient WhatsApp Number"} required>
                     <input type={composer.channel === "email" ? "email" : "tel"} value={composer.recipient} onChange={(e) => setComposer((p) => ({ ...p, recipient: e.target.value }))} required autoComplete="off" placeholder={composer.channel === "email" ? "parent@example.com" : "e.g. 0712345678 or 255712345678"} className={fieldClass} />
-                    <p className="mt-1 text-xs text-slate-500">{composer.channel === "email" ? "Enter the recipient's email address." : "Tanzanian numbers can start with 0, 6, 7 or 255."}</p>
+                    <p className="mt-1 text-xs text-slate-500">{composer.channel === "email" ? "Enter the recipient's email address." : "Tumia namba ya Tanzania (mf. 0712345678 au 255712345678). WhatsApp itafunguka; bonyeza Send kutuma."}</p>
                 </FormField>
                 {composer.channel === "email" && (
                     <FormField label="Email Subject" required>
@@ -557,7 +579,7 @@ const Composer = ({ composer, setComposer, sendResult, sending, onSubmit }) => {
             {sendResult && <ResultBox result={sendResult} />}
             <div className="flex justify-end border-t border-slate-200 pt-5">
                 <button type="submit" disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
-                    {sending ? <><RefreshCw className="h-4 w-4 animate-spin" />Sending...</> : <><Send className="h-4 w-4" />Send Communication</>}
+                    {sending ? <><RefreshCw className="h-4 w-4 animate-spin" />Sending...</> : <><Send className="h-4 w-4" />{composer.channel === "whatsapp" ? "Open WhatsApp" : "Send Communication"}</>}
                 </button>
             </div>
         </form>
