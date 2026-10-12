@@ -132,6 +132,12 @@ function AddStudent() {
   const [selectedSubjects, setSelectedSubjects] =
     useState([]);
 
+  const [advancedCombinations, setAdvancedCombinations] =
+    useState([]);
+
+  const [selectedCombinationId, setSelectedCombinationId] =
+    useState("");
+
 
   // =====================================================
   // NORMALIZED ROLE
@@ -710,6 +716,10 @@ function AddStudent() {
 
       setSelectedSubjects([]);
 
+      setAdvancedCombinations([]);
+
+      setSelectedCombinationId("");
+
       return;
 
     }
@@ -907,17 +917,70 @@ function AddStudent() {
     }
 
 
-    setSubjects(
-      data || []
-    );
-
-
-    // =================================================
-    // CLEAR PREVIOUS SUBJECT SELECTIONS
-    // =================================================
-
+    setSubjects(data || []);
     setSelectedSubjects([]);
+    setSelectedCombinationId("");
+    setAdvancedCombinations([]);
 
+    // Advanced combinations are school-specific. A default template
+    // must first be customized from the Advanced Combinations page.
+    if (String(selectedClass.academic_level || "").trim().toLowerCase() === "advanced") {
+      const { data: combinationRows, error: combinationError } = await supabase
+        .from("subject_combinations")
+        .select("id,combination_code,combination_name,level_scope,is_active,school_id")
+        .eq("school_id", Number(schoolId))
+        .eq("is_active", true)
+        .order("combination_code");
+
+      if (combinationError) {
+        setMessage("Unable to load Advanced combinations: " + combinationError.message);
+      } else {
+        const candidateRows = combinationRows || [];
+        if (candidateRows.length) {
+          const { data: links, error: linksError } = await supabase
+            .from("combination_subjects")
+            .select("combination_id,subject_id")
+            .in("combination_id", candidateRows.map((item) => item.id));
+
+          if (linksError) {
+            setMessage("Unable to load combination subjects: " + linksError.message);
+          } else {
+            const mappedIds = new Set((links || []).map((link) => Number(link.combination_id)));
+            setAdvancedCombinations(candidateRows.filter((item) => mappedIds.has(Number(item.id))));
+          }
+        }
+      }
+    }
+  };
+
+  const handleAdvancedCombinationChange = async (combinationId) => {
+    setSelectedCombinationId(combinationId);
+    if (!combinationId) {
+      setSelectedSubjects([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("combination_subjects")
+      .select("subject_id")
+      .eq("combination_id", Number(combinationId));
+
+    if (error) {
+      setMessage("Unable to load subjects for this combination: " + error.message);
+      setSelectedSubjects([]);
+      return;
+    }
+
+    const availableIds = new Set(subjects.map((subject) => Number(subject.id)));
+    const ids = (data || []).map((item) => Number(item.subject_id));
+    if (ids.some((id) => !availableIds.has(id))) {
+      setMessage("Some combination subjects are not active Advanced subjects. Update the combination before enrolling this student.");
+      setSelectedSubjects([]);
+      return;
+    }
+
+    setMessage("");
+    setSelectedSubjects(ids);
   };
 
 
@@ -993,12 +1056,16 @@ function AddStudent() {
 
 
       // -----------------------------------------------
-      // Clear previous subjects
+      // Clear previous class-specific subjects/combo
       // -----------------------------------------------
 
       setSelectedSubjects([]);
 
       setSubjects([]);
+
+      setAdvancedCombinations([]);
+
+      setSelectedCombinationId("");
 
 
       loadSubjectsForClass(
@@ -1032,6 +1099,8 @@ function AddStudent() {
   const handleSubjectChange = (
     subjectId
   ) => {
+
+    setSelectedCombinationId("");
 
     const numericSubjectId =
       Number(subjectId);
@@ -1074,6 +1143,8 @@ function AddStudent() {
 
   const selectAllSubjects = () => {
 
+    setSelectedCombinationId("");
+
     const allSubjectIds =
       subjects.map(
         subject =>
@@ -1093,6 +1164,8 @@ function AddStudent() {
   // =====================================================
 
   const clearSubjects = () => {
+
+    setSelectedCombinationId("");
 
     setSelectedSubjects([]);
 
@@ -1323,6 +1396,48 @@ function AddStudent() {
 
       }
 
+      // Verify the selected combination and its mapped subjects again
+      // immediately before saving; do not trust stale dropdown state.
+      const isAdvancedClass =
+        String(selectedClassForSave.academic_level || "").trim().toLowerCase() === "advanced";
+
+      if (isAdvancedClass && selectedCombinationId) {
+        const { data: combinationRow, error: combinationCheckError } = await supabase
+          .from("subject_combinations")
+          .select("id,school_id,is_active")
+          .eq("id", Number(selectedCombinationId))
+          .eq("school_id", currentSchoolId)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (combinationCheckError) throw combinationCheckError;
+        if (!combinationRow) {
+          throw new Error("The selected combination is no longer active for your school. Choose it again.");
+        }
+
+        const { data: combinationLinks, error: combinationLinksError } = await supabase
+          .from("combination_subjects")
+          .select("subject_id")
+          .eq("combination_id", Number(selectedCombinationId));
+
+        if (combinationLinksError) throw combinationLinksError;
+
+        const expectedIds = (combinationLinks || [])
+          .map((item) => Number(item.subject_id))
+          .sort((a, b) => a - b);
+        const actualIds = selectedSubjects
+          .map((id) => Number(id))
+          .sort((a, b) => a - b);
+
+        if (
+          expectedIds.length === 0 ||
+          expectedIds.length !== actualIds.length ||
+          expectedIds.some((id, index) => id !== actualIds[index])
+        ) {
+          throw new Error("The selected subjects do not match this combination. Select the combination again.");
+        }
+      }
+
 
       // =================================================
       // STUDENT PAYLOAD
@@ -1353,6 +1468,11 @@ function AddStudent() {
 
         current_class_id:
           currentClassId,
+
+        combination_id:
+          String(selectedClassForSave.academic_level || "").trim().toLowerCase() === "advanced" && selectedCombinationId
+            ? Number(selectedCombinationId)
+            : null,
 
         // =================================================
         // AUTHORITATIVE GLOBAL ACADEMIC YEAR
@@ -2525,6 +2645,30 @@ function AddStudent() {
 
               <div>
 
+                {String(
+                  classes.find((item) => Number(item.id) === Number(student.current_class_id))?.academic_level || ""
+                ).trim().toLowerCase() === "advanced" && (
+                  <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <label className="block font-semibold text-blue-900 mb-2">
+                      Advanced Combination (optional)
+                    </label>
+                    <select
+                      value={selectedCombinationId}
+                      onChange={(event) => handleAdvancedCombinationChange(event.target.value)}
+                      className="w-full rounded-lg border border-blue-200 bg-white p-3"
+                    >
+                      <option value="">Choose combination or select subjects manually</option>
+                      {advancedCombinations.map((combination) => (
+                        <option key={combination.id} value={combination.id}>
+                          {combination.combination_code} — {combination.combination_name} ({combination.level_scope})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs text-blue-800">
+                      Selecting a combination automatically selects its configured subjects. If the list is empty, create a school combination under Advanced Combinations first.
+                    </p>
+                  </div>
+                )}
 
                 {/* SUBJECT ACTIONS */}
 

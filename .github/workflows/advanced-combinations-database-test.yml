@@ -1,0 +1,45 @@
+name: Advanced Combinations Database Smoke Test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261012120000_advanced_subject_combinations.sql'
+      - 'supabase/tests/**'
+      - '.github/workflows/advanced-combinations-database-test.yml'
+  push:
+    branches: [feat/advanced-combinations]
+    paths:
+      - 'supabase/migrations/20261012120000_advanced_subject_combinations.sql'
+      - 'supabase/tests/**'
+      - '.github/workflows/advanced-combinations-database-test.yml'
+
+jobs:
+  migration-smoke-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Create disposable schema fixture
+        env:
+          PGPASSWORD: test-password
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/advanced-combinations-schema.sql
+      - name: Apply migration and run smoke tests
+        env:
+          PGPASSWORD: test-password
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/advanced-combinations-smoke.sql

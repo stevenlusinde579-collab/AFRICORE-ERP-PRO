@@ -6,6 +6,7 @@ import {
   FaUserGraduate,
   FaChalkboardTeacher,
   FaBook,
+  FaLayerGroup,
   FaSchool,
   FaCalendarAlt,
   FaClipboardList,
@@ -162,6 +163,18 @@ function Sidebar() {
         "headmaster",
         "academic master",
         "subject teacher"
+      ]
+    },
+
+    {
+      name: "Advanced Combinations",
+      path: "/advanced-combinations",
+      icon: <FaLayerGroup />,
+      roles: [
+        "super admin",
+        "headmaster",
+        "deputy headmaster",
+        "academic master"
       ]
     },
 

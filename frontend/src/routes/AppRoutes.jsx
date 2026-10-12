@@ -40,6 +40,7 @@ import Subjects from "../pages/subjects/Subjects";
 import AddSubject from "../pages/subjects/AddSubject";
 import EditSubject from "../pages/subjects/EditSubject";
 import SubjectProfile from "../pages/subjects/SubjectProfile";
+import AdvancedCombinations from "../pages/subjects/AdvancedCombinations";
 
 import Classes from "../pages/classes/Classes";
 import Addclass from "../pages/classes/Addclass";
@@ -413,6 +414,20 @@ export default function AppRoutes() {
                     path="subjects/profile/:id"
                     element={<SubjectProfile />}
                 />
+
+                {/* ADVANCED SUBJECT COMBINATIONS */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 2, 3, 4]}
+                        />
+                    }
+                >
+                    <Route
+                        path="advanced-combinations"
+                        element={<AdvancedCombinations />}
+                    />
+                </Route>
 
                 {/* CLASSES */}
                 <Route
