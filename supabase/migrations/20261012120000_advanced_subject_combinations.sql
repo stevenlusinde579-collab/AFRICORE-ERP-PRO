@@ -124,8 +124,7 @@ values
   (null, 'HKL', 'History, Kiswahili and English Language', 'Both', array['History','Kiswahili','English Language'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
   (null, 'KLF', 'Kiswahili, English Language and French', 'Both', array['Kiswahili','English Language','French'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
   (null, 'ECA', 'Economics, Commerce and Accountancy', 'Both', array['Economics','Commerce','Accountancy'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
-  (null, 'HGE', 'History, Geography and Economics', 'Both', array['History','Geography','Economics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true),
-  (null, 'PMC', 'Physics, Mathematics and Computer Science', 'Both', array['Physics','Advanced Mathematics','Computer Science'], 'Listed in the Tanzania Institute of Education Form V-VI curriculum; confirm availability in your school.', true)
+  (null, 'HGE', 'History, Geography and Economics', 'Both', array['History','Geography','Economics'], 'NECTA-listed combination. General Studies and subsidiary subjects are managed separately by the school.', true)
 on conflict do nothing;
 
 -- Enforce combination ownership and Advanced-class consistency at database level.
