@@ -11,6 +11,7 @@ import teacherRoutes from "./routes/teacherRoutes.js";
 import communicationRoutes from "./routes/communicationRoutes.js";
 import financeRoutes from "./routes/financeRoutes.js";
 import schoolManagementRoutes from "./routes/schoolManagementRoutes.js";
+import { authenticateUser } from "./middleware/authMiddleware.js";
 
 /* =========================================================
    APP
@@ -93,6 +94,27 @@ app.use(
     "/api/auth",
     authRoutes
 );
+
+// Public operational probes only. Application API routes below require a
+// valid user and an active school; Super Admin is resolved from profile_roles.
+const publicApiProbes = new Set([
+    "GET /ai/health",
+    "GET /exams/route-test",
+    "GET /finance/route-test",
+    "GET /result-analysis/test",
+    "GET /communication",
+    "GET /communication/"
+]);
+
+app.use("/api", (req, res, next) => {
+    const requestKey = `${req.method} ${req.path}`;
+
+    if (publicApiProbes.has(requestKey)) {
+        return next();
+    }
+
+    return authenticateUser(req, res, next);
+});
 
 
 app.use(
