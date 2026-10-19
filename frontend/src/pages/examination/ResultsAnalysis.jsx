@@ -1039,6 +1039,20 @@ export default function ResultsAnalysis() {
         ? "All Examination Classes"
         : getClassName(classMap.get(idValue(selectedClassId)));
 
+    const isCseeExam = useMemo(() => {
+        const levelContext = [
+            exam?.education_level,
+            exam?.level,
+            exam?.exam_type,
+            ...examSubjects.flatMap(es => {
+                const cls = classMap.get(idValue(es.class_id));
+                const subject = subjectMap.get(idValue(es.subject_id));
+                return [cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name, subject?.education_level];
+            })
+        ].filter(Boolean).join(" ");
+        return isOrdinaryLevel(levelContext);
+    }, [exam, examSubjects, classMap, subjectMap]);
+
 
     // ========================================================
     // STUDENT SUBJECT RESULT
@@ -1535,9 +1549,12 @@ export default function ResultsAnalysis() {
             .filter(row => row.possible > 0)
             .sort((a, b) => b.percentage - a.percentage || b.total - a.total);
 
-        const studentGradeDistribution = ["A", "B", "C", "D", "F"].map(grade => ({
+        const gradeLabels = examGradingScales.length
+            ? examGradingScales.map(scale => scale.grade)
+            : (isCseeExam ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"]);
+        const studentGradeDistribution = gradeLabels.map(grade => ({
             grade,
-            count: rankedStudents.filter(row => row.grade === grade).length
+            count: rankedStudents.filter(row => String(row.grade) === String(grade)).length
         }));
         const cseeEligibleStudents = rankedStudents.filter(row => row.cseeEligible);
         const cseeGpa = cseeEligibleStudents.length ? cseeEligibleStudents.reduce((sum, row) => sum + numberValue(row.cseeGpa), 0) / cseeEligibleStudents.length : null;
@@ -1551,12 +1568,16 @@ export default function ResultsAnalysis() {
                     idValue(student.current_class_id) === idValue(es.class_id) ||
                     idValue(student.exam_class_id) === idValue(es.class_id))
                 .map(student => calculateStudentSubject(student.id, es));
-            const graded = subjectResults.map(row => ({ ...row, grade: getGrade(row.percentage), point: getGradePoint(getGrade(row.percentage)) }));
+            const graded = subjectResults.map(row => {
+                const configured = gradeFromConfiguredScale(row.percentage, examGradingScales);
+                const grade = configured?.grade || (isCseeExam ? getGrade(row.percentage) : genericGrade(row.percentage));
+                return { ...row, grade, point: isCseeExam ? getGradePoint(grade) : null };
+            });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const avg = graded.length ? total / graded.length : 0;
-            const passed = graded.filter(row => numberValue(row.percentage) >= 40).length;
-            const gradeCounts = Object.fromEntries(["A","B","C","D","F"].map(g => [g, graded.filter(row => row.grade === g).length]));
-            const subjectGpa = graded.length ? graded.reduce((sum, row) => sum + row.point, 0) / graded.length : null;
+            const passed = graded.filter(row => row.pass).length;
+            const gradeCounts = Object.fromEntries(gradeLabels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
+            const subjectGpa = isCseeExam && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
                 exam_subject_id: es.id,
                 subject_id: es.subject_id,
@@ -1627,7 +1648,7 @@ export default function ResultsAnalysis() {
             subjectRows,
             classRows
         };
-    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap]);
+    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam]);
 
     // ========================================================
     // CLASS OVERALL RESULT
