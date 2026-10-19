@@ -1237,8 +1237,6 @@ export default function ResultsAnalysis() {
         // questions have a combined max_marks of 115.
         const percentage = clamp(rawTotal);
         const grade = gradeForPercentage(percentage);
-        const configuredPassMarks = numberValue(examSubject.pass_marks);
-        const passPercentage = configuredPassMarks > 0 ? configuredPassMarks : 40;
 
         return {
             exam_subject_id: examSubject.id,
@@ -1252,7 +1250,7 @@ export default function ResultsAnalysis() {
             percentage,
             grade,
             remark: remarkForGrade(grade),
-            pass: rawPossible > 0 && (scaleForPercentage(percentage) ? passedForPercentage(percentage) : percentage >= passPercentage),
+            pass: rawPossible > 0 && passedForPercentage(percentage),
             questions: selectedQuestions.length,
             marked_questions: markedQuestions,
             missing_questions: Math.max(0, selectedQuestions.length - markedQuestions),
