@@ -1151,8 +1151,6 @@ export default function ResultsAnalysis() {
             const rawTotal = clamp(numberValue(finalSubjectMark.marks_obtained));
             const rawPossible = 100;
             const percentage = rawTotal;
-            const passMarks = numberValue(examSubject.pass_marks);
-            const passPercentage = passMarks > 0 ? passMarks : 40;
             const grade = gradeForPercentage(percentage);
             const questionLevelMarks = studentMarks.filter(
                 mark => mark.source !== "exam_marks" && mark.question_id != null
@@ -1170,7 +1168,10 @@ export default function ResultsAnalysis() {
                 percentage,
                 grade,
                 remark: finalSubjectMark.remark || remarkForGrade(grade),
-                pass: scaleForPercentage(percentage) ? passedForPercentage(percentage) : percentage >= passPercentage,
+                // Use the same configured pass-threshold logic as question-level marks.
+                // If no grading band applies, passedForPercentage converts pass_marks
+                // from raw subject marks to a percentage using full_marks.
+                pass: passedForPercentage(percentage),
                 questions: subjectQuestions.length,
                 marked_questions: questionLevelMarks.length,
                 missing_questions: Math.max(0, subjectQuestions.length - questionLevelMarks.length),
