@@ -4055,7 +4055,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Candidates" value={data.candidates || 0} />
                 <DetailBox label="School Average" value={`${formatNumber(data.average,1)}%`} />
-                <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "â€”"} />
+                {isCseeExam && <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "—"} />}
                 <DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} />
                 <DetailBox label="Subjects" value={(data.subjectRows || []).length} />
             </div>
@@ -4142,7 +4142,7 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
         <div className="p-6 text-slate-900 report-page">
             <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={isCseeExam ? `${data.className || "Class"} Â· Best Seven Classification` : `${data.className || "Class"} Â· Configured Grading`} />
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
-                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} /><DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "â€”"} /><DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
+                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} />{isCseeExam && <DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "—"} />}<DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
             {isCseeExam && <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />}
             {isCseeExam && <div className="mb-5">
