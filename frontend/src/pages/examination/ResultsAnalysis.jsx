@@ -103,11 +103,56 @@ const getGrade = percentage => {
     return "F";
 };
 
+const normalizeEducationLevel = value => String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+
+const isOrdinaryLevel = value => {
+    const level = normalizeEducationLevel(value);
+    return /O LEVEL|ORDINARY LEVEL|ORDINARY SECONDARY|FORM\s*(I|1|II|2|III|3|IV|4)(\b|$)|FORM\s*1\s*[-–]\s*4/.test(level)
+        && !/A LEVEL|ADVANCED LEVEL|FORM\s*(V|5|VI|6)(\b|$)/.test(level);
+};
+
+const gradeFromConfiguredScale = (percentage, scales) => {
+    const p = numberValue(percentage);
+    const ordered = [...(Array.isArray(scales) ? scales : [])]
+        .sort((a, b) => numberValue(b.min_percentage) - numberValue(a.min_percentage));
+    return ordered.find(scale =>
+        p >= numberValue(scale.min_percentage) &&
+        p <= numberValue(scale.max_percentage)
+    ) || null;
+};
+
+const isLegacyOLevelScale = scales => {
+    const grades = (Array.isArray(scales) ? scales : [])
+        .map(scale => String(scale.grade || "").trim().toUpperCase())
+        .sort();
+    return grades.length === 5 && ["A", "B", "C", "D", "F"].every((grade, index) => grades[index] === grade);
+};
+
+const applicableGradeScale = (percentage, scales, ordinaryLevel) => {
+    // Older non-O-Level exams may have inherited the original A-F CSEE defaults.
+    // Do not treat those defaults as valid grading policy for a different level.
+    if (!ordinaryLevel && isLegacyOLevelScale(scales)) return null;
+    return gradeFromConfiguredScale(percentage, scales);
+};
+
+const genericGrade = percentage => {
+    const p = numberValue(percentage);
+    if (p >= 80) return "Excellent";
+    if (p >= 65) return "Good";
+    if (p >= 50) return "Satisfactory";
+    if (p >= 40) return "Developing";
+    return "Needs Support";
+};
+
 const _GRADE_POINTS = Object.freeze({ A: 1, B: 2, C: 3, D: 4, F: 5 });
 const getGradePoint = grade => _GRADE_POINTS[String(grade || "").trim().toUpperCase()] ?? 5;
 
 // Standard result: Best 7 analysed subjects determine Aggregate, GPA and Division.
-const calculateResult = subjectResults => {
+const calculateResult = (subjectResults, gradingScales = []) => {
     // Every subject assigned to the student is part of the result. Missing
     // marks are treated as 0%, therefore they receive grade F and 5 points.
     const analysed = Array.isArray(subjectResults)
@@ -119,7 +164,7 @@ const calculateResult = subjectResults => {
                         ? row.percentage
                         : numberValue(row.total)
                 );
-                const grade = getGrade(percentage);
+                const grade = gradeFromConfiguredScale(percentage, gradingScales)?.grade || getGrade(percentage);
                 return {
                     ...row,
                     percentage,
@@ -202,11 +247,17 @@ const performanceClass = percentage => {
 
 const gradeClass = grade => {
     switch (String(grade || "").toUpperCase()) {
-        case "A": return "text-emerald-700 bg-emerald-50 border-emerald-200";
-        case "B": return "text-blue-700 bg-blue-50 border-blue-200";
-        case "C": return "text-amber-700 bg-amber-50 border-amber-200";
-        case "D": return "text-orange-700 bg-orange-50 border-orange-200";
-        default: return "text-red-700 bg-red-50 border-red-200";
+        case "A":
+        case "EXCELLENT": return "text-emerald-700 bg-emerald-50 border-emerald-200";
+        case "B":
+        case "GOOD": return "text-blue-700 bg-blue-50 border-blue-200";
+        case "C":
+        case "SATISFACTORY": return "text-amber-700 bg-amber-50 border-amber-200";
+        case "D":
+        case "DEVELOPING": return "text-orange-700 bg-orange-50 border-orange-200";
+        case "F":
+        case "NEEDS SUPPORT": return "text-red-700 bg-red-50 border-red-200";
+        default: return "text-slate-700 bg-slate-50 border-slate-200";
     }
 };
 
@@ -368,6 +419,7 @@ export default function ResultsAnalysis() {
     const [marks, setMarks] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [classes, setClasses] = useState([]);
+    const [examGradingScales, setExamGradingScales] = useState([]);
 
     // --------------------------------------------------------
     // UI STATE
@@ -456,6 +508,20 @@ export default function ResultsAnalysis() {
 
             if (examError) throw examError;
             setExam(examData);
+
+            // Use the grading scale saved for this examination where available.
+            const { data: gradingScaleData, error: gradingScaleError } = await supabase
+                .from("exam_grading_scales")
+                .select("grade, min_percentage, max_percentage, remark, result, sort_order")
+                .eq("exam_id", examId)
+                .order("sort_order", { ascending: true });
+
+            if (gradingScaleError) {
+                console.warn("EXAM GRADING SCALE WARNING:", gradingScaleError);
+                setExamGradingScales([]);
+            } else {
+                setExamGradingScales(gradingScaleData || []);
+            }
 
             // 2. EXAM SUBJECTS
             const { data: examSubjectData, error: examSubjectError } = await supabase
@@ -993,6 +1059,27 @@ export default function ResultsAnalysis() {
         ? "All Examination Classes"
         : getClassName(classMap.get(idValue(selectedClassId)));
 
+    const isCseeClass = useCallback(classId => {
+        const cls = classMap.get(idValue(classId));
+        const classSubjects = examSubjects.filter(es => idValue(es.class_id) === idValue(classId));
+        const levelContext = [
+            exam?.education_level,
+            exam?.level,
+            exam?.exam_type,
+            cls?.academic_level,
+            cls?.class_name,
+            cls?.name,
+            cls?.short_name,
+            ...classSubjects.map(es => subjectMap.get(idValue(es.subject_id))?.education_level)
+        ].filter(Boolean).join(" ");
+        return isOrdinaryLevel(levelContext);
+    }, [exam, examSubjects, classMap, subjectMap]);
+
+    const isCseeExam = useMemo(() => {
+        const classIds = [...new Set(examSubjects.map(es => idValue(es.class_id)).filter(Boolean))];
+        return classIds.length > 0 && classIds.every(classId => isCseeClass(classId));
+    }, [examSubjects, isCseeClass]);
+
 
     // ========================================================
     // STUDENT SUBJECT RESULT
@@ -1011,6 +1098,42 @@ export default function ResultsAnalysis() {
         );
 
         const selectionType = normalizeSelectionType(examSubject.question_selection_type);
+        const subjectInfo = subjectMap.get(idValue(examSubject.subject_id));
+        const classInfo = classMap.get(idValue(examSubject.class_id));
+        const levelContext = [
+            exam?.education_level, exam?.level, exam?.exam_type,
+            subjectInfo?.education_level, classInfo?.academic_level,
+            classInfo?.class_name, classInfo?.name, classInfo?.short_name
+        ].filter(Boolean).join(" ");
+        const ordinaryLevel = isOrdinaryLevel(levelContext);
+        const scaleForPercentage = percentage =>
+            applicableGradeScale(percentage, examGradingScales, ordinaryLevel);
+        const gradeForPercentage = percentage =>
+            scaleForPercentage(percentage)?.grade ||
+            (ordinaryLevel ? getGrade(percentage) : genericGrade(percentage));
+        const passedForPercentage = percentage => {
+            const configured = scaleForPercentage(percentage);
+            if (configured) {
+                return String(configured.result || "").trim().toUpperCase() === "PASS";
+            }
+
+            // Use this subject's own pass mark when no grading band applies.
+            // exam_subject marks are stored in raw marks, while this analysis
+            // works with normalized percentages, so convert the threshold too.
+            const fullMarks = numberValue(examSubject?.full_marks);
+            const passMarks = numberValue(examSubject?.pass_marks);
+            const configuredPassPercentage = fullMarks > 0
+                ? (passMarks / fullMarks) * 100
+                : 40;
+
+            return numberValue(percentage) >= configuredPassPercentage;
+        };
+        const remarkForGrade = grade => {
+            const configured = examGradingScales.find(scale =>
+                String(scale.grade || "").toUpperCase() === String(grade || "").toUpperCase()
+            );
+            return configured?.remark || (ordinaryLevel ? getRemark(grade) : String(grade || "Not graded"));
+        };
 
         // A final row in exam_marks is already the subject mark against
         // exam_subjects.full_marks. Keep the public `total` value normalized
@@ -1028,9 +1151,7 @@ export default function ResultsAnalysis() {
             const rawTotal = clamp(numberValue(finalSubjectMark.marks_obtained));
             const rawPossible = 100;
             const percentage = rawTotal;
-            const passMarks = numberValue(examSubject.pass_marks);
-            const passPercentage = passMarks > 0 ? passMarks : 40;
-            const grade = getGrade(percentage);
+            const grade = gradeForPercentage(percentage);
             const questionLevelMarks = studentMarks.filter(
                 mark => mark.source !== "exam_marks" && mark.question_id != null
             );
@@ -1046,8 +1167,11 @@ export default function ResultsAnalysis() {
                 rawPossible,
                 percentage,
                 grade,
-                remark: finalSubjectMark.remark || getRemark(grade),
-                pass: percentage >= passPercentage,
+                remark: finalSubjectMark.remark || remarkForGrade(grade),
+                // Use the same configured pass-threshold logic as question-level marks.
+                // If no grading band applies, passedForPercentage converts pass_marks
+                // from raw subject marks to a percentage using full_marks.
+                pass: passedForPercentage(percentage),
                 questions: subjectQuestions.length,
                 marked_questions: questionLevelMarks.length,
                 missing_questions: Math.max(0, subjectQuestions.length - questionLevelMarks.length),
@@ -1112,9 +1236,7 @@ export default function ResultsAnalysis() {
         // the student's mark. Therefore 85 remains 85%, even if the selected
         // questions have a combined max_marks of 115.
         const percentage = clamp(rawTotal);
-        const grade = getGrade(percentage);
-        const configuredPassMarks = numberValue(examSubject.pass_marks);
-        const passPercentage = configuredPassMarks > 0 ? configuredPassMarks : 40;
+        const grade = gradeForPercentage(percentage);
 
         return {
             exam_subject_id: examSubject.id,
@@ -1127,8 +1249,8 @@ export default function ResultsAnalysis() {
             rawPossible,
             percentage,
             grade,
-            remark: getRemark(grade),
-            pass: rawPossible > 0 && percentage >= passPercentage,
+            remark: remarkForGrade(grade),
+            pass: rawPossible > 0 && passedForPercentage(percentage),
             questions: selectedQuestions.length,
             marked_questions: markedQuestions,
             missing_questions: Math.max(0, selectedQuestions.length - markedQuestions),
@@ -1144,7 +1266,7 @@ export default function ResultsAnalysis() {
                             : "No Marks",
             source: "exam_question_marks"
         };
-    }, [getStudentMarks, questions, subjectMap]);
+    }, [getStudentMarks, questions, subjectMap, classMap, exam, examGradingScales]);
 
     // ========================================================
     // STUDENT ANALYSIS
@@ -1208,14 +1330,32 @@ export default function ResultsAnalysis() {
             // Best-7 calculation as the Report Form. Missing marks remain F.
             // BEST 7 MUST ALWAYS use ALL examination subjects, never the
             // currently selected subject filter.
-            const csee = calculateResult(allSubjectResults);
+            const levelContext = [
+                exam?.education_level, exam?.level, exam?.exam_type,
+                ...assignedExamSubjects.flatMap(es => {
+                    const cls = classMap.get(idValue(es.class_id));
+                    const subject = subjectMap.get(idValue(es.subject_id));
+                    return [cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name, subject?.education_level];
+                })
+            ].filter(Boolean).join(" ");
+            const ordinaryLevel = isOrdinaryLevel(levelContext);
+            const csee = ordinaryLevel
+                ? calculateResult(allSubjectResults, examGradingScales)
+                : { eligible: false, analysedSubjects: allSubjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
             const bestSeven = csee.bestSeven || [];
-            const total = bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0);
-            const possible = 700;
-            const average = bestSeven.length ? (total / 700) * 100 : 0;
+            const total = ordinaryLevel
+                ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
+                : allSubjectResults.reduce((sum, result) => sum + numberValue(result.total), 0);
+            const possible = ordinaryLevel ? 700 : allSubjectResults.length * 100;
+            const average = ordinaryLevel
+                ? (bestSeven.length ? (total / 700) * 100 : 0)
+                : (possible > 0 ? (total / possible) * 100 : 0);
             const percentage = average;
-            const grade = bestSeven.length === 7 ? getGrade(average) : "â€”";
-            const passed = bestSeven.length === 7 ? average >= 40 : false;
+            const overallConfigured = applicableGradeScale(average, examGradingScales, ordinaryLevel);
+            const grade = overallConfigured?.grade || (ordinaryLevel ? getGrade(average) : genericGrade(average));
+            const passed = overallConfigured
+                ? String(overallConfigured.result || "").toUpperCase() === "PASS"
+                : average >= 40;
             const hasMarks = markedResults.some(result => result.total > 0 || result.marked_questions > 0);
 
             // Calculate GPA/Division for this exact studentAnalysis row.
@@ -1237,7 +1377,7 @@ export default function ResultsAnalysis() {
                 possible,
                 percentage,
                 grade,
-                remark: getRemark(grade),
+                remark: overallConfigured?.remark || (ordinaryLevel ? getRemark(grade) : grade),
                 pass: passed,
                 hasMarks,
                 cseeEligible: csee.eligible,
@@ -1294,6 +1434,10 @@ export default function ResultsAnalysis() {
         }));
     }, [
         students,
+        exam,
+        classes,
+        subjects,
+        examGradingScales,
         selectedClassId,
         selectedSubjectId,
         filteredExamSubjects,
@@ -1341,24 +1485,31 @@ export default function ResultsAnalysis() {
             );
             const allSubjectsPossible = assignedSubjectsCount * 100;
             const analysed = subjectResults.filter(result => result.possible > 0);
-            const csee = calculateResult(subjectResults);
+            const levelContext = [
+                exam?.education_level, exam?.level, exam?.exam_type,
+                ...assignedExamSubjects.flatMap(es => {
+                    const cls = classMap.get(idValue(es.class_id));
+                    const subject = subjects.find(item => idValue(item.id) === idValue(es.subject_id));
+                    return [cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name, subject?.education_level];
+                })
+            ].filter(Boolean).join(" ");
+            const ordinaryLevel = isOrdinaryLevel(levelContext);
+            const csee = ordinaryLevel
+                ? calculateResult(subjectResults, examGradingScales)
+                : { eligible: false, analysedSubjects: subjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
 
-            // FINAL STUDENT RESULT = BEST 7 ONLY.
-            // Do not divide the Best 7 percentage by the total number of
-            // examination subjects. For example, 423/700 = 60.43% = C.
-            // If the student has more than seven subjects, only the seven
-            // subjects selected by calculateResult() are used for Grade/GPA/Division.
             const bestSeven = csee.bestSeven || [];
-            const total = bestSeven.reduce(
-                (sum, result) => sum + numberValue(result.total),
-                0
-            );
-            const possible = bestSeven.length * 100;
-            const average = bestSeven.length > 0
-                ? (total / 700) * 100
+            const total = ordinaryLevel
+                ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
+                : allSubjectsTotal;
+            const possible = ordinaryLevel ? bestSeven.length * 100 : allSubjectsPossible;
+            const average = possible > 0
+                ? (total / possible) * 100
                 : 0;
             const percentage = average;
-            const grade = bestSeven.length === 7 ? getGrade(average) : (bestSeven.length ? getGrade(average) : "â€”");
+            const configuredOverall = applicableGradeScale(average, examGradingScales, ordinaryLevel);
+            const grade = configuredOverall?.grade ||
+                (ordinaryLevel ? getGrade(average) : genericGrade(average));
 
             return {
                 id: student.id,
@@ -1372,8 +1523,10 @@ export default function ResultsAnalysis() {
                 possible,
                 percentage,
                 grade,
-                remark: getRemark(grade),
-                pass: bestSeven.length === 7 ? average >= 40 : false,
+                remark: configuredOverall?.remark || (ordinaryLevel ? getRemark(grade) : grade),
+                pass: configuredOverall
+                    ? String(configuredOverall.result || "").toUpperCase() === "PASS"
+                    : average >= 40,
                 subjects: subjectResults,
                 subjectCount: subjectResults.length,
                 allSubjectsTotal,
@@ -1398,7 +1551,7 @@ export default function ResultsAnalysis() {
                 missingSubjects: subjectResults.filter(result => result.status === "No Marks").length
             };
         });
-    }, [students, examSubjects, calculateStudentSubject, classMap]);
+    }, [students, examSubjects, calculateStudentSubject, classMap, exam, subjects, examGradingScales]);
 
     const overallRankedStudents = useMemo(() => {
         const ranked = overallStudentAnalysis
@@ -1445,9 +1598,16 @@ export default function ResultsAnalysis() {
             .filter(row => row.possible > 0)
             .sort((a, b) => b.percentage - a.percentage || b.total - a.total);
 
-        const studentGradeDistribution = ["A", "B", "C", "D", "F"].map(grade => ({
+        const configuredGradeLabels = examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
+            ? examGradingScales.map(scale => scale.grade)
+            : [];
+        const gradeLabels = [...new Set([
+            ...configuredGradeLabels,
+            ...rankedStudents.map(row => row.grade).filter(Boolean)
+        ])];
+        const studentGradeDistribution = gradeLabels.map(grade => ({
             grade,
-            count: rankedStudents.filter(row => row.grade === grade).length
+            count: rankedStudents.filter(row => String(row.grade) === String(grade)).length
         }));
         const cseeEligibleStudents = rankedStudents.filter(row => row.cseeEligible);
         const cseeGpa = cseeEligibleStudents.length ? cseeEligibleStudents.reduce((sum, row) => sum + numberValue(row.cseeGpa), 0) / cseeEligibleStudents.length : null;
@@ -1461,12 +1621,17 @@ export default function ResultsAnalysis() {
                     idValue(student.current_class_id) === idValue(es.class_id) ||
                     idValue(student.exam_class_id) === idValue(es.class_id))
                 .map(student => calculateStudentSubject(student.id, es));
-            const graded = subjectResults.map(row => ({ ...row, grade: getGrade(row.percentage), point: getGradePoint(getGrade(row.percentage)) }));
+            const graded = subjectResults.map(row => {
+                const classIsCsee = isCseeClass(es.class_id);
+                const configured = applicableGradeScale(row.percentage, examGradingScales, classIsCsee);
+                const grade = configured?.grade || (classIsCsee ? getGrade(row.percentage) : genericGrade(row.percentage));
+                return { ...row, grade, point: classIsCsee ? getGradePoint(grade) : null };
+            });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const avg = graded.length ? total / graded.length : 0;
-            const passed = graded.filter(row => numberValue(row.percentage) >= 40).length;
-            const gradeCounts = Object.fromEntries(["A","B","C","D","F"].map(g => [g, graded.filter(row => row.grade === g).length]));
-            const subjectGpa = graded.length ? graded.reduce((sum, row) => sum + row.point, 0) / graded.length : null;
+            const passed = graded.filter(row => row.pass).length;
+            const gradeCounts = Object.fromEntries(gradeLabels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
+            const subjectGpa = isCseeClass(es.class_id) && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
                 exam_subject_id: es.id,
                 subject_id: es.subject_id,
@@ -1537,7 +1702,7 @@ export default function ResultsAnalysis() {
             subjectRows,
             classRows
         };
-    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap]);
+    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam, isCseeClass]);
 
     // ========================================================
     // CLASS OVERALL RESULT
@@ -1565,8 +1730,12 @@ export default function ResultsAnalysis() {
             const subjectCount = subjectResults.length;
             const total = subjectResults.reduce((sum, row) => sum + numberValue(row.total), 0);
             const average = subjectCount ? total / subjectCount : 0;
-            const grade = getGrade(average);
-            const csee = calculateResult(subjectResults);
+            const classIsCsee = isCseeClass(selectedClassId);
+            const configuredOverall = applicableGradeScale(average, examGradingScales, classIsCsee);
+            const grade = configuredOverall?.grade || (classIsCsee ? getGrade(average) : genericGrade(average));
+            const csee = classIsCsee
+                ? calculateResult(subjectResults, examGradingScales)
+                : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
             return {
                 ...student,
                 full_name: safeName(student),
@@ -1577,8 +1746,8 @@ export default function ResultsAnalysis() {
                 possible: subjectCount * 100,
                 percentage: average,
                 grade,
-                remark: getRemark(grade),
-                pass: average >= 40,
+                remark: configuredOverall?.remark || (classIsCsee ? getRemark(grade) : grade),
+                pass: configuredOverall ? String(configuredOverall.result || "").toUpperCase() === "PASS" : average >= 40,
                 cseeEligible: csee.eligible,
                 cseeAggregate: csee.aggregate,
                 cseeGpa: csee.gpa,
@@ -1605,12 +1774,20 @@ export default function ResultsAnalysis() {
             const results = classStudents.map(student =>
                 calculateStudentSubject(student.id, es)
             );
-            const graded = results.map(row => ({ ...row, grade: getGrade(row.percentage), point: getGradePoint(getGrade(row.percentage)) }));
+            const graded = results.map(row => {
+                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeClass(selectedClassId));
+                const grade = configured?.grade || (isCseeClass(selectedClassId) ? getGrade(row.percentage) : genericGrade(row.percentage));
+                return { ...row, grade, point: isCseeClass(selectedClassId) ? getGradePoint(grade) : null };
+            });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const average = graded.length ? total / graded.length : 0;
-            const passed = graded.filter(row => numberValue(row.percentage) >= 40).length;
-            const gradeCounts = Object.fromEntries(["A","B","C","D","F"].map(g => [g, graded.filter(row => row.grade === g).length]));
-            const subjectGpa = graded.length ? graded.reduce((sum, row) => sum + row.point, 0) / graded.length : null;
+            const passed = graded.filter(row => row.pass).length;
+            const classIsCsee = isCseeClass(selectedClassId);
+            const labels = examGradingScales.length && (classIsCsee || !isLegacyOLevelScale(examGradingScales))
+                ? examGradingScales.map(scale => scale.grade)
+                : (classIsCsee ? ["A","B","C","D","F"] : ["Excellent","Good","Satisfactory","Developing","Needs Support"]);
+            const gradeCounts = Object.fromEntries(labels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
+            const subjectGpa = classIsCsee && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
                 exam_subject_id: es.id,
                 subject_id: es.subject_id,
@@ -1656,35 +1833,48 @@ export default function ResultsAnalysis() {
             cseeEligibleStudents: eligibleStudents.length,
             cseeGpa: classGpa,
             cseeDivisionDistribution: divisionDistribution,
-            gradeDistribution: ["A", "B", "C", "D", "F"].map(grade => ({
+            gradeDistribution: (examGradingScales.length && (isCseeClass(selectedClassId) || !isLegacyOLevelScale(examGradingScales))
+                ? examGradingScales.map(scale => scale.grade)
+                : (isCseeClass(selectedClassId) ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"])
+            ).map(grade => ({
                 grade,
-                count: rows.filter(row => row.grade === grade).length
+                count: rows.filter(row => String(row.grade) === String(grade)).length
             })),
             topStudents: rankedWithPosition.slice(0, 10)
         };
-    }, [selectedClassId, students, examSubjects, calculateStudentSubject, subjectMap, classMap]);
+    }, [selectedClassId, students, examSubjects, calculateStudentSubject, subjectMap, classMap, examGradingScales, isCseeClass]);
 
 
     const getStudentReport = useCallback(student => {
         const full = overallRankedStudents.find(row => idValue(row.id) === idValue(student.id)) || student;
-        const subjectsForReport = (full.subjects || []).map(result => ({
-            ...result,
-            subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
-            grade: getGrade(result.percentage),
-            remark: getRemark(getGrade(result.percentage)),
-            report_status: result.pass ? "Passed" : "Failed"
-        }));
+        const subjectsForReport = (full.subjects || []).map(result => {
+            const reportIsCsee = isCseeClass(full.class_id);
+            const configured = applicableGradeScale(result.percentage, examGradingScales, reportIsCsee);
+            const grade = configured?.grade || (reportIsCsee ? getGrade(result.percentage) : genericGrade(result.percentage));
+            return {
+                ...result,
+                subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
+                grade,
+                remark: configured?.remark || (reportIsCsee ? getRemark(grade) : grade),
+                report_status: result.pass ? "Passed" : "Failed"
+            };
+        });
         const analysed = subjectsForReport.filter(row => row.possible > 0);
-        const csee = calculateResult(subjectsForReport);
+        const reportIsCsee = isCseeClass(full.class_id);
+        const csee = reportIsCsee
+            ? calculateResult(subjectsForReport, examGradingScales)
+            : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
         const cseeGpa = csee.gpa;
         const cseeDivision = csee.division;
         const weak = [...analysed].sort((a, b) => a.percentage - b.percentage).slice(0, 3);
         const recommendations = [];
-        if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
-        else if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
-        else if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
-        else if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
-        else recommendations.push("Mwanafunzi anahitaji uingiliaji wa haraka wa kitaaluma, marudio ya msingi na ufuatiliaji wa maendeleo mara kwa mara.");
+        if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
+        else if (!reportIsCsee && full.percentage >= 65) recommendations.push("Mwanafunzi anaendelea vizuri; endelea kuimarisha maeneo yenye changamoto na kufuatilia maendeleo.");
+        else if (!reportIsCsee && full.percentage >= 40) recommendations.push("Mwanafunzi anahitaji mazoezi na msaada zaidi katika maeneo yenye changamoto.");
+        else recommendations.push("Mwanafunzi anahitaji uingiliaji wa kitaaluma na ufuatiliaji wa maendeleo mara kwa mara.");
         if (weak.length) recommendations.push(`Masomo yanayohitaji kipaumbele cha kuboresha ufaulu: ${weak.map(row => `${row.subject_name} (${formatNumber(row.percentage, 1)}%)`).join(", ")}.`);
 
         const savedFields = studentReportFields[idValue(full.id)] || {};
@@ -1692,7 +1882,9 @@ export default function ResultsAnalysis() {
             ...full,
             subjects: subjectsForReport,
             recommendations,
-            reportStatus: csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed",
+            reportStatus: reportIsCsee
+                ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
+                : (full.pass ? "Passed" : "Failed"),
             cseeEligible: csee.eligible,
             cseeAggregate: csee.aggregate,
             cseeGpa,
@@ -1711,7 +1903,7 @@ export default function ResultsAnalysis() {
             parent_phone: full.parent_phone || "",
             parent_email: full.parent_email || ""
         };
-    }, [overallRankedStudents, subjectMap, studentReportFields]);
+    }, [overallRankedStudents, subjectMap, studentReportFields, examGradingScales, isCseeClass]);
 
 
     const printStudentReport = useCallback(student => {
@@ -3023,8 +3215,10 @@ export default function ResultsAnalysis() {
                         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                             <MetricCard icon={FaUserGraduate} label="Students" value={schoolOverall.candidates} sub={`${schoolOverall.studentsAnalysed} analysed`} />
                             <MetricCard icon={FaChartBar} label="School Average" value={`${formatNumber(schoolOverall.average, 1)}%`} sub={performanceLabel(schoolOverall.average)} tone={schoolOverall.average < 40 ? "danger" : schoolOverall.average < 60 ? "warning" : "success"} />
-                            <MetricCard icon={FaGraduationCap} label="GPA" value={schoolOverall.cseeGpa != null ? formatNumber(schoolOverall.cseeGpa, 2) : "â€”"} sub={`${schoolOverall.cseeEligibleStudents} eligible Â· Best 7`} tone="info" />
-                            <MetricCard icon={FaTrophy} label="Candidates" value={schoolOverall.cseeEligibleStudents} sub="Best 7 eligible" tone="info" />
+                            {isCseeExam && <>
+                                <MetricCard icon={FaGraduationCap} label="GPA" value={schoolOverall.cseeGpa != null ? formatNumber(schoolOverall.cseeGpa, 2) : "â€”"} sub={`${schoolOverall.cseeEligibleStudents} eligible Â· Best 7`} tone="info" />
+                                <MetricCard icon={FaTrophy} label="Candidates" value={schoolOverall.cseeEligibleStudents} sub="Best 7 eligible" tone="info" />
+                            </>}
                             <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(schoolOverall.passRate, 1)}%`} sub={`${schoolOverall.studentsPassed} passed Â· ${schoolOverall.studentsFailed} failed`} tone={schoolOverall.passRate < 50 ? "danger" : schoolOverall.passRate < 70 ? "warning" : "success"} />
                             <MetricCard icon={FaTrophy} label="Highest Student" value={schoolOverall.topStudents[0]?.full_name || "â€”"} sub={schoolOverall.topStudents[0] ? `${formatNumber(schoolOverall.topStudents[0].percentage, 1)}%` : "No result"} tone="info" />
                             <MetricCard icon={FaListOl} label="Exam Subjects" value={examSubjects.length} sub={`${schoolOverall.assignments} subject assignments`} />
@@ -3060,7 +3254,7 @@ export default function ResultsAnalysis() {
                             </Panel>
                         </div>
 
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                        {isCseeExam && <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                             <Panel title="Division Distribution" icon={FaGraduationCap}>
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                     {schoolOverall.cseeDivisionDistribution.map(row => (
@@ -3074,10 +3268,10 @@ export default function ResultsAnalysis() {
                             <Panel title=" Calculation" icon={FaChartBar}>
                                 <div className="text-sm text-slate-600 leading-6">GPA na Division vinahesabiwa kwa <strong>Best 7</strong> subjects. A=1, B=2, C=3, D=4, F=5; Aggregate ni jumla ya points za Best 7.</div>
                             </Panel>
-                        </div>
+                        </div>}
 
                         <Panel title="Top Students â€” School" icon={FaTrophy}>
-                            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Class</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th></tr></thead><tbody>{schoolOverall.topStudents.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3">{row.class_name}</td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td><td className="px-3 py-3 font-bold">{row.cseeGpa != null ? formatNumber(row.cseeGpa,2) : "â€”"}</td><td className="px-3 py-3 font-bold">{row.cseeDivision ? `Div ${row.cseeDivision}` : "â€”"}</td></tr>)}</tbody></table></div>
+                            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Class</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th>{isCseeExam && <><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th></>}</tr></thead><tbody>{schoolOverall.topStudents.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3">{row.class_name}</td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td>{isCseeExam && <><td className="px-3 py-3 font-bold">{row.cseeGpa != null ? formatNumber(row.cseeGpa,2) : "â€”"}</td><td className="px-3 py-3 font-bold">{row.cseeDivision ? `Div ${row.cseeDivision}` : "â€”"}</td></>}</tr>)}</tbody></table></div>
                         </Panel>
                     </div>
                 )}
@@ -3347,8 +3541,10 @@ export default function ResultsAnalysis() {
                                         <th className="px-3 py-3">Total</th>
                                         <th className="px-3 py-3">%</th>
                                         <th className="px-3 py-3">Grade</th>
-                                        <th className="px-3 py-3">GPA</th>
-                                        <th className="px-3 py-3">Division</th>
+                                        {isCseeExam && <>
+                                            <th className="px-3 py-3">GPA</th>
+                                            <th className="px-3 py-3">Division</th>
+                                        </>}
                                         <th className="px-3 py-3">Status</th>
                                         <th className="px-3 py-3 text-right">Trace</th>
                                     </tr>
@@ -3377,8 +3573,10 @@ export default function ResultsAnalysis() {
                                                     {student.grade}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"}</td>
-                                            <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "â€”"}</td>
+                                            {isCseeExam && <>
+                                                <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"}</td>
+                                                <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "—"}</td>
+                                            </>}
                                             <td className="px-3 py-3">
                                                 {student.status === "Complete" ? (
                                                     <span className="text-emerald-700 text-xs font-bold inline-flex items-center gap-1">
@@ -3446,11 +3644,11 @@ export default function ResultsAnalysis() {
 
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
-                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} />}
+                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} />}
+                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
+                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
                 </div>,
                 document.body
             )}
@@ -3610,8 +3808,12 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-function StudentReportPrint({ exam, report }) {
-    const result = calculateResult(report?.subjects || []);
+function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }) {
+    // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
+    // Do not recalculate them for Primary, ECE or Advanced Level reports.
+    const result = isCseeExam
+        ? calculateResult(report?.subjects || [], examGradingScales)
+        : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
     const bestSeven = result.bestSeven || [];
     const gpa = report?.cseeGpa ?? report?.gpa ?? result.gpa;
     const division = report?.cseeDivision ?? report?.division ?? result.division;
@@ -3619,7 +3821,9 @@ function StudentReportPrint({ exam, report }) {
     const divisionLabel = division ? (division === "0" ? "Division 0" : `Division ${division}`) : "Not Calculated";
     const bestSevenTotal = bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0);
     const bestSevenAverage = bestSeven.length ? (bestSevenTotal / 700) * 100 : 0;
-    const finalGrade = bestSeven.length === 7 ? getGrade(bestSevenAverage) : "â€”";
+    const finalGrade = isCseeExam
+        ? (bestSeven.length === 7 ? (applicableGradeScale(bestSevenAverage, examGradingScales, true)?.grade || getGrade(bestSevenAverage)) : "—")
+        : (report?.grade || "â€”");
     const allSubjects = report?.subjects || [];
 
     return (
@@ -3631,19 +3835,21 @@ function StudentReportPrint({ exam, report }) {
                 <DetailBox label="Admission No." value={report.admission || "â€”"} />
                 <DetailBox label="Class" value={report.class_name || "â€”"} />
                 <DetailBox label="Gender" value={report.gender || "â€”"} />
-                <DetailBox label="Best 7 Subjects" value={`${bestSeven.length}/7`} />
-                <DetailBox label="Best 7 Total" value={`${formatNumber(bestSevenTotal, 0)} / 700`} />
-                <DetailBox label="Best 7 Average" value={bestSeven.length ? `${formatNumber(bestSevenAverage, 1)}%` : "â€”"} />
-                <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "â€”"} />
-                <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "â€”"} />
-                <DetailBox label="Division" value={divisionLabel} />
+                {isCseeExam && <>
+                    <DetailBox label="Best 7 Subjects" value={`${bestSeven.length}/7`} />
+                    <DetailBox label="Best 7 Total" value={`${formatNumber(bestSevenTotal, 0)} / 700`} />
+                    <DetailBox label="Best 7 Average" value={bestSeven.length ? `${formatNumber(bestSevenAverage, 1)}%` : "â€”"} />
+                    <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "â€”"} />
+                    <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "â€”"} />
+                    <DetailBox label="Division" value={divisionLabel} />
+                </>}
                 <DetailBox label="Grade" value={finalGrade} />
                 <DetailBox label="Status" value={report.reportStatus || "â€”"} />
             </div>
 
-            <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />
+            {isCseeExam && <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />}
 
-            <div className="mb-4">
+            {isCseeExam && <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">Best Seven Subjects â€” Final Calculation</h3>
                 <table className="w-full border-collapse text-[9px] report-table">
                     <thead><tr>{["#","Subject","Mark","%","Grade","Point","Counted"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
@@ -3661,12 +3867,12 @@ function StudentReportPrint({ exam, report }) {
                         ))}
                     </tbody>
                 </table>
-            </div>
+            </div>}
 
             <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">All Exam Subjects</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["#","Subject","Mark","%","Grade","Point","Status"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["#","Subject","Mark","%","Grade","Point","Status"] : ["#","Subject","Mark","%","Grade","Remark","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{allSubjects.map((row, index) => (
                         <tr key={row.exam_subject_id || index}>
                             <td className="border border-slate-400 p-1 text-center">{index + 1}</td>
@@ -3674,8 +3880,8 @@ function StudentReportPrint({ exam, report }) {
                             <td className="border border-slate-400 p-1 text-center">{formatNumber(row.total, 0)}</td>
                             <td className="border border-slate-400 p-1 text-center">{formatNumber(row.percentage, 1)}%</td>
                             <td className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(row.grade)}`}>{row.grade}</td>
-                            <td className="border border-slate-400 p-1 text-center">{getGradePoint(row.grade)}</td>
-                            <td className="border border-slate-400 p-1 text-center">{bestSeven.some(best => idValue(best.exam_subject_id) === idValue(row.exam_subject_id)) ? "Best 7" : (row.report_status || "Reported")}</td>
+                            <td className="border border-slate-400 p-1 text-center">{isCseeExam ? getGradePoint(row.grade) : (row.remark || row.grade)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{isCseeExam && bestSeven.some(best => idValue(best.exam_subject_id) === idValue(row.exam_subject_id)) ? "Best 7" : (row.report_status || "Reported")}</td>
                         </tr>
                     ))}</tbody>
                 </table>
@@ -3748,23 +3954,49 @@ function DivisionSummary({ distribution = [], title = "Division Summary" }) {
 }
 
 function SubjectSummaryTable({ subjects = [] }) {
+    const gradeLabels = [...new Set(
+        subjects.flatMap(row => Object.keys(row.gradeCounts || {}))
+    )];
+    const showGpa = subjects.some(row => row.gpa != null);
+
     return (
         <div className="mb-5">
             <h3 className="font-extrabold text-sm mb-2">Subject Performance Summary</h3>
             <table className="w-full border-collapse text-[9px] report-table">
-                <thead><tr>{["Subject","A","B","C","D","F","GPA"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                <thead>
+                    <tr>
+                        {["Subject", ...gradeLabels, ...(showGpa ? ["GPA"] : [])].map(label => (
+                            <th key={label} className="border border-slate-400 p-1 text-center">{label}</th>
+                        ))}
+                    </tr>
+                </thead>
                 <tbody>{subjects.map(row => {
-                    const gc = row.gradeCounts || {};
-                    const gpa = row.gpa != null ? formatNumber(row.gpa,2) : "â€”";
-                    const gpaTone = numberValue(row.gpa) <= 2 ? "bg-emerald-100 text-emerald-900" : numberValue(row.gpa) <= 3 ? "bg-yellow-100 text-yellow-900" : numberValue(row.gpa) <= 4 ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900";
-                    return <tr key={row.exam_subject_id}>
-                        <td className="border border-slate-400 p-1 font-bold text-left">{row.subject_name}{row.class_name ? <span className="font-normal text-slate-500"> Â· {row.class_name}</span> : null}</td>
-                        {["A","B","C","D","F"].map(g => <td key={g} className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(g)}`}>{gc[g] || 0}</td>)}
-                        <td className={`border border-slate-400 p-1 text-center font-black ${gpaTone}`}>{gpa}</td>
-                    </tr>;
+                    const gradeCounts = row.gradeCounts || {};
+                    const gpa = row.gpa != null ? formatNumber(row.gpa, 2) : "—";
+                    const gpaTone = numberValue(row.gpa) <= 2
+                        ? "bg-emerald-100 text-emerald-900"
+                        : numberValue(row.gpa) <= 3
+                            ? "bg-yellow-100 text-yellow-900"
+                            : numberValue(row.gpa) <= 4
+                                ? "bg-orange-100 text-orange-900"
+                                : "bg-red-100 text-red-900";
+                    return (
+                        <tr key={row.exam_subject_id}>
+                            <td className="border border-slate-400 p-1 font-bold text-left">
+                                {row.subject_name}
+                                {row.class_name ? <span className="font-normal text-slate-500"> · {row.class_name}</span> : null}
+                            </td>
+                            {gradeLabels.map(label => (
+                                <td key={label} className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(label)}`}>
+                                    {gradeCounts[label] || 0}
+                                </td>
+                            ))}
+                            {showGpa && <td className={`border border-slate-400 p-1 text-center font-black ${gpaTone}`}>{gpa}</td>}
+                        </tr>
+                    );
                 })}</tbody>
             </table>
-            <div className="mt-2 text-[8px] text-slate-600">GPA points: A=1, B=2, C=3, D=4, F=5. A higher subject GPA indicates weaker performance.</div>
+            {showGpa && <div className="mt-2 text-[8px] text-slate-600">GPA points: A=1, B=2, C=3, D=4, F=5. A higher subject GPA indicates weaker performance.</div>}
         </div>
     );
 }
@@ -3795,42 +4027,60 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
     );
 }
 
-function SchoolOverallReportPrint({ exam, data }) {
+function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
     const students = data.allStudents || data.topStudents || [];
-    const finalRows = students.map(student => ({ ...student, finalResult: calculateResult(student.subjects || []) }));
+    const finalRows = students.map(student => ({
+        ...student,
+        finalResult: isCseeExam
+            ? calculateResult(student.subjects || [], examGradingScales)
+            : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" }
+    }));
     const finalEligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null);
     const schoolGpa = finalEligible.length ? finalEligible.reduce((sum, row) => sum + numberValue(row.finalResult.gpa), 0) / finalEligible.length : null;
     const schoolDivisions = ["I", "II", "III", "IV", "0"].map(division => ({ division, count: finalRows.filter(row => row.finalResult.division === division).length }));
-    const schoolGrades = ["A", "B", "C", "D", "F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs = row.finalResult.bestSeven || []; const avg = bs.length ? (bs.reduce((sum, item) => sum + numberValue(item.total), 0) / 700) * 100 : 0; return getGrade(avg) === grade; }).length }));
+    const schoolGradeLabels = [...new Set((examGradingScales || []).map(scale => scale.grade).filter(Boolean))];
+    const schoolGrades = (schoolGradeLabels.length ? schoolGradeLabels : ["A", "B", "C", "D", "F"]).map(grade => ({
+        grade,
+        count: finalRows.filter(row => {
+            const best = row.finalResult.bestSeven || [];
+            const average = best.length ? (best.reduce((sum, item) => sum + numberValue(item.total), 0) / 700) * 100 : 0;
+            return (applicableGradeScale(average, examGradingScales, true)?.grade || getGrade(average)) === grade;
+        }).length
+    }));
     const classRows = data.classRows || [];
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle="Whole School Performance Â· Best Seven Classification" />
+            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle={isCseeExam ? "Whole School Performance Â· Best Seven Classification" : "Whole School Performance Â· Configured Grading"} />
 
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Candidates" value={data.candidates || 0} />
                 <DetailBox label="School Average" value={`${formatNumber(data.average,1)}%`} />
-                <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "â€”"} />
+                {isCseeExam && <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "—"} />}
                 <DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} />
                 <DetailBox label="Subjects" value={(data.subjectRows || []).length} />
             </div>
 
-            <DivisionSummary distribution={schoolDivisions} title="School Division Distribution" />
+            {isCseeExam && <DivisionSummary distribution={schoolDivisions} title="School Division Distribution" />}
 
-            <div className="mb-5">
+            {isCseeExam && <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">School Grade Distribution</h3>
                 <div className="grid grid-cols-5 gap-2">
                     {schoolGrades.map(row => <div key={row.grade} className={`border rounded-lg p-2 text-center ${gradeClass(row.grade)}`}><div className="text-[9px] font-bold">Grade {row.grade}</div><div className="text-lg font-black">{row.count || 0}</div><div className="text-[8px]">students</div></div>)}
                 </div>
-            </div>
+            </div>}
 
             <div className="mb-5">
-                <h3 className="font-extrabold text-sm mb-2">Class Performance & Division Distribution</h3>
+                <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Class Performance & Division Distribution" : "Class Performance Summary"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"] : ["Class","Students","Average","Pass Rate"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{classRows.map(row => <tr key={row.class_id}>
-                        <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td><td className="border border-slate-400 p-1 text-center">{row.students}</td><td className="border border-slate-400 p-1 text-center">{formatNumber(row.average,1)}%</td><td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "â€”"}</td>
-                        {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.divisions?.[d] || 0}</td>)}
+                        <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td>
+                        <td className="border border-slate-400 p-1 text-center">{row.students}</td>
+                        <td className="border border-slate-400 p-1 text-center">{formatNumber(row.average,1)}%</td>
+                        {isCseeExam && <>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "â€”"}</td>
+                            {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.divisions?.[d] || 0}</td>)}
+                        </>}
                         <td className="border border-slate-400 p-1 text-center">{formatNumber(row.passRate,1)}%</td>
                     </tr>)}</tbody>
                 </table>
@@ -3839,12 +4089,27 @@ function SchoolOverallReportPrint({ exam, data }) {
             <SubjectSummaryTable subjects={data.subjectRows || []} />
 
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Students â€” Final GPA & Division</h3>
+                <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Students — Final GPA & Division" : "Students — Final Results"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["Pos.","Student","Admission","Class","Best 7 Total","Average","Grade","Aggregate","GPA","Division"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["Pos.","Student","Admission","Class","Best 7 Total","Average","Grade","Aggregate","GPA","Division"] : ["Pos.","Student","Admission","Class","Total","Average","Grade","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{finalRows.map(student => <tr key={student.id}>
-                        <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.class_name}</td>
-                        <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? getGrade(avg) : "â€”"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "â€”"}</td>
+                        <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td>
+                        <td className="border border-slate-400 p-1 font-bold">{student.full_name}</td>
+                        <td className="border border-slate-400 p-1">{student.admission}</td>
+                        <td className="border border-slate-400 p-1">{student.class_name}</td>
+                        {isCseeExam ? <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? (applicableGradeScale(avg, examGradingScales, true)?.grade || getGrade(avg)) : "—"; })()}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td>
+                        </> : <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.total,0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.percentage,1)}%</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.grade || "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        </>}
                     </tr>)}</tbody>
                 </table>
             </div>
@@ -3854,30 +4119,59 @@ function SchoolOverallReportPrint({ exam, data }) {
     );
 }
 
-function ClassOverallReportPrint({ exam, data }) {
+function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
     const students = data.students || data.topStudents || [];
-    const finalRows = students.map(student => ({ ...student, finalResult: calculateResult(student.subjects || []) }));
+    const finalRows = students.map(student => ({
+        ...student,
+        finalResult: isCseeExam
+            ? calculateResult(student.subjects || [], examGradingScales)
+            : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" }
+    }));
     const classGpa = (() => { const eligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null); return eligible.length ? eligible.reduce((sum,row)=>sum+numberValue(row.finalResult.gpa),0)/eligible.length : null; })();
     const classDivisions = ["I","II","III","IV","0"].map(division => ({ division, count: finalRows.filter(row => row.finalResult.division === division).length }));
-    const classGrades = ["A","B","C","D","F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs=row.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,item)=>sum+numberValue(item.total),0)/700)*100:0; return getGrade(avg)===grade; }).length }));
+    const classGradeLabels = [...new Set((examGradingScales || []).map(scale => scale.grade).filter(Boolean))];
+    const classGrades = (classGradeLabels.length ? classGradeLabels : ["A", "B", "C", "D", "F"]).map(grade => ({
+        grade,
+        count: finalRows.filter(row => {
+            const best = row.finalResult.bestSeven || [];
+            const average = best.length ? (best.reduce((sum, item) => sum + numberValue(item.total), 0) / 700) * 100 : 0;
+            return (applicableGradeScale(average, examGradingScales, true)?.grade || getGrade(average)) === grade;
+        }).length
+    }));
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={`${data.className || "Class"} Â· Best Seven Classification`} />
+            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={isCseeExam ? `${data.className || "Class"} Â· Best Seven Classification` : `${data.className || "Class"} Â· Configured Grading`} />
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
-                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} /><DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "â€”"} /><DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
+                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} />{isCseeExam && <DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "—"} />}<DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
-            <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />
-            <div className="mb-5">
+            {isCseeExam && <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />}
+            {isCseeExam && <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">Class Grade Distribution</h3>
                 <div className="grid grid-cols-5 gap-2">{classGrades.map(row => <div key={row.grade} className={`border rounded-lg p-2 text-center ${gradeClass(row.grade)}`}><div className="text-[9px] font-bold">Grade {row.grade}</div><div className="text-lg font-black">{row.count || 0}</div><div className="text-[8px]">students</div></div>)}</div>
-            </div>
+            </div>}
             <SubjectSummaryTable subjects={data.subjects || []} />
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Student Final Results â€” GPA & Division</h3>
+                <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Student Final Results — GPA & Division" : "Student Final Results"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["Pos.","Student","Admission","Best 7 Total","Average","Grade","Aggregate","GPA","Division","Status"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["Pos.","Student","Admission","Best 7 Total","Average","Grade","Aggregate","GPA","Division","Status"] : ["Pos.","Student","Admission","Total","Average","Grade","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{finalRows.map(student => <tr key={student.id}>
-                        <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row)=>sum+numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.percentage),0)/student.cseeBestSeven.length,1)}%` : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs=student.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,row)=>sum+numberValue(row.total),0)/700)*100:0; return bs.length ? getGrade(avg) : "â€”"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "â€”"}</td><td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td>
+                        <td className="border border-slate-400 p-1 font-bold">{student.full_name}</td>
+                        <td className="border border-slate-400 p-1">{student.admission}</td>
+                        {isCseeExam ? <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row)=>sum+numberValue(row.total),0),0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.percentage),0)/student.cseeBestSeven.length,1)}%` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs=student.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,row)=>sum+numberValue(row.total),0)/700)*100:0; return bs.length ? getGrade(avg) : "—"; })()}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        </> : <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.total,0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.percentage,1)}%</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.grade || "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        </>}
                     </tr>)}</tbody>
                 </table>
             </div>

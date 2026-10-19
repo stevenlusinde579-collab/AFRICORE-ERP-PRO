@@ -255,6 +255,39 @@ function AddExam() {
         );
     }, [classes, classificationForm.class_id]);
 
+    // Keep the default grade bands appropriate to the selected education level.
+    // Teachers can still edit every band before saving the examination.
+    useEffect(() => {
+        if (!selectedClass || classifications.length > 0) return;
+
+        const levelText = [
+            selectedClass.academic_level,
+            selectedClass.class_name,
+            selectedClass.name,
+            selectedClass.short_name
+        ].filter(Boolean).join(" ").toUpperCase();
+        const isOLevel = /O[ _-]?LEVEL|ORDINARY SECONDARY|FORM\s*(I|1|II|2|III|3|IV|4)\b/.test(levelText)
+            && !/A[ _-]?LEVEL|ADVANCED|FORM\s*(V|5|VI|6)\b/.test(levelText);
+
+        if (isOLevel) {
+            setGradingScales([
+                { grade: "A", min_percentage: 75, max_percentage: 100, remark: "Excellent", result: "PASS" },
+                { grade: "B", min_percentage: 65, max_percentage: 74, remark: "Very Good", result: "PASS" },
+                { grade: "C", min_percentage: 45, max_percentage: 64, remark: "Good", result: "PASS" },
+                { grade: "D", min_percentage: 30, max_percentage: 44, remark: "Satisfactory", result: "PASS" },
+                { grade: "F", min_percentage: 0, max_percentage: 29, remark: "Fail", result: "FAIL" }
+            ]);
+        } else {
+            setGradingScales([
+                { grade: "Excellent", min_percentage: 80, max_percentage: 100, remark: "Excellent performance", result: "PASS" },
+                { grade: "Good", min_percentage: 65, max_percentage: 79, remark: "Good performance", result: "PASS" },
+                { grade: "Satisfactory", min_percentage: 50, max_percentage: 64, remark: "Satisfactory performance", result: "PASS" },
+                { grade: "Developing", min_percentage: 40, max_percentage: 49, remark: "Developing; further practice recommended", result: "PASS" },
+                { grade: "Needs Support", min_percentage: 0, max_percentage: 39, remark: "Needs additional support", result: "FAIL" }
+            ]);
+        }
+    }, [selectedClass?.id, selectedClass?.academic_level, selectedClass?.class_name, selectedClass?.name, selectedClass?.short_name, classifications.length]);
+
     const getClassNumber = (classItem) => {
         if (!classItem) return null;
 

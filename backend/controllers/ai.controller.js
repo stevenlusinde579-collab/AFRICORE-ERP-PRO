@@ -934,6 +934,9 @@ const buildExamAnalysisPrompt =
         subjectName,
         level,
         examName,
+        examType,
+        curriculum,
+        gradingCriteria,
     }) => {
         const structuralEvidence =
             structuralQuestions
@@ -954,6 +957,23 @@ ${subjectName}
 
 LEVEL:
 ${level}
+
+EXAM TYPE:
+${examType || "Not specified"}
+
+CURRICULUM / SYLLABUS:
+${curriculum || "Use the curriculum and topics evident in the paper; do not assume a specific national syllabus."}
+
+CONFIGURED GRADING CRITERIA:
+${gradingCriteria || "No exam-specific grading criteria supplied. Do not invent a grading system."}
+
+LEVEL-AWARE RULES:
+- Apply criteria appropriate to the stated education level, subject, exam type and supplied curriculum.
+- Do not apply CSEE/O-Level conventions such as Best 7, Division or O-Level grade boundaries to Baby Class, Nursery, Primary, A-Level or other levels unless explicitly specified in the configured criteria.
+- For early childhood and lower primary, assess age/level appropriateness, foundational skills, clarity, simple instructions and developmental suitability; do not expect advanced-secondary terminology.
+- For A-Level, use the stated subject and syllabus context; do not assume O-Level scope.
+- If level, curriculum, grading criteria or a paper detail is unknown, state that limitation in recommendations rather than inventing requirements.
+- AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
 
 IMPORTANT:
 Analyze the WHOLE examination paper.
@@ -2250,11 +2270,58 @@ export const analyzePaper =
                 examSubject.name ||
                 "Unknown Subject";
 
+            let classContext = null;
+            if (examSubject.class_id) {
+                const { data: classData, error: classError } = await supabase
+                    .from("classes")
+                    .select("*")
+                    .eq("id", examSubject.class_id)
+                    .maybeSingle();
+                if (classError) {
+                    console.warn("AI class-level context unavailable:", classError.message);
+                } else {
+                    classContext = classData;
+                }
+            }
+
             const level =
                 examSubject.level ||
                 examSubject.class_level ||
+                subject?.education_level ||
+                classContext?.academic_level ||
+                classContext?.class_name ||
+                classContext?.name ||
                 exam.level ||
+                exam.education_level ||
                 "Unknown Level";
+
+            let gradingCriteria = "";
+            try {
+                const { data: gradingRows, error: gradingError } = await supabase
+                    .from("exam_grading_scales")
+                    .select("grade, min_percentage, max_percentage, remark, result")
+                    .eq("exam_id", examId)
+                    .order("sort_order", { ascending: true });
+                if (gradingError) {
+                    console.warn("AI grading criteria unavailable:", gradingError.message);
+                } else if (gradingRows?.length) {
+                    gradingCriteria = gradingRows.map(row =>
+                        String(row.grade) + ": " + row.min_percentage + "-" + row.max_percentage + "% (" + (row.result || "unspecified") + "; " + (row.remark || "no remark") + ")"
+                    ).join("; ");
+                }
+            } catch (gradingLoadError) {
+                console.warn("AI grading criteria load failed:", gradingLoadError?.message);
+            }
+
+            const curriculum = [
+                exam.curriculum,
+                exam.syllabus,
+                subject?.curriculum,
+                subject?.syllabus,
+                subject?.education_level
+            ].filter(Boolean).join(" / ");
+
+            const examType = exam.exam_type || exam.type || "";
 
             const examName =
                 exam.name ||
@@ -2638,6 +2705,12 @@ export const analyzePaper =
                     level,
 
                     examName,
+
+                    examType,
+
+                    curriculum,
+
+                    gradingCriteria,
                 });
 
             console.log(
