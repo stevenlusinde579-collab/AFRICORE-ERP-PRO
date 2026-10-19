@@ -3610,7 +3610,7 @@ export default function ResultsAnalysis() {
 
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
-                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} />}
+                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeExam} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
                     {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} />}
@@ -3774,7 +3774,7 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-function StudentReportPrint({ exam, report }) {
+function StudentReportPrint({ exam, report, isCseeExam }) {
     const result = calculateResult(report?.subjects || []);
     const bestSeven = result.bestSeven || [];
     const gpa = report?.cseeGpa ?? report?.gpa ?? result.gpa;
@@ -3783,7 +3783,9 @@ function StudentReportPrint({ exam, report }) {
     const divisionLabel = division ? (division === "0" ? "Division 0" : `Division ${division}`) : "Not Calculated";
     const bestSevenTotal = bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0);
     const bestSevenAverage = bestSeven.length ? (bestSevenTotal / 700) * 100 : 0;
-    const finalGrade = bestSeven.length === 7 ? getGrade(bestSevenAverage) : "â€”";
+    const finalGrade = isCseeExam
+        ? (bestSeven.length === 7 ? getGrade(bestSevenAverage) : "â€”")
+        : (report?.grade || "â€”");
     const allSubjects = report?.subjects || [];
 
     return (
@@ -3795,19 +3797,21 @@ function StudentReportPrint({ exam, report }) {
                 <DetailBox label="Admission No." value={report.admission || "â€”"} />
                 <DetailBox label="Class" value={report.class_name || "â€”"} />
                 <DetailBox label="Gender" value={report.gender || "â€”"} />
-                <DetailBox label="Best 7 Subjects" value={`${bestSeven.length}/7`} />
-                <DetailBox label="Best 7 Total" value={`${formatNumber(bestSevenTotal, 0)} / 700`} />
-                <DetailBox label="Best 7 Average" value={bestSeven.length ? `${formatNumber(bestSevenAverage, 1)}%` : "â€”"} />
-                <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "â€”"} />
-                <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "â€”"} />
-                <DetailBox label="Division" value={divisionLabel} />
+                {isCseeExam && <>
+                    <DetailBox label="Best 7 Subjects" value={`${bestSeven.length}/7`} />
+                    <DetailBox label="Best 7 Total" value={`${formatNumber(bestSevenTotal, 0)} / 700`} />
+                    <DetailBox label="Best 7 Average" value={bestSeven.length ? `${formatNumber(bestSevenAverage, 1)}%` : "â€”"} />
+                    <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "â€”"} />
+                    <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "â€”"} />
+                    <DetailBox label="Division" value={divisionLabel} />
+                </>}
                 <DetailBox label="Grade" value={finalGrade} />
                 <DetailBox label="Status" value={report.reportStatus || "â€”"} />
             </div>
 
-            <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />
+            {isCseeExam && <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />}
 
-            <div className="mb-4">
+            {isCseeExam && <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">Best Seven Subjects â€” Final Calculation</h3>
                 <table className="w-full border-collapse text-[9px] report-table">
                     <thead><tr>{["#","Subject","Mark","%","Grade","Point","Counted"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
@@ -3825,7 +3829,7 @@ function StudentReportPrint({ exam, report }) {
                         ))}
                     </tbody>
                 </table>
-            </div>
+            </div>}
 
             <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">All Exam Subjects</h3>
