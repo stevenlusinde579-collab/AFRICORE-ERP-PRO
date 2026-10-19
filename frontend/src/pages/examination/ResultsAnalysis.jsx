@@ -1734,7 +1734,7 @@ export default function ResultsAnalysis() {
             const configuredOverall = applicableGradeScale(average, examGradingScales, classIsCsee);
             const grade = configuredOverall?.grade || (classIsCsee ? getGrade(average) : genericGrade(average));
             const csee = classIsCsee
-                ? calculateResult(subjectResults)
+                ? calculateResult(subjectResults, examGradingScales)
                 : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
             return {
                 ...student,
@@ -3640,11 +3640,11 @@ export default function ResultsAnalysis() {
 
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
-                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} />}
+                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} />}
-                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} />}
+                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
+                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
                 </div>,
                 document.body
             )}
@@ -3804,11 +3804,11 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-function StudentReportPrint({ exam, report, isCseeExam }) {
+function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }) {
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
     // Do not recalculate them for Primary, ECE or Advanced Level reports.
     const result = isCseeExam
-        ? calculateResult(report?.subjects || [])
+        ? calculateResult(report?.subjects || [], examGradingScales)
         : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
     const bestSeven = result.bestSeven || [];
     const gpa = report?.cseeGpa ?? report?.gpa ?? result.gpa;
@@ -3997,12 +3997,12 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
     );
 }
 
-function SchoolOverallReportPrint({ exam, data, isCseeExam = false }) {
+function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
     const students = data.allStudents || data.topStudents || [];
     const finalRows = students.map(student => ({
         ...student,
         finalResult: isCseeExam
-            ? calculateResult(student.subjects || [])
+            ? calculateResult(student.subjects || [], examGradingScales)
             : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" }
     }));
     const finalEligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null);
@@ -4061,7 +4061,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false }) {
     );
 }
 
-function ClassOverallReportPrint({ exam, data, isCseeExam = false }) {
+function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
     const students = data.students || data.topStudents || [];
     const finalRows = students.map(student => ({
         ...student,
