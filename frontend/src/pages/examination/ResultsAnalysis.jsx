@@ -3806,7 +3806,11 @@ function RecommendationBox({ recommendations }) {
 }
 
 function StudentReportPrint({ exam, report, isCseeExam }) {
-    const result = calculateResult(report?.subjects || []);
+    // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
+    // Do not recalculate them for Primary, ECE or Advanced Level reports.
+    const result = isCseeExam
+        ? calculateResult(report?.subjects || [])
+        : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
     const bestSeven = result.bestSeven || [];
     const gpa = report?.cseeGpa ?? report?.gpa ?? result.gpa;
     const division = report?.cseeDivision ?? report?.division ?? result.division;
@@ -3996,7 +4000,15 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
 
 function SchoolOverallReportPrint({ exam, data }) {
     const students = data.allStudents || data.topStudents || [];
-    const finalRows = students.map(student => ({ ...student, finalResult: calculateResult(student.subjects || []) }));
+    const isCseeExam = isOrdinaryLevel([
+        exam?.education_level, exam?.level, exam?.exam_type, exam?.name, exam?.exam_name
+    ].filter(Boolean).join(" "));
+    const finalRows = students.map(student => ({
+        ...student,
+        finalResult: isCseeExam
+            ? calculateResult(student.subjects || [])
+            : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" }
+    }));
     const finalEligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null);
     const schoolGpa = finalEligible.length ? finalEligible.reduce((sum, row) => sum + numberValue(row.finalResult.gpa), 0) / finalEligible.length : null;
     const schoolDivisions = ["I", "II", "III", "IV", "0"].map(division => ({ division, count: finalRows.filter(row => row.finalResult.division === division).length }));
@@ -4055,7 +4067,15 @@ function SchoolOverallReportPrint({ exam, data }) {
 
 function ClassOverallReportPrint({ exam, data }) {
     const students = data.students || data.topStudents || [];
-    const finalRows = students.map(student => ({ ...student, finalResult: calculateResult(student.subjects || []) }));
+    const isCseeExam = isOrdinaryLevel([
+        exam?.education_level, exam?.level, exam?.exam_type, exam?.name, exam?.exam_name, data?.className
+    ].filter(Boolean).join(" "));
+    const finalRows = students.map(student => ({
+        ...student,
+        finalResult: isCseeExam
+            ? calculateResult(student.subjects || [])
+            : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" }
+    }));
     const classGpa = (() => { const eligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null); return eligible.length ? eligible.reduce((sum,row)=>sum+numberValue(row.finalResult.gpa),0)/eligible.length : null; })();
     const classDivisions = ["I","II","III","IV","0"].map(division => ({ division, count: finalRows.filter(row => row.finalResult.division === division).length }));
     const classGrades = ["A","B","C","D","F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs=row.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,item)=>sum+numberValue(item.total),0)/700)*100:0; return getGrade(avg)===grade; }).length }));
