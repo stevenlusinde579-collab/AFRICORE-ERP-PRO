@@ -152,7 +152,7 @@ const _GRADE_POINTS = Object.freeze({ A: 1, B: 2, C: 3, D: 4, F: 5 });
 const getGradePoint = grade => _GRADE_POINTS[String(grade || "").trim().toUpperCase()] ?? 5;
 
 // Standard result: Best 7 analysed subjects determine Aggregate, GPA and Division.
-const calculateResult = subjectResults => {
+const calculateResult = (subjectResults, gradingScales = []) => {
     // Every subject assigned to the student is part of the result. Missing
     // marks are treated as 0%, therefore they receive grade F and 5 points.
     const analysed = Array.isArray(subjectResults)
@@ -164,7 +164,7 @@ const calculateResult = subjectResults => {
                         ? row.percentage
                         : numberValue(row.total)
                 );
-                const grade = getGrade(percentage);
+                const grade = gradeFromConfiguredScale(percentage, gradingScales)?.grade || getGrade(percentage);
                 return {
                     ...row,
                     percentage,
@@ -1330,7 +1330,7 @@ export default function ResultsAnalysis() {
             ].filter(Boolean).join(" ");
             const ordinaryLevel = isOrdinaryLevel(levelContext);
             const csee = ordinaryLevel
-                ? calculateResult(allSubjectResults)
+                ? calculateResult(allSubjectResults, examGradingScales)
                 : { eligible: false, analysedSubjects: allSubjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
             const bestSeven = csee.bestSeven || [];
             const total = ordinaryLevel
@@ -1485,7 +1485,7 @@ export default function ResultsAnalysis() {
             ].filter(Boolean).join(" ");
             const ordinaryLevel = isOrdinaryLevel(levelContext);
             const csee = ordinaryLevel
-                ? calculateResult(subjectResults)
+                ? calculateResult(subjectResults, examGradingScales)
                 : { eligible: false, analysedSubjects: subjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
 
             const bestSeven = csee.bestSeven || [];
@@ -1852,7 +1852,7 @@ export default function ResultsAnalysis() {
         const analysed = subjectsForReport.filter(row => row.possible > 0);
         const reportIsCsee = isCseeClass(full.class_id);
         const csee = reportIsCsee
-            ? calculateResult(subjectsForReport)
+            ? calculateResult(subjectsForReport, examGradingScales)
             : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
         const cseeGpa = csee.gpa;
         const cseeDivision = csee.division;
