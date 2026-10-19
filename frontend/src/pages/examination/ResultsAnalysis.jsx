@@ -3950,23 +3950,49 @@ function DivisionSummary({ distribution = [], title = "Division Summary" }) {
 }
 
 function SubjectSummaryTable({ subjects = [] }) {
+    const gradeLabels = [...new Set(
+        subjects.flatMap(row => Object.keys(row.gradeCounts || {}))
+    )];
+    const showGpa = subjects.some(row => row.gpa != null);
+
     return (
         <div className="mb-5">
             <h3 className="font-extrabold text-sm mb-2">Subject Performance Summary</h3>
             <table className="w-full border-collapse text-[9px] report-table">
-                <thead><tr>{["Subject","A","B","C","D","F","GPA"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                <thead>
+                    <tr>
+                        {["Subject", ...gradeLabels, ...(showGpa ? ["GPA"] : [])].map(label => (
+                            <th key={label} className="border border-slate-400 p-1 text-center">{label}</th>
+                        ))}
+                    </tr>
+                </thead>
                 <tbody>{subjects.map(row => {
-                    const gc = row.gradeCounts || {};
-                    const gpa = row.gpa != null ? formatNumber(row.gpa,2) : "â€”";
-                    const gpaTone = numberValue(row.gpa) <= 2 ? "bg-emerald-100 text-emerald-900" : numberValue(row.gpa) <= 3 ? "bg-yellow-100 text-yellow-900" : numberValue(row.gpa) <= 4 ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900";
-                    return <tr key={row.exam_subject_id}>
-                        <td className="border border-slate-400 p-1 font-bold text-left">{row.subject_name}{row.class_name ? <span className="font-normal text-slate-500"> Â· {row.class_name}</span> : null}</td>
-                        {["A","B","C","D","F"].map(g => <td key={g} className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(g)}`}>{gc[g] || 0}</td>)}
-                        <td className={`border border-slate-400 p-1 text-center font-black ${gpaTone}`}>{gpa}</td>
-                    </tr>;
+                    const gradeCounts = row.gradeCounts || {};
+                    const gpa = row.gpa != null ? formatNumber(row.gpa, 2) : "—";
+                    const gpaTone = numberValue(row.gpa) <= 2
+                        ? "bg-emerald-100 text-emerald-900"
+                        : numberValue(row.gpa) <= 3
+                            ? "bg-yellow-100 text-yellow-900"
+                            : numberValue(row.gpa) <= 4
+                                ? "bg-orange-100 text-orange-900"
+                                : "bg-red-100 text-red-900";
+                    return (
+                        <tr key={row.exam_subject_id}>
+                            <td className="border border-slate-400 p-1 font-bold text-left">
+                                {row.subject_name}
+                                {row.class_name ? <span className="font-normal text-slate-500"> · {row.class_name}</span> : null}
+                            </td>
+                            {gradeLabels.map(label => (
+                                <td key={label} className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(label)}`}>
+                                    {gradeCounts[label] || 0}
+                                </td>
+                            ))}
+                            {showGpa && <td className={`border border-slate-400 p-1 text-center font-black ${gpaTone}`}>{gpa}</td>}
+                        </tr>
+                    );
                 })}</tbody>
             </table>
-            <div className="mt-2 text-[8px] text-slate-600">GPA points: A=1, B=2, C=3, D=4, F=5. A higher subject GPA indicates weaker performance.</div>
+            {showGpa && <div className="mt-2 text-[8px] text-slate-600">GPA points: A=1, B=2, C=3, D=4, F=5. A higher subject GPA indicates weaker performance.</div>}
         </div>
     );
 }
