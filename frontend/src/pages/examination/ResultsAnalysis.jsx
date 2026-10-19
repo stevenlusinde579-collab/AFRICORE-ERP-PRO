@@ -1113,9 +1113,20 @@ export default function ResultsAnalysis() {
             (ordinaryLevel ? getGrade(percentage) : genericGrade(percentage));
         const passedForPercentage = percentage => {
             const configured = scaleForPercentage(percentage);
-            return configured
-                ? String(configured.result || "").toUpperCase() === "PASS"
-                : numberValue(percentage) >= 40;
+            if (configured) {
+                return String(configured.result || "").trim().toUpperCase() === "PASS";
+            }
+
+            // Use this subject's own pass mark when no grading band applies.
+            // exam_subject marks are stored in raw marks, while this analysis
+            // works with normalized percentages, so convert the threshold too.
+            const fullMarks = numberValue(examSubject?.full_marks);
+            const passMarks = numberValue(examSubject?.pass_marks);
+            const configuredPassPercentage = fullMarks > 0
+                ? (passMarks / fullMarks) * 100
+                : 40;
+
+            return numberValue(percentage) >= configuredPassPercentage;
         };
         const remarkForGrade = grade => {
             const configured = examGradingScales.find(scale =>
