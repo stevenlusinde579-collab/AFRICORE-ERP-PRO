@@ -4129,7 +4129,15 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
     }));
     const classGpa = (() => { const eligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null); return eligible.length ? eligible.reduce((sum,row)=>sum+numberValue(row.finalResult.gpa),0)/eligible.length : null; })();
     const classDivisions = ["I","II","III","IV","0"].map(division => ({ division, count: finalRows.filter(row => row.finalResult.division === division).length }));
-    const classGrades = ["A","B","C","D","F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs=row.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,item)=>sum+numberValue(item.total),0)/700)*100:0; return getGrade(avg)===grade; }).length }));
+    const classGradeLabels = [...new Set((examGradingScales || []).map(scale => scale.grade).filter(Boolean))];
+    const classGrades = (classGradeLabels.length ? classGradeLabels : ["A", "B", "C", "D", "F"]).map(grade => ({
+        grade,
+        count: finalRows.filter(row => {
+            const best = row.finalResult.bestSeven || [];
+            const average = best.length ? (best.reduce((sum, item) => sum + numberValue(item.total), 0) / 700) * 100 : 0;
+            return (applicableGradeScale(average, examGradingScales, true)?.grade || getGrade(average)) === grade;
+        }).length
+    }));
     return (
         <div className="p-6 text-slate-900 report-page">
             <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={isCseeExam ? `${data.className || "Class"} Â· Best Seven Classification` : `${data.className || "Class"} Â· Configured Grading`} />
