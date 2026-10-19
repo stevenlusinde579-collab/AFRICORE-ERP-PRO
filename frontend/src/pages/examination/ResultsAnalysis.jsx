@@ -4038,7 +4038,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
     const classRows = data.classRows || [];
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle="Whole School Performance Â· Best Seven Classification" />
+            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle={isCseeExam ? "Whole School Performance Â· Best Seven Classification" : "Whole School Performance Â· Configured Grading"} />
 
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Candidates" value={data.candidates || 0} />
@@ -4058,12 +4058,17 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
             </div>}
 
             <div className="mb-5">
-                <h3 className="font-extrabold text-sm mb-2">Class Performance & Division Distribution</h3>
+                <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Class Performance & Division Distribution" : "Class Performance Summary"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"] : ["Class","Students","Average","Pass Rate"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{classRows.map(row => <tr key={row.class_id}>
-                        <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td><td className="border border-slate-400 p-1 text-center">{row.students}</td><td className="border border-slate-400 p-1 text-center">{formatNumber(row.average,1)}%</td><td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "â€”"}</td>
-                        {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.divisions?.[d] || 0}</td>)}
+                        <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td>
+                        <td className="border border-slate-400 p-1 text-center">{row.students}</td>
+                        <td className="border border-slate-400 p-1 text-center">{formatNumber(row.average,1)}%</td>
+                        {isCseeExam && <>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "â€”"}</td>
+                            {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.divisions?.[d] || 0}</td>)}
+                        </>}
                         <td className="border border-slate-400 p-1 text-center">{formatNumber(row.passRate,1)}%</td>
                     </tr>)}</tbody>
                 </table>
@@ -4072,12 +4077,27 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
             <SubjectSummaryTable subjects={data.subjectRows || []} />
 
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Students â€” Final GPA & Division</h3>
+                <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Students — Final GPA & Division" : "Students — Final Results"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["Pos.","Student","Admission","Class","Best 7 Total","Average","Grade","Aggregate","GPA","Division"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["Pos.","Student","Admission","Class","Best 7 Total","Average","Grade","Aggregate","GPA","Division"] : ["Pos.","Student","Admission","Class","Total","Average","Grade","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{finalRows.map(student => <tr key={student.id}>
-                        <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.class_name}</td>
-                        <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? getGrade(avg) : "â€”"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "â€”"}</td>
+                        <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td>
+                        <td className="border border-slate-400 p-1 font-bold">{student.full_name}</td>
+                        <td className="border border-slate-400 p-1">{student.admission}</td>
+                        <td className="border border-slate-400 p-1">{student.class_name}</td>
+                        {isCseeExam ? <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? getGrade(avg) : "—"; })()}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td>
+                        </> : <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.total,0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.percentage,1)}%</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.grade || "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        </>}
                     </tr>)}</tbody>
                 </table>
             </div>
