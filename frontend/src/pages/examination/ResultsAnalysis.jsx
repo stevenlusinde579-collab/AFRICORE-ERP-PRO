@@ -247,11 +247,17 @@ const performanceClass = percentage => {
 
 const gradeClass = grade => {
     switch (String(grade || "").toUpperCase()) {
-        case "A": return "text-emerald-700 bg-emerald-50 border-emerald-200";
-        case "B": return "text-blue-700 bg-blue-50 border-blue-200";
-        case "C": return "text-amber-700 bg-amber-50 border-amber-200";
-        case "D": return "text-orange-700 bg-orange-50 border-orange-200";
-        default: return "text-red-700 bg-red-50 border-red-200";
+        case "A":
+        case "EXCELLENT": return "text-emerald-700 bg-emerald-50 border-emerald-200";
+        case "B":
+        case "GOOD": return "text-blue-700 bg-blue-50 border-blue-200";
+        case "C":
+        case "SATISFACTORY": return "text-amber-700 bg-amber-50 border-amber-200";
+        case "D":
+        case "DEVELOPING": return "text-orange-700 bg-orange-50 border-orange-200";
+        case "F":
+        case "NEEDS SUPPORT": return "text-red-700 bg-red-50 border-red-200";
+        default: return "text-slate-700 bg-slate-50 border-slate-200";
     }
 };
 
