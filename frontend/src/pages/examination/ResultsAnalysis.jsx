@@ -1422,24 +1422,31 @@ export default function ResultsAnalysis() {
             );
             const allSubjectsPossible = assignedSubjectsCount * 100;
             const analysed = subjectResults.filter(result => result.possible > 0);
-            const csee = calculateResult(subjectResults);
+            const levelContext = [
+                exam?.education_level, exam?.level, exam?.exam_type,
+                ...assignedExamSubjects.flatMap(es => {
+                    const cls = classMap.get(idValue(es.class_id));
+                    const subject = subjects.find(item => idValue(item.id) === idValue(es.subject_id));
+                    return [cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name, subject?.education_level];
+                })
+            ].filter(Boolean).join(" ");
+            const ordinaryLevel = isOrdinaryLevel(levelContext);
+            const csee = ordinaryLevel
+                ? calculateResult(subjectResults)
+                : { eligible: false, analysedSubjects: subjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
 
-            // FINAL STUDENT RESULT = BEST 7 ONLY.
-            // Do not divide the Best 7 percentage by the total number of
-            // examination subjects. For example, 423/700 = 60.43% = C.
-            // If the student has more than seven subjects, only the seven
-            // subjects selected by calculateResult() are used for Grade/GPA/Division.
             const bestSeven = csee.bestSeven || [];
-            const total = bestSeven.reduce(
-                (sum, result) => sum + numberValue(result.total),
-                0
-            );
-            const possible = bestSeven.length * 100;
-            const average = bestSeven.length > 0
-                ? (total / 700) * 100
+            const total = ordinaryLevel
+                ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
+                : allSubjectsTotal;
+            const possible = ordinaryLevel ? bestSeven.length * 100 : allSubjectsPossible;
+            const average = possible > 0
+                ? (total / possible) * 100
                 : 0;
             const percentage = average;
-            const grade = bestSeven.length === 7 ? getGrade(average) : (bestSeven.length ? getGrade(average) : "â€”");
+            const configuredOverall = gradeFromConfiguredScale(average, examGradingScales);
+            const grade = configuredOverall?.grade ||
+                (ordinaryLevel ? getGrade(average) : genericGrade(average));
 
             return {
                 id: student.id,
@@ -1453,8 +1460,10 @@ export default function ResultsAnalysis() {
                 possible,
                 percentage,
                 grade,
-                remark: getRemark(grade),
-                pass: bestSeven.length === 7 ? average >= 40 : false,
+                remark: configuredOverall?.remark || (ordinaryLevel ? getRemark(grade) : grade),
+                pass: configuredOverall
+                    ? String(configuredOverall.result || "").toUpperCase() === "PASS"
+                    : average >= 40,
                 subjects: subjectResults,
                 subjectCount: subjectResults.length,
                 allSubjectsTotal,
@@ -1479,7 +1488,7 @@ export default function ResultsAnalysis() {
                 missingSubjects: subjectResults.filter(result => result.status === "No Marks").length
             };
         });
-    }, [students, examSubjects, calculateStudentSubject, classMap]);
+    }, [students, examSubjects, calculateStudentSubject, classMap, exam, subjects, examGradingScales]);
 
     const overallRankedStudents = useMemo(() => {
         const ranked = overallStudentAnalysis
