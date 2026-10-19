@@ -1057,6 +1057,23 @@ export default function ResultsAnalysis() {
         );
 
         const selectionType = normalizeSelectionType(examSubject.question_selection_type);
+        const subjectInfo = subjectMap.get(idValue(examSubject.subject_id));
+        const classInfo = classMap.get(idValue(examSubject.class_id));
+        const levelContext = [
+            exam?.education_level, exam?.level, exam?.exam_type,
+            subjectInfo?.education_level, classInfo?.academic_level,
+            classInfo?.class_name, classInfo?.name, classInfo?.short_name
+        ].filter(Boolean).join(" ");
+        const ordinaryLevel = isOrdinaryLevel(levelContext);
+        const gradeForPercentage = percentage =>
+            gradeFromConfiguredScale(percentage, examGradingScales)?.grade ||
+            (ordinaryLevel ? getGrade(percentage) : genericGrade(percentage));
+        const remarkForGrade = grade => {
+            const configured = examGradingScales.find(scale =>
+                String(scale.grade || "").toUpperCase() === String(grade || "").toUpperCase()
+            );
+            return configured?.remark || (ordinaryLevel ? getRemark(grade) : String(grade || "Not graded"));
+        };
 
         // A final row in exam_marks is already the subject mark against
         // exam_subjects.full_marks. Keep the public `total` value normalized
@@ -1076,7 +1093,7 @@ export default function ResultsAnalysis() {
             const percentage = rawTotal;
             const passMarks = numberValue(examSubject.pass_marks);
             const passPercentage = passMarks > 0 ? passMarks : 40;
-            const grade = getGrade(percentage);
+            const grade = gradeForPercentage(percentage);
             const questionLevelMarks = studentMarks.filter(
                 mark => mark.source !== "exam_marks" && mark.question_id != null
             );
@@ -1092,7 +1109,7 @@ export default function ResultsAnalysis() {
                 rawPossible,
                 percentage,
                 grade,
-                remark: finalSubjectMark.remark || getRemark(grade),
+                remark: finalSubjectMark.remark || remarkForGrade(grade),
                 pass: percentage >= passPercentage,
                 questions: subjectQuestions.length,
                 marked_questions: questionLevelMarks.length,
@@ -1158,7 +1175,7 @@ export default function ResultsAnalysis() {
         // the student's mark. Therefore 85 remains 85%, even if the selected
         // questions have a combined max_marks of 115.
         const percentage = clamp(rawTotal);
-        const grade = getGrade(percentage);
+        const grade = gradeForPercentage(percentage);
         const configuredPassMarks = numberValue(examSubject.pass_marks);
         const passPercentage = configuredPassMarks > 0 ? configuredPassMarks : 40;
 
@@ -1173,7 +1190,7 @@ export default function ResultsAnalysis() {
             rawPossible,
             percentage,
             grade,
-            remark: getRemark(grade),
+            remark: remarkForGrade(grade),
             pass: rawPossible > 0 && percentage >= passPercentage,
             questions: selectedQuestions.length,
             marked_questions: markedQuestions,
@@ -1190,7 +1207,7 @@ export default function ResultsAnalysis() {
                             : "No Marks",
             source: "exam_question_marks"
         };
-    }, [getStudentMarks, questions, subjectMap]);
+    }, [getStudentMarks, questions, subjectMap, classMap, exam, examGradingScales]);
 
     // ========================================================
     // STUDENT ANALYSIS
