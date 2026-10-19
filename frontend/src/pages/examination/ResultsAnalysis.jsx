@@ -1059,19 +1059,26 @@ export default function ResultsAnalysis() {
         ? "All Examination Classes"
         : getClassName(classMap.get(idValue(selectedClassId)));
 
-    const isCseeExam = useMemo(() => {
+    const isCseeClass = useCallback(classId => {
+        const cls = classMap.get(idValue(classId));
+        const classSubjects = examSubjects.filter(es => idValue(es.class_id) === idValue(classId));
         const levelContext = [
             exam?.education_level,
             exam?.level,
             exam?.exam_type,
-            ...examSubjects.flatMap(es => {
-                const cls = classMap.get(idValue(es.class_id));
-                const subject = subjectMap.get(idValue(es.subject_id));
-                return [cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name, subject?.education_level];
-            })
+            cls?.academic_level,
+            cls?.class_name,
+            cls?.name,
+            cls?.short_name,
+            ...classSubjects.map(es => subjectMap.get(idValue(es.subject_id))?.education_level)
         ].filter(Boolean).join(" ");
         return isOrdinaryLevel(levelContext);
     }, [exam, examSubjects, classMap, subjectMap]);
+
+    const isCseeExam = useMemo(() => {
+        const classIds = [...new Set(examSubjects.map(es => idValue(es.class_id)).filter(Boolean))];
+        return classIds.length > 0 && classIds.every(classId => isCseeClass(classId));
+    }, [examSubjects, isCseeClass]);
 
 
     // ========================================================
@@ -1597,15 +1604,16 @@ export default function ResultsAnalysis() {
                     idValue(student.exam_class_id) === idValue(es.class_id))
                 .map(student => calculateStudentSubject(student.id, es));
             const graded = subjectResults.map(row => {
-                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeExam);
-                const grade = configured?.grade || (isCseeExam ? getGrade(row.percentage) : genericGrade(row.percentage));
-                return { ...row, grade, point: isCseeExam ? getGradePoint(grade) : null };
+                const classIsCsee = isCseeClass(es.class_id);
+                const configured = applicableGradeScale(row.percentage, examGradingScales, classIsCsee);
+                const grade = configured?.grade || (classIsCsee ? getGrade(row.percentage) : genericGrade(row.percentage));
+                return { ...row, grade, point: classIsCsee ? getGradePoint(grade) : null };
             });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const avg = graded.length ? total / graded.length : 0;
             const passed = graded.filter(row => row.pass).length;
             const gradeCounts = Object.fromEntries(gradeLabels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
-            const subjectGpa = isCseeExam && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
+            const subjectGpa = isCseeClass(es.class_id) && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
                 exam_subject_id: es.id,
                 subject_id: es.subject_id,
@@ -1676,7 +1684,7 @@ export default function ResultsAnalysis() {
             subjectRows,
             classRows
         };
-    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam]);
+    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam, isCseeClass]);
 
     // ========================================================
     // CLASS OVERALL RESULT
@@ -1704,9 +1712,10 @@ export default function ResultsAnalysis() {
             const subjectCount = subjectResults.length;
             const total = subjectResults.reduce((sum, row) => sum + numberValue(row.total), 0);
             const average = subjectCount ? total / subjectCount : 0;
-            const configuredOverall = applicableGradeScale(average, examGradingScales, isCseeExam);
-            const grade = configuredOverall?.grade || (isCseeExam ? getGrade(average) : genericGrade(average));
-            const csee = isCseeExam
+            const classIsCsee = isCseeClass(selectedClassId);
+            const configuredOverall = applicableGradeScale(average, examGradingScales, classIsCsee);
+            const grade = configuredOverall?.grade || (classIsCsee ? getGrade(average) : genericGrade(average));
+            const csee = classIsCsee
                 ? calculateResult(subjectResults)
                 : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
             return {
@@ -1719,7 +1728,7 @@ export default function ResultsAnalysis() {
                 possible: subjectCount * 100,
                 percentage: average,
                 grade,
-                remark: configuredOverall?.remark || (isCseeExam ? getRemark(grade) : grade),
+                remark: configuredOverall?.remark || (classIsCsee ? getRemark(grade) : grade),
                 pass: configuredOverall ? String(configuredOverall.result || "").toUpperCase() === "PASS" : average >= 40,
                 cseeEligible: csee.eligible,
                 cseeAggregate: csee.aggregate,
@@ -1748,9 +1757,9 @@ export default function ResultsAnalysis() {
                 calculateStudentSubject(student.id, es)
             );
             const graded = results.map(row => {
-                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeExam);
-                const grade = configured?.grade || (isCseeExam ? getGrade(row.percentage) : genericGrade(row.percentage));
-                return { ...row, grade, point: isCseeExam ? getGradePoint(grade) : null };
+                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeClass(selectedClassId));
+                const grade = configured?.grade || (isCseeClass(selectedClassId) ? getGrade(row.percentage) : genericGrade(row.percentage));
+                return { ...row, grade, point: isCseeClass(selectedClassId) ? getGradePoint(grade) : null };
             });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const average = graded.length ? total / graded.length : 0;
@@ -1814,36 +1823,38 @@ export default function ResultsAnalysis() {
             })),
             topStudents: rankedWithPosition.slice(0, 10)
         };
-    }, [selectedClassId, students, examSubjects, calculateStudentSubject, subjectMap, classMap, examGradingScales, isCseeExam]);
+    }, [selectedClassId, students, examSubjects, calculateStudentSubject, subjectMap, classMap, examGradingScales, isCseeClass]);
 
 
     const getStudentReport = useCallback(student => {
         const full = overallRankedStudents.find(row => idValue(row.id) === idValue(student.id)) || student;
         const subjectsForReport = (full.subjects || []).map(result => {
-            const configured = applicableGradeScale(result.percentage, examGradingScales, isCseeExam);
-            const grade = configured?.grade || (isCseeExam ? getGrade(result.percentage) : genericGrade(result.percentage));
+            const reportIsCsee = isCseeClass(full.class_id);
+            const configured = applicableGradeScale(result.percentage, examGradingScales, reportIsCsee);
+            const grade = configured?.grade || (reportIsCsee ? getGrade(result.percentage) : genericGrade(result.percentage));
             return {
                 ...result,
                 subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
                 grade,
-                remark: configured?.remark || (isCseeExam ? getRemark(grade) : grade),
+                remark: configured?.remark || (reportIsCsee ? getRemark(grade) : grade),
                 report_status: result.pass ? "Passed" : "Failed"
             };
         });
         const analysed = subjectsForReport.filter(row => row.possible > 0);
-        const csee = isCseeExam
+        const reportIsCsee = isCseeClass(full.class_id);
+        const csee = reportIsCsee
             ? calculateResult(subjectsForReport)
             : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
         const cseeGpa = csee.gpa;
         const cseeDivision = csee.division;
         const weak = [...analysed].sort((a, b) => a.percentage - b.percentage).slice(0, 3);
         const recommendations = [];
-        if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
-        else if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
-        else if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
-        else if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
-        else if (!isCseeExam && full.percentage >= 65) recommendations.push("Mwanafunzi anaendelea vizuri; endelea kuimarisha maeneo yenye changamoto na kufuatilia maendeleo.");
-        else if (!isCseeExam && full.percentage >= 40) recommendations.push("Mwanafunzi anahitaji mazoezi na msaada zaidi katika maeneo yenye changamoto.");
+        if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
+        else if (!reportIsCsee && full.percentage >= 65) recommendations.push("Mwanafunzi anaendelea vizuri; endelea kuimarisha maeneo yenye changamoto na kufuatilia maendeleo.");
+        else if (!reportIsCsee && full.percentage >= 40) recommendations.push("Mwanafunzi anahitaji mazoezi na msaada zaidi katika maeneo yenye changamoto.");
         else recommendations.push("Mwanafunzi anahitaji uingiliaji wa kitaaluma na ufuatiliaji wa maendeleo mara kwa mara.");
         if (weak.length) recommendations.push(`Masomo yanayohitaji kipaumbele cha kuboresha ufaulu: ${weak.map(row => `${row.subject_name} (${formatNumber(row.percentage, 1)}%)`).join(", ")}.`);
 
@@ -1852,7 +1863,7 @@ export default function ResultsAnalysis() {
             ...full,
             subjects: subjectsForReport,
             recommendations,
-            reportStatus: isCseeExam
+            reportStatus: reportIsCsee
                 ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
                 : (full.pass ? "Passed" : "Failed"),
             cseeEligible: csee.eligible,
@@ -1873,7 +1884,7 @@ export default function ResultsAnalysis() {
             parent_phone: full.parent_phone || "",
             parent_email: full.parent_email || ""
         };
-    }, [overallRankedStudents, subjectMap, studentReportFields, examGradingScales, isCseeExam]);
+    }, [overallRankedStudents, subjectMap, studentReportFields, examGradingScales, isCseeClass]);
 
 
     const printStudentReport = useCallback(student => {
@@ -3610,7 +3621,7 @@ export default function ResultsAnalysis() {
 
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
-                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeExam} />}
+                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
                     {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} />}
