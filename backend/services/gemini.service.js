@@ -1546,6 +1546,7 @@ const repairUnescapedJsonStringQuotes = (
         const nextCharacter = source[nextIndex];
         const canCloseString =
             nextCharacter === undefined ||
+            nextCharacter === ":" ||
             nextCharacter === "," ||
             nextCharacter === "}" ||
             nextCharacter === "]";
