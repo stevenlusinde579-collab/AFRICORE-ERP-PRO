@@ -1544,12 +1544,66 @@ const repairUnescapedJsonStringQuotes = (
         }
 
         const nextCharacter = source[nextIndex];
+
+        // A comma after a quoted word may be ordinary sentence
+        // punctuation (for example, 'Choose "A", "B" or "C"').
+        // Treat it as a JSON delimiter only when what follows
+        // looks like the end of a container or another object key.
+        let commaFollowedByJsonStructure = false;
+
+        if (nextCharacter === ",") {
+            let afterComma = nextIndex + 1;
+
+            while (
+                afterComma < source.length &&
+                /\s/.test(source[afterComma])
+            ) {
+                afterComma++;
+            }
+
+            if (
+                source[afterComma] === "}" ||
+                source[afterComma] === "]"
+            ) {
+                commaFollowedByJsonStructure = true;
+            } else if (source[afterComma] === '"') {
+                let keyEnd = afterComma + 1;
+                let keyEscaped = false;
+
+                while (keyEnd < source.length) {
+                    const keyCharacter = source[keyEnd];
+
+                    if (keyEscaped) {
+                        keyEscaped = false;
+                    } else if (keyCharacter === "\\") {
+                        keyEscaped = true;
+                    } else if (keyCharacter === '"') {
+                        break;
+                    }
+
+                    keyEnd++;
+                }
+
+                keyEnd++;
+
+                while (
+                    keyEnd < source.length &&
+                    /\s/.test(source[keyEnd])
+                ) {
+                    keyEnd++;
+                }
+
+                commaFollowedByJsonStructure =
+                    source[keyEnd] === ":";
+            }
+        }
+
         const canCloseString =
             nextCharacter === undefined ||
             nextCharacter === ":" ||
-            nextCharacter === "," ||
             nextCharacter === "}" ||
-            nextCharacter === "]";
+            nextCharacter === "]" ||
+            commaFollowedByJsonStructure;
 
         if (canCloseString) {
             output += character;
