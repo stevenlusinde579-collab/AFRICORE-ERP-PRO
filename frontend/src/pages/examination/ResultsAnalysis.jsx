@@ -3541,8 +3541,10 @@ export default function ResultsAnalysis() {
                                         <th className="px-3 py-3">Total</th>
                                         <th className="px-3 py-3">%</th>
                                         <th className="px-3 py-3">Grade</th>
-                                        <th className="px-3 py-3">GPA</th>
-                                        <th className="px-3 py-3">Division</th>
+                                        {isCseeExam && <>
+                                            <th className="px-3 py-3">GPA</th>
+                                            <th className="px-3 py-3">Division</th>
+                                        </>}
                                         <th className="px-3 py-3">Status</th>
                                         <th className="px-3 py-3 text-right">Trace</th>
                                     </tr>
@@ -3571,8 +3573,10 @@ export default function ResultsAnalysis() {
                                                     {student.grade}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"}</td>
-                                            <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "â€”"}</td>
+                                            {isCseeExam && <>
+                                                <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"}</td>
+                                                <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "—"}</td>
+                                            </>}
                                             <td className="px-3 py-3">
                                                 {student.status === "Complete" ? (
                                                     <span className="text-emerald-700 text-xs font-bold inline-flex items-center gap-1">
