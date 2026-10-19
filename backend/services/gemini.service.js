@@ -1487,6 +1487,81 @@ const extractGeminiText =
     };
 
 // ============================================================
+// REPAIR UNESCAPED DOUBLE QUOTES INSIDE JSON STRINGS
+//
+// Gemini can occasionally return natural-language quotes inside
+// a JSON string without escaping them. Repair only quotes that
+// cannot plausibly close a JSON token, then validate the complete
+// result with JSON.parse before accepting it.
+// ============================================================
+
+const repairUnescapedJsonStringQuotes = (
+    value
+) => {
+    const source = String(value || "");
+    let output = "";
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < source.length; index++) {
+        const character = source[index];
+
+        if (!inString) {
+            output += character;
+
+            if (character === '"') {
+                inString = true;
+                escaped = false;
+            }
+
+            continue;
+        }
+
+        if (escaped) {
+            output += character;
+            escaped = false;
+            continue;
+        }
+
+        if (character === "\\") {
+            output += character;
+            escaped = true;
+            continue;
+        }
+
+        if (character !== '"') {
+            output += character;
+            continue;
+        }
+
+        let nextIndex = index + 1;
+
+        while (
+            nextIndex < source.length &&
+            /\s/.test(source[nextIndex])
+        ) {
+            nextIndex++;
+        }
+
+        const nextCharacter = source[nextIndex];
+        const canCloseString =
+            nextCharacter === undefined ||
+            nextCharacter === "," ||
+            nextCharacter === "}" ||
+            nextCharacter === "]";
+
+        if (canCloseString) {
+            output += character;
+            inString = false;
+        } else {
+            output += '\\"';
+        }
+    }
+
+    return output;
+};
+
+// ============================================================
 // CLEAN GEMINI JSON
 // ============================================================
 
@@ -1628,21 +1703,46 @@ const cleanGeminiJson = (
     } catch (
         error
     ) {
-        const jsonError =
-            createGeminiError(
-                "Gemini ilirudisha response ambayo si valid JSON.",
-                "GEMINI_INVALID_JSON",
-                502,
-                {
-                    originalError:
-                        error,
+        // Attempt a narrow repair for unescaped quotation marks
+        // in natural-language fields. Never accept repaired text
+        // unless the entire result passes JSON.parse.
+        try {
+            const repairedText =
+                repairUnescapedJsonStringQuotes(
+                    text
+                );
 
-                    rawText:
-                        text,
-                }
+            JSON.parse(
+                repairedText
             );
 
-        throw jsonError;
+            console.warn(
+                "GEMINI JSON QUOTE REPAIR SUCCESS"
+            );
+
+            return repairedText;
+        } catch (
+            repairError
+        ) {
+            const jsonError =
+                createGeminiError(
+                    "Gemini ilirudisha response ambayo si valid JSON.",
+                    "GEMINI_INVALID_JSON",
+                    502,
+                    {
+                        originalError:
+                            error,
+
+                        repairError:
+                            repairError?.message || null,
+
+                        rawText:
+                            text,
+                    }
+                );
+
+            throw jsonError;
+        }
     }
 };
 
