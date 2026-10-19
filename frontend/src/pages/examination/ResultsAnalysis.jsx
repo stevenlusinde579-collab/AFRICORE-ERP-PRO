@@ -1333,9 +1333,13 @@ export default function ResultsAnalysis() {
                 ? calculateResult(allSubjectResults)
                 : { eligible: false, analysedSubjects: allSubjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
             const bestSeven = csee.bestSeven || [];
-            const total = allSubjectResults.reduce((sum, result) => sum + numberValue(result.total), 0);
-            const possible = allSubjectResults.length * 100;
-            const average = possible > 0 ? (total / possible) * 100 : 0;
+            const total = ordinaryLevel
+                ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
+                : allSubjectResults.reduce((sum, result) => sum + numberValue(result.total), 0);
+            const possible = ordinaryLevel ? 700 : allSubjectResults.length * 100;
+            const average = ordinaryLevel
+                ? (bestSeven.length ? (total / 700) * 100 : 0)
+                : (possible > 0 ? (total / possible) * 100 : 0);
             const percentage = average;
             const overallConfigured = applicableGradeScale(average, examGradingScales, ordinaryLevel);
             const grade = overallConfigured?.grade || (ordinaryLevel ? getGrade(average) : genericGrade(average));
