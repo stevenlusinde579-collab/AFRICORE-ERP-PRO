@@ -125,6 +125,20 @@ const gradeFromConfiguredScale = (percentage, scales) => {
     ) || null;
 };
 
+const isLegacyOLevelScale = scales => {
+    const grades = (Array.isArray(scales) ? scales : [])
+        .map(scale => String(scale.grade || "").trim().toUpperCase())
+        .sort();
+    return grades.length === 5 && ["A", "B", "C", "D", "F"].every((grade, index) => grades[index] === grade);
+};
+
+const applicableGradeScale = (percentage, scales, ordinaryLevel) => {
+    // Older non-O-Level exams may have inherited the original A-F CSEE defaults.
+    // Do not treat those defaults as valid grading policy for a different level.
+    if (!ordinaryLevel && isLegacyOLevelScale(scales)) return null;
+    return gradeFromConfiguredScale(percentage, scales);
+};
+
 const genericGrade = percentage => {
     const p = numberValue(percentage);
     if (p >= 80) return "Excellent";
@@ -1080,7 +1094,7 @@ export default function ResultsAnalysis() {
         ].filter(Boolean).join(" ");
         const ordinaryLevel = isOrdinaryLevel(levelContext);
         const gradeForPercentage = percentage =>
-            gradeFromConfiguredScale(percentage, examGradingScales)?.grade ||
+            applicableGradeScale(percentage, examGradingScales, ordinaryLevel)?.grade ||
             (ordinaryLevel ? getGrade(percentage) : genericGrade(percentage));
         const remarkForGrade = grade => {
             const configured = examGradingScales.find(scale =>
@@ -1302,7 +1316,7 @@ export default function ResultsAnalysis() {
             const possible = allSubjectResults.length * 100;
             const average = possible > 0 ? (total / possible) * 100 : 0;
             const percentage = average;
-            const overallConfigured = gradeFromConfiguredScale(average, examGradingScales);
+            const overallConfigured = applicableGradeScale(average, examGradingScales, ordinaryLevel);
             const grade = overallConfigured?.grade || (ordinaryLevel ? getGrade(average) : genericGrade(average));
             const passed = overallConfigured
                 ? String(overallConfigured.result || "").toUpperCase() === "PASS"
@@ -1458,7 +1472,7 @@ export default function ResultsAnalysis() {
                 ? (total / possible) * 100
                 : 0;
             const percentage = average;
-            const configuredOverall = gradeFromConfiguredScale(average, examGradingScales);
+            const configuredOverall = applicableGradeScale(average, examGradingScales, ordinaryLevel);
             const grade = configuredOverall?.grade ||
                 (ordinaryLevel ? getGrade(average) : genericGrade(average));
 
@@ -1549,7 +1563,7 @@ export default function ResultsAnalysis() {
             .filter(row => row.possible > 0)
             .sort((a, b) => b.percentage - a.percentage || b.total - a.total);
 
-        const gradeLabels = examGradingScales.length
+        const gradeLabels = examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
             ? examGradingScales.map(scale => scale.grade)
             : (isCseeExam ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"]);
         const studentGradeDistribution = gradeLabels.map(grade => ({
@@ -1569,7 +1583,7 @@ export default function ResultsAnalysis() {
                     idValue(student.exam_class_id) === idValue(es.class_id))
                 .map(student => calculateStudentSubject(student.id, es));
             const graded = subjectResults.map(row => {
-                const configured = gradeFromConfiguredScale(row.percentage, examGradingScales);
+                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeExam);
                 const grade = configured?.grade || (isCseeExam ? getGrade(row.percentage) : genericGrade(row.percentage));
                 return { ...row, grade, point: isCseeExam ? getGradePoint(grade) : null };
             });
