@@ -934,6 +934,9 @@ const buildExamAnalysisPrompt =
         subjectName,
         level,
         examName,
+        examType,
+        curriculum,
+        gradingCriteria,
     }) => {
         const structuralEvidence =
             structuralQuestions
@@ -954,6 +957,23 @@ ${subjectName}
 
 LEVEL:
 ${level}
+
+EXAM TYPE:
+${examType || "Not specified"}
+
+CURRICULUM / SYLLABUS:
+${curriculum || "Use the curriculum and topics evident in the paper; do not assume a specific national syllabus."}
+
+CONFIGURED GRADING CRITERIA:
+${gradingCriteria || "No exam-specific grading criteria supplied. Do not invent a grading system."}
+
+LEVEL-AWARE RULES:
+- Apply criteria appropriate to the stated education level, subject, exam type and supplied curriculum.
+- Do not apply CSEE/O-Level conventions such as Best 7, Division or O-Level grade boundaries to Baby Class, Nursery, Primary, A-Level or other levels unless explicitly specified in the configured criteria.
+- For early childhood and lower primary, assess age/level appropriateness, foundational skills, clarity, simple instructions and developmental suitability; do not expect advanced-secondary terminology.
+- For A-Level, use the stated subject and syllabus context; do not assume O-Level scope.
+- If level, curriculum, grading criteria or a paper detail is unknown, state that limitation in recommendations rather than inventing requirements.
+- AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
 
 IMPORTANT:
 Analyze the WHOLE examination paper.
