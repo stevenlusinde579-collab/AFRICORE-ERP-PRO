@@ -4120,7 +4120,7 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
     const classGrades = ["A","B","C","D","F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs=row.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,item)=>sum+numberValue(item.total),0)/700)*100:0; return getGrade(avg)===grade; }).length }));
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={`${data.className || "Class"} Â· Best Seven Classification`} />
+            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={isCseeExam ? `${data.className || "Class"} Â· Best Seven Classification` : `${data.className || "Class"} Â· Configured Grading`} />
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} /><DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "â€”"} /><DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
@@ -4131,11 +4131,27 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
             </div>}
             <SubjectSummaryTable subjects={data.subjects || []} />
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">Student Final Results â€” GPA & Division</h3>
+                <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Student Final Results — GPA & Division" : "Student Final Results"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["Pos.","Student","Admission","Best 7 Total","Average","Grade","Aggregate","GPA","Division","Status"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["Pos.","Student","Admission","Best 7 Total","Average","Grade","Aggregate","GPA","Division","Status"] : ["Pos.","Student","Admission","Total","Average","Grade","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{finalRows.map(student => <tr key={student.id}>
-                        <td className="border border-slate-400 p-1 text-center">{student.position || "â€”"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row)=>sum+numberValue(row.total),0),0)}</td><td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.percentage),0)/student.cseeBestSeven.length,1)}%` : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs=student.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,row)=>sum+numberValue(row.total),0)/700)*100:0; return bs.length ? getGrade(avg) : "â€”"; })()}</td><td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "â€”"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "â€”"}</td><td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        <td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td>
+                        <td className="border border-slate-400 p-1 font-bold">{student.full_name}</td>
+                        <td className="border border-slate-400 p-1">{student.admission}</td>
+                        {isCseeExam ? <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row)=>sum+numberValue(row.total),0),0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.percentage),0)/student.cseeBestSeven.length,1)}%` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs=student.finalResult.bestSeven||[]; const avg=bs.length?(bs.reduce((sum,row)=>sum+numberValue(row.total),0)/700)*100:0; return bs.length ? getGrade(avg) : "—"; })()}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        </> : <>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.total,0)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{formatNumber(student.percentage,1)}%</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{student.grade || "—"}</td>
+                            <td className="border border-slate-400 p-1 text-center">{student.pass ? "Passed" : "Failed"}</td>
+                        </>}
                     </tr>)}</tbody>
                 </table>
             </div>
