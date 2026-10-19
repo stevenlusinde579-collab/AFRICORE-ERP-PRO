@@ -4066,7 +4066,7 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
     const finalRows = students.map(student => ({
         ...student,
         finalResult: isCseeExam
-            ? calculateResult(student.subjects || [])
+            ? calculateResult(student.subjects || [], examGradingScales)
             : { eligible: false, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" }
     }));
     const classGpa = (() => { const eligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null); return eligible.length ? eligible.reduce((sum,row)=>sum+numberValue(row.finalResult.gpa),0)/eligible.length : null; })();
