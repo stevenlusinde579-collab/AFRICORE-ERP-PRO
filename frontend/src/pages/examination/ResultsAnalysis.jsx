@@ -1584,9 +1584,13 @@ export default function ResultsAnalysis() {
             .filter(row => row.possible > 0)
             .sort((a, b) => b.percentage - a.percentage || b.total - a.total);
 
-        const gradeLabels = examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
+        const configuredGradeLabels = examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
             ? examGradingScales.map(scale => scale.grade)
-            : (isCseeExam ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"]);
+            : [];
+        const gradeLabels = [...new Set([
+            ...configuredGradeLabels,
+            ...rankedStudents.map(row => row.grade).filter(Boolean)
+        ])];
         const studentGradeDistribution = gradeLabels.map(grade => ({
             grade,
             count: rankedStudents.filter(row => String(row.grade) === String(grade)).length
@@ -1764,11 +1768,12 @@ export default function ResultsAnalysis() {
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const average = graded.length ? total / graded.length : 0;
             const passed = graded.filter(row => row.pass).length;
-            const labels = examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
+            const classIsCsee = isCseeClass(selectedClassId);
+            const labels = examGradingScales.length && (classIsCsee || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
-                : (isCseeExam ? ["A","B","C","D","F"] : ["Excellent","Good","Satisfactory","Developing","Needs Support"]);
+                : (classIsCsee ? ["A","B","C","D","F"] : ["Excellent","Good","Satisfactory","Developing","Needs Support"]);
             const gradeCounts = Object.fromEntries(labels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
-            const subjectGpa = isCseeExam && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
+            const subjectGpa = classIsCsee && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
                 exam_subject_id: es.id,
                 subject_id: es.subject_id,
@@ -1814,9 +1819,9 @@ export default function ResultsAnalysis() {
             cseeEligibleStudents: eligibleStudents.length,
             cseeGpa: classGpa,
             cseeDivisionDistribution: divisionDistribution,
-            gradeDistribution: (examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
+            gradeDistribution: (examGradingScales.length && (isCseeClass(selectedClassId) || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
-                : (isCseeExam ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"])
+                : (isCseeClass(selectedClassId) ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"])
             ).map(grade => ({
                 grade,
                 count: rows.filter(row => String(row.grade) === String(grade)).length
