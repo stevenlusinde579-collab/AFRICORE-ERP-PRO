@@ -3822,7 +3822,7 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
     const bestSevenTotal = bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0);
     const bestSevenAverage = bestSeven.length ? (bestSevenTotal / 700) * 100 : 0;
     const finalGrade = isCseeExam
-        ? (bestSeven.length === 7 ? getGrade(bestSevenAverage) : "â€”")
+        ? (bestSeven.length === 7 ? (applicableGradeScale(bestSevenAverage, examGradingScales, true)?.grade || getGrade(bestSevenAverage)) : "—")
         : (report?.grade || "â€”");
     const allSubjects = report?.subjects || [];
 
@@ -4038,7 +4038,15 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
     const finalEligible = finalRows.filter(row => row.finalResult.eligible && row.finalResult.gpa != null);
     const schoolGpa = finalEligible.length ? finalEligible.reduce((sum, row) => sum + numberValue(row.finalResult.gpa), 0) / finalEligible.length : null;
     const schoolDivisions = ["I", "II", "III", "IV", "0"].map(division => ({ division, count: finalRows.filter(row => row.finalResult.division === division).length }));
-    const schoolGrades = ["A", "B", "C", "D", "F"].map(grade => ({ grade, count: finalRows.filter(row => { const bs = row.finalResult.bestSeven || []; const avg = bs.length ? (bs.reduce((sum, item) => sum + numberValue(item.total), 0) / 700) * 100 : 0; return getGrade(avg) === grade; }).length }));
+    const schoolGradeLabels = [...new Set((examGradingScales || []).map(scale => scale.grade).filter(Boolean))];
+    const schoolGrades = (schoolGradeLabels.length ? schoolGradeLabels : ["A", "B", "C", "D", "F"]).map(grade => ({
+        grade,
+        count: finalRows.filter(row => {
+            const best = row.finalResult.bestSeven || [];
+            const average = best.length ? (best.reduce((sum, item) => sum + numberValue(item.total), 0) / 700) * 100 : 0;
+            return (applicableGradeScale(average, examGradingScales, true)?.grade || getGrade(average)) === grade;
+        }).length
+    }));
     const classRows = data.classRows || [];
     return (
         <div className="p-6 text-slate-900 report-page">
@@ -4092,7 +4100,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
                         {isCseeExam ? <>
                             <td className="border border-slate-400 p-1 text-center">{formatNumber((student.cseeBestSeven || []).reduce((sum,row) => sum + numberValue(row.total),0),0)}</td>
                             <td className="border border-slate-400 p-1 text-center">{student.cseeBestSeven?.length ? `${formatNumber(((student.cseeBestSeven.reduce((sum,row)=>sum+numberValue(row.total),0) / 700) * 100),1)}%` : "—"}</td>
-                            <td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? getGrade(avg) : "—"; })()}</td>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{(() => { const bs = student.finalResult.bestSeven || []; const total = bs.reduce((sum,row)=>sum+numberValue(row.total),0); const avg = bs.length ? (total / 700) * 100 : 0; return bs.length ? (applicableGradeScale(avg, examGradingScales, true)?.grade || getGrade(avg)) : "—"; })()}</td>
                             <td className="border border-slate-400 p-1 text-center">{student.finalResult.aggregate ?? "—"}</td>
                             <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.gpa != null ? formatNumber(student.finalResult.gpa,2) : "—"}</td>
                             <td className="border border-slate-400 p-1 text-center font-bold">{student.finalResult.division ? `Division ${student.finalResult.division}` : "—"}</td>
