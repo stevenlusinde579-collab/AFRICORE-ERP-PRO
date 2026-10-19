@@ -3644,8 +3644,8 @@ export default function ResultsAnalysis() {
                     {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} />}
+                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} />}
+                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} />}
                 </div>,
                 document.body
             )}
@@ -3998,11 +3998,8 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
     );
 }
 
-function SchoolOverallReportPrint({ exam, data }) {
+function SchoolOverallReportPrint({ exam, data, isCseeExam = false }) {
     const students = data.allStudents || data.topStudents || [];
-    const isCseeExam = isOrdinaryLevel([
-        exam?.education_level, exam?.level, exam?.exam_type, exam?.name, exam?.exam_name
-    ].filter(Boolean).join(" "));
     const finalRows = students.map(student => ({
         ...student,
         finalResult: isCseeExam
@@ -4065,11 +4062,8 @@ function SchoolOverallReportPrint({ exam, data }) {
     );
 }
 
-function ClassOverallReportPrint({ exam, data }) {
+function ClassOverallReportPrint({ exam, data, isCseeExam = false }) {
     const students = data.students || data.topStudents || [];
-    const isCseeExam = isOrdinaryLevel([
-        exam?.education_level, exam?.level, exam?.exam_type, exam?.name, exam?.exam_name, data?.className
-    ].filter(Boolean).join(" "));
     const finalRows = students.map(student => ({
         ...student,
         finalResult: isCseeExam
