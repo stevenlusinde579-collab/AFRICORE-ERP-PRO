@@ -2274,7 +2274,7 @@ export const analyzePaper =
             if (examSubject.class_id) {
                 const { data: classData, error: classError } = await supabase
                     .from("classes")
-                    .select("academic_level, class_name, name, short_name")
+                    .select("*")
                     .eq("id", examSubject.class_id)
                     .maybeSingle();
                 if (classError) {
