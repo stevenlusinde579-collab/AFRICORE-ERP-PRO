@@ -1093,9 +1093,17 @@ export default function ResultsAnalysis() {
             classInfo?.class_name, classInfo?.name, classInfo?.short_name
         ].filter(Boolean).join(" ");
         const ordinaryLevel = isOrdinaryLevel(levelContext);
+        const scaleForPercentage = percentage =>
+            applicableGradeScale(percentage, examGradingScales, ordinaryLevel);
         const gradeForPercentage = percentage =>
-            applicableGradeScale(percentage, examGradingScales, ordinaryLevel)?.grade ||
+            scaleForPercentage(percentage)?.grade ||
             (ordinaryLevel ? getGrade(percentage) : genericGrade(percentage));
+        const passedForPercentage = percentage => {
+            const configured = scaleForPercentage(percentage);
+            return configured
+                ? String(configured.result || "").toUpperCase() === "PASS"
+                : numberValue(percentage) >= 40;
+        };
         const remarkForGrade = grade => {
             const configured = examGradingScales.find(scale =>
                 String(scale.grade || "").toUpperCase() === String(grade || "").toUpperCase()
@@ -1138,7 +1146,7 @@ export default function ResultsAnalysis() {
                 percentage,
                 grade,
                 remark: finalSubjectMark.remark || remarkForGrade(grade),
-                pass: percentage >= passPercentage,
+                pass: scaleForPercentage(percentage) ? passedForPercentage(percentage) : percentage >= passPercentage,
                 questions: subjectQuestions.length,
                 marked_questions: questionLevelMarks.length,
                 missing_questions: Math.max(0, subjectQuestions.length - questionLevelMarks.length),
@@ -1219,7 +1227,7 @@ export default function ResultsAnalysis() {
             percentage,
             grade,
             remark: remarkForGrade(grade),
-            pass: rawPossible > 0 && percentage >= passPercentage,
+            pass: rawPossible > 0 && (scaleForPercentage(percentage) ? passedForPercentage(percentage) : percentage >= passPercentage),
             questions: selectedQuestions.length,
             marked_questions: markedQuestions,
             missing_questions: Math.max(0, selectedQuestions.length - markedQuestions),
@@ -1838,7 +1846,9 @@ export default function ResultsAnalysis() {
             ...full,
             subjects: subjectsForReport,
             recommendations,
-            reportStatus: csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed",
+            reportStatus: isCseeExam
+                ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
+                : (full.pass ? "Passed" : "Failed"),
             cseeEligible: csee.eligible,
             cseeAggregate: csee.aggregate,
             cseeGpa,
