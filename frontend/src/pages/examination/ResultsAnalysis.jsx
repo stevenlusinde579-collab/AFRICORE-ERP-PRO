@@ -4023,14 +4023,14 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false }) {
                 <DetailBox label="Subjects" value={(data.subjectRows || []).length} />
             </div>
 
-            <DivisionSummary distribution={schoolDivisions} title="School Division Distribution" />
+            {isCseeExam && <DivisionSummary distribution={schoolDivisions} title="School Division Distribution" />}
 
-            <div className="mb-5">
+            {isCseeExam && <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">School Grade Distribution</h3>
                 <div className="grid grid-cols-5 gap-2">
                     {schoolGrades.map(row => <div key={row.grade} className={`border rounded-lg p-2 text-center ${gradeClass(row.grade)}`}><div className="text-[9px] font-bold">Grade {row.grade}</div><div className="text-lg font-black">{row.count || 0}</div><div className="text-[8px]">students</div></div>)}
                 </div>
-            </div>
+            </div>}
 
             <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">Class Performance & Division Distribution</h3>
@@ -4079,11 +4079,11 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false }) {
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} /><DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "â€”"} /><DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
-            <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />
-            <div className="mb-5">
+            {isCseeExam && <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />
+            {isCseeExam && <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">Class Grade Distribution</h3>
                 <div className="grid grid-cols-5 gap-2">{classGrades.map(row => <div key={row.grade} className={`border rounded-lg p-2 text-center ${gradeClass(row.grade)}`}><div className="text-[9px] font-bold">Grade {row.grade}</div><div className="text-lg font-black">{row.count || 0}</div><div className="text-[8px]">students</div></div>)}</div>
-            </div>
+            </div>}
             <SubjectSummaryTable subjects={data.subjects || []} />
             <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">Student Final Results â€” GPA & Division</h3>
