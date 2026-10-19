@@ -1791,9 +1791,12 @@ export default function ResultsAnalysis() {
             cseeEligibleStudents: eligibleStudents.length,
             cseeGpa: classGpa,
             cseeDivisionDistribution: divisionDistribution,
-            gradeDistribution: ["A", "B", "C", "D", "F"].map(grade => ({
+            gradeDistribution: (examGradingScales.length && (isCseeExam || !isLegacyOLevelScale(examGradingScales))
+                ? examGradingScales.map(scale => scale.grade)
+                : (isCseeExam ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"])
+            ).map(grade => ({
                 grade,
-                count: rows.filter(row => row.grade === grade).length
+                count: rows.filter(row => String(row.grade) === String(grade)).length
             })),
             topStudents: rankedWithPosition.slice(0, 10)
         };
@@ -1802,24 +1805,32 @@ export default function ResultsAnalysis() {
 
     const getStudentReport = useCallback(student => {
         const full = overallRankedStudents.find(row => idValue(row.id) === idValue(student.id)) || student;
-        const subjectsForReport = (full.subjects || []).map(result => ({
-            ...result,
-            subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
-            grade: getGrade(result.percentage),
-            remark: getRemark(getGrade(result.percentage)),
-            report_status: result.pass ? "Passed" : "Failed"
-        }));
+        const subjectsForReport = (full.subjects || []).map(result => {
+            const configured = applicableGradeScale(result.percentage, examGradingScales, isCseeExam);
+            const grade = configured?.grade || (isCseeExam ? getGrade(result.percentage) : genericGrade(result.percentage));
+            return {
+                ...result,
+                subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
+                grade,
+                remark: configured?.remark || (isCseeExam ? getRemark(grade) : grade),
+                report_status: result.pass ? "Passed" : "Failed"
+            };
+        });
         const analysed = subjectsForReport.filter(row => row.possible > 0);
-        const csee = calculateResult(subjectsForReport);
+        const csee = isCseeExam
+            ? calculateResult(subjectsForReport)
+            : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
         const cseeGpa = csee.gpa;
         const cseeDivision = csee.division;
         const weak = [...analysed].sort((a, b) => a.percentage - b.percentage).slice(0, 3);
         const recommendations = [];
-        if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
-        else if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
-        else if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
-        else if (csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
-        else recommendations.push("Mwanafunzi anahitaji uingiliaji wa haraka wa kitaaluma, marudio ya msingi na ufuatiliaji wa maendeleo mara kwa mara.");
+        if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
+        else if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
+        else if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
+        else if (isCseeExam && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
+        else if (!isCseeExam && full.percentage >= 65) recommendations.push("Mwanafunzi anaendelea vizuri; endelea kuimarisha maeneo yenye changamoto na kufuatilia maendeleo.");
+        else if (!isCseeExam && full.percentage >= 40) recommendations.push("Mwanafunzi anahitaji mazoezi na msaada zaidi katika maeneo yenye changamoto.");
+        else recommendations.push("Mwanafunzi anahitaji uingiliaji wa kitaaluma na ufuatiliaji wa maendeleo mara kwa mara.");
         if (weak.length) recommendations.push(`Masomo yanayohitaji kipaumbele cha kuboresha ufaulu: ${weak.map(row => `${row.subject_name} (${formatNumber(row.percentage, 1)}%)`).join(", ")}.`);
 
         const savedFields = studentReportFields[idValue(full.id)] || {};
@@ -1846,7 +1857,7 @@ export default function ResultsAnalysis() {
             parent_phone: full.parent_phone || "",
             parent_email: full.parent_email || ""
         };
-    }, [overallRankedStudents, subjectMap, studentReportFields]);
+    }, [overallRankedStudents, subjectMap, studentReportFields, examGradingScales, isCseeExam]);
 
 
     const printStudentReport = useCallback(student => {
