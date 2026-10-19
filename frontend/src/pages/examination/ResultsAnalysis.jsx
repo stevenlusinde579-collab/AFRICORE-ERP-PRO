@@ -3834,7 +3834,7 @@ function StudentReportPrint({ exam, report, isCseeExam }) {
             <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">All Exam Subjects</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{["#","Subject","Mark","%","Grade","Point","Status"].map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam ? ["#","Subject","Mark","%","Grade","Point","Status"] : ["#","Subject","Mark","%","Grade","Remark","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{allSubjects.map((row, index) => (
                         <tr key={row.exam_subject_id || index}>
                             <td className="border border-slate-400 p-1 text-center">{index + 1}</td>
@@ -3842,8 +3842,8 @@ function StudentReportPrint({ exam, report, isCseeExam }) {
                             <td className="border border-slate-400 p-1 text-center">{formatNumber(row.total, 0)}</td>
                             <td className="border border-slate-400 p-1 text-center">{formatNumber(row.percentage, 1)}%</td>
                             <td className={`border border-slate-400 p-1 text-center font-bold ${gradeClass(row.grade)}`}>{row.grade}</td>
-                            <td className="border border-slate-400 p-1 text-center">{getGradePoint(row.grade)}</td>
-                            <td className="border border-slate-400 p-1 text-center">{bestSeven.some(best => idValue(best.exam_subject_id) === idValue(row.exam_subject_id)) ? "Best 7" : (row.report_status || "Reported")}</td>
+                            <td className="border border-slate-400 p-1 text-center">{isCseeExam ? getGradePoint(row.grade) : (row.remark || row.grade)}</td>
+                            <td className="border border-slate-400 p-1 text-center">{isCseeExam && bestSeven.some(best => idValue(best.exam_subject_id) === idValue(row.exam_subject_id)) ? "Best 7" : (row.report_status || "Reported")}</td>
                         </tr>
                     ))}</tbody>
                 </table>
