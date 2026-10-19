@@ -103,6 +103,37 @@ const getGrade = percentage => {
     return "F";
 };
 
+const normalizeEducationLevel = value => String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+
+const isOrdinaryLevel = value => {
+    const level = normalizeEducationLevel(value);
+    return /O LEVEL|ORDINARY LEVEL|ORDINARY SECONDARY|FORM\s*(I|1|II|2|III|3|IV|4)(\b|$)|FORM\s*1\s*[-–]\s*4/.test(level)
+        && !/A LEVEL|ADVANCED LEVEL|FORM\s*(V|5|VI|6)(\b|$)/.test(level);
+};
+
+const gradeFromConfiguredScale = (percentage, scales) => {
+    const p = numberValue(percentage);
+    const ordered = [...(Array.isArray(scales) ? scales : [])]
+        .sort((a, b) => numberValue(b.min_percentage) - numberValue(a.min_percentage));
+    return ordered.find(scale =>
+        p >= numberValue(scale.min_percentage) &&
+        p <= numberValue(scale.max_percentage)
+    ) || null;
+};
+
+const genericGrade = percentage => {
+    const p = numberValue(percentage);
+    if (p >= 80) return "Excellent";
+    if (p >= 65) return "Good";
+    if (p >= 50) return "Satisfactory";
+    if (p >= 40) return "Developing";
+    return "Needs Support";
+};
+
 const _GRADE_POINTS = Object.freeze({ A: 1, B: 2, C: 3, D: 4, F: 5 });
 const getGradePoint = grade => _GRADE_POINTS[String(grade || "").trim().toUpperCase()] ?? 5;
 
@@ -368,6 +399,7 @@ export default function ResultsAnalysis() {
     const [marks, setMarks] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [classes, setClasses] = useState([]);
+    const [examGradingScales, setExamGradingScales] = useState([]);
 
     // --------------------------------------------------------
     // UI STATE
@@ -456,6 +488,20 @@ export default function ResultsAnalysis() {
 
             if (examError) throw examError;
             setExam(examData);
+
+            // Use the grading scale saved for this examination where available.
+            const { data: gradingScaleData, error: gradingScaleError } = await supabase
+                .from("exam_grading_scales")
+                .select("grade, min_percentage, max_percentage, remark, result, sort_order")
+                .eq("exam_id", examId)
+                .order("sort_order", { ascending: true });
+
+            if (gradingScaleError) {
+                console.warn("EXAM GRADING SCALE WARNING:", gradingScaleError);
+                setExamGradingScales([]);
+            } else {
+                setExamGradingScales(gradingScaleData || []);
+            }
 
             // 2. EXAM SUBJECTS
             const { data: examSubjectData, error: examSubjectError } = await supabase
@@ -1208,14 +1254,28 @@ export default function ResultsAnalysis() {
             // Best-7 calculation as the Report Form. Missing marks remain F.
             // BEST 7 MUST ALWAYS use ALL examination subjects, never the
             // currently selected subject filter.
-            const csee = calculateResult(allSubjectResults);
+            const levelContext = [
+                exam?.education_level, exam?.level, exam?.exam_type,
+                ...assignedExamSubjects.flatMap(es => {
+                    const cls = classMap.get(idValue(es.class_id));
+                    const subject = subjectMap.get(idValue(es.subject_id));
+                    return [cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name, subject?.education_level];
+                })
+            ].filter(Boolean).join(" ");
+            const ordinaryLevel = isOrdinaryLevel(levelContext);
+            const csee = ordinaryLevel
+                ? calculateResult(allSubjectResults)
+                : { eligible: false, analysedSubjects: allSubjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
             const bestSeven = csee.bestSeven || [];
-            const total = bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0);
-            const possible = 700;
-            const average = bestSeven.length ? (total / 700) * 100 : 0;
+            const total = allSubjectResults.reduce((sum, result) => sum + numberValue(result.total), 0);
+            const possible = allSubjectResults.length * 100;
+            const average = possible > 0 ? (total / possible) * 100 : 0;
             const percentage = average;
-            const grade = bestSeven.length === 7 ? getGrade(average) : "â€”";
-            const passed = bestSeven.length === 7 ? average >= 40 : false;
+            const overallConfigured = gradeFromConfiguredScale(average, examGradingScales);
+            const grade = overallConfigured?.grade || (ordinaryLevel ? getGrade(average) : genericGrade(average));
+            const passed = overallConfigured
+                ? String(overallConfigured.result || "").toUpperCase() === "PASS"
+                : average >= 40;
             const hasMarks = markedResults.some(result => result.total > 0 || result.marked_questions > 0);
 
             // Calculate GPA/Division for this exact studentAnalysis row.
@@ -1237,7 +1297,7 @@ export default function ResultsAnalysis() {
                 possible,
                 percentage,
                 grade,
-                remark: getRemark(grade),
+                remark: overallConfigured?.remark || (ordinaryLevel ? getRemark(grade) : grade),
                 pass: passed,
                 hasMarks,
                 cseeEligible: csee.eligible,
@@ -1294,6 +1354,10 @@ export default function ResultsAnalysis() {
         }));
     }, [
         students,
+        exam,
+        classes,
+        subjects,
+        examGradingScales,
         selectedClassId,
         selectedSubjectId,
         filteredExamSubjects,
