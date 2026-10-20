@@ -3141,10 +3141,10 @@ export const analyzePaper =
             if (
                 !selectiveValidation.valid
             ) {
-                throw new Error(
-                    `Invalid selective-question structure: ${selectiveValidation.problems.join(
-                        " | "
-                    )}`
+                console.warn(
+                    "SELECTIVE QUESTION STRUCTURE WARNING (NON-BLOCKING):",
+                    selectiveValidation.problems.join(" | "),
+                    "The AI analysis will continue; confirm selection instructions against the original paper."
                 );
             }
 
@@ -3166,36 +3166,18 @@ export const analyzePaper =
                 questionsWithoutMarks.length >
                 0
             ) {
-                console.error(
-                    "QUESTIONS WITHOUT AI-DETERMINED MARKS:",
+                console.warn(
+                    "QUESTIONS WITHOUT RELIABLE MARK VALUES:",
                     questionsWithoutMarks.map(
-                        (
-                            question
-                        ) => ({
-                            question:
-                                question.question_number,
-
-                            marks:
-                                question.max_marks,
-
-                            source:
-                                question.mark_source,
-
-                            evidence:
-                                question.mark_evidence,
+                        (question) => ({
+                            question: question.question_number,
+                            section: question.section,
+                            marks: question.max_marks,
+                            source: question.mark_source,
+                            evidence: question.mark_evidence,
                         })
-                    )
-                );
-
-                throw new Error(
-                    `AI could not reliably determine marks for: ${questionsWithoutMarks
-                        .map(
-                            (q) =>
-                                `Q${q.question_number}`
-                        )
-                        .join(
-                            ", "
-                        )}.`
+                    ),
+                    "Continue structural/content analysis without inventing marks."
                 );
             }
 
@@ -3247,14 +3229,27 @@ export const analyzePaper =
                     0
                 );
 
+            const reportedTotalMarks =
+                numberOrNull(
+                    aiResult.total_marks
+                );
+
             const totalMarks =
-                effectiveCalculatedMarks;
+                effectiveCalculatedMarks > 0
+                    ? effectiveCalculatedMarks
+                    : (
+                        reportedTotalMarks !== null &&
+                        reportedTotalMarks > 0
+                            ? reportedTotalMarks
+                            : 0
+                    );
 
             if (
                 totalMarks <= 0
             ) {
-                throw new Error(
-                    "The examination paper does not provide enough evidence to determine a valid effective total mark."
+                console.warn(
+                    "TOTAL MARKS NOT ESTABLISHED:",
+                    "Analysis will be saved with total_marks = 0. Do not use this paper's AI mark totals for grading until marks are confirmed."
                 );
             }
 
@@ -3299,6 +3294,31 @@ export const analyzePaper =
                 )
                     ? aiResult.recommendations
                     : [];
+
+            if (
+                questionsWithoutMarks.length > 0
+            ) {
+                recommendations.push(
+                    "Some questions do not have reliable mark values in the paper or AI response. Confirm the original marking scheme before using totals for grading."
+                );
+            }
+
+            if (
+                totalMarks <= 0
+            ) {
+                recommendations.push(
+                    "The examination's total marks could not be reliably established. Content and structure analysis is available, but confirm the marking scheme before using any mark-based calculations."
+                );
+            }
+
+            if (
+                !selectiveValidation.valid
+            ) {
+                recommendations.push(
+                    "The paper may contain selection instructions that need teacher verification: " +
+                    selectiveValidation.problems.join(" | ")
+                );
+            }
 
             const bloomsDistribution =
                 aiResult.blooms_distribution &&
