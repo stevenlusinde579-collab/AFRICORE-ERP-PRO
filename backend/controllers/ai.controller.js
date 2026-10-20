@@ -1194,6 +1194,14 @@ RETURN STRICT JSON ONLY.
 
 Do not wrap the JSON in markdown.
 
+JSON VALIDITY RULES (CRITICAL):
+- Return one complete, syntactically valid JSON object and nothing else.
+- Escape every double quote that appears inside a JSON string value as \\".
+- Escape backslashes and control characters correctly inside JSON strings.
+- Do not place literal, unescaped line breaks inside a JSON string value.
+- Preserve quoted phrases from the examination paper as text, but encode them using valid JSON escaping.
+- Before returning, verify that the entire response can be parsed as JSON. Never return comments, trailing commas, or explanatory prose outside the JSON object.
+
 Expected JSON structure:
 
 {
