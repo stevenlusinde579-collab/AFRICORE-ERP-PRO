@@ -3022,6 +3022,9 @@ export const analyzePaper =
             // REMOVE DUPLICATES
             // ------------------------------------------------
 
+            // Deduplicate only genuinely repeated entries. Question numbering
+            // can restart inside each section (e.g. Section B, Question 1),
+            // so question number alone is not a safe identity key.
             const questionMap =
                 new Map();
 
@@ -3043,13 +3046,27 @@ export const analyzePaper =
                     continue;
                 }
 
+                const normalizedQuestionText =
+                    String(
+                        question.question_text ||
+                        question.text ||
+                        ""
+                    )
+                        .toLowerCase()
+                        .replace(/\\s+/g, " ")
+                        .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+                        .trim();
+
+                const identityKey =
+                    `${number}:${normalizedQuestionText}`;
+
                 if (
                     !questionMap.has(
-                        number
+                        identityKey
                     )
                 ) {
                     questionMap.set(
-                        number,
+                        identityKey,
                         question
                     );
                 }
@@ -3074,8 +3091,13 @@ export const analyzePaper =
                 questions.length !==
                     expectedQuestionCount
             ) {
-                throw new Error(
-                    `AI identified ${questions.length} main questions, but the examination instructions indicate ${expectedQuestionCount} questions.`
+                console.warn(
+                    "QUESTION COUNT DIFFERENCE (NON-BLOCKING):",
+                    {
+                        detectedByPdfHeuristic: expectedQuestionCount,
+                        identifiedByAI: questions.length,
+                        note: "PDF count extraction is a hint; papers may use section-based, repeated, nested, or non-standard numbering."
+                    }
                 );
             }
 
@@ -3083,15 +3105,10 @@ export const analyzePaper =
             // QUESTION NUMBER VALIDATION
             // ------------------------------------------------
 
-            if (
-                expectedQuestionCount >
-                    0
-            ) {
+            {
                 const actualNumbers =
                     questions.map(
-                        (
-                            question
-                        ) =>
+                        (question) =>
                             Number(
                                 question.question_number
                             )
@@ -3099,19 +3116,15 @@ export const analyzePaper =
 
                 const hasSequentialNumbering =
                     actualNumbers.every(
-                        (
-                            number,
-                            index
-                        ) =>
-                            number ===
-                            index + 1
+                        (number, index) =>
+                            number === index + 1
                     );
 
-                if (
-                    !hasSequentialNumbering
-                ) {
-                    throw new Error(
-                        `AI did not correctly reconstruct the examination question numbering. Detected: ${actualNumbers.join(", ")}.`
+                if (!hasSequentialNumbering) {
+                    console.warn(
+                        "NON-SEQUENTIAL QUESTION LABELS (NON-BLOCKING):",
+                        actualNumbers,
+                        "The printed paper may restart numbering by section or use non-standard numbering."
                     );
                 }
             }
