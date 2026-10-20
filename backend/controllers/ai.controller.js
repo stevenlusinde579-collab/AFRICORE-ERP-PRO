@@ -653,22 +653,48 @@ const parseAIResult = (
         // or imperfect JSON responses from other AI/provider versions.
     }
 
-    let jsonText =
-        extractCompleteJsonValue(
-            rawText
+    // Repair unescaped quotes BEFORE extracting the complete JSON value.
+    // If extraction runs first, an unescaped quote inside a question can make
+    // the scanner think the JSON string ended early and truncate the candidate.
+    const firstObjectIndex =
+        rawText.indexOf("{");
+
+    const firstArrayIndex =
+        rawText.indexOf("[");
+
+    let jsonStartIndex = -1;
+
+    if (firstObjectIndex === -1) {
+        jsonStartIndex = firstArrayIndex;
+    } else if (firstArrayIndex === -1) {
+        jsonStartIndex = firstObjectIndex;
+    } else {
+        jsonStartIndex = Math.min(
+            firstObjectIndex,
+            firstArrayIndex
+        );
+    }
+
+    const rawJsonCandidate =
+        jsonStartIndex >= 0
+            ? rawText.slice(jsonStartIndex)
+            : rawText;
+
+    let repairedCandidate =
+        repairUnescapedJsonStringQuotes(
+            rawJsonCandidate
         );
 
-    // Recover common malformed quotation marks in exam question text.
-    // Do not use the result unless it is a complete valid JSON document.
-    try {
-        const quoteRepairedText =
-            repairUnescapedJsonStringQuotes(
-                jsonText
-            );
+    let jsonText =
+        extractCompleteJsonValue(
+            repairedCandidate
+        );
 
+    // Accept quote repair only when the extracted result is valid complete JSON.
+    try {
         const quoteRepairedResult =
             JSON.parse(
-                quoteRepairedText
+                jsonText
             );
 
         if (
@@ -684,6 +710,13 @@ const parseAIResult = (
     } catch {
         // Continue with the existing general recovery path.
     }
+
+    // Keep the original extracted candidate as a fallback for cases where
+    // the quote-repair pass changes a legitimate delimiter or cannot recover.
+    jsonText =
+        extractCompleteJsonValue(
+            rawText
+        );
 
     jsonText =
         repairCommonAIJsonErrors(
