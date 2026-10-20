@@ -2274,8 +2274,10 @@ export const analyzePaper =
                 return res
                     .status(200)
                     .json({
+                        // The PDF was stored, but the requested AI analysis failed.
+                        // Keep this distinct from a successful completed analysis.
                         success:
-                            true,
+                            false,
 
                         paper_saved:
                             true,
