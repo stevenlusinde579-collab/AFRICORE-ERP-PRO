@@ -510,6 +510,24 @@ const parseAIResult = (
             rawText
         );
 
+    // Gemini's service already validates and cleans its JSON response.
+    // Parse a complete valid JSON document before applying any repair regexes.
+    // This avoids corrupting valid question text that happens to contain commas,
+    // quotes, or punctuation resembling JSON syntax.
+    try {
+        const directResult = JSON.parse(rawText);
+
+        if (
+            directResult &&
+            typeof directResult === "object"
+        ) {
+            return directResult;
+        }
+    } catch {
+        // Continue to the tolerant recovery path for fenced, prefixed,
+        // or imperfect JSON responses from other AI/provider versions.
+    }
+
     let jsonText =
         extractCompleteJsonValue(
             rawText
