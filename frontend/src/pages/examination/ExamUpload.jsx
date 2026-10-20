@@ -770,15 +770,24 @@ function ExamUpload() {
             );
 
 
-            if (!aiResponse.data?.success) {
+            // The backend currently returns HTTP 200 and success:true when the
+            // PDF is stored but AI analysis fails. Do not treat that as a
+            // successful analysis or navigate to a dashboard that can only return 404.
+            const analysisFailed =
+                aiResponse.data?.analysis_completed === false ||
+                String(aiResponse.data?.ai_status || "").toLowerCase() === "failed";
+
+            if (!aiResponse.data?.success || analysisFailed) {
+                console.error(
+                    "AI ANALYSIS DID NOT COMPLETE:",
+                    aiResponse.data
+                );
 
                 throw new Error(
                     aiResponse.data?.message ||
-                    "PDF imehifadhiwa Storage lakini AI Analysis imeshindwa kuichambua."
+                    "PDF imehifadhiwa, lakini uchambuzi wa AI haujakamilika. Angalia hali ya karatasi na Render logs."
                 );
-
             }
-
 
             console.log(
                 "AI ANALYSIS UPLOAD SUCCESS:",
