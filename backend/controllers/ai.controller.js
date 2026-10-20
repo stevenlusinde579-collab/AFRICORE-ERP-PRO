@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
-import { askGemini } from "../services/gemini.service.js";
+import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
 
 // ============================================================
@@ -2239,68 +2239,24 @@ export const analyzePaper =
             let pdfText =
                 "";
 
+            // PDF text extraction is supporting evidence only. A scanned PDF,
+            // a PDF with diagrams, or a paper with complex layout must still be
+            // sent to Gemini as the original PDF instead of being rejected here.
             try {
                 pdfText =
                     await withTimeout(
                         readPDF(
-                            req.file
-                                .buffer
+                            req.file.buffer
                         ),
                         30000,
-                        "PDF reading timed out after 30 seconds."
+                        "PDF text extraction timed out after 30 seconds."
                     );
-            } catch (
-                error
-            ) {
+            } catch (error) {
                 console.error(
-                    "PDF READING FAILED:",
-                    error
+                    "PDF TEXT EXTRACTION FAILED; CONTINUING WITH ORIGINAL PDF:",
+                    error?.message || error
                 );
-
-                await updatePaperStatus(
-                    examPaperId,
-                    {
-                        status:
-                            "Failed",
-
-                        aiStatus:
-                            "Failed",
-
-                        errorMessage:
-                            "The examination paper was saved, but its PDF text could not be read.",
-                    }
-                );
-
-                return res
-                    .status(200)
-                    .json({
-                        success:
-                            true,
-
-                        paper_saved:
-                            true,
-
-                        analysis_completed:
-                            false,
-
-                        ai_status:
-                            "Failed",
-
-                        exam_id:
-                            examId,
-
-                        exam_subject_id:
-                            examSubjectId,
-
-                        exam_paper_id:
-                            examPaperId,
-
-                        reused_paper:
-                            reusedPaper,
-
-                        message:
-                            "The examination paper was saved, but AI analysis could not be completed because the PDF could not be read.",
-                    });
+                pdfText = "";
             }
 
             pdfText =
@@ -2313,56 +2269,9 @@ export const analyzePaper =
                 `${Date.now() - pdfStartedAt}ms`
             );
 
-            if (
-                pdfText.length <
-                50
-            ) {
-                await updatePaperStatus(
-                    examPaperId,
-                    {
-                        status:
-                            "Failed",
-
-                        aiStatus:
-                            "Failed",
-
-                        errorMessage:
-                            "The examination paper was saved, but the PDF contains little or no readable text.",
-                    }
-                );
-
-                return res
-                    .status(200)
-                    .json({
-                        success:
-                            true,
-
-                        paper_saved:
-                            true,
-
-                        analysis_completed:
-                            false,
-
-                        ai_status:
-                            "Failed",
-
-                        exam_id:
-                            examId,
-
-                        exam_subject_id:
-                            examSubjectId,
-
-                        exam_paper_id:
-                            examPaperId,
-
-                        reused_paper:
-                            reusedPaper,
-
-                        message:
-                            "The examination paper was saved, but AI analysis could not be completed because the PDF contains little or no readable text.",
-                    });
-            }
-
+            // Do not reject image-only/scanned papers because extracted text is
+            // short. Gemini receives the original PDF below and can inspect its
+            // visual content. Empty extraction simply means fewer text hints.
             console.log(
                 "PDF TEXT LENGTH:",
                 pdfText.length
@@ -2460,8 +2369,9 @@ export const analyzePaper =
             try {
                 aiRawResponse =
                     await withTimeout(
-                        askGemini(
-                            prompt
+                        askGeminiWithPDF(
+                            prompt,
+                            req.file.buffer.toString("base64")
                         ),
                         120000,
                         "AI analysis timed out."
@@ -2532,7 +2442,7 @@ export const analyzePaper =
                     .status(200)
                     .json({
                         success:
-                            true,
+                            false,
 
                         paper_saved:
                             true,
@@ -2609,7 +2519,7 @@ export const analyzePaper =
                     .status(200)
                     .json({
                         success:
-                            true,
+                            false,
 
                         paper_saved:
                             true,
@@ -2669,7 +2579,7 @@ export const analyzePaper =
                     .status(200)
                     .json({
                         success:
-                            true,
+                            false,
 
                         paper_saved:
                             true,
@@ -3850,7 +3760,7 @@ export const analyzePaper =
                     .status(200)
                     .json({
                         success:
-                            true,
+                            false,
 
                         paper_saved:
                             true,

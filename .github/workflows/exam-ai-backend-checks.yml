@@ -1,0 +1,39 @@
+name: Exam AI Backend Checks
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/exam-ai-backend-checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/exam-ai-backend-checks.yml"
+
+jobs:
+  exam-ai-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Check examination AI JavaScript syntax
+        run: |
+          node --check backend/controllers/ai.controller.js
+          node --check backend/services/gemini.service.js
+          node --check backend/services/pdfReader.js
+
+      - name: Run safe AI parser and controller tests
+        run: npm --prefix backend run test:ai-safe
