@@ -472,6 +472,131 @@ const repairCommonAIJsonErrors =
         return text;
     };
 
+// ============================================================
+// REPAIR UNESCAPED DOUBLE QUOTES INSIDE JSON STRING VALUES
+//
+// Exam question text often contains quoted words or instructions.
+// Gemini can return those quotes without JSON escaping. Escape only
+// quotes that cannot reasonably be JSON string delimiters, and only
+// accept the repaired document if JSON.parse validates it.
+// ============================================================
+
+const repairUnescapedJsonStringQuotes = (
+    value
+) => {
+    const source = String(value || "");
+    let output = "";
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < source.length; index++) {
+        const character = source[index];
+
+        if (!inString) {
+            output += character;
+
+            if (character === '"') {
+                inString = true;
+                escaped = false;
+            }
+
+            continue;
+        }
+
+        if (escaped) {
+            output += character;
+            escaped = false;
+            continue;
+        }
+
+        if (character === "\\") {
+            output += character;
+            escaped = true;
+            continue;
+        }
+
+        if (character !== '"') {
+            output += character;
+            continue;
+        }
+
+        let nextIndex = index + 1;
+
+        while (
+            nextIndex < source.length &&
+            /\s/.test(source[nextIndex])
+        ) {
+            nextIndex++;
+        }
+
+        const nextCharacter = source[nextIndex];
+        let commaFollowedByJsonStructure = false;
+
+        if (nextCharacter === ",") {
+            let afterComma = nextIndex + 1;
+
+            while (
+                afterComma < source.length &&
+                /\s/.test(source[afterComma])
+            ) {
+                afterComma++;
+            }
+
+            if (
+                source[afterComma] === "}" ||
+                source[afterComma] === "]"
+            ) {
+                commaFollowedByJsonStructure = true;
+            } else if (source[afterComma] === '"') {
+                let keyEnd = afterComma + 1;
+                let keyEscaped = false;
+
+                while (keyEnd < source.length) {
+                    const keyCharacter = source[keyEnd];
+
+                    if (keyEscaped) {
+                        keyEscaped = false;
+                    } else if (keyCharacter === "\\") {
+                        keyEscaped = true;
+                    } else if (keyCharacter === '"') {
+                        break;
+                    }
+
+                    keyEnd++;
+                }
+
+                keyEnd++;
+
+                while (
+                    keyEnd < source.length &&
+                    /\s/.test(source[keyEnd])
+                ) {
+                    keyEnd++;
+                }
+
+                commaFollowedByJsonStructure =
+                    source[keyEnd] === ":";
+            }
+        }
+
+        const canCloseString =
+            nextCharacter === undefined ||
+            nextCharacter === ":" ||
+            nextCharacter === "}" ||
+            nextCharacter === "]" ||
+            commaFollowedByJsonStructure;
+
+        if (canCloseString) {
+            output += character;
+            inString = false;
+        } else {
+            output += '\\"';
+        }
+    }
+
+    return output;
+};
+
 const parseAIResult = (
     aiRawResponse
 ) => {
@@ -532,6 +657,33 @@ const parseAIResult = (
         extractCompleteJsonValue(
             rawText
         );
+
+    // Recover common malformed quotation marks in exam question text.
+    // Do not use the result unless it is a complete valid JSON document.
+    try {
+        const quoteRepairedText =
+            repairUnescapedJsonStringQuotes(
+                jsonText
+            );
+
+        const quoteRepairedResult =
+            JSON.parse(
+                quoteRepairedText
+            );
+
+        if (
+            quoteRepairedResult &&
+            typeof quoteRepairedResult === "object"
+        ) {
+            console.warn(
+                "AI JSON QUOTE REPAIR SUCCESS"
+            );
+
+            return quoteRepairedResult;
+        }
+    } catch {
+        // Continue with the existing general recovery path.
+    }
 
     jsonText =
         repairCommonAIJsonErrors(
