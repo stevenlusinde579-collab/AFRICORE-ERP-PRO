@@ -975,6 +975,18 @@ LEVEL-AWARE RULES:
 - If level, curriculum, grading criteria or a paper detail is unknown, state that limitation in recommendations rather than inventing requirements.
 - AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
 
+ADAPTIVE PAPER-FIRST ANALYSIS (CRITICAL):
+- Do not assume that this paper is an Ordinary Level / CSEE examination. The level value may be a class label, a school-specific label, or incomplete metadata; use the actual PDF content as primary evidence and use the supplied level as context.
+- First infer the paper's own structure from the complete PDF: title/header, class or form, subject, duration, instructions, sections, question numbering, subparts, marks, diagrams/tables, and question formats. Support any structure that actually appears instead of forcing a familiar template.
+- This analyzer must work across early-childhood, nursery, primary, Ordinary Level, Advanced Level, vocational, college, internal school exams, mock exams, terminal exams, mid-term exams, and other paper types. This list is illustrative, not restrictive.
+- Never require the paper to contain sections A/B/C, a fixed number of questions, a particular mark total, multiple-choice questions, essay questions, or any standard national-exam layout. Use the paper's actual layout.
+- Do not interpret missing metadata as proof that a paper is Ordinary Level. Do not import CSEE/NECTA, Best 7, division, GPA, grade bands, topic lists, or syllabus assumptions unless the paper metadata or configured criteria explicitly support them.
+- If the PDF's visible structure conflicts with extracted structural evidence or expected-question heuristics, trust the full paper text and explain uncertainty; structuralQuestions, section totals, and expected question counts are hints only, not hard constraints.
+- Identify main questions and their subparts according to the paper's own numbering convention. Handle Roman numerals, letters, nested numbering, continuous numbering, repeated numbering by section, and question prompts without a simple numeric prefix. Do not split a main question into multiple questions just because it has subparts.
+- For each field in the required JSON, use evidence from this paper. If a field does not apply to this paper, use an empty array/object, null, or a neutral explanatory value consistent with the schema rather than fabricating data. Never fail analysis merely because the paper does not match a familiar template.
+- Keep section names, question labels, marks, question types, and selection instructions as printed. Do not silently renumber or normalize them to an Ordinary Level pattern.
+- Assess suitability and quality relative to the stated/inferred level, subject, exam purpose, and available curriculum. If the level or curriculum cannot be determined reliably, describe the uncertainty and avoid unsupported curriculum-coverage percentages or claims.
+
 IMPORTANT:
 Analyze the WHOLE examination paper.
 
