@@ -1619,7 +1619,7 @@ const calculateEffectiveSectionMarks =
                 !question.selection_required
             ) {
                 const key =
-                    `QUESTION-${question.question_number}`;
+                    `SECTION-${String(question.section || "UNSECTIONED").trim().toUpperCase()}-QUESTION-${question.question_number}`;
 
                 groups.set(
                     key,
