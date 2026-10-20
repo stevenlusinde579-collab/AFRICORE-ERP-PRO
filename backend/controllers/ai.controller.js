@@ -718,6 +718,31 @@ const parseAIResult = (
             error.code =
                 "INVALID_AI_JSON";
 
+            // Include the malformed JSON location in diagnostics.
+            // The previous 2,000-character prefix could not show errors
+            // occurring later in longer exam analyses.
+            const parsePositionMatch =
+                String(
+                    firstError?.message ||
+                    secondError?.message ||
+                    ""
+                ).match(/position\s+(\d+)/i);
+
+            const parsePosition =
+                parsePositionMatch
+                    ? Number(parsePositionMatch[1])
+                    : -1;
+
+            const previewStart =
+                parsePosition >= 0
+                    ? Math.max(0, parsePosition - 500)
+                    : Math.max(0, rawText.length - 1500);
+
+            const previewEnd =
+                parsePosition >= 0
+                    ? Math.min(rawText.length, parsePosition + 800)
+                    : rawText.length;
+
             error.details = {
                 firstError:
                     firstError.message,
@@ -725,10 +750,20 @@ const parseAIResult = (
                 secondError:
                     secondError.message,
 
+                responseLength:
+                    rawText.length,
+
+                parsePosition,
+
                 responsePreview:
                     rawText.slice(
-                        0,
-                        2000
+                        previewStart,
+                        previewEnd
+                    ),
+
+                responseEndsWith:
+                    rawText.slice(
+                        Math.max(0, rawText.length - 500)
                     ),
             };
 
