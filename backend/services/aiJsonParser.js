@@ -417,6 +417,28 @@ const parseAIResult = (
             rawJsonCandidate
         );
 
+    // First validate the entire repaired candidate directly. This avoids
+    // allowing the recovery scanner to alter a valid repaired JSON document.
+    try {
+        const repairedWholeResult =
+            JSON.parse(
+                repairedCandidate
+            );
+
+        if (
+            repairedWholeResult &&
+            typeof repairedWholeResult === "object"
+        ) {
+            console.warn(
+                "AI JSON QUOTE REPAIR SUCCESS"
+            );
+
+            return repairedWholeResult;
+        }
+    } catch {
+        // A provider may prefix or append explanatory text; try extraction next.
+    }
+
     let jsonText =
         extractCompleteJsonValue(
             repairedCandidate
