@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGemini } from "../services/gemini.service.js";
+import { parseAIResult } from "../services/aiJsonParser.js";
 
 // ============================================================
 // AI ANALYSIS LOCKS
@@ -269,305 +270,6 @@ const calculateFileHash = (
 // JSON CLEANING
 // ============================================================
 
-const normalizeAIJsonCharacters =
-    (value) => {
-        if (
-            typeof value !==
-            "string"
-        ) {
-            return value;
-        }
-
-        return value
-            .replace(
-                /[\u2018\u2019]/g,
-                "'"
-            )
-            .replace(
-                /[\u201C\u201D]/g,
-                '"'
-            )
-            .replace(
-                /\u00A0/g,
-                " "
-            )
-            .replace(
-                /\uFEFF/g,
-                ""
-            );
-    };
-
-const stripMarkdownJson = (
-    value
-) => {
-    let text =
-        normalizeAIJsonCharacters(
-            value
-        );
-
-    text =
-        text.trim();
-
-    text =
-        text.replace(
-            /^```(?:json)?\s*/i,
-            ""
-        );
-
-    text =
-        text.replace(
-            /\s*```$/i,
-            ""
-        );
-
-    return text.trim();
-};
-
-const extractCompleteJsonValue =
-    (text) => {
-        const source =
-            String(
-                text || ""
-            ).trim();
-
-        if (!source) {
-            return "";
-        }
-
-        const firstObject =
-            source.indexOf("{");
-
-        const firstArray =
-            source.indexOf("[");
-
-        let start = -1;
-
-        if (
-            firstObject === -1
-        ) {
-            start =
-                firstArray;
-        } else if (
-            firstArray === -1
-        ) {
-            start =
-                firstObject;
-        } else {
-            start =
-                Math.min(
-                    firstObject,
-                    firstArray
-                );
-        }
-
-        if (
-            start < 0
-        ) {
-            return source;
-        }
-
-        const opening =
-            source[start];
-
-        const closing =
-            opening === "{"
-                ? "}"
-                : "]";
-
-        let depth = 0;
-        let inString = false;
-        let escaped = false;
-
-        for (
-            let index = start;
-            index < source.length;
-            index++
-        ) {
-            const character =
-                source[index];
-
-            if (inString) {
-                if (escaped) {
-                    escaped = false;
-                    continue;
-                }
-
-                if (
-                    character === "\\"
-                ) {
-                    escaped = true;
-                    continue;
-                }
-
-                if (
-                    character === '"'
-                ) {
-                    inString = false;
-                }
-
-                continue;
-            }
-
-            if (
-                character === '"'
-            ) {
-                inString = true;
-                continue;
-            }
-
-            if (
-                character === opening
-            ) {
-                depth++;
-            } else if (
-                character === closing
-            ) {
-                depth--;
-
-                if (
-                    depth === 0
-                ) {
-                    return source.slice(
-                        start,
-                        index + 1
-                    );
-                }
-            }
-        }
-
-        return source.slice(
-            start
-        );
-    };
-
-const repairCommonAIJsonErrors =
-    (value) => {
-        let text =
-            String(value || "");
-
-        text =
-            text.replace(
-                /,\s*([}\]])/g,
-                "$1"
-            );
-
-        text =
-            text.replace(
-                /:\s*undefined\b/g,
-                ": null"
-            );
-
-        text =
-            text.replace(
-                /:\s*NaN\b/g,
-                ": null"
-            );
-
-        text =
-            text.replace(
-                /([{[]\s*)'([A-Za-z_$][\w$]*)'\s*:/g,
-                '$1"$2":'
-            );
-
-        return text;
-    };
-
-const parseAIResult = (
-    aiRawResponse
-) => {
-    let rawText;
-
-    if (
-        typeof aiRawResponse ===
-        "string"
-    ) {
-        rawText =
-            aiRawResponse;
-    } else if (
-        aiRawResponse?.text
-    ) {
-        rawText =
-            aiRawResponse.text;
-    } else if (
-        aiRawResponse?.response
-    ) {
-        rawText =
-            typeof aiRawResponse.response ===
-            "string"
-                ? aiRawResponse.response
-                : JSON.stringify(
-                    aiRawResponse.response
-                );
-    } else {
-        rawText =
-            JSON.stringify(
-                aiRawResponse
-            );
-    }
-
-    rawText =
-        stripMarkdownJson(
-            rawText
-        );
-
-    let jsonText =
-        extractCompleteJsonValue(
-            rawText
-        );
-
-    jsonText =
-        repairCommonAIJsonErrors(
-            jsonText
-        );
-
-    try {
-        return JSON.parse(
-            jsonText
-        );
-    } catch (
-        firstError
-    ) {
-        try {
-            const cleaned =
-                jsonText.replace(
-                    /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,
-                    ""
-                );
-
-            return JSON.parse(
-                cleaned
-            );
-        } catch (
-            secondError
-        ) {
-            const error =
-                new Error(
-                    "Gemini returned an invalid JSON examination analysis."
-                );
-
-            error.code =
-                "INVALID_AI_JSON";
-
-            error.details = {
-                firstError:
-                    firstError.message,
-
-                secondError:
-                    secondError.message,
-
-                responsePreview:
-                    rawText.slice(
-                        0,
-                        2000
-                    ),
-            };
-
-            throw error;
-        }
-    }
-};
-
-// ============================================================
 // DISPLAY HELPERS
 // ============================================================
 
@@ -975,6 +677,18 @@ LEVEL-AWARE RULES:
 - If level, curriculum, grading criteria or a paper detail is unknown, state that limitation in recommendations rather than inventing requirements.
 - AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
 
+ADAPTIVE PAPER-FIRST ANALYSIS (CRITICAL):
+- Do not assume that this paper is an Ordinary Level / CSEE examination. The level value may be a class label, a school-specific label, or incomplete metadata; use the actual PDF content as primary evidence and use the supplied level as context.
+- First infer the paper's own structure from the complete PDF: title/header, class or form, subject, duration, instructions, sections, question numbering, subparts, marks, diagrams/tables, and question formats. Support any structure that actually appears instead of forcing a familiar template.
+- This analyzer must work across early-childhood, nursery, primary, Ordinary Level, Advanced Level, vocational, college, internal school exams, mock exams, terminal exams, mid-term exams, and other paper types. This list is illustrative, not restrictive.
+- Never require the paper to contain sections A/B/C, a fixed number of questions, a particular mark total, multiple-choice questions, essay questions, or any standard national-exam layout. Use the paper's actual layout.
+- Do not interpret missing metadata as proof that a paper is Ordinary Level. Do not import CSEE/NECTA, Best 7, division, GPA, grade bands, topic lists, or syllabus assumptions unless the paper metadata or configured criteria explicitly support them.
+- If the PDF's visible structure conflicts with extracted structural evidence or expected-question heuristics, trust the full paper text and explain uncertainty; structuralQuestions, section totals, and expected question counts are hints only, not hard constraints.
+- Identify main questions and their subparts according to the paper's own numbering convention. Handle Roman numerals, letters, nested numbering, continuous numbering, repeated numbering by section, and question prompts without a simple numeric prefix. Do not split a main question into multiple questions just because it has subparts.
+- For each field in the required JSON, use evidence from this paper. If a field does not apply to this paper, use an empty array/object, null, or a neutral explanatory value consistent with the schema rather than fabricating data. Never fail analysis merely because the paper does not match a familiar template.
+- Keep section names, question labels, marks, question types, and selection instructions as printed. Do not silently renumber or normalize them to an Ordinary Level pattern.
+- Assess suitability and quality relative to the stated/inferred level, subject, exam purpose, and available curriculum. If the level or curriculum cannot be determined reliably, describe the uncertainty and avoid unsupported curriculum-coverage percentages or claims.
+
 IMPORTANT:
 Analyze the WHOLE examination paper.
 
@@ -1011,6 +725,14 @@ Do not treat the printed 30 marks as the effective student-answer total.
 RETURN STRICT JSON ONLY.
 
 Do not wrap the JSON in markdown.
+
+JSON VALIDITY RULES (CRITICAL):
+- Return one complete, syntactically valid JSON object and nothing else.
+- Escape every double quote that appears inside a JSON string value as \\".
+- Escape backslashes and control characters correctly inside JSON strings.
+- Do not place literal, unescaped line breaks inside a JSON string value.
+- Preserve quoted phrases from the examination paper as text, but encode them using valid JSON escaping.
+- Before returning, verify that the entire response can be parsed as JSON. Never return comments, trailing commas, or explanatory prose outside the JSON object.
 
 Expected JSON structure:
 
@@ -1607,7 +1329,7 @@ const calculateEffectiveSectionMarks =
                 !question.selection_required
             ) {
                 const key =
-                    `QUESTION-${question.question_number}`;
+                    `SECTION-${String(question.section || "UNSECTIONED").trim().toUpperCase()}-QUESTION-${question.question_number}`;
 
                 groups.set(
                     key,
@@ -3010,6 +2732,9 @@ export const analyzePaper =
             // REMOVE DUPLICATES
             // ------------------------------------------------
 
+            // Deduplicate only genuinely repeated entries. Question numbering
+            // can restart inside each section (e.g. Section B, Question 1),
+            // so question number alone is not a safe identity key.
             const questionMap =
                 new Map();
 
@@ -3031,13 +2756,27 @@ export const analyzePaper =
                     continue;
                 }
 
+                const normalizedQuestionText =
+                    String(
+                        question.question_text ||
+                        question.text ||
+                        ""
+                    )
+                        .toLowerCase()
+                        .replace(/\s+/g, " ")
+                        .replace(/[^\p{L}\p{N}]+/gu, " ")
+                        .trim();
+
+                const identityKey =
+                    `${number}:${normalizedQuestionText}`;
+
                 if (
                     !questionMap.has(
-                        number
+                        identityKey
                     )
                 ) {
                     questionMap.set(
-                        number,
+                        identityKey,
                         question
                     );
                 }
@@ -3062,8 +2801,13 @@ export const analyzePaper =
                 questions.length !==
                     expectedQuestionCount
             ) {
-                throw new Error(
-                    `AI identified ${questions.length} main questions, but the examination instructions indicate ${expectedQuestionCount} questions.`
+                console.warn(
+                    "QUESTION COUNT DIFFERENCE (NON-BLOCKING):",
+                    {
+                        detectedByPdfHeuristic: expectedQuestionCount,
+                        identifiedByAI: questions.length,
+                        note: "PDF count extraction is a hint; papers may use section-based, repeated, nested, or non-standard numbering."
+                    }
                 );
             }
 
@@ -3071,15 +2815,10 @@ export const analyzePaper =
             // QUESTION NUMBER VALIDATION
             // ------------------------------------------------
 
-            if (
-                expectedQuestionCount >
-                    0
-            ) {
+            {
                 const actualNumbers =
                     questions.map(
-                        (
-                            question
-                        ) =>
+                        (question) =>
                             Number(
                                 question.question_number
                             )
@@ -3087,19 +2826,15 @@ export const analyzePaper =
 
                 const hasSequentialNumbering =
                     actualNumbers.every(
-                        (
-                            number,
-                            index
-                        ) =>
-                            number ===
-                            index + 1
+                        (number, index) =>
+                            number === index + 1
                     );
 
-                if (
-                    !hasSequentialNumbering
-                ) {
-                    throw new Error(
-                        `AI did not correctly reconstruct the examination question numbering. Detected: ${actualNumbers.join(", ")}.`
+                if (!hasSequentialNumbering) {
+                    console.warn(
+                        "NON-SEQUENTIAL QUESTION LABELS (NON-BLOCKING):",
+                        actualNumbers,
+                        "The printed paper may restart numbering by section or use non-standard numbering."
                     );
                 }
             }
@@ -3116,10 +2851,10 @@ export const analyzePaper =
             if (
                 !selectiveValidation.valid
             ) {
-                throw new Error(
-                    `Invalid selective-question structure: ${selectiveValidation.problems.join(
-                        " | "
-                    )}`
+                console.warn(
+                    "SELECTIVE QUESTION STRUCTURE WARNING (NON-BLOCKING):",
+                    selectiveValidation.problems.join(" | "),
+                    "The AI analysis will continue; confirm selection instructions against the original paper."
                 );
             }
 
@@ -3141,36 +2876,18 @@ export const analyzePaper =
                 questionsWithoutMarks.length >
                 0
             ) {
-                console.error(
-                    "QUESTIONS WITHOUT AI-DETERMINED MARKS:",
+                console.warn(
+                    "QUESTIONS WITHOUT RELIABLE MARK VALUES:",
                     questionsWithoutMarks.map(
-                        (
-                            question
-                        ) => ({
-                            question:
-                                question.question_number,
-
-                            marks:
-                                question.max_marks,
-
-                            source:
-                                question.mark_source,
-
-                            evidence:
-                                question.mark_evidence,
+                        (question) => ({
+                            question: question.question_number,
+                            section: question.section,
+                            marks: question.max_marks,
+                            source: question.mark_source,
+                            evidence: question.mark_evidence,
                         })
-                    )
-                );
-
-                throw new Error(
-                    `AI could not reliably determine marks for: ${questionsWithoutMarks
-                        .map(
-                            (q) =>
-                                `Q${q.question_number}`
-                        )
-                        .join(
-                            ", "
-                        )}.`
+                    ),
+                    "Continue structural/content analysis without inventing marks."
                 );
             }
 
@@ -3222,14 +2939,27 @@ export const analyzePaper =
                     0
                 );
 
+            const reportedTotalMarks =
+                numberOrNull(
+                    aiResult.total_marks
+                );
+
             const totalMarks =
-                effectiveCalculatedMarks;
+                effectiveCalculatedMarks > 0
+                    ? effectiveCalculatedMarks
+                    : (
+                        reportedTotalMarks !== null &&
+                        reportedTotalMarks > 0
+                            ? reportedTotalMarks
+                            : 0
+                    );
 
             if (
                 totalMarks <= 0
             ) {
-                throw new Error(
-                    "The examination paper does not provide enough evidence to determine a valid effective total mark."
+                console.warn(
+                    "TOTAL MARKS NOT ESTABLISHED:",
+                    "Analysis will be saved with total_marks = 0. Do not use this paper's AI mark totals for grading until marks are confirmed."
                 );
             }
 
@@ -3274,6 +3004,31 @@ export const analyzePaper =
                 )
                     ? aiResult.recommendations
                     : [];
+
+            if (
+                questionsWithoutMarks.length > 0
+            ) {
+                recommendations.push(
+                    "Some questions do not have reliable mark values in the paper or AI response. Confirm the original marking scheme before using totals for grading."
+                );
+            }
+
+            if (
+                totalMarks <= 0
+            ) {
+                recommendations.push(
+                    "The examination's total marks could not be reliably established. Content and structure analysis is available, but confirm the marking scheme before using any mark-based calculations."
+                );
+            }
+
+            if (
+                !selectiveValidation.valid
+            ) {
+                recommendations.push(
+                    "The paper may contain selection instructions that need teacher verification: " +
+                    selectiveValidation.problems.join(" | ")
+                );
+            }
 
             const bloomsDistribution =
                 aiResult.blooms_distribution &&
