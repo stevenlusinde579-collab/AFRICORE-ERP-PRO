@@ -3,6 +3,7 @@ import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
+import { extractDeclaredTotalMarks } from "../services/examMarkValidation.js";
 
 // ============================================================
 // AI ANALYSIS LOCKS
@@ -2854,7 +2855,13 @@ export const analyzePaper =
                     aiResult.total_marks
                 );
 
-            const totalMarks =
+            // Prefer an explicitly printed paper total when the PDF provides
+            // one. The AI's question-by-question mark sum can be incomplete;
+            // never silently replace a printed total with that lower sum.
+            const declaredTotalMarks =
+                extractDeclaredTotalMarks(pdfText);
+
+            const calculatedQuestionTotal =
                 effectiveCalculatedMarks > 0
                     ? effectiveCalculatedMarks
                     : (
@@ -2863,6 +2870,30 @@ export const analyzePaper =
                             ? reportedTotalMarks
                             : 0
                     );
+
+            const totalMarks =
+                declaredTotalMarks !== null
+                    ? declaredTotalMarks
+                    : calculatedQuestionTotal;
+
+            const totalMarksMismatch =
+                declaredTotalMarks !== null &&
+                effectiveCalculatedMarks > 0 &&
+                Math.abs(
+                    declaredTotalMarks -
+                    effectiveCalculatedMarks
+                ) > 0.01;
+
+            if (totalMarksMismatch) {
+                console.warn(
+                    "DECLARED TOTAL MARKS DIFFER FROM AI QUESTION MARKS:",
+                    {
+                        declaredTotalMarks,
+                        calculatedQuestionMarks: effectiveCalculatedMarks,
+                        difference: declaredTotalMarks - effectiveCalculatedMarks,
+                    }
+                );
+            }
 
             if (
                 totalMarks <= 0
@@ -2928,6 +2959,12 @@ export const analyzePaper =
             ) {
                 recommendations.push(
                     "The examination's total marks could not be reliably established. Content and structure analysis is available, but confirm the marking scheme before using any mark-based calculations."
+                );
+            }
+
+            if (totalMarksMismatch) {
+                recommendations.push(
+                    `The paper explicitly states a total of ${declaredTotalMarks} marks, but the AI-identified question marks add up to ${effectiveCalculatedMarks}. The displayed examination total follows the printed paper total; review the question marks because one or more marks may have been missed or misread.`
                 );
             }
 
