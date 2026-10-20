@@ -770,7 +770,11 @@ function ExamUpload() {
             );
 
 
-            if (!aiResponse.data?.success) {
+            if (
+                !aiResponse.data?.success ||
+                aiResponse.data?.analysis_completed === false ||
+                String(aiResponse.data?.ai_status || "").toLowerCase() === "failed"
+            ) {
 
                 throw new Error(
                     aiResponse.data?.message ||
