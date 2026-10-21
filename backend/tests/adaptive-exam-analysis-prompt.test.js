@@ -79,7 +79,7 @@ test("supports the three uploaded real-paper layouts without imposing one templa
                 "SECTION B (54 Marks)",
                 "SECTION C (30 Marks)",
             ].join("\n"),
-            expected: [/eleven \\(11\\) questions/, /two \\(2\\) questions from section C/, /SECTION C \\(30 Marks\\)/],
+            expected: [/eleven \(11\) questions/, /two \(2\) questions from section C/, /SECTION C \(30 Marks\)/],
         },
         {
             name: "Basic Mathematics Form Three 2026",
@@ -93,7 +93,7 @@ test("supports the three uploaded real-paper layouts without imposing one templa
                 "Draw a Histogram to represent the information (3 marks)",
                 "SECTION B: (40 MARKS)",
             ].join("\n"),
-            expected: [/fourteen \\(14\\) questions/, /1\\.5 marks/, /Draw a Histogram/, /SECTION B: \\(40 MARKS\\)/],
+            expected: [/fourteen \(14\) questions/, /1\.5 marks/, /Draw a Histogram/, /SECTION B: \(40 MARKS\)/],
         },
     ];
 
