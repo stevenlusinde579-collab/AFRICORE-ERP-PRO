@@ -649,12 +649,15 @@ export const buildExamAnalysisPrompt =
                 )
                 .join("\n");
 
+        // Detect early-years and primary papers from metadata AND the PDF.
+        // Baby Class/Nursery and Swahili school labels were not covered by the
+        // previous detector, causing those papers to receive only generic rules.
         const primaryLevelContext =
-            `${level || ""} ${subjectName || ""} ${examName || ""} ${String(pdfText || "").slice(0, 3500)}`;
+            `${level || ""} ${subjectName || ""} ${examName || ""} ${String(pdfText || "").slice(0, 12000)}`;
 
         const isPrimaryPaper =
-            /\bprimary\b|\bstandard\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bstd\.?\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bclass\s*(?:one|two|three|four|five|six|seven|[1-7])\b/i.test(
-            primaryLevelContext
+            /\bprimary\b|\bprimary\s+school\b|\bshule\s+ya\s+msingi\b|\bdarasa\s+la\s*(?:kwanza|pili|tatu|nne|tano|sita|saba|[1-7])\b|\bstandard\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bstd\.?\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bclass\s*(?:one|two|three|four|five|six|seven|[1-7])\b|\bbaby\s*class\b|\bnursery\b|\bpre[- ]?primary\b|\bkindergarten\b|\bchekechea\b|\bawali\b/i.test(
+                primaryLevelContext
             );
 
         const primaryAnalysisRules = isPrimaryPaper
@@ -670,6 +673,10 @@ PRIMARY-SCHOOL PAPER RULES (apply because the supplied metadata or PDF identifie
 - Cross-check marks at all levels: sub-items to main question, questions to section, and sections to whole-paper total. Distinguish a printed total from a calculated total, and account for selective questions (e.g. answer any 2 of 4) so the student's effective marks are not confused with the marks available in the paper.
 - A printed section total is not proof that visible question-level marks add up correctly. Count all answer slots and disclose unresolved discrepancies for teacher review.
 - Evaluate age-appropriate language, foundational skills, clarity of instructions, and whether the tasks match the stated primary class; do not penalize a primary paper for not using secondary-school question styles.
+- USE A PRIMARY/EARLY-YEARS ANALYSIS MODE: this is a different analysis strategy from Ordinary Level. Treat Baby Class, Nursery, Kindergarten, Pre-primary and Primary/Standard papers according to young learners' actual tasks and visual layout, not CSEE conventions.
+- Keep JSON compact to reduce truncation: preserve every required top-level key and every main question, but keep summary, recommendations, topic explanations and mark_evidence concise (normally one short sentence each). Do not repeat the full question text in multiple fields. Do not emit long essays explaining routine items.
+- Count visible response slots and sub-items from the PDF, including picture identification, tracing, colouring, matching, oral/listening tasks, simple numeracy, letter/word recognition and fill-in blanks. Do not treat answer options, page numbers or subpart labels as separate main questions.
+- For early-years papers, prioritize a faithful inventory of tasks and age appropriateness. If marks are absent, preserve uncertainty and teacher review rather than inventing a secondary-school mark scheme.
 `
             : "";
 
