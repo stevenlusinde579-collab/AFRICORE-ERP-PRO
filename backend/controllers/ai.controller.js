@@ -733,6 +733,14 @@ Use the printed examination paper as the primary evidence.
 
 Determine marks from the actual paper whenever possible.
 
+MARK ALLOCATION MUST BE STRUCTURE-DRIVEN, NOT TEMPLATE-DRIVEN (all education levels):
+- Use the strongest available evidence first: explicit marks beside a question/item, then explicit "each carries" instructions, then section totals plus the actual item/response structure, and finally the whole-paper total as a cross-check.
+- If item marks are missing but a section total exists, inspect the actual tasks and count answerable units: blanks, MCQ choices, matching pairs, dictation words/lines, short responses, calculations, essays, diagrams, practical steps and nested subparts. Use task type, expected work and repeated patterns in this paper to infer a defensible allocation. Do not assume every question or sub-item has equal marks, and do not import a mark pattern from a different exam level or subject.
+- A defensible inferred allocation should reconcile to the printed section total while leaving explicit item marks unchanged. Record mark_source as "inferred_from_section_structure" and explain the evidence and allocation in mark_evidence. Use fractional marks only if compatible with the paper's marking convention.
+- If neither item marks nor section totals provide enough evidence, do not fabricate precision. Mark the value as uncertain (use 0 if the schema requires a numeric value) and recommend teacher confirmation.
+- Cross-check sub-items against their parent question, question totals against section totals, and section totals against the paper total. Keep printed totals distinct from calculated totals, and account for selective-answer instructions so available marks are not confused with the effective marks a student can earn.
+- Keep the paper's own numbering, repeated labels, section names, item types and mark conventions. These instructions apply to unfamiliar layouts too; they are not a fixed template.
+
 If a mark value is not explicitly visible, infer it only when the structure of the paper provides strong evidence.
 
 Never invent arbitrary marks.
