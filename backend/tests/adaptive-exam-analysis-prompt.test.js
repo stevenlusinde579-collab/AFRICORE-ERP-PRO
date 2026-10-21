@@ -114,6 +114,22 @@ test("applies primary-specific counting and mark reconciliation rules to the upl
     assert.match(prompt, /do not fabricate precision/i);
 });
 
+test("detects Baby Class, Nursery and Swahili primary labels and adds dedicated early-years analysis rules", () => {
+    const samples = [
+        { level: "Baby Class", text: "BABY CLASS\nCOLOUR THE PICTURE\nTRACE THE LETTER A", subject: "Environmental Activities" },
+        { level: "Nursery", text: "CHEKECHEA\nUNGANISHA PICHA NA MANENO", subject: "Language" },
+        { level: "Darasa la Nne", text: "SHULE YA MSINGI\nMTIHANI WA KISWAHILI\nJibu maswali yote.", subject: "Kiswahili" },
+        { level: "Unknown", text: "STANDARD IV ENGLISH\nMATCH THE PICTURES\nFILL IN THE BLANKS", subject: "English" },
+    ];
+
+    for (const sample of samples) {
+        const prompt = buildPrompt(sample);
+        assert.match(prompt, /PRIMARY-SCHOOL PAPER RULES/i, sample.level);
+        assert.match(prompt, /USE A PRIMARY\/EARLY-YEARS ANALYSIS MODE/i, sample.level);
+        assert.match(prompt, /Keep JSON compact to reduce truncation/i, sample.level);
+    }
+});
+
 test("does not apply primary-only rules to a Form Four paper", () => {
     const prompt = buildPrompt({
         text: "FORM FOUR COMMERCE\\nSECTION A (16 MARKS)\\nAnswer all questions.",
