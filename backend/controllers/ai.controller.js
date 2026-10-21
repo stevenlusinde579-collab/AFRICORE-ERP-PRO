@@ -3,7 +3,7 @@ import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
-import { extractDeclaredTotalMarks } from "../services/examMarkValidation.js";
+import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
 // ============================================================
 // AI ANALYSIS LOCKS
@@ -2869,22 +2869,17 @@ export const analyzePaper =
             // a question/mark was missed during extraction, so it is a cross-check,
             // not an automatic replacement for the paper-level total.
             const totalMarks =
-                declaredTotalMarks !== null
-                    ? declaredTotalMarks
-                    : (
-                        reportedTotalMarks !== null &&
-                        reportedTotalMarks > 0
-                            ? reportedTotalMarks
-                            : effectiveCalculatedMarks
-                    );
+                resolveExamTotalMarks({
+                    declaredTotalMarks,
+                    reportedTotalMarks,
+                    calculatedQuestionMarks: effectiveCalculatedMarks,
+                });
 
             const totalMarksMismatch =
-                totalMarks > 0 &&
-                effectiveCalculatedMarks > 0 &&
-                Math.abs(
-                    totalMarks -
+                hasMarkTotalMismatch(
+                    totalMarks,
                     effectiveCalculatedMarks
-                ) > 0.01;
+                );
 
             if (totalMarksMismatch) {
                 console.warn(
