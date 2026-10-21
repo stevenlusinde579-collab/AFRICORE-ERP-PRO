@@ -80,3 +80,42 @@ test("keeps missing or unreadable paper details as uncertainty rather than inven
     assert.match(prompt, /Never invent arbitrary marks/i);
     assert.match(prompt, /If the level or curriculum cannot be determined reliably/i);
 });
+
+
+test("applies primary-specific counting and mark reconciliation rules to the uploaded Standard IV English paper", () => {
+    const prompt = buildPrompt({
+        text: [
+            "IRINGA MUNICIPAL COUNCIL",
+            "MOCK EXAMINATION STD IV",
+            "SUBJECT: ENGLISH LANGUAGE",
+            "SECTION A: 30 MARKS",
+            "1. Listen carefully and write five sentences (i-v).",
+            "2. Choose the most correct answer (i-x).",
+            "3. Match List A with List B (i-v).",
+            "SECTION B: (10 MARKS)",
+            "4. Write the correct word from jumbled letters (i-iii).",
+            "4. Complete Mary's daily routine (i-iv).",
+            "SECTION C: (10 marks)",
+            "6. Read the passage and answer five questions (i-v).",
+        ].join("\\n"),
+        level: "Standard IV",
+        subject: "English Language",
+    });
+
+    assert.match(prompt, /PRIMARY-SCHOOL PAPER RULES/i);
+    assert.match(prompt, /every answer slot\/sub-item/i);
+    assert.match(prompt, /repeats a number/i);
+    assert.match(prompt, /do not merge them or silently renumber them/i);
+    assert.match(prompt, /cross-check the marks assigned to all questions in each section/i);
+    assert.match(prompt, /do not invent marks merely to force a match/i);
+});
+
+test("does not apply primary-only rules to a Form Four paper", () => {
+    const prompt = buildPrompt({
+        text: "FORM FOUR COMMERCE\\nSECTION A (16 MARKS)\\nAnswer all questions.",
+        level: "Form Four",
+        subject: "Commerce",
+    });
+
+    assert.doesNotMatch(prompt, /PRIMARY-SCHOOL PAPER RULES/i);
+});
