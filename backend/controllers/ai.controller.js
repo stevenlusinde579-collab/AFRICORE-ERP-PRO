@@ -2864,36 +2864,37 @@ export const analyzePaper =
             const declaredTotalMarks =
                 extractDeclaredTotalMarks(pdfText);
 
-            const calculatedQuestionTotal =
-                effectiveCalculatedMarks > 0
-                    ? effectiveCalculatedMarks
+            // Resolve the paper total from the strongest available whole-paper
+            // evidence first. The sum of detected question rows can be lower if
+            // a question/mark was missed during extraction, so it is a cross-check,
+            // not an automatic replacement for the paper-level total.
+            const totalMarks =
+                declaredTotalMarks !== null
+                    ? declaredTotalMarks
                     : (
                         reportedTotalMarks !== null &&
                         reportedTotalMarks > 0
                             ? reportedTotalMarks
-                            : 0
+                            : effectiveCalculatedMarks
                     );
 
-            const totalMarks =
-                declaredTotalMarks !== null
-                    ? declaredTotalMarks
-                    : calculatedQuestionTotal;
-
             const totalMarksMismatch =
-                declaredTotalMarks !== null &&
+                totalMarks > 0 &&
                 effectiveCalculatedMarks > 0 &&
                 Math.abs(
-                    declaredTotalMarks -
+                    totalMarks -
                     effectiveCalculatedMarks
                 ) > 0.01;
 
             if (totalMarksMismatch) {
                 console.warn(
-                    "DECLARED TOTAL MARKS DIFFER FROM AI QUESTION MARKS:",
+                    "PAPER TOTAL DIFFERS FROM SUM OF AI-IDENTIFIED QUESTION MARKS:",
                     {
+                        paperTotal: totalMarks,
                         declaredTotalMarks,
+                        reportedTotalMarks,
                         calculatedQuestionMarks: effectiveCalculatedMarks,
-                        difference: declaredTotalMarks - effectiveCalculatedMarks,
+                        difference: totalMarks - effectiveCalculatedMarks,
                     }
                 );
             }
@@ -2966,8 +2967,13 @@ export const analyzePaper =
             }
 
             if (totalMarksMismatch) {
+                const totalEvidence =
+                    declaredTotalMarks !== null
+                        ? "The PDF text contains an explicit paper-total declaration"
+                        : "The AI identified a paper-level total";
+
                 recommendations.push(
-                    `The paper explicitly states a total of ${declaredTotalMarks} marks, but the AI-identified question marks add up to ${effectiveCalculatedMarks}. The displayed examination total follows the printed paper total; review the question marks because one or more marks may have been missed or misread.`
+                    `${totalEvidence} of ${totalMarks} marks, but the marks assigned to the identified questions add up to ${effectiveCalculatedMarks}. Review every page and question: one or more questions or mark values may have been missed, misread, or counted incorrectly. Do not treat this discrepancy as resolved until checked against the original paper.`
                 );
             }
 
