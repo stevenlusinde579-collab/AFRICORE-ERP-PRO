@@ -630,7 +630,7 @@ const extractQuestionBlocks = (
 // GEMINI PROMPT
 // ============================================================
 
-const buildExamAnalysisPrompt =
+export const buildExamAnalysisPrompt =
     ({
         pdfText,
         structuralQuestions,
@@ -679,19 +679,33 @@ LEVEL-AWARE RULES:
 - AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
 
 ADAPTIVE PAPER-FIRST ANALYSIS (CRITICAL):
+- Treat the uploaded PDF itself as the source of truth. Inspect every page of the PDF visually as well as using extracted text; text extraction and the structural question list can be incomplete, especially for scanned pages, columns, tables, mathematical notation, diagrams, handwriting, multi-column layouts, or marks printed near page margins.
+- Before analyzing content, internally map the actual paper: identify its title and metadata, instructions, all sections or groups (if any), every main question and subpart, the printed marks, optional/compulsory questions, diagrams/tables, and the order in which they appear. Then analyze that mapped structure. Do not expose this internal planning; return the required JSON only.
 - Do not assume that this paper is an Ordinary Level / CSEE examination. The level value may be a class label, a school-specific label, or incomplete metadata; use the actual PDF content as primary evidence and use the supplied level as context.
 - First infer the paper's own structure from the complete PDF: title/header, class or form, subject, duration, instructions, sections, question numbering, subparts, marks, diagrams/tables, and question formats. Support any structure that actually appears instead of forcing a familiar template.
 - This analyzer must work across early-childhood, nursery, primary, Ordinary Level, Advanced Level, vocational, college, internal school exams, mock exams, terminal exams, mid-term exams, and other paper types. This list is illustrative, not restrictive.
 - Never require the paper to contain sections A/B/C, a fixed number of questions, a particular mark total, multiple-choice questions, essay questions, or any standard national-exam layout. Use the paper's actual layout.
 - Do not interpret missing metadata as proof that a paper is Ordinary Level. Do not import CSEE/NECTA, Best 7, division, GPA, grade bands, topic lists, or syllabus assumptions unless the paper metadata or configured criteria explicitly support them.
-- If the PDF's visible structure conflicts with extracted structural evidence or expected-question heuristics, trust the full paper text and explain uncertainty; structuralQuestions, section totals, and expected question counts are hints only, not hard constraints.
+- If the PDF's visible structure conflicts with extracted structural evidence or expected-question heuristics, trust the PDF page content and explain uncertainty; structuralQuestions, section totals, and expected question counts are hints only, not hard constraints.
+- Treat extracted text as supporting evidence, never as a requirement that every question must match a numeric pattern. Read question labels such as "1.", "1(a)", "(i)", "Qn 2", Roman numerals, matching items, case studies, practical tasks, and prompts arranged in tables or columns according to the paper's own structure.
+- If the paper uses an unfamiliar or mixed format, adapt the analysis to it. Do not reject, omit, merge, split, renumber, or fabricate questions just because their layout differs from a known examination template.
+- Record the question's original printed label at the start of question_text when the database's numeric question_number field cannot represent it. Use question_number as a stable numeric display/order value only; never use it to rewrite the printed label.
+- For paper-level totals, prefer an explicit total printed on the paper when clearly visible. If printed totals, section totals, question marks, and optional-question rules disagree, preserve the evidence and explain the discrepancy in recommendations; do not silently invent a reconciliation.
 - Identify main questions and their subparts according to the paper's own numbering convention. Handle Roman numerals, letters, nested numbering, continuous numbering, repeated numbering by section, and question prompts without a simple numeric prefix. Do not split a main question into multiple questions just because it has subparts.
 - For each field in the required JSON, use evidence from this paper. If a field does not apply to this paper, use an empty array/object, null, or a neutral explanatory value consistent with the schema rather than fabricating data. Never fail analysis merely because the paper does not match a familiar template.
 - Keep section names, question labels, marks, question types, and selection instructions as printed. Do not silently renumber or normalize them to an Ordinary Level pattern.
 - Assess suitability and quality relative to the stated/inferred level, subject, exam purpose, and available curriculum. If the level or curriculum cannot be determined reliably, describe the uncertainty and avoid unsupported curriculum-coverage percentages or claims.
 
+ANALYSIS WORKFLOW (REQUIRED):
+1. Read all PDF pages, not just the first page or the extracted text.
+2. Determine the paper's actual structure and instructions from the PDF. Sections may be absent, named differently, repeated, or organized as tables/cases/practical tasks.
+3. Identify each main question and its subparts in the order printed. Keep subparts attached to their parent question unless the paper clearly treats them as independent questions.
+4. Extract marks and optional-answer rules from the visible paper. Distinguish marks available on the paper from marks a student is required to attempt.
+5. Analyze the subject content, difficulty, expected answers, topic coverage, and quality relative to the actual level and purpose.
+6. Cross-check the number of questions and total marks against the PDF. If any detail is unreadable or contradictory, report uncertainty in recommendations rather than guessing.
+
 IMPORTANT:
-Analyze the WHOLE examination paper.
+Analyze the WHOLE examination paper, including pages or sections whose layout differs from familiar templates.
 
 Do not invent questions, marks, answers, sections, topics, or selection rules.
 
