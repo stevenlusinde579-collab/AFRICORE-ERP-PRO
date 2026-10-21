@@ -46,3 +46,74 @@ test("keeps unknown paper details as uncertainty rather than encouraging guesses
     assert.match(prompt, /explain the discrepancy in recommendations; do not silently invent a reconciliation/i);
     assert.match(prompt, /Never invent arbitrary marks/i);
 });
+
+
+test("supports the three uploaded real-paper layouts without imposing one template", () => {
+    const paperSamples = [
+        {
+            name: "English Standard IV",
+            level: "Standard IV",
+            text: [
+                "IRINGA MUNICIPAL COUNCIL",
+                "MOCK EXAMINATION STD IV",
+                "SUBJECT: ENGLISH LANGUAGE",
+                "SECTION A: 30 MARKS",
+                "1. Listen carefully to the sentences read by your invigilator",
+                "2. Choose the most correct answer from the given alternatives",
+                "3. Match the words from List A with the words with similar sounds in List B",
+                "SECTION B: 10 MARKS",
+                "SECTION C: 10 marks",
+                "6. Read the following passage carefully and then answer the questions that follow",
+            ].join("\\n"),
+            expected: [/SECTION A: 30 MARKS/, /Match the words/, /Read the following passage/],
+        },
+        {
+            name: "Commerce Form Four 2025",
+            level: "Form Four",
+            text: [
+                "COMMERCE 061",
+                "Year: 2025",
+                "This paper consists of a total of eleven (11) questions",
+                "Answer all questions in sections A and B and two (2) questions from section C",
+                "SECTION A (16 Marks)",
+                "SECTION B (54 Marks)",
+                "SECTION C (30 Marks)",
+            ].join("\\n"),
+            expected: [/eleven \\(11\\) questions/, /two \\(2\\) questions from section C/, /SECTION C \\(30 Marks\\)/],
+        },
+        {
+            name: "Basic Mathematics Form Three 2026",
+            level: "Form Three",
+            text: [
+                "BASIC MATHEMATICS",
+                "This paper consists of section A and B with a total of fourteen (14) questions",
+                "SECTION A: (60 MARKS)",
+                "Round off 0.63102 to 4 decimal places (1 mark)",
+                "If a water tank fills up with 200 litres in five minutes, find the rate of flow (1.5 marks)",
+                "Draw a Histogram to represent the information (3 marks)",
+                "SECTION B: (40 MARKS)",
+            ].join("\\n"),
+            expected: [/fourteen \\(14\\) questions/, /1\\.5 marks/, /Draw a Histogram/, /SECTION B: \\(40 MARKS\\)/],
+        },
+    ];
+
+    for (const sample of paperSamples) {
+        const prompt = buildExamAnalysisPrompt({
+            pdfText: sample.text,
+            structuralQuestions: [],
+            subjectName: sample.name,
+            level: sample.level,
+            examName: sample.name,
+            examType: "Uploaded examination paper",
+            curriculum: "",
+            gradingCriteria: "",
+        });
+
+        assert.match(prompt, /Treat the uploaded PDF itself as the source of truth/i, sample.name);
+        assert.match(prompt, /Never require the paper to contain sections A\\/B\\/C/i, sample.name);
+        assert.match(prompt, /optional-answer rules/i, sample.name);
+        for (const pattern of sample.expected) {
+            assert.match(prompt, pattern, sample.name);
+        }
+    }
+});
