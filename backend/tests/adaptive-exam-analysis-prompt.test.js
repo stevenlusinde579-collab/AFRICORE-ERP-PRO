@@ -64,7 +64,7 @@ test("supports the three uploaded real-paper layouts without imposing one templa
                 "SECTION B: 10 MARKS",
                 "SECTION C: 10 marks",
                 "6. Read the following passage carefully and then answer the questions that follow",
-            ].join("\\n"),
+            ].join("\n"),
             expected: [/SECTION A: 30 MARKS/, /Match the words/, /Read the following passage/],
         },
         {
@@ -78,7 +78,7 @@ test("supports the three uploaded real-paper layouts without imposing one templa
                 "SECTION A (16 Marks)",
                 "SECTION B (54 Marks)",
                 "SECTION C (30 Marks)",
-            ].join("\\n"),
+            ].join("\n"),
             expected: [/eleven \\(11\\) questions/, /two \\(2\\) questions from section C/, /SECTION C \\(30 Marks\\)/],
         },
         {
@@ -92,7 +92,7 @@ test("supports the three uploaded real-paper layouts without imposing one templa
                 "If a water tank fills up with 200 litres in five minutes, find the rate of flow (1.5 marks)",
                 "Draw a Histogram to represent the information (3 marks)",
                 "SECTION B: (40 MARKS)",
-            ].join("\\n"),
+            ].join("\n"),
             expected: [/fourteen \\(14\\) questions/, /1\\.5 marks/, /Draw a Histogram/, /SECTION B: \\(40 MARKS\\)/],
         },
     ];
