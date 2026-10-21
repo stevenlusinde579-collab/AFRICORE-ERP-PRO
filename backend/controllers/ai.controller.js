@@ -3,6 +3,7 @@ import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
+import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
 // ============================================================
 // AI ANALYSIS LOCKS
@@ -629,7 +630,7 @@ const extractQuestionBlocks = (
 // GEMINI PROMPT
 // ============================================================
 
-const buildExamAnalysisPrompt =
+export const buildExamAnalysisPrompt =
     ({
         pdfText,
         structuralQuestions,
@@ -647,6 +648,38 @@ const buildExamAnalysisPrompt =
                         `Q${question.question_number}: ${question.text}`
                 )
                 .join("\n");
+
+        // Detect early-years and primary papers from metadata AND the PDF.
+        // Baby Class/Nursery and Swahili school labels were not covered by the
+        // previous detector, causing those papers to receive only generic rules.
+        const primaryLevelContext =
+            `${level || ""} ${subjectName || ""} ${examName || ""} ${String(pdfText || "").slice(0, 12000)}`;
+
+        const isPrimaryPaper =
+            /\bprimary\b|\bprimary\s+school\b|\bshule\s+ya\s+msingi\b|\bdarasa\s+la\s*(?:kwanza|pili|tatu|nne|tano|sita|saba|[1-7])\b|\bstandard\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bstd\.?\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bclass\s*(?:one|two|three|four|five|six|seven|[1-7])\b|\bbaby\s*class\b|\bnursery\b|\bpre[- ]?primary\b|\bkindergarten\b|\bchekechea\b|\bawali\b/i.test(
+                primaryLevelContext
+            );
+
+        const primaryAnalysisRules = `
+PRIMARY / EARLY-YEARS ANALYSIS GUIDANCE (always supplied; apply only when the original PDF's visible content indicates Baby Class, Nursery, Pre-primary, Kindergarten or Primary):
+- The extracted-text detector ${isPrimaryPaper ? 'found a likely primary/early-years label' : 'did not find a reliable primary/early-years text label; this does not mean the PDF is secondary-level'}. Inspect the original attached PDF page by page and use its visual content to determine the level, even if extracted text is empty or incomplete.
+- Never classify a paper as Ordinary Level only because its class metadata or extracted PDF text is blank or unrecognized.
+
+- Analyse at the level shown by this paper (for example Standard IV / Class Four). Do not apply secondary-school or CSEE conventions.
+- Read and account for every answer slot/sub-item, including Roman numerals (i, ii, iii), matching-table rows, multiple-choice items, fill-in blanks, dictation lines, and comprehension questions. These are sub-items of the printed main question, not automatically separate main questions.
+- Preserve the paper's printed question labels exactly. If the paper repeats a number (for example two separate questions labelled 4) or skips a number, do not merge them or silently renumber them. Distinguish repeated labels by section, wording, and their order in the paper.
+- Use a hierarchy of evidence for marks: (1) marks printed beside the question/sub-item, (2) explicit instructions such as "each carries 2 marks", (3) an explicit section total plus the count and type of answerable items in that section, (4) the whole-paper total only as a final cross-check. Never override stronger evidence with weaker evidence.
+- If a question has no printed mark but the section has a printed total, infer question marks from the actual answer structure: count response slots, matching pairs, multiple-choice items, dictation words/lines, blanks, calculations, written explanations and subparts; account for their relative effort and cognitive demand. Allocate the section total across those items proportionally to the evidence, not by a fixed template and not automatically equally. Use fractional marks when the paper's conventions support them.
+- If a section total is known and individual item marks are absent, make a transparent best-fit allocation only when the visible item structure supports it. Set mark_source to "inferred_from_section_structure" and explain the count, allocation logic and confidence in mark_evidence. Ensure inferred question marks reconcile to the section total, but do not alter any explicitly printed item marks to force a match.
+- If the section total is absent too, infer marks only from explicit per-item clues or a clearly repeated pattern in the paper. Otherwise leave the mark uncertain (0 if the schema requires a number), label it as uncertain, and recommend teacher confirmation instead of fabricating precision.
+- Cross-check marks at all levels: sub-items to main question, questions to section, and sections to whole-paper total. Distinguish a printed total from a calculated total, and account for selective questions (e.g. answer any 2 of 4) so the student's effective marks are not confused with the marks available in the paper.
+- A printed section total is not proof that visible question-level marks add up correctly. Count all answer slots and disclose unresolved discrepancies for teacher review.
+- Evaluate age-appropriate language, foundational skills, clarity of instructions, and whether the tasks match the stated primary class; do not penalize a primary paper for not using secondary-school question styles.
+- USE A PRIMARY/EARLY-YEARS ANALYSIS MODE: this is a different analysis strategy from Ordinary Level. Treat Baby Class, Nursery, Kindergarten, Pre-primary and Primary/Standard papers according to young learners' actual tasks and visual layout, not CSEE conventions.
+- Keep JSON compact to reduce truncation: preserve every required top-level key and every main question, but keep summary, recommendations, topic explanations and mark_evidence concise (normally one short sentence each). Do not repeat the full question text in multiple fields. Do not emit long essays explaining routine items.
+- Count visible response slots and sub-items from the PDF, including picture identification, tracing, colouring, matching, oral/listening tasks, simple numeracy, letter/word recognition and fill-in blanks. Do not treat answer options, page numbers or subpart labels as separate main questions.
+- For early-years papers, prioritize a faithful inventory of tasks and age appropriateness. If marks are absent, preserve uncertainty and teacher review rather than inventing a secondary-school mark scheme.
+`
 
         return `
 You are analyzing a complete examination paper.
@@ -677,7 +710,12 @@ LEVEL-AWARE RULES:
 - If level, curriculum, grading criteria or a paper detail is unknown, state that limitation in recommendations rather than inventing requirements.
 - AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
 
+${primaryAnalysisRules}
+
 ADAPTIVE PAPER-FIRST ANALYSIS (CRITICAL):
+- Read the uploaded PDF page by page, in order. Use the original PDF pages together with extracted text; do not rely on extracted text alone when it omits diagrams, marks, tables, or question wording.
+- Before finalizing, cross-check each identified main question, its printed subparts, the marks shown, section totals, and the paper-level total against the source. If the evidence conflicts or is unreadable, state the exact uncertainty in recommendations rather than guessing.
+- Keep the existing JSON schema and analysis flow; a paper with a different level or layout is not a reason to reject analysis.
 - Do not assume that this paper is an Ordinary Level / CSEE examination. The level value may be a class label, a school-specific label, or incomplete metadata; use the actual PDF content as primary evidence and use the supplied level as context.
 - First infer the paper's own structure from the complete PDF: title/header, class or form, subject, duration, instructions, sections, question numbering, subparts, marks, diagrams/tables, and question formats. Support any structure that actually appears instead of forcing a familiar template.
 - This analyzer must work across early-childhood, nursery, primary, Ordinary Level, Advanced Level, vocational, college, internal school exams, mock exams, terminal exams, mid-term exams, and other paper types. This list is illustrative, not restrictive.
@@ -702,6 +740,14 @@ Do NOT convert every subpart into a separate main question.
 Use the printed examination paper as the primary evidence.
 
 Determine marks from the actual paper whenever possible.
+
+MARK ALLOCATION MUST BE STRUCTURE-DRIVEN, NOT TEMPLATE-DRIVEN (all education levels):
+- Use the strongest available evidence first: explicit marks beside a question/item, then explicit "each carries" instructions, then section totals plus the actual item/response structure, and finally the whole-paper total as a cross-check.
+- If item marks are missing but a section total exists, inspect the actual tasks and count answerable units: blanks, MCQ choices, matching pairs, dictation words/lines, short responses, calculations, essays, diagrams, practical steps and nested subparts. Use task type, expected work and repeated patterns in this paper to infer a defensible allocation. Do not assume every question or sub-item has equal marks, and do not import a mark pattern from a different exam level or subject.
+- A defensible inferred allocation should reconcile to the printed section total while leaving explicit item marks unchanged. Record mark_source as "inferred_from_section_structure" and explain the evidence and allocation in mark_evidence. Use fractional marks only if compatible with the paper's marking convention.
+- If neither item marks nor section totals provide enough evidence, do not fabricate precision. Mark the value as uncertain (use 0 if the schema requires a numeric value) and recommend teacher confirmation.
+- Cross-check sub-items against their parent question, question totals against section totals, and section totals against the paper total. Keep printed totals distinct from calculated totals, and account for selective-answer instructions so available marks are not confused with the effective marks a student can earn.
+- Keep the paper's own numbering, repeated labels, section names, item types and mark conventions. These instructions apply to unfamiliar layouts too; they are not a fixed template.
 
 If a mark value is not explicitly visible, infer it only when the structure of the paper provides strong evidence.
 
@@ -2486,65 +2532,78 @@ export const analyzePaper =
             let aiResult;
 
             try {
-                aiResult =
-                    parseAIResult(
-                        aiRawResponse
-                    );
-            } catch (
-                error
-            ) {
+                aiResult = parseAIResult(aiRawResponse);
+            } catch (firstParseError) {
                 console.error(
-                    "AI JSON PARSE ERROR:",
-                    error
+                    "AI JSON PARSE ERROR; STARTING ONE CONTROLLED RECOVERY ATTEMPT:",
+                    errorDetails(firstParseError)
                 );
 
-                const safeMessage =
-                    "The examination paper was saved successfully, but the AI response could not be processed. Please try the AI analysis again.";
+                // Gemini's service validates JSON syntax, but the controller
+                // parser can still reject an unusual provider response. Retry
+                // the original PDF once here as well, using a concise recovery
+                // instruction. This is especially useful for long primary and
+                // early-years papers; never fabricate questions or marks.
+                try {
+                    const recoveryPrompt = [
+                        String(prompt),
+                        "",
+                        "FINAL JSON RECOVERY MODE:",
+                        "Return exactly one complete valid JSON object using the required schema. Do not include markdown, commentary, or text outside JSON.",
+                        "Keep explanatory text concise to avoid truncation. Preserve all visible main questions and sub-items from the PDF.",
+                        "Do not invent questions, answers, or marks. If marks are not printed or cannot be established from the paper, represent uncertainty according to the schema and recommend teacher review.",
+                        "Close every string, object, and array. Escape quotation marks and control characters inside string values.",
+                    ].join("\n");
 
-                await updatePaperStatus(
-                    examPaperId,
-                    {
-                        status:
-                            "Failed",
+                    const recoveryRawResponse = await withTimeout(
+                        askGeminiWithPDF(
+                            recoveryPrompt,
+                            req.file.buffer.toString("base64")
+                        ),
+                        120000,
+                        "AI analysis recovery timed out."
+                    );
 
-                        aiStatus:
-                            "Failed",
+                    aiResult = parseAIResult(recoveryRawResponse);
 
-                        errorMessage:
-                            safeMessage,
-                    }
-                );
-
-                return res
-                    .status(200)
-                    .json({
-                        success:
-                            false,
-
-                        paper_saved:
-                            true,
-
-                        analysis_completed:
-                            false,
-
-                        ai_status:
-                            "Failed",
-
-                        exam_id:
+                    console.warn(
+                        "AI JSON RECOVERY SUCCEEDED",
+                        JSON.stringify({
                             examId,
-
-                        exam_subject_id:
-                            examSubjectId,
-
-                        exam_paper_id:
                             examPaperId,
+                            originalErrorCode: firstParseError?.code || null,
+                        })
+                    );
+                } catch (recoveryError) {
+                    console.error(
+                        "AI JSON RECOVERY FAILED:",
+                        errorDetails(recoveryError)
+                    );
 
-                        reused_paper:
-                            reusedPaper,
+                    const safeMessage =
+                        "The examination paper was saved, but AI could not produce a complete readable analysis after an automatic retry. Please try again later; if it continues, check the backend AI error logs.";
 
-                        message:
-                            safeMessage,
+                    await updatePaperStatus(
+                        examPaperId,
+                        {
+                            status: "Failed",
+                            aiStatus: "Failed",
+                            errorMessage: safeMessage,
+                        }
+                    );
+
+                    return res.status(200).json({
+                        success: false,
+                        paper_saved: true,
+                        analysis_completed: false,
+                        ai_status: "Failed",
+                        exam_id: examId,
+                        exam_subject_id: examSubjectId,
+                        exam_paper_id: examPaperId,
+                        reused_paper: reusedPaper,
+                        message: safeMessage,
                     });
+                }
             }
 
             const rawQuestions =
@@ -2854,15 +2913,41 @@ export const analyzePaper =
                     aiResult.total_marks
                 );
 
+            // Prefer an explicitly printed paper total when the PDF provides
+            // one. The AI's question-by-question mark sum can be incomplete;
+            // never silently replace a printed total with that lower sum.
+            const declaredTotalMarks =
+                extractDeclaredTotalMarks(pdfText);
+
+            // Resolve the paper total from the strongest available whole-paper
+            // evidence first. The sum of detected question rows can be lower if
+            // a question/mark was missed during extraction, so it is a cross-check,
+            // not an automatic replacement for the paper-level total.
             const totalMarks =
-                effectiveCalculatedMarks > 0
-                    ? effectiveCalculatedMarks
-                    : (
-                        reportedTotalMarks !== null &&
-                        reportedTotalMarks > 0
-                            ? reportedTotalMarks
-                            : 0
-                    );
+                resolveExamTotalMarks({
+                    declaredTotalMarks,
+                    reportedTotalMarks,
+                    calculatedQuestionMarks: effectiveCalculatedMarks,
+                });
+
+            const totalMarksMismatch =
+                hasMarkTotalMismatch(
+                    totalMarks,
+                    effectiveCalculatedMarks
+                );
+
+            if (totalMarksMismatch) {
+                console.warn(
+                    "PAPER TOTAL DIFFERS FROM SUM OF AI-IDENTIFIED QUESTION MARKS:",
+                    {
+                        paperTotal: totalMarks,
+                        declaredTotalMarks,
+                        reportedTotalMarks,
+                        calculatedQuestionMarks: effectiveCalculatedMarks,
+                        difference: totalMarks - effectiveCalculatedMarks,
+                    }
+                );
+            }
 
             if (
                 totalMarks <= 0
@@ -2928,6 +3013,17 @@ export const analyzePaper =
             ) {
                 recommendations.push(
                     "The examination's total marks could not be reliably established. Content and structure analysis is available, but confirm the marking scheme before using any mark-based calculations."
+                );
+            }
+
+            if (totalMarksMismatch) {
+                const totalEvidence =
+                    declaredTotalMarks !== null
+                        ? "The PDF text contains an explicit paper-total declaration"
+                        : "The AI identified a paper-level total";
+
+                recommendations.push(
+                    `${totalEvidence} of ${totalMarks} marks, but the marks assigned to the identified questions add up to ${effectiveCalculatedMarks}. Review every page and question: one or more questions or mark values may have been missed, misread, or counted incorrectly. Do not treat this discrepancy as resolved until checked against the original paper.`
                 );
             }
 

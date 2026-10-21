@@ -2069,9 +2069,88 @@ export const askGeminiWithPDF =
                     response
                 );
 
-            return cleanGeminiJson(
-                rawText
-            );
+            try {
+                return cleanGeminiJson(rawText);
+            } catch (firstParseError) {
+                // A malformed JSON response should not immediately fail a
+                // valid uploaded paper. Retry once with the same PDF and a
+                // stricter repair instruction; never attempt to guess missing
+                // fields or accept incomplete JSON.
+                if (
+                    ![
+                        "GEMINI_INVALID_JSON",
+                        "INVALID_AI_JSON",
+                    ].includes(firstParseError?.code)
+                ) {
+                    throw firstParseError;
+                }
+
+                console.warn(
+                    "GEMINI PDF JSON RETRY: first response was invalid; retrying once with stricter JSON-only instructions."
+                );
+
+                const retryPrompt = [
+                    String(prompt),
+                    "",
+                    "REQUIRED RECOVERY INSTRUCTION:",
+                    "Your previous response was not valid complete JSON. Analyze the attached PDF again and return exactly one complete JSON object matching the Expected JSON structure above.",
+                    "Do not shorten the analysis by omitting required keys. Do not use markdown fences, comments, trailing commas, or text outside the JSON.",
+                    "Escape all quotation marks and control characters inside JSON strings. Ensure every object and array is fully closed before finishing.",
+                    "Keep the paper's actual structure and evidence-based marks. Do not invent questions or marks to make the JSON easier to produce.",
+                ].join("\n");
+
+                const retryPayload = {
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: retryPrompt },
+                                {
+                                    inlineData: {
+                                        mimeType: "application/pdf",
+                                        data: String(pdfBase64),
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+                        temperature: 0,
+                    },
+                };
+
+                const retryResponse = await makeGeminiRequest(retryPayload);
+                const retryText = extractGeminiText(retryResponse);
+
+                try {
+                    return cleanGeminiJson(retryText);
+                } catch (retryParseError) {
+                    console.error(
+                        "GEMINI PDF JSON RETRY FAILED:",
+                        JSON.stringify({
+                            firstError: firstParseError?.code || firstParseError?.message,
+                            retryError: retryParseError?.code || retryParseError?.message,
+                            firstResponseLength: String(rawText || "").length,
+                            retryResponseLength: String(retryText || "").length,
+                        })
+                    );
+
+                    const error = createGeminiError(
+                        "Gemini ilirudisha JSON isiyokamilika hata baada ya jaribio la pili. PDF imehifadhiwa; jaribu tena au punguza kurasa za PDF ikiwa ni ndefu sana.",
+                        "GEMINI_INVALID_JSON_AFTER_RETRY",
+                        502,
+                        {
+                            firstError: firstParseError?.code || firstParseError?.message,
+                            retryError: retryParseError?.code || retryParseError?.message,
+                            firstResponseLength: String(rawText || "").length,
+                            retryResponseLength: String(retryText || "").length,
+                        }
+                    );
+                    throw error;
+                }
+            }
         } catch (
             error
         ) {
