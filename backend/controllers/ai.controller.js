@@ -653,8 +653,8 @@ export const buildExamAnalysisPrompt =
             `${level || ""} ${subjectName || ""} ${examName || ""} ${String(pdfText || "").slice(0, 3500)}`;
 
         const isPrimaryPaper =
-            /\\bprimary\\b|\\bstandard\\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\\b|\\bstd\\.?\\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\\b|\\bclass\\s*(?:one|two|three|four|five|six|seven|[1-7])\\b/i.test(
-                primaryLevelContext
+            /\bprimary\b|\bstandard\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bstd\.?\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\b|\bclass\s*(?:one|two|three|four|five|six|seven|[1-7])\b/i.test(
+            primaryLevelContext
             );
 
         const primaryAnalysisRules = isPrimaryPaper
@@ -698,6 +698,8 @@ LEVEL-AWARE RULES:
 - For A-Level, use the stated subject and syllabus context; do not assume O-Level scope.
 - If level, curriculum, grading criteria or a paper detail is unknown, state that limitation in recommendations rather than inventing requirements.
 - AI analysis is advisory. It must not alter the saved examination, marks, approval status or publish results.
+
+${primaryAnalysisRules}
 
 ADAPTIVE PAPER-FIRST ANALYSIS (CRITICAL):
 - Read the uploaded PDF page by page, in order. Use the original PDF pages together with extracted text; do not rely on extracted text alone when it omits diagrams, marks, tables, or question wording.
