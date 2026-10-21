@@ -110,7 +110,7 @@ test("supports the three uploaded real-paper layouts without imposing one templa
         });
 
         assert.match(prompt, /Treat the uploaded PDF itself as the source of truth/i, sample.name);
-        assert.match(prompt, /Never require the paper to contain sections A\\/B\\/C/i, sample.name);
+        assert.match(prompt, /Never require the paper to contain sections A\/B\/C/i, sample.name);
         assert.match(prompt, /optional-answer rules/i, sample.name);
         for (const pattern of sample.expected) {
             assert.match(prompt, pattern, sample.name);
