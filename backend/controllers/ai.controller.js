@@ -660,9 +660,11 @@ export const buildExamAnalysisPrompt =
                 primaryLevelContext
             );
 
-        const primaryAnalysisRules = isPrimaryPaper
-            ? `
-PRIMARY-SCHOOL PAPER RULES (apply because the supplied metadata or PDF identifies a primary class):
+        const primaryAnalysisRules = `
+PRIMARY / EARLY-YEARS ANALYSIS GUIDANCE (always supplied; apply only when the original PDF's visible content indicates Baby Class, Nursery, Pre-primary, Kindergarten or Primary):
+- The extracted-text detector ${isPrimaryPaper ? 'found a likely primary/early-years label' : 'did not find a reliable primary/early-years text label; this does not mean the PDF is secondary-level'}. Inspect the original attached PDF page by page and use its visual content to determine the level, even if extracted text is empty or incomplete.
+- Never classify a paper as Ordinary Level only because its class metadata or extracted PDF text is blank or unrecognized.
+
 - Analyse at the level shown by this paper (for example Standard IV / Class Four). Do not apply secondary-school or CSEE conventions.
 - Read and account for every answer slot/sub-item, including Roman numerals (i, ii, iii), matching-table rows, multiple-choice items, fill-in blanks, dictation lines, and comprehension questions. These are sub-items of the printed main question, not automatically separate main questions.
 - Preserve the paper's printed question labels exactly. If the paper repeats a number (for example two separate questions labelled 4) or skips a number, do not merge them or silently renumber them. Distinguish repeated labels by section, wording, and their order in the paper.
@@ -678,7 +680,6 @@ PRIMARY-SCHOOL PAPER RULES (apply because the supplied metadata or PDF identifie
 - Count visible response slots and sub-items from the PDF, including picture identification, tracing, colouring, matching, oral/listening tasks, simple numeracy, letter/word recognition and fill-in blanks. Do not treat answer options, page numbers or subpart labels as separate main questions.
 - For early-years papers, prioritize a faithful inventory of tasks and age appropriateness. If marks are absent, preserve uncertainty and teacher review rather than inventing a secondary-school mark scheme.
 `
-            : "";
 
         return `
 You are analyzing a complete examination paper.
