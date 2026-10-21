@@ -649,6 +649,27 @@ export const buildExamAnalysisPrompt =
                 )
                 .join("\n");
 
+        const primaryLevelContext =
+            `${level || ""} ${subjectName || ""} ${examName || ""} ${String(pdfText || "").slice(0, 3500)}`;
+
+        const isPrimaryPaper =
+            /\\bprimary\\b|\\bstandard\\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\\b|\\bstd\\.?\\s*(?:[1-7]|i{1,3}|iv|v|vi|vii)\\b|\\bclass\\s*(?:one|two|three|four|five|six|seven|[1-7])\\b/i.test(
+                primaryLevelContext
+            );
+
+        const primaryAnalysisRules = isPrimaryPaper
+            ? `
+PRIMARY-SCHOOL PAPER RULES (apply because the supplied metadata or PDF identifies a primary class):
+- Analyse at the level shown by this paper (for example Standard IV / Class Four). Do not apply secondary-school or CSEE conventions.
+- Read and account for every answer slot/sub-item, including Roman numerals (i, ii, iii), matching-table rows, multiple-choice items, fill-in blanks, dictation lines, and comprehension questions. These are sub-items of the printed main question, not automatically separate main questions.
+- Preserve the paper's printed question labels exactly. If the paper repeats a number (for example two separate questions labelled 4) or skips a number, do not merge them or silently renumber them. Distinguish repeated labels by section, wording, and their order in the paper.
+- For each main question, use explicit question/sub-item marks when printed. If marks are not printed beside items, use section totals only when the item structure supports a defensible allocation. Do not distribute marks evenly by default if the evidence does not support it.
+- Cross-check the marks assigned to all questions in each section against the printed section total and cross-check section totals against the whole-paper total. If they cannot be reconciled from the PDF, preserve the printed totals and explain which question-level allocation remains uncertain; do not invent marks merely to force a match.
+- A printed section total is not proof that the visible question-level marks add up correctly. Count the items and show any discrepancy for teacher review.
+- Evaluate age-appropriate language, foundational skills, clarity of instructions, and whether the tasks match the stated primary class; do not penalize a primary paper for not using secondary-school question styles.
+`
+            : "";
+
         return `
 You are analyzing a complete examination paper.
 
