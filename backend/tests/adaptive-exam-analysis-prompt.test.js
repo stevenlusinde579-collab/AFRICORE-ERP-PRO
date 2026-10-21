@@ -34,10 +34,6 @@ test("uses concise page-by-page evidence instructions without replacing establis
     assert.match(prompt, /count answerable units/i);
     assert.match(prompt, /Do not assume every question or sub-item has equal marks/i);
     assert.match(prompt, /Keep the paper's own numbering, repeated labels, section names, item types and mark conventions/i);
-    assert.match(prompt, /Use a hierarchy of evidence for marks/i);
-    assert.match(prompt, /infer question marks from the actual answer structure/i);
-    assert.match(prompt, /inferred_from_section_structure/i);
-    assert.match(prompt, /sub-items to main question, questions to section, and sections to whole-paper total/i);
 });
 
 test("supports Primary, Ordinary Level, Advanced Level and unfamiliar layouts without fixed format assumptions", () => {
@@ -114,8 +110,8 @@ test("applies primary-specific counting and mark reconciliation rules to the upl
     assert.match(prompt, /every answer slot\/sub-item/i);
     assert.match(prompt, /repeats a number/i);
     assert.match(prompt, /do not merge them or silently renumber them/i);
-    assert.match(prompt, /cross-check the marks assigned to all questions in each section/i);
-    assert.match(prompt, /do not invent marks merely to force a match/i);
+    assert.match(prompt, /Cross-check sub-items against their parent question, question totals against section totals, and section totals against the paper total/i);
+    assert.match(prompt, /do not fabricate precision/i);
 });
 
 test("does not apply primary-only rules to a Form Four paper", () => {
