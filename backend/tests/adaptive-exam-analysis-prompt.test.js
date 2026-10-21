@@ -125,7 +125,7 @@ test("detects Baby Class, Nursery and Swahili primary labels and adds dedicated 
     for (const sample of samples) {
         const prompt = buildPrompt(sample);
         assert.match(prompt, /PRIMARY-SCHOOL PAPER RULES/i, sample.level);
-        assert.match(prompt, /USE A PRIMARY\\/EARLY-YEARS ANALYSIS MODE/i, sample.level);
+        assert.match(prompt, /USE A PRIMARY\/EARLY-YEARS ANALYSIS MODE/i, sample.level);
         assert.match(prompt, /Keep JSON compact to reduce truncation/i, sample.level);
     }
 });
