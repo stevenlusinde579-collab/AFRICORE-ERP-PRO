@@ -116,16 +116,16 @@ test("applies primary-specific counting and mark reconciliation rules to the upl
 
 test("detects Baby Class, Nursery and Swahili primary labels and adds dedicated early-years analysis rules", () => {
     const samples = [
-        { level: "Baby Class", text: "BABY CLASS\nCOLOUR THE PICTURE\nTRACE THE LETTER A", subject: "Environmental Activities" },
-        { level: "Nursery", text: "CHEKECHEA\nUNGANISHA PICHA NA MANENO", subject: "Language" },
-        { level: "Darasa la Nne", text: "SHULE YA MSINGI\nMTIHANI WA KISWAHILI\nJibu maswali yote.", subject: "Kiswahili" },
-        { level: "Unknown", text: "STANDARD IV ENGLISH\nMATCH THE PICTURES\nFILL IN THE BLANKS", subject: "English" },
+        { level: "Baby Class", text: ["BABY CLASS", "COLOUR THE PICTURE", "TRACE THE LETTER A"].join(" "), subject: "Environmental Activities" },
+        { level: "Nursery", text: ["CHEKECHEA", "UNGANISHA PICHA NA MANENO"].join(" "), subject: "Language" },
+        { level: "Darasa la Nne", text: ["SHULE YA MSINGI", "MTIHANI WA KISWAHILI", "Jibu maswali yote."].join(" "), subject: "Kiswahili" },
+        { level: "Unknown", text: ["STANDARD IV ENGLISH", "MATCH THE PICTURES", "FILL IN THE BLANKS"].join(" "), subject: "English" },
     ];
 
     for (const sample of samples) {
         const prompt = buildPrompt(sample);
         assert.match(prompt, /PRIMARY-SCHOOL PAPER RULES/i, sample.level);
-        assert.match(prompt, /USE A PRIMARY\/EARLY-YEARS ANALYSIS MODE/i, sample.level);
+        assert.match(prompt, /USE A PRIMARY\\/EARLY-YEARS ANALYSIS MODE/i, sample.level);
         assert.match(prompt, /Keep JSON compact to reduce truncation/i, sample.level);
     }
 });
