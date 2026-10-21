@@ -24,4 +24,29 @@ const extractDeclaredTotalMarks = (pdfText) => {
     return null;
 };
 
-export { extractDeclaredTotalMarks };
+const resolveExamTotalMarks = ({
+    declaredTotalMarks,
+    reportedTotalMarks,
+    calculatedQuestionMarks,
+}) => {
+    const declared = Number(declaredTotalMarks);
+    if (Number.isFinite(declared) && declared > 0) return declared;
+
+    const reported = Number(reportedTotalMarks);
+    if (Number.isFinite(reported) && reported > 0) return reported;
+
+    const calculated = Number(calculatedQuestionMarks);
+    if (Number.isFinite(calculated) && calculated > 0) return calculated;
+
+    return 0;
+};
+
+const hasMarkTotalMismatch = (paperTotal, calculatedQuestionMarks) => {
+    const total = Number(paperTotal);
+    const calculated = Number(calculatedQuestionMarks);
+    return Number.isFinite(total) && total > 0 &&
+        Number.isFinite(calculated) && calculated > 0 &&
+        Math.abs(total - calculated) > 0.01;
+};
+
+export { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch };
