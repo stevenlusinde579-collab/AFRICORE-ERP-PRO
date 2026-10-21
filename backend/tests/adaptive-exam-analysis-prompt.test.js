@@ -30,6 +30,10 @@ test("uses concise page-by-page evidence instructions without replacing establis
     assert.match(prompt, /ADVANCED BIOLOGY/);
     assert.match(prompt, /Explain the diagram/);
     assert.match(prompt, /A main examination question must remain ONE question/i);
+    assert.match(prompt, /MARK ALLOCATION MUST BE STRUCTURE-DRIVEN, NOT TEMPLATE-DRIVEN/i);
+    assert.match(prompt, /count answerable units/i);
+    assert.match(prompt, /Do not assume every question or sub-item has equal marks/i);
+    assert.match(prompt, /Keep the paper's own numbering, repeated labels, section names, item types and mark conventions/i);
     assert.match(prompt, /Use a hierarchy of evidence for marks/i);
     assert.match(prompt, /infer question marks from the actual answer structure/i);
     assert.match(prompt, /inferred_from_section_structure/i);
