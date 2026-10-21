@@ -30,6 +30,10 @@ test("uses concise page-by-page evidence instructions without replacing establis
     assert.match(prompt, /ADVANCED BIOLOGY/);
     assert.match(prompt, /Explain the diagram/);
     assert.match(prompt, /A main examination question must remain ONE question/i);
+    assert.match(prompt, /Use a hierarchy of evidence for marks/i);
+    assert.match(prompt, /infer question marks from the actual answer structure/i);
+    assert.match(prompt, /inferred_from_section_structure/i);
+    assert.match(prompt, /sub-items to main question, questions to section, and sections to whole-paper total/i);
 });
 
 test("supports Primary, Ordinary Level, Advanced Level and unfamiliar layouts without fixed format assumptions", () => {
