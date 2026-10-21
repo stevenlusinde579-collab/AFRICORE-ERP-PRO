@@ -2544,7 +2544,9 @@ export const analyzePaper =
                 );
 
                 const safeMessage =
-                    "The examination paper was saved successfully, but the AI response could not be processed. Please try the AI analysis again.";
+                    error?.code === "INVALID_AI_JSON"
+                        ? "The examination paper was saved, but the AI response was not valid JSON. Please retry the analysis; the system will attempt a safer recovery."
+                        : "The examination paper was saved successfully, but the AI response could not be processed. Please try the AI analysis again.";
 
                 await updatePaperStatus(
                     examPaperId,
