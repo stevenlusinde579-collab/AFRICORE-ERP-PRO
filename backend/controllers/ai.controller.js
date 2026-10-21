@@ -2531,67 +2531,78 @@ export const analyzePaper =
             let aiResult;
 
             try {
-                aiResult =
-                    parseAIResult(
-                        aiRawResponse
-                    );
-            } catch (
-                error
-            ) {
+                aiResult = parseAIResult(aiRawResponse);
+            } catch (firstParseError) {
                 console.error(
-                    "AI JSON PARSE ERROR:",
-                    error
+                    "AI JSON PARSE ERROR; STARTING ONE CONTROLLED RECOVERY ATTEMPT:",
+                    errorDetails(firstParseError)
                 );
 
-                const safeMessage =
-                    error?.code === "INVALID_AI_JSON"
-                        ? "The examination paper was saved, but the AI response was not valid JSON. Please retry the analysis; the system will attempt a safer recovery."
-                        : "The examination paper was saved successfully, but the AI response could not be processed. Please try the AI analysis again.";
+                // Gemini's service validates JSON syntax, but the controller
+                // parser can still reject an unusual provider response. Retry
+                // the original PDF once here as well, using a concise recovery
+                // instruction. This is especially useful for long primary and
+                // early-years papers; never fabricate questions or marks.
+                try {
+                    const recoveryPrompt = [
+                        String(prompt),
+                        "",
+                        "FINAL JSON RECOVERY MODE:",
+                        "Return exactly one complete valid JSON object using the required schema. Do not include markdown, commentary, or text outside JSON.",
+                        "Keep explanatory text concise to avoid truncation. Preserve all visible main questions and sub-items from the PDF.",
+                        "Do not invent questions, answers, or marks. If marks are not printed or cannot be established from the paper, represent uncertainty according to the schema and recommend teacher review.",
+                        "Close every string, object, and array. Escape quotation marks and control characters inside string values.",
+                    ].join("\n");
 
-                await updatePaperStatus(
-                    examPaperId,
-                    {
-                        status:
-                            "Failed",
+                    const recoveryRawResponse = await withTimeout(
+                        askGeminiWithPDF(
+                            recoveryPrompt,
+                            req.file.buffer.toString("base64")
+                        ),
+                        120000,
+                        "AI analysis recovery timed out."
+                    );
 
-                        aiStatus:
-                            "Failed",
+                    aiResult = parseAIResult(recoveryRawResponse);
 
-                        errorMessage:
-                            safeMessage,
-                    }
-                );
-
-                return res
-                    .status(200)
-                    .json({
-                        success:
-                            false,
-
-                        paper_saved:
-                            true,
-
-                        analysis_completed:
-                            false,
-
-                        ai_status:
-                            "Failed",
-
-                        exam_id:
+                    console.warn(
+                        "AI JSON RECOVERY SUCCEEDED",
+                        JSON.stringify({
                             examId,
-
-                        exam_subject_id:
-                            examSubjectId,
-
-                        exam_paper_id:
                             examPaperId,
+                            originalErrorCode: firstParseError?.code || null,
+                        })
+                    );
+                } catch (recoveryError) {
+                    console.error(
+                        "AI JSON RECOVERY FAILED:",
+                        errorDetails(recoveryError)
+                    );
 
-                        reused_paper:
-                            reusedPaper,
+                    const safeMessage =
+                        "The examination paper was saved, but AI could not produce a complete readable analysis after an automatic retry. Please try again later; if it continues, check the backend AI error logs.";
 
-                        message:
-                            safeMessage,
+                    await updatePaperStatus(
+                        examPaperId,
+                        {
+                            status: "Failed",
+                            aiStatus: "Failed",
+                            errorMessage: safeMessage,
+                        }
+                    );
+
+                    return res.status(200).json({
+                        success: false,
+                        paper_saved: true,
+                        analysis_completed: false,
+                        ai_status: "Failed",
+                        exam_id: examId,
+                        exam_subject_id: examSubjectId,
+                        exam_paper_id: examPaperId,
+                        reused_paper: reusedPaper,
+                        message: safeMessage,
                     });
+                }
             }
 
             const rawQuestions =
