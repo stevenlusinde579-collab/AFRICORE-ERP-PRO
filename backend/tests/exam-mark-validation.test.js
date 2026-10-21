@@ -1,18 +1,42 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractDeclaredTotalMarks } from "../services/examMarkValidation.js";
+import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
-test("extracts an explicit total marks label", () => {
-    assert.equal(extractDeclaredTotalMarks("ENGLISH EXAMINATION\nTOTAL MARKS: 50"), 50);
-    assert.equal(extractDeclaredTotalMarks("Maximum Marks - 100"), 100);
+test("extracts an explicitly declared whole-paper total", () => {
+    assert.equal(extractDeclaredTotalMarks("TOTAL MARKS: 50"), 50);
+    assert.equal(extractDeclaredTotalMarks("This paper carries 100 marks"), 100);
 });
 
-test("extracts an explicit sentence declaring the whole paper total", () => {
-    assert.equal(extractDeclaredTotalMarks("This paper carries 50 marks."), 50);
-    assert.equal(extractDeclaredTotalMarks("Total of 80 marks"), 80);
+test("does not infer a paper total from unrelated question marks", () => {
+    assert.equal(extractDeclaredTotalMarks("Question 1 (10 marks) Question 2 (20 marks)"), null);
 });
 
-test("does not guess the whole-paper total from unrelated question marks", () => {
-    assert.equal(extractDeclaredTotalMarks("Question 1 carries 10 marks. Section A has 20 marks."), null);
-    assert.equal(extractDeclaredTotalMarks(""), null);
+test("prefers explicit whole-paper total when question marks were missed", () => {
+    assert.equal(resolveExamTotalMarks({
+        declaredTotalMarks: 50,
+        reportedTotalMarks: 40,
+        calculatedQuestionMarks: 40,
+    }), 50);
+});
+
+test("uses AI-reported paper total over an incomplete question sum when no explicit total was extracted", () => {
+    assert.equal(resolveExamTotalMarks({
+        declaredTotalMarks: null,
+        reportedTotalMarks: 50,
+        calculatedQuestionMarks: 40,
+    }), 50);
+});
+
+test("falls back to question sum only when no paper-level total is available", () => {
+    assert.equal(resolveExamTotalMarks({
+        declaredTotalMarks: null,
+        reportedTotalMarks: null,
+        calculatedQuestionMarks: 45,
+    }), 45);
+});
+
+test("flags disagreement between paper total and identified question marks", () => {
+    assert.equal(hasMarkTotalMismatch(50, 40), true);
+    assert.equal(hasMarkTotalMismatch(50, 50), false);
+    assert.equal(hasMarkTotalMismatch(0, 40), false);
 });
