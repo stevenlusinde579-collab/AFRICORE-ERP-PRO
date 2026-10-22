@@ -15,10 +15,8 @@ const normalizeAIJsonCharacters =
                 /[\u2018\u2019]/g,
                 "'"
             )
-            .replace(
-                /[\u201C\u201D]/g,
-                '"'
-            )
+            // Preserve curly double quotation marks inside JSON strings.
+            // Converting them to ASCII quotes corrupts valid exam question text.
             .replace(
                 /\u00A0/g,
                 " "
@@ -220,6 +218,7 @@ const repairUnescapedJsonStringQuotes = (
     let output = "";
     let inString = false;
     let escaped = false;
+    let currentStringIsKey = false;
 
     for (let index = 0; index < source.length; index++) {
         const character = source[index];
@@ -230,6 +229,43 @@ const repairUnescapedJsonStringQuotes = (
             if (character === '"') {
                 inString = true;
                 escaped = false;
+
+                let previousNonWhitespace = output.length - 2;
+                while (
+                    previousNonWhitespace >= 0 &&
+                    /\s/.test(output[previousNonWhitespace])
+                ) {
+                    previousNonWhitespace--;
+                }
+
+                const keyContext =
+                    previousNonWhitespace >= 0 &&
+                    (output[previousNonWhitespace] === "{" ||
+                        output[previousNonWhitespace] === ",");
+
+                currentStringIsKey = false;
+                if (keyContext) {
+                    let lookAhead = index + 1;
+                    let lookAheadEscaped = false;
+                    for (; lookAhead < source.length; lookAhead++) {
+                        const lookAheadCharacter = source[lookAhead];
+                        if (lookAheadEscaped) {
+                            lookAheadEscaped = false;
+                        } else if (lookAheadCharacter === "\\") {
+                            lookAheadEscaped = true;
+                        } else if (lookAheadCharacter === '"') {
+                            lookAhead++;
+                            while (
+                                lookAhead < source.length &&
+                                /\s/.test(source[lookAhead])
+                            ) {
+                                lookAhead++;
+                            }
+                            currentStringIsKey = source[lookAhead] === ":";
+                            break;
+                        }
+                    }
+                }
             }
 
             continue;
@@ -311,9 +347,11 @@ const repairUnescapedJsonStringQuotes = (
             }
         }
 
+        // A colon closes a string only when the opening quote was an object key.
+        // Quoted phrases in question text may be followed by a colon too.
         const canCloseString =
             nextCharacter === undefined ||
-            nextCharacter === ":" ||
+            (nextCharacter === ":" && currentStringIsKey) ||
             nextCharacter === "}" ||
             nextCharacter === "]" ||
             commaFollowedByJsonStructure;
