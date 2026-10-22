@@ -15,10 +15,8 @@ const normalizeAIJsonCharacters =
                 /[\u2018\u2019]/g,
                 "'"
             )
-            .replace(
-                /[\u201C\u201D]/g,
-                '"'
-            )
+            // Preserve curly double quotation marks inside JSON strings.
+            // Converting them to ASCII quotes corrupts valid exam question text.
             .replace(
                 /\u00A0/g,
                 " "
