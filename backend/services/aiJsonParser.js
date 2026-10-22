@@ -251,7 +251,7 @@ const repairUnescapedJsonStringQuotes = (
                         const lookAheadCharacter = source[lookAhead];
                         if (lookAheadEscaped) {
                             lookAheadEscaped = false;
-                        } else if (lookAheadCharacter === "\\\\") {
+                        } else if (lookAheadCharacter === "\\") {
                             lookAheadEscaped = true;
                         } else if (lookAheadCharacter === '"') {
                             lookAhead++;
