@@ -309,9 +309,49 @@ const repairUnescapedJsonStringQuotes = (
             }
         }
 
+        // A colon closes a JSON string only when that string is an object key.
+        // Inside question text, a quoted phrase may itself be followed by a colon;
+        // treating that as a delimiter leaves the remainder of the JSON invalid.
+        let previousNonWhitespace = output.length - 1;
+        while (
+            previousNonWhitespace >= 0 &&
+            /\\s/.test(output[previousNonWhitespace])
+        ) {
+            previousNonWhitespace--;
+        }
+
+        const keyContext =
+            previousNonWhitespace >= 0 &&
+            (output[previousNonWhitespace] === "{" ||
+                output[previousNonWhitespace] === ",");
+
+        let stringIsKey = false;
+        if (keyContext) {
+            let lookAhead = index + 1;
+            let lookAheadEscaped = false;
+            for (; lookAhead < source.length; lookAhead++) {
+                const lookAheadCharacter = source[lookAhead];
+                if (lookAheadEscaped) {
+                    lookAheadEscaped = false;
+                } else if (lookAheadCharacter === "\\\\") {
+                    lookAheadEscaped = true;
+                } else if (lookAheadCharacter === '"') {
+                    lookAhead++;
+                    while (
+                        lookAhead < source.length &&
+                        /\\s/.test(source[lookAhead])
+                    ) {
+                        lookAhead++;
+                    }
+                    stringIsKey = source[lookAhead] === ":";
+                    break;
+                }
+            }
+        }
+
         const canCloseString =
             nextCharacter === undefined ||
-            nextCharacter === ":" ||
+            (nextCharacter === ":" && stringIsKey) ||
             nextCharacter === "}" ||
             nextCharacter === "]" ||
             commaFollowedByJsonStructure;
