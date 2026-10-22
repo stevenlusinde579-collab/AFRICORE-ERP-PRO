@@ -47,3 +47,16 @@ test("rejects truncated JSON instead of returning partial analysis", () => {
         (error) => error?.code === "INVALID_AI_JSON"
     );
 });
+
+
+test("repairs the reported primary mathematics question with quoted number words", () => {
+    const malformed = String.raw`{"questions":[{"question_number":1,"question_text":"i. Andika 47 215 kwa maneno. iv. Andika kwa tarakimu: "Ishirini na tatu elfu mia sita na kumi na mbili". v. Andika XLVII kwa namba za kiarabu.","max_marks":6}]}`;
+    const parsed = parseAIResult(malformed);
+    assert.match(parsed.questions[0].question_text, /"Ishirini na tatu elfu mia sita na kumi na mbili"/);
+    assert.equal(parsed.questions[0].max_marks, 6);
+});
+
+test("preserves curly quotation marks inside valid JSON strings", () => {
+    const payload = { questions: [{ text: "Andika kwa tarakimu: “ishirini na tatu”." }] };
+    assert.deepEqual(parseAIResult(JSON.stringify(payload)), payload);
+});
