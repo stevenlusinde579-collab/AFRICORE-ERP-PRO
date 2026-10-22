@@ -233,7 +233,7 @@ const repairUnescapedJsonStringQuotes = (
                 let previousNonWhitespace = output.length - 2;
                 while (
                     previousNonWhitespace >= 0 &&
-                    /\\s/.test(output[previousNonWhitespace])
+                    /\s/.test(output[previousNonWhitespace])
                 ) {
                     previousNonWhitespace--;
                 }
@@ -257,7 +257,7 @@ const repairUnescapedJsonStringQuotes = (
                             lookAhead++;
                             while (
                                 lookAhead < source.length &&
-                                /\\s/.test(source[lookAhead])
+                                /\s/.test(source[lookAhead])
                             ) {
                                 lookAhead++;
                             }
