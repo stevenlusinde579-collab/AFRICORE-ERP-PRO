@@ -1835,7 +1835,7 @@ export default function ResultsAnalysis() {
             cseeDivisionDistribution: divisionDistribution,
             gradeDistribution: (examGradingScales.length && (isCseeClass(selectedClassId) || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
-                : (isCseeClass(selectedClassId) ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"])
+                : gradeLabelsForEducationLevel([exam?.education_level, exam?.level, exam?.exam_type, classMap.get(idValue(selectedClassId))?.academic_level, classMap.get(idValue(selectedClassId))?.class_name].filter(Boolean).join(" "), examGradingScales)
             ).map(grade => ({
                 grade,
                 count: rows.filter(row => String(row.grade) === String(grade)).length
