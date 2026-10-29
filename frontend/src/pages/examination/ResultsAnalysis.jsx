@@ -49,6 +49,7 @@ import {
 } from "react-icons/fa";
 
 import { supabase } from "../../services/supabase";
+import { getEducationLevelType, gradeForEducationLevel, getApplicableGradeScale, remarkForEducationLevel, gradeLabelsForEducationLevel } from "../../utils/resultGrading";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 
@@ -103,27 +104,9 @@ const getGrade = percentage => {
     return "F";
 };
 
-const normalizeEducationLevel = value => String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ");
+const isOrdinaryLevel = value => getEducationLevelType(value) === "O_LEVEL";
 
-const isOrdinaryLevel = value => {
-    const level = normalizeEducationLevel(value);
-    return /O LEVEL|ORDINARY LEVEL|ORDINARY SECONDARY|FORM\s*(I|1|II|2|III|3|IV|4)(\b|$)|FORM\s*1\s*[-–]\s*4/.test(level)
-        && !/A LEVEL|ADVANCED LEVEL|FORM\s*(V|5|VI|6)(\b|$)/.test(level);
-};
-
-const gradeFromConfiguredScale = (percentage, scales) => {
-    const p = numberValue(percentage);
-    const ordered = [...(Array.isArray(scales) ? scales : [])]
-        .sort((a, b) => numberValue(b.min_percentage) - numberValue(a.min_percentage));
-    return ordered.find(scale =>
-        p >= numberValue(scale.min_percentage) &&
-        p <= numberValue(scale.max_percentage)
-    ) || null;
-};
+const gradeFromConfiguredScale = (percentage, scales) => getApplicableGradeScale(percentage, scales, "O_LEVEL");
 
 const isLegacyOLevelScale = scales => {
     const grades = (Array.isArray(scales) ? scales : [])
@@ -132,21 +115,7 @@ const isLegacyOLevelScale = scales => {
     return grades.length === 5 && ["A", "B", "C", "D", "F"].every((grade, index) => grades[index] === grade);
 };
 
-const applicableGradeScale = (percentage, scales, ordinaryLevel) => {
-    // Older non-O-Level exams may have inherited the original A-F CSEE defaults.
-    // Do not treat those defaults as valid grading policy for a different level.
-    if (!ordinaryLevel && isLegacyOLevelScale(scales)) return null;
-    return gradeFromConfiguredScale(percentage, scales);
-};
-
-const genericGrade = percentage => {
-    const p = numberValue(percentage);
-    if (p >= 80) return "Excellent";
-    if (p >= 65) return "Good";
-    if (p >= 50) return "Satisfactory";
-    if (p >= 40) return "Developing";
-    return "Needs Support";
-};
+const applicableGradeScale = (percentage, scales, ordinaryLevel) => getApplicableGradeScale(percentage, scales, ordinaryLevel ? "O_LEVEL" : "GENERAL");
 
 const _GRADE_POINTS = Object.freeze({ A: 1, B: 2, C: 3, D: 4, F: 5 });
 const getGradePoint = grade => _GRADE_POINTS[String(grade || "").trim().toUpperCase()] ?? 5;
@@ -1108,9 +1077,7 @@ export default function ResultsAnalysis() {
         const ordinaryLevel = isOrdinaryLevel(levelContext);
         const scaleForPercentage = percentage =>
             applicableGradeScale(percentage, examGradingScales, ordinaryLevel);
-        const gradeForPercentage = percentage =>
-            scaleForPercentage(percentage)?.grade ||
-            (ordinaryLevel ? getGrade(percentage) : genericGrade(percentage));
+        const gradeForPercentage = percentage => gradeForEducationLevel(percentage, levelContext, examGradingScales);
         const passedForPercentage = percentage => {
             const configured = scaleForPercentage(percentage);
             if (configured) {
@@ -1352,7 +1319,7 @@ export default function ResultsAnalysis() {
                 : (possible > 0 ? (total / possible) * 100 : 0);
             const percentage = average;
             const overallConfigured = applicableGradeScale(average, examGradingScales, ordinaryLevel);
-            const grade = overallConfigured?.grade || (ordinaryLevel ? getGrade(average) : genericGrade(average));
+            const grade = gradeForEducationLevel(average, levelContext, examGradingScales);
             const passed = overallConfigured
                 ? String(overallConfigured.result || "").toUpperCase() === "PASS"
                 : average >= 40;
@@ -1377,7 +1344,7 @@ export default function ResultsAnalysis() {
                 possible,
                 percentage,
                 grade,
-                remark: overallConfigured?.remark || (ordinaryLevel ? getRemark(grade) : grade),
+                remark: remarkForEducationLevel(grade, levelContext, examGradingScales) || overallConfigured?.remark || (ordinaryLevel ? getRemark(grade) : grade),
                 pass: passed,
                 hasMarks,
                 cseeEligible: csee.eligible,
@@ -1508,8 +1475,7 @@ export default function ResultsAnalysis() {
                 : 0;
             const percentage = average;
             const configuredOverall = applicableGradeScale(average, examGradingScales, ordinaryLevel);
-            const grade = configuredOverall?.grade ||
-                (ordinaryLevel ? getGrade(average) : genericGrade(average));
+            const grade = gradeForEducationLevel(average, levelContext, examGradingScales);
 
             return {
                 id: student.id,
@@ -1523,7 +1489,7 @@ export default function ResultsAnalysis() {
                 possible,
                 percentage,
                 grade,
-                remark: configuredOverall?.remark || (ordinaryLevel ? getRemark(grade) : grade),
+                remark: remarkForEducationLevel(grade, levelContext, examGradingScales) || configuredOverall?.remark || (ordinaryLevel ? getRemark(grade) : grade),
                 pass: configuredOverall
                     ? String(configuredOverall.result || "").toUpperCase() === "PASS"
                     : average >= 40,
@@ -1622,9 +1588,10 @@ export default function ResultsAnalysis() {
                     idValue(student.exam_class_id) === idValue(es.class_id))
                 .map(student => calculateStudentSubject(student.id, es));
             const graded = subjectResults.map(row => {
+                const classInfo = classMap.get(idValue(es.class_id));
+                const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(es.subject_id))?.education_level].filter(Boolean).join(" ");
                 const classIsCsee = isCseeClass(es.class_id);
-                const configured = applicableGradeScale(row.percentage, examGradingScales, classIsCsee);
-                const grade = configured?.grade || (classIsCsee ? getGrade(row.percentage) : genericGrade(row.percentage));
+                const grade = gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
                 return { ...row, grade, point: classIsCsee ? getGradePoint(grade) : null };
             });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
@@ -1730,9 +1697,11 @@ export default function ResultsAnalysis() {
             const subjectCount = subjectResults.length;
             const total = subjectResults.reduce((sum, row) => sum + numberValue(row.total), 0);
             const average = subjectCount ? total / subjectCount : 0;
+            const classInfo = classMap.get(idValue(selectedClassId));
+            const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name].filter(Boolean).join(" ");
             const classIsCsee = isCseeClass(selectedClassId);
             const configuredOverall = applicableGradeScale(average, examGradingScales, classIsCsee);
-            const grade = configuredOverall?.grade || (classIsCsee ? getGrade(average) : genericGrade(average));
+            const grade = gradeForEducationLevel(average, levelContext, examGradingScales);
             const csee = classIsCsee
                 ? calculateResult(subjectResults, examGradingScales)
                 : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
@@ -1775,8 +1744,9 @@ export default function ResultsAnalysis() {
                 calculateStudentSubject(student.id, es)
             );
             const graded = results.map(row => {
-                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeClass(selectedClassId));
-                const grade = configured?.grade || (isCseeClass(selectedClassId) ? getGrade(row.percentage) : genericGrade(row.percentage));
+                const classInfo = classMap.get(idValue(selectedClassId));
+                const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(row.subject_id))?.education_level].filter(Boolean).join(" ");
+                const grade = gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
                 return { ...row, grade, point: isCseeClass(selectedClassId) ? getGradePoint(grade) : null };
             });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
@@ -1785,7 +1755,7 @@ export default function ResultsAnalysis() {
             const classIsCsee = isCseeClass(selectedClassId);
             const labels = examGradingScales.length && (classIsCsee || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
-                : (classIsCsee ? ["A","B","C","D","F"] : ["Excellent","Good","Satisfactory","Developing","Needs Support"]);
+                : gradeLabelsForEducationLevel(levelContext, examGradingScales);
             const gradeCounts = Object.fromEntries(labels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
             const subjectGpa = classIsCsee && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
@@ -1835,7 +1805,7 @@ export default function ResultsAnalysis() {
             cseeDivisionDistribution: divisionDistribution,
             gradeDistribution: (examGradingScales.length && (isCseeClass(selectedClassId) || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
-                : (isCseeClass(selectedClassId) ? ["A", "B", "C", "D", "F"] : ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"])
+                : gradeLabelsForEducationLevel([exam?.education_level, exam?.level, exam?.exam_type, classMap.get(idValue(selectedClassId))?.academic_level, classMap.get(idValue(selectedClassId))?.class_name].filter(Boolean).join(" "), examGradingScales)
             ).map(grade => ({
                 grade,
                 count: rows.filter(row => String(row.grade) === String(grade)).length
@@ -1849,13 +1819,15 @@ export default function ResultsAnalysis() {
         const full = overallRankedStudents.find(row => idValue(row.id) === idValue(student.id)) || student;
         const subjectsForReport = (full.subjects || []).map(result => {
             const reportIsCsee = isCseeClass(full.class_id);
+            const classInfo = classMap.get(idValue(full.class_id));
+            const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(result.subject_id))?.education_level].filter(Boolean).join(" ");
             const configured = applicableGradeScale(result.percentage, examGradingScales, reportIsCsee);
-            const grade = configured?.grade || (reportIsCsee ? getGrade(result.percentage) : genericGrade(result.percentage));
+            const grade = gradeForEducationLevel(result.percentage, levelContext, examGradingScales);
             return {
                 ...result,
                 subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
                 grade,
-                remark: configured?.remark || (reportIsCsee ? getRemark(grade) : grade),
+                remark: remarkForEducationLevel(grade, levelContext, examGradingScales) || configured?.remark || (reportIsCsee ? getRemark(grade) : grade),
                 report_status: result.pass ? "Passed" : "Failed"
             };
         });
