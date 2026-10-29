@@ -25,6 +25,17 @@ const isLegacyOLevelScale = scales => {
 export const getApplicableGradeScale = (percentage, scales, levelContext) => {
   const levelType = getEducationLevelType(levelContext);
   if (levelType !== "O_LEVEL" && isLegacyOLevelScale(scales)) return null;
+
+  // Primary results must use letter grades. Some schools have a generic
+  // early-years scale (Excellent/Good/Developing/Needs Support) attached to
+  // the exam; do not let that scale replace Primary A/B/C/D/E grades.
+  if (levelType === "PRIMARY") {
+    const configuredGrades = (Array.isArray(scales) ? scales : [])
+      .map(scale => String(scale?.grade || "").trim().toUpperCase())
+      .filter(Boolean);
+    if (configuredGrades.length && configuredGrades.some(grade => !/^[A-F]$/.test(grade))) return null;
+  }
+
   const p = Number(percentage) || 0;
   return [...(Array.isArray(scales) ? scales : [])]
     .sort((a, b) => (Number(b.min_percentage) || 0) - (Number(a.min_percentage) || 0))
