@@ -3880,7 +3880,7 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
 
             {levelType === "EARLY_YEARS" && <div className="border border-slate-400 rounded-lg p-3 mb-4"><h3 className="font-extrabold text-xs mb-1">Child Development Summary</h3><p className="text-[10px]">Review learning-area remarks and teacher recommendations to understand the child’s progress and areas needing support.</p></div>}
             {levelType === "A_LEVEL" && <div className="border border-slate-400 rounded-lg p-3 mb-4"><h3 className="font-extrabold text-xs mb-1">Advanced Level Summary</h3><p className="text-[10px]">Review the registered subject combination and A-Level grades. CSEE Best Seven, aggregate and division do not apply to A-Level.</p></div>}
-            <div className="grid grid-cols-2 gap-3 mt-4>
+            <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Tabia kwa Ujumla</h3><p className="text-[10px] whitespace-pre-wrap">{report.generalConduct || "____________________________________________"}</p></div>
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Bidii za Kazi za Mikono</h3><p className="text-[10px] whitespace-pre-wrap">{report.manualWorkEffort || "____________________________________________"}</p></div>
             </div>
