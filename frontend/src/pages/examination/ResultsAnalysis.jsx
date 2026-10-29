@@ -4394,7 +4394,8 @@ function StudentTrace({
     openQuestionDetail,
     reportFields,
     updateReportField,
-    communicationStatus
+    communicationStatus,
+    isCseeClass
 }) {
     const results = examSubjects
         .filter(es => idValue(es.class_id) === idValue(student.class_id))
