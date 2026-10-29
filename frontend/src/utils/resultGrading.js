@@ -55,6 +55,15 @@ export const gradeForEducationLevel = (percentage, levelContext, scales = []) =>
     return "F";
   }
 
+  // Tanzania primary-school letter grades (unless the exam has its own valid scale).
+  if (levelType === "PRIMARY") {
+    if (p >= 75) return "A";
+    if (p >= 65) return "B";
+    if (p >= 45) return "C";
+    if (p >= 30) return "D";
+    return "E";
+  }
+
   if (p >= 80) return "Excellent";
   if (p >= 65) return "Good";
   if (p >= 50) return "Satisfactory";
@@ -76,6 +85,9 @@ export const remarkForEducationLevel = (grade, levelContext, scales = []) => {
   if (levelType === "A_LEVEL") {
     return ({ A: "Excellent", B: "Very Good", C: "Good", D: "Average", E: "Satisfactory", S: "Subsidiary", F: "Fail" })[normalizedGrade] || grade;
   }
+  if (levelType === "PRIMARY") {
+    return ({ A: "Excellent", B: "Very Good", C: "Good", D: "Satisfactory", E: "Needs Improvement" })[normalizedGrade] || grade;
+  }
   return grade || "Not assessed";
 };
 
@@ -87,5 +99,6 @@ export const gradeLabelsForEducationLevel = (levelContext, scales = []) => {
   if (configured.length && (levelType === "O_LEVEL" || !isLegacyOLevelScale(scales))) return [...new Set(configured)];
   if (levelType === "O_LEVEL") return ["A", "B", "C", "D", "F"];
   if (levelType === "A_LEVEL") return ["A", "B", "C", "D", "E", "S", "F"];
+  if (levelType === "PRIMARY") return ["A", "B", "C", "D", "E"];
   return ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"];
 };
