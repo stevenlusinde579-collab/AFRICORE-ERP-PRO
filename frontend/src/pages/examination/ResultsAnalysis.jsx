@@ -1591,7 +1591,6 @@ export default function ResultsAnalysis() {
                 const classInfo = classMap.get(idValue(es.class_id));
                 const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(es.subject_id))?.education_level].filter(Boolean).join(" ");
                 const classIsCsee = isCseeClass(es.class_id);
-                const configured = applicableGradeScale(row.percentage, examGradingScales, classIsCsee);
                 const grade = gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
                 return { ...row, grade, point: classIsCsee ? getGradePoint(grade) : null };
             });
@@ -1747,7 +1746,6 @@ export default function ResultsAnalysis() {
             const graded = results.map(row => {
                 const classInfo = classMap.get(idValue(selectedClassId));
                 const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(row.subject_id))?.education_level].filter(Boolean).join(" ");
-                const configured = applicableGradeScale(row.percentage, examGradingScales, isCseeClass(selectedClassId));
                 const grade = gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
                 return { ...row, grade, point: isCseeClass(selectedClassId) ? getGradePoint(grade) : null };
             });
