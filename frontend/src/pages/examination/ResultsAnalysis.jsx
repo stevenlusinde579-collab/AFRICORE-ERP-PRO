@@ -3617,7 +3617,7 @@ export default function ResultsAnalysis() {
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
                     {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
-                    {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} />}
+                    {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} examGradingScales={examGradingScales} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
                     {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
                     {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
@@ -3755,6 +3755,23 @@ function InsightMetric({ title, icon: Icon, value, detail, tone }) {
 // PRINT REPORT COMPONENTS
 // ============================================================
 
+function getReportLevelType(exam, report = {}) {
+    return getEducationLevelType([
+        exam?.education_level, exam?.educationLevel, exam?.level, exam?.exam_type,
+        report?.education_level, report?.academic_level, report?.class_name,
+        report?.className, report?.class, report?.stream
+    ].filter(Boolean).join(" "));
+}
+
+function getReportLevelLabel(levelType) {
+    return ({
+        EARLY_YEARS: "Early Years / Baby Class",
+        PRIMARY: "Primary Education",
+        O_LEVEL: "Ordinary Level (O-Level)",
+        A_LEVEL: "Advanced Level (A-Level)"
+    })[levelType] || "General Education";
+}
+
 function ReportHeader({ exam, title, subtitle }) {
     const { showSchoolName, schoolName } = useSchool();
     const brandName = showSchoolName && schoolName ? schoolName : "AfriCore ERP";
@@ -3781,6 +3798,8 @@ function RecommendationBox({ recommendations }) {
 }
 
 function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }) {
+    const levelType = getReportLevelType(exam, report);
+    const levelLabel = getReportLevelLabel(levelType);
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
     // Do not recalculate them for Primary, ECE or Advanced Level reports.
     const result = isCseeExam
@@ -3800,7 +3819,7 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
 
     return (
         <div className="p-7 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="Student Academic Report" subtitle={`${report.class_name || "Class"} Â· ${report.stream || ""} Â· Position ${report.position || "â€”"}/${report.rankTotal || "â€”"}`} />
+            <ReportHeader exam={exam} title={`${levelLabel} — Student Academic Report`} subtitle={`${report.class_name || "Class"} Â· ${report.stream || ""} Â· Position ${report.position || "â€”"}/${report.rankTotal || "â€”"}`} />
 
             <div className="grid grid-cols-4 gap-2 text-[10px] mb-4">
                 <DetailBox label="Student Name" value={report.full_name || "â€”"} />
@@ -3842,7 +3861,7 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
             </div>}
 
             <div className="mb-4">
-                <h3 className="font-extrabold text-sm mb-2">All Exam Subjects</h3>
+                <h3 className="font-extrabold text-sm mb-2">{levelType === "EARLY_YEARS" ? "Child Development and Learning Areas" : levelType === "PRIMARY" ? "Primary Subject Results" : levelType === "A_LEVEL" ? "Advanced Level Subject Results" : "All Exam Subjects"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
                     <thead><tr>{(isCseeExam ? ["#","Subject","Mark","%","Grade","Point","Status"] : ["#","Subject","Mark","%","Grade","Remark","Status"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{allSubjects.map((row, index) => (
@@ -3859,6 +3878,8 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
                 </table>
             </div>
 
+            {levelType === "EARLY_YEARS" && <div className="border border-slate-400 rounded-lg p-3 mb-4"><h3 className="font-extrabold text-xs mb-1">Child Development Summary</h3><p className="text-[10px]">Review learning-area remarks and teacher recommendations to understand the child’s progress and areas needing support.</p></div>}
+            {levelType === "A_LEVEL" && <div className="border border-slate-400 rounded-lg p-3 mb-4"><h3 className="font-extrabold text-xs mb-1">Advanced Level Summary</h3><p className="text-[10px]">Review the registered subject combination and A-Level grades. CSEE Best Seven, aggregate and division do not apply to A-Level.</p></div>}
             <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Tabia kwa Ujumla</h3><p className="text-[10px] whitespace-pre-wrap">{report.generalConduct || "____________________________________________"}</p></div>
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Bidii za Kazi za Mikono</h3><p className="text-[10px] whitespace-pre-wrap">{report.manualWorkEffort || "____________________________________________"}</p></div>
@@ -3869,10 +3890,12 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
     );
 }
 
-function SubjectReportPrint({ exam, report }) {
+function SubjectReportPrint({ exam, report, examGradingScales = [] }) {
+    const levelType = getReportLevelType(exam, report);
+    const levelLabel = getReportLevelLabel(levelType);
     return (
         <div className="p-8 text-slate-900">
-            <ReportHeader exam={exam} title="Subject Analysis Report" subtitle={`${report.subject_name} Â· ${report.class_name}`} />
+            <ReportHeader exam={exam} title={`${levelLabel} — Subject Analysis Report`} subtitle={`${report.subject_name} Â· ${report.class_name}`} />
             <div className="grid grid-cols-4 gap-3 text-sm mb-5">
                 <DetailBox label="Candidates" value={report.candidates} />
                 <DetailBox label="Analysed" value={report.analysed} />
@@ -3894,7 +3917,7 @@ function SubjectReportPrint({ exam, report }) {
                             <td className="border border-slate-400 p-2">{getAdmission(row.student)}</td>
                             <td className="border border-slate-400 p-2">{formatNumber(row.result.total)} / {formatNumber(row.result.possible)}</td>
                             <td className="border border-slate-400 p-2">{formatNumber(row.result.percentage, 1)}%</td>
-                            <td className="border border-slate-400 p-2">{getGrade(row.result.percentage)}</td>
+                            <td className="border border-slate-400 p-2">{gradeForEducationLevel(row.result.percentage, [exam?.education_level, exam?.level, exam?.exam_type, report?.class_name].filter(Boolean).join(" "), examGradingScales)}</td>
                             <td className="border border-slate-400 p-2">{row.result.status}</td>
                         </tr>
                     ))}
@@ -4000,6 +4023,8 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
 }
 
 function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
+    const levelType = getReportLevelType(exam, data);
+    const levelLabel = getReportLevelLabel(levelType);
     const students = data.allStudents || data.topStudents || [];
     const finalRows = students.map(student => ({
         ...student,
@@ -4022,7 +4047,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
     const classRows = data.classRows || [];
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="School Overall Examination Report" subtitle={isCseeExam ? "Whole School Performance Â· Best Seven Classification" : "Whole School Performance Â· Configured Grading"} />
+            <ReportHeader exam={exam} title={`${levelLabel} — School Overall Report`} subtitle={isCseeExam ? "Whole School Performance Â· Best Seven Classification" : "Whole School Performance Â· Configured Grading"} />
 
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Candidates" value={data.candidates || 0} />
@@ -4092,6 +4117,8 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
 }
 
 function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
+    const levelType = getReportLevelType(exam, data);
+    const levelLabel = getReportLevelLabel(levelType);
     const students = data.students || data.topStudents || [];
     const finalRows = students.map(student => ({
         ...student,
@@ -4112,7 +4139,7 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
     }));
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title="Class Overall Examination Report" subtitle={isCseeExam ? `${data.className || "Class"} Â· Best Seven Classification` : `${data.className || "Class"} Â· Configured Grading`} />
+            <ReportHeader exam={exam} title={`${levelLabel} — Class Results Report`} subtitle={isCseeExam ? `${data.className || "Class"} Â· Best Seven Classification` : `${data.className || "Class"} Â· Configured Grading`} />
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} />{isCseeExam && <DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "—"} />}<DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
@@ -4156,15 +4183,18 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
 function OverallReportPrint({ exam, data }) {
     const students = data.students || [];
     const subjects = data.subjects || [];
+    const levelType = getReportLevelType(exam, data);
+    const levelLabel = getReportLevelLabel(levelType);
+    const showCseeMetrics = levelType === "O_LEVEL";
     return (
         <div className="p-8 text-slate-900">
-            <ReportHeader exam={exam} title="Overall Examination Results" subtitle="All examination subjects" />
+            <ReportHeader exam={exam} title={`${levelLabel} — Overall Examination Results`} subtitle="All examination subjects" />
             <div className="mb-5 text-sm"><strong>Subjects:</strong> {subjects.map(s => s.subject_name).join(", ") || "â€”"} Â· <strong>Candidates:</strong> {students.length}</div>
             <table className="w-full border-collapse text-[10px]">
                 <thead><tr>
                     <th className="border border-slate-400 p-1">Pos.</th><th className="border border-slate-400 p-1 text-left">Student</th><th className="border border-slate-400 p-1">Admission</th>
                     {subjects.map(s => <th key={s.exam_subject_id} className="border border-slate-400 p-1">{s.subject_name}</th>)}
-                    <th className="border border-slate-400 p-1">Total</th><th className="border border-slate-400 p-1">%</th><th className="border border-slate-400 p-1">Grade</th><th className="border border-slate-400 p-1">GPA</th><th className="border border-slate-400 p-1">Division</th>
+                    <th className="border border-slate-400 p-1">Total</th><th className="border border-slate-400 p-1">%</th><th className="border border-slate-400 p-1">Grade</th>{showCseeMetrics && <><th className="border border-slate-400 p-1">GPA</th><th className="border border-slate-400 p-1">Division</th></>}
                 </tr></thead>
                 <tbody>
                     {students.map(student => (
@@ -4179,8 +4209,7 @@ function OverallReportPrint({ exam, data }) {
                             <td className="border border-slate-400 p-1 text-center font-bold">{formatNumber(student.total)}</td>
                             <td className="border border-slate-400 p-1 text-center font-bold">{formatNumber(student.percentage, 1)}%</td>
                             <td className="border border-slate-400 p-1 text-center font-bold">{student.grade}</td>
-                            <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"}</td>
-                            <td className="border border-slate-400 p-1 text-center font-bold">{student.cseeDivision ? `Division ${student.cseeDivision}` : "â€”"}</td>
+                            {showCseeMetrics && <><td className="border border-slate-400 p-1 text-center font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"}</td><td className="border border-slate-400 p-1 text-center font-bold">{student.cseeDivision ? `Division ${student.cseeDivision}` : "—"}</td></>}
                         </tr>
                     ))}
                 </tbody>
