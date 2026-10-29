@@ -1207,17 +1207,17 @@ export default function ResultsAnalysis() {
         // The generic percentage helper returns "Needs Support" for low
         // scores, which is appropriate for early-years progress labels but
         // not for Primary grades (A/B/C/D/E).
-        const subjectClass = classMap.get(idValue(examSubject.class_id));
-        const subjectInfo = subjectMap.get(idValue(examSubject.subject_id));
+        const gradeSubjectClass = classMap.get(idValue(examSubject.class_id));
+        const gradeSubjectInfo = subjectMap.get(idValue(examSubject.subject_id));
         const subjectLevelContext = [
             exam?.education_level,
             exam?.level,
             exam?.exam_type,
-            subjectClass?.academic_level,
-            subjectClass?.class_name,
-            subjectClass?.name,
-            subjectClass?.short_name,
-            subjectInfo?.education_level
+            gradeSubjectClass?.academic_level,
+            gradeSubjectClass?.class_name,
+            gradeSubjectClass?.name,
+            gradeSubjectClass?.short_name,
+            gradeSubjectInfo?.education_level
         ].filter(Boolean).join(" ");
         const grade = gradeForEducationLevel(percentage, subjectLevelContext, examGradingScales);
         const remark = remarkForEducationLevel(grade, subjectLevelContext, examGradingScales);
