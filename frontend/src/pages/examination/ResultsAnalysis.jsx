@@ -104,7 +104,6 @@ const getGrade = percentage => {
     return "F";
 };
 
-const normalizeEducationLevel = value => String(value || "").trim().toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 const isOrdinaryLevel = value => getEducationLevelType(value) === "O_LEVEL";
 
 const gradeFromConfiguredScale = (percentage, scales) => getApplicableGradeScale(percentage, scales, "O_LEVEL");
@@ -117,15 +116,6 @@ const isLegacyOLevelScale = scales => {
 };
 
 const applicableGradeScale = (percentage, scales, ordinaryLevel) => getApplicableGradeScale(percentage, scales, ordinaryLevel ? "O_LEVEL" : "GENERAL");
-
-const genericGrade = percentage => {
-    const p = numberValue(percentage);
-    if (p >= 80) return "Excellent";
-    if (p >= 65) return "Good";
-    if (p >= 50) return "Satisfactory";
-    if (p >= 40) return "Developing";
-    return "Needs Support";
-};
 
 const _GRADE_POINTS = Object.freeze({ A: 1, B: 2, C: 3, D: 4, F: 5 });
 const getGradePoint = grade => _GRADE_POINTS[String(grade || "").trim().toUpperCase()] ?? 5;
