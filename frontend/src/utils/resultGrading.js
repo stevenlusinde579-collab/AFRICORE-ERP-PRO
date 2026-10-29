@@ -55,12 +55,15 @@ export const gradeForEducationLevel = (percentage, levelContext, scales = []) =>
     return "F";
   }
 
-  // Tanzania primary-school letter grades (unless the exam has its own valid scale).
+  // NECTA PSLE subject bands are A=41–50, B=31–40, C=21–30,
+  // D=11–20, E=0–10 for a paper marked out of 50. Convert those
+  // boundaries to percentages so papers with a different maximum mark
+  // can be compared consistently. A valid exam-specific scale above wins.
   if (levelType === "PRIMARY") {
-    if (p >= 75) return "A";
-    if (p >= 65) return "B";
-    if (p >= 45) return "C";
-    if (p >= 30) return "D";
+    if (p >= 82) return "A";
+    if (p >= 62) return "B";
+    if (p >= 42) return "C";
+    if (p >= 22) return "D";
     return "E";
   }
 
@@ -86,7 +89,7 @@ export const remarkForEducationLevel = (grade, levelContext, scales = []) => {
     return ({ A: "Excellent", B: "Very Good", C: "Good", D: "Average", E: "Satisfactory", S: "Subsidiary", F: "Fail" })[normalizedGrade] || grade;
   }
   if (levelType === "PRIMARY") {
-    return ({ A: "Excellent", B: "Very Good", C: "Good", D: "Satisfactory", E: "Needs Improvement" })[normalizedGrade] || grade;
+    return ({ A: "Excellent", B: "Very Good", C: "Good", D: "Satisfactory", E: "Unsatisfactory" })[normalizedGrade] || grade;
   }
   return grade || "Not assessed";
 };
