@@ -34,7 +34,7 @@ test("uses ACSEE grade bands when no exam-specific scale is configured", () => {
   assert.deepEqual(gradeLabelsForEducationLevel("Form VI"), ["A", "B", "C", "D", "E", "S", "F"]);
 });
 
-test("uses primary letter grades and does not apply inherited O-Level defaults", () => {
+test("uses NECTA PSLE A–E bands for primary and does not apply inherited O-Level defaults", () => {
   const legacyScale = [
     { grade: "A", min_percentage: 75, max_percentage: 100 },
     { grade: "B", min_percentage: 65, max_percentage: 74 },
@@ -42,14 +42,16 @@ test("uses primary letter grades and does not apply inherited O-Level defaults",
     { grade: "D", min_percentage: 30, max_percentage: 44 },
     { grade: "F", min_percentage: 0, max_percentage: 29 }
   ];
-  assert.equal(gradeForEducationLevel(75, "Primary", legacyScale), "A");
-  assert.equal(gradeForEducationLevel(65, "Standard IV", legacyScale), "B");
-  assert.equal(gradeForEducationLevel(45, "Primary", legacyScale), "C");
-  assert.equal(gradeForEducationLevel(30, "Primary", legacyScale), "D");
-  assert.equal(gradeForEducationLevel(29, "Primary", legacyScale), "E");
+  assert.equal(gradeForEducationLevel(82, "Primary", legacyScale), "A");
+  assert.equal(gradeForEducationLevel(62, "Standard IV", legacyScale), "B");
+  assert.equal(gradeForEducationLevel(42, "Primary", legacyScale), "C");
+  assert.equal(gradeForEducationLevel(22, "Primary", legacyScale), "D");
+  assert.equal(gradeForEducationLevel(21, "Primary", legacyScale), "E");
   assert.deepEqual(gradeLabelsForEducationLevel("Primary", legacyScale), ["A", "B", "C", "D", "E"]);
-  assert.equal(remarkForEducationLevel("E", "Primary"), "Needs Improvement");
+  assert.equal(remarkForEducationLevel("E", "Primary"), "Unsatisfactory");
   assert.equal(gradeForEducationLevel(75, "Baby Class", legacyScale), "Good");
+  assert.equal(gradeForEducationLevel(75, "Ordinary Level", legacyScale), "A");
+  assert.equal(gradeForEducationLevel(75, "Advanced Level"), "B");
 });
 
 test("prefers a valid examination-specific grading scale", () => {
