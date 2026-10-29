@@ -1522,16 +1522,30 @@ export default function ResultsAnalysis() {
     const overallRankedStudents = useMemo(() => {
         const ranked = overallStudentAnalysis
             .filter(row => row.possible > 0)
-            .sort((a, b) => b.percentage - a.percentage || b.total - a.total);
+            .sort((a, b) => idValue(a.class_id).localeCompare(idValue(b.class_id)) || b.percentage - a.percentage || b.total - a.total);
         const positionMap = new Map();
-        ranked.forEach((row, index) => {
-            if (!positionMap.has(row.percentage)) positionMap.set(row.percentage, index + 1);
+        const rankTotals = new Map();
+        const classRanked = new Map();
+        ranked.forEach(row => {
+            const classKey = idValue(row.class_id);
+            if (!classRanked.has(classKey)) classRanked.set(classKey, []);
+            classRanked.get(classKey).push(row);
         });
-        return overallStudentAnalysis.map(row => ({
-            ...row,
-            position: row.possible > 0 ? positionMap.get(row.percentage) : null,
-            rankTotal: ranked.length
-        }));
+        classRanked.forEach((rows, classKey) => {
+            rankTotals.set(classKey, rows.length);
+            rows.forEach((row, index) => {
+                const rankKey = `${classKey}::${row.percentage}`;
+                if (!positionMap.has(rankKey)) positionMap.set(rankKey, index + 1);
+            });
+        });
+        return overallStudentAnalysis.map(row => {
+            const classKey = idValue(row.class_id);
+            return {
+                ...row,
+                position: row.possible > 0 ? positionMap.get(`${classKey}::${row.percentage}`) : null,
+                rankTotal: rankTotals.get(classKey) || 0
+            };
+        });
     }, [overallStudentAnalysis]);
 
     // ========================================================
@@ -3611,6 +3625,7 @@ export default function ResultsAnalysis() {
                     studentReportFields={studentReportFields}
                     updateStudentReportFields={updateStudentReportFields}
                     communicationStatus={communicationStatus}
+                    isCseeClass={isCseeClass}
                 />
             )}
 
@@ -4110,7 +4125,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
                     </tr>)}</tbody>
                 </table>
             </div>
-            <div className="mt-4 text-[8px] text-slate-600">Final GPA, Aggregate and Division are calculated from the Best Seven subjects. Subjects without marks remain F and may occupy a Best Seven position when required.</div>
+            {isCseeExam && <div className="mt-4 text-[8px] text-slate-600">Final GPA, Aggregate and Division are calculated from the Best Seven subjects. Subjects without marks remain F and may occupy a Best Seven position when required.</div>}
             <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><div className="border-t border-slate-500 pt-2">Prepared By</div><div className="border-t border-slate-500 pt-2">Academic Officer</div><div className="border-t border-slate-500 pt-2">Headmaster</div></div>
         </div>
     );
@@ -4174,7 +4189,7 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
                     </tr>)}</tbody>
                 </table>
             </div>
-            <div className="mt-4 text-[8px] text-slate-600">Final GPA, Aggregate and Division use the Best Seven subjects. Missing marks are treated as F when a subject is required to complete the seven counted subjects.</div>
+            {isCseeExam && <div className="mt-4 text-[8px] text-slate-600">Final GPA, Aggregate and Division use the Best Seven subjects. Missing marks are treated as F when a subject is required to complete the seven counted subjects.</div>}
             <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><div className="border-t border-slate-500 pt-2">Prepared By</div><div className="border-t border-slate-500 pt-2">Academic Officer</div><div className="border-t border-slate-500 pt-2">Headmaster</div></div>
         </div>
     );
@@ -4257,7 +4272,8 @@ function TraceModal({
     printSubjectReport,
     studentReportFields,
     updateStudentReportFields,
-    communicationStatus
+    communicationStatus,
+    isCseeClass
 }) {
     const data = detail.data;
 
@@ -4330,6 +4346,7 @@ function TraceModal({
                             reportFields={studentReportFields[idValue(data.id)] || {}}
                             updateReportField={updateStudentReportFields}
                             communicationStatus={communicationStatus?.[idValue(data.id)] || null}
+                            isCseeClass={isCseeClass}
                         />
                     )}
 
@@ -4431,10 +4448,13 @@ function StudentTrace({
                 <DetailBox label="Class" value={student.class_name} />
                 <DetailBox label="Jumla ya Marks" value={formatNumber(student.total)} />
                 <DetailBox label="Percentage" value={`${formatNumber(student.percentage, 1)}%`} />
-                <DetailBox label="Grade" value={student.grade} />
-                <DetailBox label="Aggregate" value={student.cseeAggregate ?? "â€”"} />
-                <DetailBox label="GPA" value={student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "â€”"} />
-                <DetailBox label="Division" value={student.cseeDivision ? `Division ${student.cseeDivision}` : "â€”"} />
+                <DetailBox label="Grade" value={student.grade || "—"} />
+                <DetailBox label="Position" value={student.position ? `${student.position}/${student.rankTotal || "—"}` : "—"} />
+                {isCseeClass?.(student.class_id) && <>
+                    <DetailBox label="Aggregate" value={student.cseeAggregate ?? "—"} />
+                    <DetailBox label="GPA" value={student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"} />
+                    <DetailBox label="Division" value={student.cseeDivision ? `Division ${student.cseeDivision}` : "—"} />
+                </>}
                 <DetailBox label="Status" value={student.percentage >= 40 ? "Passed" : "Failed"} />
             </div>
 
