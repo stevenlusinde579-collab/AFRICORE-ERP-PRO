@@ -1203,7 +1203,24 @@ export default function ResultsAnalysis() {
         // the student's mark. Therefore 85 remains 85%, even if the selected
         // questions have a combined max_marks of 115.
         const percentage = clamp(rawTotal);
-        const grade = gradeForPercentage(percentage);
+        // Subject grades must follow the exam/class education level.
+        // The generic percentage helper returns "Needs Support" for low
+        // scores, which is appropriate for early-years progress labels but
+        // not for Primary grades (A/B/C/D/E).
+        const subjectClass = classMap.get(idValue(examSubject.class_id));
+        const subjectInfo = subjectMap.get(idValue(examSubject.subject_id));
+        const subjectLevelContext = [
+            exam?.education_level,
+            exam?.level,
+            exam?.exam_type,
+            subjectClass?.academic_level,
+            subjectClass?.class_name,
+            subjectClass?.name,
+            subjectClass?.short_name,
+            subjectInfo?.education_level
+        ].filter(Boolean).join(" ");
+        const grade = gradeForEducationLevel(percentage, subjectLevelContext, examGradingScales);
+        const remark = remarkForEducationLevel(grade, subjectLevelContext, examGradingScales);
 
         return {
             exam_subject_id: examSubject.id,
@@ -1216,7 +1233,7 @@ export default function ResultsAnalysis() {
             rawPossible,
             percentage,
             grade,
-            remark: remarkForGrade(grade),
+            remark: remark || grade,
             pass: rawPossible > 0 && passedForPercentage(percentage),
             questions: selectedQuestions.length,
             marked_questions: markedQuestions,
