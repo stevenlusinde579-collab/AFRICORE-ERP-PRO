@@ -54,8 +54,11 @@ test("uses NECTA PSLE A–E bands for primary and does not apply inherited O-Lev
   assert.equal(gradeForEducationLevel(75, "Advanced Level"), "B");
 });
 
-test("prefers a valid examination-specific grading scale", () => {
-  const scale = [{ grade: "Merit", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
-  assert.equal(gradeForEducationLevel(75, "Primary", scale), "Merit");
-  assert.equal(remarkForEducationLevel("Merit", "Primary", scale), "Very good");
+test("uses Primary letter grades and honors remarks for valid letter-grade scales", () => {
+  const nonLetterScale = [{ grade: "Merit", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
+  assert.equal(gradeForEducationLevel(75, "Primary", nonLetterScale), "A");
+
+  const primaryScale = [{ grade: "A", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
+  assert.equal(gradeForEducationLevel(75, "Primary", primaryScale), "A");
+  assert.equal(remarkForEducationLevel("A", "Primary", primaryScale), "Very good");
 });
