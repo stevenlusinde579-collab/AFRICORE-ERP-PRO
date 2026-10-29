@@ -1755,7 +1755,7 @@ export default function ResultsAnalysis() {
             const classIsCsee = isCseeClass(selectedClassId);
             const labels = examGradingScales.length && (classIsCsee || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
-                : (classIsCsee ? ["A","B","C","D","F"] : ["Excellent","Good","Satisfactory","Developing","Needs Support"]);
+                : gradeLabelsForEducationLevel(levelContext, examGradingScales);
             const gradeCounts = Object.fromEntries(labels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
             const subjectGpa = classIsCsee && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
