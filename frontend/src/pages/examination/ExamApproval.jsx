@@ -3455,7 +3455,7 @@ const ExamApproval = () => {
                                     <div className="max-w-xl w-full bg-red-950 border border-red-800 rounded-2xl p-7">
 
                                         <div className="text-4xl mb-4">
-                                            âš ï¸
+                                            ⚠️
                                         </div>
 
 
