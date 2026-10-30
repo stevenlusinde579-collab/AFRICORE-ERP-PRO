@@ -254,6 +254,8 @@ function Dashboard() {
 
     classes: 0,
 
+    cashBalance: 0,
+
   });
 
 
@@ -505,6 +507,12 @@ function Dashboard() {
         .from("classes")
         .select("*", { count: "exact", head: true });
 
+      let cashAccountsQuery = supabase
+        .schema("finance")
+        .from("cash_accounts")
+        .select("current_balance,balance")
+        .eq("is_active", true);
+
       let recentStudentsQuery = supabase
         .from("students")
         .select("first_name,last_name,admission_number,created_at")
@@ -519,6 +527,7 @@ function Dashboard() {
         nonStaffQuery = nonStaffQuery.eq("school_id", schoolFilter);
         totalStaffQuery = totalStaffQuery.eq("school_id", schoolFilter);
         classesQuery = classesQuery.eq("school_id", schoolFilter);
+        cashAccountsQuery = cashAccountsQuery.eq("school_id", schoolFilter);
         recentStudentsQuery = recentStudentsQuery.eq("school_id", schoolFilter);
       }
 
@@ -528,6 +537,7 @@ function Dashboard() {
         nonStaffResult,
         totalStaffResult,
         classResult,
+        cashAccountsResult,
         recentResult,
       ] = await Promise.all([
         studentsQuery,
@@ -535,6 +545,7 @@ function Dashboard() {
         nonStaffQuery,
         totalStaffQuery,
         classesQuery,
+        cashAccountsQuery,
         recentStudentsQuery,
       ]);
 
@@ -544,6 +555,7 @@ function Dashboard() {
         nonStaffResult.error,
         totalStaffResult.error,
         classResult.error,
+        cashAccountsResult.error,
         recentResult.error,
       ].filter(Boolean);
 
@@ -561,6 +573,15 @@ function Dashboard() {
         nonStaff: nonStaffResult.count || 0,
         totalStaff: totalStaffResult.count || 0,
         classes: classResult.count || 0,
+        cashBalance: (cashAccountsResult.data || []).reduce(
+          (total, account) =>
+            total + Number(
+              account.current_balance ??
+              account.balance ??
+              0
+            ),
+          0
+        ),
       });
 
       setRecentStudents(recentResult.data || []);
@@ -1239,7 +1260,10 @@ function SuperAdminDashboard({
 
     {
       title: "School Balance",
-      value: "TZS 0",
+      value: `TZS ${new Intl.NumberFormat("en-TZ", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(stats.cashBalance || 0)}`,
       icon: <MdAccountBalance />,
       color: "bg-yellow-600",
     },
