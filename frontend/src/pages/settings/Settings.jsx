@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Building2,
     FileText,
@@ -42,6 +43,7 @@ const PromotionMetric = ({ label, value }) => (
 
 
 function Settings() {
+    const navigate = useNavigate();
     const {
         refreshSchool,
         academicYears,
@@ -811,9 +813,9 @@ function Settings() {
                 throw signOutError;
             }
 
-            // Replace the current history entry so the Back button does not
-            // reopen a protected page after the user has logged out.
-            window.location.replace("/");
+            // Navigate within React Router so Vercel does not receive a new
+            // document request for the SPA root after logout.
+            navigate("/", { replace: true });
         } catch (err) {
             console.error("LOGOUT ERROR:", err);
 
