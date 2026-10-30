@@ -4886,7 +4886,7 @@ function EnterMarks() {
                                     <p className={`font-bold ${checkingApproval ? "text-blue-800" : fullApproval ? "text-green-800" : "text-red-800"}`}>
                                         {checkingApproval ? "Checking Examination Approval..." : fullApproval ? "EXAMINATION APPROVED — ENTER MARKS UNLOCKED" : "ENTER MARKS LOCKED — APPROVAL NOT COMPLETE"}
                                     </p>
-                                    <p className="text-sm text-gray-600 mt-1">Academic Master â†’ Deputy Headmaster â†’ Headmaster</p>
+                                    <p className="text-sm text-gray-600 mt-1">Academic Master → Deputy Headmaster → Headmaster</p>
                                 </div>
                                 <button type="button" onClick={() => checkExamApproval(selectedExamSubjectId)} disabled={checkingApproval} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50">
                                     {checkingApproval ? <><FaSpinner className="animate-spin" /> Checking...</> : "Check Approval Again"}
