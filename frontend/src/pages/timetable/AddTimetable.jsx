@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import { useSchool } from "../../context/SchoolContext";
 
 
 function AddTimetable(){
 
 const navigate = useNavigate();
-
-
-const schoolId = 1;
+const { schoolId, loading: schoolLoading } = useSchool();
 
 
 const [classes,setClasses]=useState([]);
@@ -53,9 +52,11 @@ session:"Morning"
 
 useEffect(()=>{
 
-loadData();
+if (!schoolLoading && schoolId) {
+    loadData();
+}
 
-},[]);
+},[schoolLoading,schoolId]);
 
 
 
@@ -150,6 +151,11 @@ const saveTimetable=async(e)=>{
 
 e.preventDefault();
 
+
+if (!schoolId || Number(schoolId) <= 0) {
+    setMessage("School information is still loading or unavailable. Please refresh and try again.");
+    return;
+}
 
 setLoading(true);
 
@@ -296,7 +302,7 @@ const {error}=await supabase
 {
 
 
-school_id:schoolId,
+school_id:Number(schoolId),
 
 
 class_id:Number(form.class_id),
