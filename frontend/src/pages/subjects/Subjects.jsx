@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useRole } from "../../context/RoleContext";
 
 import SubjectTable from "./SubjectTable";
 import SubjectSearch from "./SubjectSearch";
@@ -11,6 +12,8 @@ function Subjects(){
 
 
 const navigate = useNavigate();
+const { selectedRoleId } = useRole();
+const canManageSubjects = [1, 4].includes(Number(selectedRoleId));
 
 
 
@@ -67,8 +70,8 @@ Manage school subjects in AfriCore ERP PRO
 
 
 
+{canManageSubjects && (
 <button
-
 onClick={()=>navigate("/subjects/add")}
 
 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
