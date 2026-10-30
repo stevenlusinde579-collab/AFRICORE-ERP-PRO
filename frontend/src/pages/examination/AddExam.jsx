@@ -383,7 +383,7 @@ function AddExam() {
         );
 
         if (rangeMatch) {
-            const toNumber = value => /^\\d+$/.test(value)
+            const toNumber = value => /^\d+$/.test(value)
                 ? Number(value)
                 : romanNumbers[value];
             const start = toNumber(rangeMatch[1]);
