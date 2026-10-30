@@ -75,6 +75,8 @@ const {data:classData}=await supabase
 
 .select("*")
 
+.eq("school_id", Number(schoolId))
+
 .order("class_name");
 
 
@@ -96,6 +98,8 @@ const {data:teacherData}=await supabase
 .from("teachers")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .order("first_name");
 
@@ -174,6 +178,8 @@ const {data:existing,error:checkError}=await supabase
 
 .select("*")
 
+.eq("school_id", Number(schoolId))
+
 .eq("class_id",Number(form.class_id))
 
 .eq("period_id",Number(form.period_id))
@@ -250,6 +256,8 @@ const {data:teacherBusy}=await supabase
 .from("class_timetables")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .eq("teacher_id",Number(form.teacher_id))
 
