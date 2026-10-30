@@ -49,6 +49,26 @@ test("uses NECTA PSLE A–E bands for primary and does not apply inherited O-Lev
   assert.equal(gradeForEducationLevel(21, "Primary", legacyScale), "E");
   assert.deepEqual(gradeLabelsForEducationLevel("Primary", legacyScale), ["A", "B", "C", "D", "E"]);
   assert.equal(remarkForEducationLevel("E", "Primary"), "Unsatisfactory");
+test("Primary always displays A-E grades and never inherited support labels", () => {
+  const inheritedEarlyYearsScale = [
+    { grade: "Excellent", min_percentage: 80, max_percentage: 100 },
+    { grade: "Good", min_percentage: 65, max_percentage: 79 },
+    { grade: "Satisfactory", min_percentage: 50, max_percentage: 64 },
+    { grade: "Developing", min_percentage: 40, max_percentage: 49 },
+    { grade: "Needs Support", min_percentage: 0, max_percentage: 39 }
+  ];
+
+  assert.equal(gradeForEducationLevel(20, "Primary", inheritedEarlyYearsScale), "E");
+  assert.equal(gradeForEducationLevel(39, "Standard IV", inheritedEarlyYearsScale), "D");
+  assert.equal(gradeForEducationLevel(50, "Primary", inheritedEarlyYearsScale), "C");
+  assert.equal(gradeForEducationLevel(70, "Primary", inheritedEarlyYearsScale), "B");
+  assert.equal(gradeForEducationLevel(90, "Primary", inheritedEarlyYearsScale), "A");
+  assert.deepEqual(
+    gradeLabelsForEducationLevel("Primary", inheritedEarlyYearsScale),
+    ["A", "B", "C", "D", "E"]
+  );
+});
+
   assert.equal(gradeForEducationLevel(75, "Baby Class", legacyScale), "Good");
   assert.equal(gradeForEducationLevel(75, "Ordinary Level", legacyScale), "A");
   assert.equal(gradeForEducationLevel(75, "Advanced Level"), "B");
