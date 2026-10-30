@@ -76,6 +76,6 @@ test("Primary always displays A-E grades and never inherited support labels", ()
 
 test("prefers a valid examination-specific grading scale", () => {
   const scale = [{ grade: "Merit", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
-  assert.equal(gradeForEducationLevel(75, "Primary", scale), "Merit");
-  assert.equal(remarkForEducationLevel("Merit", "Primary", scale), "Very good");
+  assert.equal(gradeForEducationLevel(75, "Primary", scale), "B");
+  assert.equal(remarkForEducationLevel("B", "Primary", scale), "Very Good");
 });

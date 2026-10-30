@@ -756,6 +756,91 @@ function FinancialStatements() {
 
 
     // ========================================================
+    // LIVE FINANCIAL STATEMENT UPDATES
+    // ========================================================
+    // Refresh when finance journal records change, when the user
+    // returns to this tab, and periodically as a fallback in case
+    // Realtime is not enabled for the finance schema.
+    useEffect(() => {
+        let refreshTimer = null;
+        let refreshInProgress = false;
+
+        const refreshSilently = () => {
+            if (
+                document.visibilityState !== "visible" ||
+                refreshInProgress
+            ) {
+                return;
+            }
+
+            refreshInProgress = true;
+
+            loadData({ silent: true }).finally(() => {
+                refreshInProgress = false;
+            });
+        };
+
+        const channel = supabase
+            .channel("financial-statements-live")
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "finance",
+                    table: "journal_entries",
+                },
+                refreshSilently
+            )
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "finance",
+                    table: "journal_entry_lines",
+                },
+                refreshSilently
+            )
+            .subscribe();
+
+        refreshTimer = window.setInterval(
+            refreshSilently,
+            15000
+        );
+
+        window.addEventListener(
+            "focus",
+            refreshSilently
+        );
+
+        document.addEventListener(
+            "visibilitychange",
+            refreshSilently
+        );
+
+        return () => {
+            if (refreshTimer) {
+                window.clearInterval(refreshTimer);
+            }
+
+            window.removeEventListener(
+                "focus",
+                refreshSilently
+            );
+
+            document.removeEventListener(
+                "visibilitychange",
+                refreshSilently
+            );
+
+            supabase.removeChannel(channel);
+        };
+
+        // loadData is intentionally omitted: it is recreated on render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+
+    // ========================================================
     // PRESET
     // ========================================================
 
