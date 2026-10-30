@@ -4884,7 +4884,7 @@ function EnterMarks() {
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                                 <div>
                                     <p className={`font-bold ${checkingApproval ? "text-blue-800" : fullApproval ? "text-green-800" : "text-red-800"}`}>
-                                        {checkingApproval ? "Checking Examination Approval..." : fullApproval ? "EXAMINATION APPROVED â€” ENTER MARKS UNLOCKED" : "ENTER MARKS LOCKED â€” APPROVAL NOT COMPLETE"}
+                                        {checkingApproval ? "Checking Examination Approval..." : fullApproval ? "EXAMINATION APPROVED — ENTER MARKS UNLOCKED" : "ENTER MARKS LOCKED — APPROVAL NOT COMPLETE"}
                                     </p>
                                     <p className="text-sm text-gray-600 mt-1">Academic Master â†’ Deputy Headmaster â†’ Headmaster</p>
                                 </div>
@@ -5443,19 +5443,19 @@ function EnterMarks() {
                                         {" "}
                                         {examId}
 
-                                        {" â€¢ "}
+                                        {" • "}
 
                                         Subject ID:
                                         {" "}
                                         {selectedSubjectId || "-"}
 
-                                        {" â€¢ "}
+                                        {" • "}
 
                                         Class ID:
                                         {" "}
                                         {selectedClassId || "-"}
 
-                                        {" â€¢ "}
+                                        {" • "}
 
                                         Exam Subject ID:
                                         {" "}
@@ -5500,13 +5500,13 @@ function EnterMarks() {
                                         {" "}
                                         {questions.length}
 
-                                        {" â€¢ "}
+                                        {" • "}
 
                                         Topics:
                                         {" "}
                                         {topicGroups.length}
 
-                                        {" â€¢ "}
+                                        {" • "}
 
                                         Selective:
                                         {" "}
@@ -6730,7 +6730,7 @@ function EnterMarks() {
                                                                                                                             )
                                                                                                                         }
 
-                                                                                                                        {" â€¢ "}
+                                                                                                                        {" • "}
 
                                                                                                                         ENTER =
                                                                                                                         Next Question
