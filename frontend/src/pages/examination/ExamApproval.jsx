@@ -3277,7 +3277,7 @@ const ExamApproval = () => {
                                                         {paper.pdf_url && (
 
                                                             <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
-                                                                âœ“ PDF Ready
+                                                                ✓ PDF Ready
                                                             </span>
 
                                                         )}
@@ -3411,7 +3411,7 @@ const ExamApproval = () => {
                                         onClick={closePdf}
                                         className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold"
                                     >
-                                        âœ• Close
+                                        ✕ Close
                                     </button>
 
                                 </div>
@@ -3872,7 +3872,7 @@ const ExamApproval = () => {
                             {academicApproved ? (
 
                                 <span className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-bold">
-                                    âœ“ Approved
+                                    ✓ Approved
                                 </span>
 
                             ) : (
@@ -3932,7 +3932,7 @@ const ExamApproval = () => {
                             {deputyApproved ? (
 
                                 <span className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-bold">
-                                    âœ“ Approved
+                                    ✓ Approved
                                 </span>
 
                             ) : (
@@ -3992,7 +3992,7 @@ const ExamApproval = () => {
                             {headmasterApproved ? (
 
                                 <span className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-bold">
-                                    âœ“ Final Approved
+                                    ✓ Final Approved
                                 </span>
 
                             ) : (
