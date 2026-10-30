@@ -34,6 +34,18 @@ export const getApplicableGradeScale = (percentage, scales, levelContext) => {
 export const gradeForEducationLevel = (percentage, levelContext, scales = []) => {
   const p = Math.max(0, Math.min(100, Number(percentage) || 0));
   const levelType = getEducationLevelType(levelContext);
+
+  // Primary Results Analysis must always display the official A-E grade.
+  // Do not let inherited early-years/custom text scales such as
+  // "Needs Support" replace the grade on Primary result cards.
+  if (levelType === "PRIMARY") {
+    if (p >= 82) return "A";
+    if (p >= 62) return "B";
+    if (p >= 42) return "C";
+    if (p >= 22) return "D";
+    return "E";
+  }
+
   const configured = getApplicableGradeScale(p, scales, levelContext);
   if (configured) return configured.grade;
 
@@ -53,18 +65,6 @@ export const gradeForEducationLevel = (percentage, levelContext, scales = []) =>
     if (p >= 40) return "E";
     if (p >= 35) return "S";
     return "F";
-  }
-
-  // NECTA PSLE subject bands are A=41–50, B=31–40, C=21–30,
-  // D=11–20, E=0–10 for a paper marked out of 50. Convert those
-  // boundaries to percentages so papers with a different maximum mark
-  // can be compared consistently. A valid exam-specific scale above wins.
-  if (levelType === "PRIMARY") {
-    if (p >= 82) return "A";
-    if (p >= 62) return "B";
-    if (p >= 42) return "C";
-    if (p >= 22) return "D";
-    return "E";
   }
 
   if (p >= 80) return "Excellent";
@@ -99,6 +99,9 @@ export const gradeLabelsForEducationLevel = (levelContext, scales = []) => {
   const configured = (Array.isArray(scales) ? scales : [])
     .filter(scale => scale && scale.grade)
     .map(scale => String(scale.grade));
+  // Keep Primary grade distributions strictly A-E even if the exam has
+  // inherited non-primary grading labels configured.
+  if (levelType === "PRIMARY") return ["A", "B", "C", "D", "E"];
   if (configured.length && (levelType === "O_LEVEL" || !isLegacyOLevelScale(scales))) return [...new Set(configured)];
   if (levelType === "O_LEVEL") return ["A", "B", "C", "D", "F"];
   if (levelType === "A_LEVEL") return ["A", "B", "C", "D", "E", "S", "F"];
