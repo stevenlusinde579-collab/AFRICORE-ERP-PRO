@@ -4104,7 +4104,7 @@ const CommunicationMeeting = () => {
                                 </span>
 
                                 <span>
-                                    â€¢
+                                    •
                                 </span>
 
                                 <span>
