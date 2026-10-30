@@ -811,7 +811,9 @@ function Settings() {
                 throw signOutError;
             }
 
-            window.location.href = "/login";
+            // Replace the current history entry so the Back button does not
+            // reopen a protected page after the user has logged out.
+            window.location.replace("/");
         } catch (err) {
             console.error("LOGOUT ERROR:", err);
 
