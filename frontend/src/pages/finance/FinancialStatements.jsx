@@ -763,11 +763,21 @@ function FinancialStatements() {
     // Realtime is not enabled for the finance schema.
     useEffect(() => {
         let refreshTimer = null;
+        let refreshInProgress = false;
 
         const refreshSilently = () => {
-            if (document.visibilityState === "visible") {
-                loadData({ silent: true });
+            if (
+                document.visibilityState !== "visible" ||
+                refreshInProgress
+            ) {
+                return;
             }
+
+            refreshInProgress = true;
+
+            loadData({ silent: true }).finally(() => {
+                refreshInProgress = false;
+            });
         };
 
         const channel = supabase
