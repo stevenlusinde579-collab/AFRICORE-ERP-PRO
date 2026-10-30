@@ -11,7 +11,7 @@ export const getEducationLevelType = value => {
     && !/A LEVEL|ADVANCED LEVEL|FORM\s*(V|5|VI|6)(\b|$)/.test(level)) return "O_LEVEL";
   if (/A LEVEL|A-LEVEL|ADVANCED LEVEL|ADVANCED SECONDARY|FORM\s*(V|5|VI|6)(\b|$)|FORM\s*5\s*[-–]\s*6/.test(level)) return "A_LEVEL";
   if (/BABY CLASS|BABY|NURSERY|PRE PRIMARY|PRE-PRIMARY|KINDERGARTEN|EARLY YEARS/.test(level)) return "EARLY_YEARS";
-  if (/PRIMARY|STANDARD\s*(I|1|II|2|III|3|IV|4|V|5|VI|6|VII|7)(\b|$)|STD\s*(I|1|II|2|III|3|IV|4|V|5|VI|6|VII|7)(\b|$)/.test(level)) return "PRIMARY";
+  if (/PRIMARY|STANDARD\s*(I|1|II|2|III|3|IV|4|V|5|VI|6|VII|7)(\b|$)|CLASS\s*(I|1|II|2|III|3|IV|4|V|5|VI|6|VII|7)(\b|$)|STD\s*(I|1|II|2|III|3|IV|4|V|5|VI|6|VII|7)(\b|$)/.test(level)) return "PRIMARY";
   return "GENERAL";
 };
 
@@ -25,6 +25,17 @@ const isLegacyOLevelScale = scales => {
 export const getApplicableGradeScale = (percentage, scales, levelContext) => {
   const levelType = getEducationLevelType(levelContext);
   if (levelType !== "O_LEVEL" && isLegacyOLevelScale(scales)) return null;
+
+  // Primary results must use letter grades. Some schools have a generic
+  // early-years scale (Excellent/Good/Developing/Needs Support) attached to
+  // the exam; do not let that scale replace Primary A/B/C/D/E grades.
+  if (levelType === "PRIMARY") {
+    const configuredGrades = (Array.isArray(scales) ? scales : [])
+      .map(scale => String(scale?.grade || "").trim().toUpperCase())
+      .filter(Boolean);
+    if (configuredGrades.length && configuredGrades.some(grade => !/^[A-F]$/.test(grade))) return null;
+  }
+
   const p = Number(percentage) || 0;
   return [...(Array.isArray(scales) ? scales : [])]
     .sort((a, b) => (Number(b.min_percentage) || 0) - (Number(a.min_percentage) || 0))
@@ -71,7 +82,7 @@ export const gradeForEducationLevel = (percentage, levelContext, scales = []) =>
   if (p >= 65) return "Good";
   if (p >= 50) return "Satisfactory";
   if (p >= 40) return "Developing";
-  return "Needs Support";
+  return "Beginning";
 };
 
 export const remarkForEducationLevel = (grade, levelContext, scales = []) => {
@@ -106,5 +117,5 @@ export const gradeLabelsForEducationLevel = (levelContext, scales = []) => {
   if (levelType === "O_LEVEL") return ["A", "B", "C", "D", "F"];
   if (levelType === "A_LEVEL") return ["A", "B", "C", "D", "E", "S", "F"];
   if (levelType === "PRIMARY") return ["A", "B", "C", "D", "E"];
-  return ["Excellent", "Good", "Satisfactory", "Developing", "Needs Support"];
+  return ["Excellent", "Good", "Satisfactory", "Developing", "Beginning"];
 };

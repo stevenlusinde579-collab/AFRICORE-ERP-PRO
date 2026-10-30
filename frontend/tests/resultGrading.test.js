@@ -10,6 +10,8 @@ import {
 test("recognizes Baby Class, primary, O-Level and A-Level separately", () => {
   assert.equal(getEducationLevelType("Baby Class"), "EARLY_YEARS");
   assert.equal(getEducationLevelType("Standard IV"), "PRIMARY");
+  assert.equal(getEducationLevelType("Class 4"), "PRIMARY");
+  assert.equal(getEducationLevelType("Primary Class 4"), "PRIMARY");
   assert.equal(getEducationLevelType("Ordinary Level Form IV"), "O_LEVEL");
   assert.equal(getEducationLevelType("Advanced Level Form VI"), "A_LEVEL");
 });
@@ -74,8 +76,11 @@ test("Primary always displays A-E grades and never inherited support labels", ()
   assert.equal(gradeForEducationLevel(75, "Advanced Level"), "B");
 });
 
-test("prefers a valid examination-specific grading scale", () => {
-  const scale = [{ grade: "Merit", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
-  assert.equal(gradeForEducationLevel(75, "Primary", scale), "Merit");
-  assert.equal(remarkForEducationLevel("Merit", "Primary", scale), "Very good");
+test("uses Primary letter grades and honors remarks for valid letter-grade scales", () => {
+  const nonLetterScale = [{ grade: "Merit", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
+  assert.equal(gradeForEducationLevel(75, "Primary", nonLetterScale), "B");
+
+  const primaryScale = [{ grade: "A", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
+  assert.equal(gradeForEducationLevel(75, "Primary", primaryScale), "B");
+  assert.equal(remarkForEducationLevel("A", "Primary", primaryScale), "Very good");
 });
