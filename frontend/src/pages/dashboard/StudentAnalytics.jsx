@@ -13,7 +13,7 @@ import { supabase } from "../../services/supabase";
 
 
 
-function StudentAnalytics({ schoolId = null }){
+function StudentAnalytics({ schoolId = null, scopeToSchool = false }){
 
 
 const [data,setData]=useState([]);
@@ -30,6 +30,11 @@ const COLORS = [
 
 
 const loadGenderData = async()=>{
+
+if (scopeToSchool && !schoolId) {
+  setData([]);
+  return;
+}
 
 let studentsQuery = supabase
   .from("students")
@@ -137,7 +142,7 @@ useEffect(()=>{
 
 loadGenderData();
 
-},[schoolId]);
+},[schoolId, scopeToSchool]);
 
 
 
