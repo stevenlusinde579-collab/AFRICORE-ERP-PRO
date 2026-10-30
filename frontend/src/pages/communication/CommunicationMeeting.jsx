@@ -1692,7 +1692,7 @@ const CommunicationMeeting = () => {
                 );
 
                 showFloatingReaction(
-                    "ðŸ‘",
+                    "👏",
                     currentDisplayNameRef.current
                 );
 
@@ -4104,7 +4104,7 @@ const CommunicationMeeting = () => {
                                 </span>
 
                                 <span>
-                                    â€¢
+                                    •
                                 </span>
 
                                 <span>
