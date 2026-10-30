@@ -1297,7 +1297,7 @@ function EditStaffNonStaff() {
 
 
             setMessage(
-                "Photo uploaded successfully âœ…"
+                "Photo uploaded successfully ✅"
             );
 
             setMessageType("success");
@@ -1685,7 +1685,7 @@ function EditStaffNonStaff() {
 
 
             setMessage(
-                "Staff member updated successfully âœ…"
+                "Staff member updated successfully ✅"
             );
 
             setMessageType("success");
