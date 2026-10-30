@@ -4886,7 +4886,7 @@ function EnterMarks() {
                                     <p className={`font-bold ${checkingApproval ? "text-blue-800" : fullApproval ? "text-green-800" : "text-red-800"}`}>
                                         {checkingApproval ? "Checking Examination Approval..." : fullApproval ? "EXAMINATION APPROVED — ENTER MARKS UNLOCKED" : "ENTER MARKS LOCKED — APPROVAL NOT COMPLETE"}
                                     </p>
-                                    <p className="text-sm text-gray-600 mt-1">Academic Master â†’ Deputy Headmaster â†’ Headmaster</p>
+                                    <p className="text-sm text-gray-600 mt-1">Academic Master → Deputy Headmaster → Headmaster</p>
                                 </div>
                                 <button type="button" onClick={() => checkExamApproval(selectedExamSubjectId)} disabled={checkingApproval} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50">
                                     {checkingApproval ? <><FaSpinner className="animate-spin" /> Checking...</> : "Check Approval Again"}
@@ -4894,10 +4894,10 @@ function EnterMarks() {
                             </div>
                             {!checkingApproval && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.academic ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">ACADEMIC MASTER</p><p className="font-semibold mt-1">{approvalDetails.academic ? "âœ“ Approved" : "Pending"}</p></div>
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.deputy ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">DEPUTY HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.deputy ? "âœ“ Approved" : "Pending"}</p></div>
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.headmaster ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.headmaster ? "âœ“ Approved" : "Pending"}</p></div>
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.statusApproved ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">EXAM STATUS</p><p className="font-semibold mt-1">{approvalDetails.statusApproved ? "âœ“ Approved" : "Not Approved"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.academic ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">ACADEMIC MASTER</p><p className="font-semibold mt-1">{approvalDetails.academic ? "✓ Approved" : "Pending"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.deputy ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">DEPUTY HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.deputy ? "✓ Approved" : "Pending"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.headmaster ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.headmaster ? "✓ Approved" : "Pending"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.statusApproved ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">EXAM STATUS</p><p className="font-semibold mt-1">{approvalDetails.statusApproved ? "✓ Approved" : "Not Approved"}</p></div>
                                 </div>
                             )}
                         </div>

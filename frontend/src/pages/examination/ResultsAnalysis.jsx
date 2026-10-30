@@ -4484,7 +4484,7 @@ function StudentTrace({
 
             <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-sm">
-                    Subject â†’ Questions â†’ Marks
+                    Subject → Questions → Marks
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
