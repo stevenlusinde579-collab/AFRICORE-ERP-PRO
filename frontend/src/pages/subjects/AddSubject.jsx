@@ -153,8 +153,29 @@ setMessage("");
 
 
 
+const { data: authData, error: authError } = await supabase.auth.getUser();
+
+if (authError || !authData?.user?.id) {
+  setMessage("Your login session could not be verified. Please sign in again.");
+  setLoading(false);
+  return;
+}
+
+const { data: profile, error: profileError } = await supabase
+  .from("profiles")
+  .select("school_id")
+  .eq("id", authData.user.id)
+  .single();
+
+if (profileError || !profile?.school_id) {
+  setMessage("Your account is not assigned to a school. Please contact the system administrator.");
+  setLoading(false);
+  return;
+}
+
 const payload={
 
+school_id: Number(profile.school_id),
 
 curriculum_id:
 
