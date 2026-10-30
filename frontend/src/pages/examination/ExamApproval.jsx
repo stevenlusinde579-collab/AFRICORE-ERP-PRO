@@ -2184,7 +2184,7 @@ const ExamApproval = () => {
                                     margin-bottom:20px;
                                 "
                             >
-                                ðŸ“„
+                                📄
                             </div>
 
                             <div
@@ -3218,7 +3218,7 @@ const ExamApproval = () => {
                                             <div className="flex items-start gap-4 min-w-0">
 
                                                 <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-2xl shrink-0">
-                                                    ðŸ“„
+                                                    📄
                                                 </div>
 
 
@@ -3365,7 +3365,7 @@ const ExamApproval = () => {
                                 <div className="flex items-center gap-3 min-w-0">
 
                                     <div className="w-11 h-11 rounded-xl bg-red-600 flex items-center justify-center text-white text-xl shrink-0">
-                                        ðŸ“„
+                                        📄
                                     </div>
 
 
@@ -3430,7 +3430,7 @@ const ExamApproval = () => {
                                     <div className="text-center">
 
                                         <div className="text-5xl mb-5">
-                                            ðŸ“„
+                                            📄
                                         </div>
 
                                         <p className="text-white font-bold text-lg">
@@ -4053,7 +4053,7 @@ const ExamApproval = () => {
                                 <div>
                                     <p className="text-sm font-bold text-gray-700 mb-3">Notification Channels</p>
                                     <div className="grid grid-cols-2 gap-3">
-                                        {[["whatsapp","ðŸ’¬","WhatsApp"],["email","âœ‰ï¸","Email"]].map(([value, icon, label]) => (
+                                        {[["whatsapp","💬","WhatsApp"],["email","✉️","Email"]].map(([value, icon, label]) => (
                                             <button key={value} type="button" onClick={() => toggleNotificationChannel(value)} disabled={notificationSending} className={notificationChannels.includes(value) ? "border-2 border-blue-600 bg-blue-50 text-blue-700 rounded-xl p-4 font-bold" : "border-2 border-gray-200 bg-white text-gray-700 rounded-xl p-4 font-semibold"}>
                                                 <div className="text-2xl">{icon}</div>
                                                 <div className="mt-1 text-sm">{label}</div>
