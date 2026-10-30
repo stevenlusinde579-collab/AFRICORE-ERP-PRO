@@ -474,221 +474,99 @@ function Dashboard() {
      LOAD SUPER ADMIN DASHBOARD DATA
   ======================================================= */
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async ({
+    schoolId: scopedSchoolId = null,
+  } = {}) => {
 
     try {
+      const schoolFilter = scopedSchoolId
+        ? Number(scopedSchoolId)
+        : null;
 
-      /* ---------------------------------------------------
-         STUDENTS
-      --------------------------------------------------- */
-
-      const {
-        count: studentCount,
-        error: studentError,
-      } = await supabase
+      let studentsQuery = supabase
         .from("students")
-        .select(
-          "*",
-          {
-            count: "exact",
-            head: true,
-          }
-        );
+        .select("*", { count: "exact", head: true });
 
-      if (studentError) {
-
-        console.log(
-          "Student Count Error:",
-          studentError
-        );
-
-      }
-
-
-      /* ---------------------------------------------------
-         TEACHING STAFF
-      --------------------------------------------------- */
-
-      const {
-        count: teachingStaffCount,
-        error: teachingStaffError,
-      } = await supabase
+      let teachingStaffQuery = supabase
         .from("teachers")
-        .select(
-          "*",
-          {
-            count: "exact",
-            head: true,
-          }
-        )
-        .eq(
-          "staff_type",
-          "Staff"
-        );
+        .select("*", { count: "exact", head: true })
+        .eq("staff_type", "Staff");
 
-      if (teachingStaffError) {
-
-        console.log(
-          "Teaching Staff Count Error:",
-          teachingStaffError
-        );
-
-      }
-
-
-      /* ---------------------------------------------------
-         NON-STAFF
-      --------------------------------------------------- */
-
-      const {
-        count: nonStaffCount,
-        error: nonStaffError,
-      } = await supabase
+      let nonStaffQuery = supabase
         .from("teachers")
-        .select(
-          "*",
-          {
-            count: "exact",
-            head: true,
-          }
-        )
-        .eq(
-          "staff_type",
-          "Non-Staff"
-        );
+        .select("*", { count: "exact", head: true })
+        .eq("staff_type", "Non-Staff");
 
-      if (nonStaffError) {
-
-        console.log(
-          "Non-Staff Count Error:",
-          nonStaffError
-        );
-
-      }
-
-
-      /* ---------------------------------------------------
-         TOTAL STAFF + NON-STAFF
-      --------------------------------------------------- */
-
-      const {
-        count: totalStaffCount,
-        error: totalStaffError,
-      } = await supabase
+      let totalStaffQuery = supabase
         .from("teachers")
-        .select(
-          "*",
-          {
-            count: "exact",
-            head: true,
-          }
-        );
+        .select("*", { count: "exact", head: true });
 
-      if (totalStaffError) {
-
-        console.log(
-          "Total Staff Count Error:",
-          totalStaffError
-        );
-
-      }
-
-
-      /* ---------------------------------------------------
-         CLASSES
-      --------------------------------------------------- */
-
-      const {
-        count: classCount,
-        error: classError,
-      } = await supabase
+      let classesQuery = supabase
         .from("classes")
-        .select(
-          "*",
-          {
-            count: "exact",
-            head: true,
-          }
-        );
+        .select("*", { count: "exact", head: true });
 
-      if (classError) {
-
-        console.log(
-          "Class Count Error:",
-          classError
-        );
-
-      }
-
-
-      /* ---------------------------------------------------
-         SET DASHBOARD STATS
-      --------------------------------------------------- */
-
-      setStats({
-
-        students:
-          studentCount || 0,
-
-        teachingStaff:
-          teachingStaffCount || 0,
-
-        nonStaff:
-          nonStaffCount || 0,
-
-        totalStaff:
-          totalStaffCount || 0,
-
-        classes:
-          classCount || 0,
-
-      });
-
-
-      /* ---------------------------------------------------
-         RECENT STUDENTS
-      --------------------------------------------------- */
-
-      const {
-        data: recent,
-        error: recentError,
-      } = await supabase
+      let recentStudentsQuery = supabase
         .from("students")
-        .select(
-          "first_name,last_name,admission_number,created_at"
-        )
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
-        )
+        .select("first_name,last_name,admission_number,created_at")
+        .order("created_at", { ascending: false })
         .limit(5);
 
-      if (recentError) {
-
-        console.log(
-          "Recent Students Error:",
-          recentError
-        );
-
-      } else {
-
-        setRecentStudents(
-          recent || []
-        );
-
+      // Headmasters must only see records belonging to their own school.
+      // Super Admin calls this loader without a school filter.
+      if (schoolFilter) {
+        studentsQuery = studentsQuery.eq("school_id", schoolFilter);
+        teachingStaffQuery = teachingStaffQuery.eq("school_id", schoolFilter);
+        nonStaffQuery = nonStaffQuery.eq("school_id", schoolFilter);
+        totalStaffQuery = totalStaffQuery.eq("school_id", schoolFilter);
+        classesQuery = classesQuery.eq("school_id", schoolFilter);
+        recentStudentsQuery = recentStudentsQuery.eq("school_id", schoolFilter);
       }
 
+      const [
+        studentResult,
+        teachingStaffResult,
+        nonStaffResult,
+        totalStaffResult,
+        classResult,
+        recentResult,
+      ] = await Promise.all([
+        studentsQuery,
+        teachingStaffQuery,
+        nonStaffQuery,
+        totalStaffQuery,
+        classesQuery,
+        recentStudentsQuery,
+      ]);
+
+      const queryErrors = [
+        studentResult.error,
+        teachingStaffResult.error,
+        nonStaffResult.error,
+        totalStaffResult.error,
+        classResult.error,
+        recentResult.error,
+      ].filter(Boolean);
+
+      if (queryErrors.length > 0) {
+        console.error(
+          "Dashboard data query errors:",
+          queryErrors
+        );
+        throw queryErrors[0];
+      }
+
+      setStats({
+        students: studentResult.count || 0,
+        teachingStaff: teachingStaffResult.count || 0,
+        nonStaff: nonStaffResult.count || 0,
+        totalStaff: totalStaffResult.count || 0,
+        classes: classResult.count || 0,
+      });
+
+      setRecentStudents(recentResult.data || []);
     } catch (error) {
-
-      console.log(
-        "Dashboard Data Error:",
-        error
-      );
-
+      console.error("Dashboard Data Error:", error);
     }
-
   };
 
 
@@ -712,13 +590,13 @@ function Dashboard() {
         currentRoleName
       );
 
-    if (
-      dashboardType ===
-      "super_admin"
-    ) {
-
+    if (dashboardType === "super_admin") {
       loadDashboardData();
-
+    } else if (
+      dashboardType === "headmaster" &&
+      schoolId
+    ) {
+      loadDashboardData({ schoolId });
     }
 
   }, [
@@ -727,6 +605,7 @@ function Dashboard() {
     selectedProfileRoleId,
     selectedRoleName,
     currentRoleName,
+    schoolId,
   ]);
 
 
@@ -918,9 +797,11 @@ function Dashboard() {
 
       <HeadmasterDashboard
         navigate={navigate}
+        stats={stats}
+        recentStudents={recentStudents}
         primaryRole={primaryRole}
         activeRoles={activeRoles}
-        currentUser={currentUser}
+        schoolId={schoolId}
       />
 
     );
@@ -1313,6 +1194,9 @@ function SuperAdminDashboard({
   recentStudents,
   primaryRole,
   activeRoles,
+  schoolId = null,
+  dashboardTitle = "AfriCore ERP PRO Dashboard",
+  welcomeMessage = "{welcomeMessage}",
 }) {
 
   const cards = [
@@ -1387,7 +1271,7 @@ function SuperAdminDashboard({
           <div>
 
             <h1 className="text-3xl font-bold text-gray-800">
-              AfriCore ERP PRO Dashboard
+              {dashboardTitle}
             </h1>
 
             <p className="text-gray-600 mt-2">
@@ -1699,7 +1583,7 @@ function SuperAdminDashboard({
 
       <div className="mt-8">
 
-        <StudentAnalytics />
+        <StudentAnalytics schoolId={schoolId} />
 
       </div>
 
@@ -1716,82 +1600,24 @@ function SuperAdminDashboard({
 
 function HeadmasterDashboard({
   navigate,
+  stats,
+  recentStudents,
   primaryRole,
   activeRoles,
+  schoolId,
 }) {
-
   return (
-
-    <div>
-
-      <DashboardHeader
-        title="Headmaster Dashboard"
-        subtitle="School leadership and overall institutional overview."
-        role={primaryRole.role_name}
-        icon={<MdSupervisorAccount />}
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-        <DashboardCard
-          title="Students"
-          description="View and manage student information."
-          icon={<MdPeople />}
-          color="bg-blue-600"
-          onClick={() => navigate("/students")}
-        />
-
-        <DashboardCard
-          title="Staff & Non-Staff"
-          description="View teaching staff and non-staff information."
-          icon={<MdGroups />}
-          color="bg-green-600"
-          onClick={() => navigate("/teachers")}
-        />
-
-        <DashboardCard
-          title="Classes"
-          description="Review school classes and academic structure."
-          icon={<MdClass />}
-          color="bg-purple-600"
-          onClick={() => navigate("/classes")}
-        />
-
-        <DashboardCard
-          title="Examination"
-          description="Review examinations and examination progress."
-          icon={<MdAssignment />}
-          color="bg-red-600"
-          onClick={() => navigate("/examination")}
-        />
-
-        <DashboardCard
-          title="Communication"
-          description="Access school communication and management messages."
-          icon={<MdGroups />}
-          color="bg-indigo-600"
-          onClick={() => navigate("/communication")}
-        />
-
-        <DashboardCard
-          title="AI Analysis"
-          description="Access available academic intelligence tools."
-          icon={<MdPsychology />}
-          color="bg-cyan-600"
-          onClick={() => navigate("/ai")}
-        />
-
-      </div>
-
-      <RoleInformation
-        activeRoles={activeRoles}
-        primaryRole={primaryRole}
-      />
-
-    </div>
-
+    <SuperAdminDashboard
+      navigate={navigate}
+      stats={stats}
+      recentStudents={recentStudents}
+      primaryRole={primaryRole}
+      activeRoles={activeRoles}
+      schoolId={schoolId}
+      dashboardTitle="AfriCore ERP PRO Dashboard"
+      welcomeMessage="Welcome back. Here's your school overview."
+    />
   );
-
 }
 
 
