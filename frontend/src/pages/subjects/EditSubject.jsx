@@ -118,29 +118,16 @@ loadSubject();
 
 const handleChange=(e)=>{
 
+const { name, value, type, checked } = e.target;
 
-const {name,value,type,checked}=e.target;
-
-
-setForm({
-
-...form,
-
-[name]:
-
-type==="checkbox"
-
-?
-
-checked
-
-:
-
-value
-
-
-});
-
+setForm(previous => ({
+    ...previous,
+    [name]: type === "checkbox" ? checked : value,
+    // Clear the previous level's class restriction on level transfer.
+    ...(name === "education_level" && value !== previous.education_level
+        ? { class_scope: "" }
+        : {})
+}));
 
 };
 
@@ -321,7 +308,7 @@ Select Level
 </option>
 
 
-<option value="Primary">
+<option value="Nursery">\nNursery\n</option>\n\n<option value="Primary">
 
 Primary
 
