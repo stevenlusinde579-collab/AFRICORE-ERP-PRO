@@ -116,43 +116,17 @@ setCurriculums(data);
 
 const handleChange=(e)=>{
 
+const { name, value, type, checked } = e.target;
 
-const {
-
-name,
-
-value,
-
-type,
-
-checked
-
-}=e.target;
-
-
-
-
-setSubject({
-
-...subject,
-
-
-[name]:
-
-type==="checkbox"
-
-?
-
-checked
-
-:
-
-value
-
-
-});
-
-
+setSubject(previous => ({
+    ...previous,
+    [name]: type === "checkbox" ? checked : value,
+    // A class scope from the old level must not hide this subject
+    // after the user transfers it to a different education level.
+    ...(name === "education_level" && value !== previous.education_level
+        ? { class_scope: "" }
+        : {})
+}));
 
 };
 
@@ -590,7 +564,7 @@ Select Level
 </option>
 
 
-<option value="Primary">
+<option value="Nursery">\nNursery\n</option>\n\n<option value="Primary">
 
 Primary
 
