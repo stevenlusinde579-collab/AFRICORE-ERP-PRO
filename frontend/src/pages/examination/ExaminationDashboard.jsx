@@ -449,7 +449,7 @@ function ExaminationDashboard() {
             title: "Enter Marks",
 
             description:
-                "Select Class â†’ Subject and enter student marks for the examination.",
+                "Select Class → Subject and enter student marks for the examination.",
 
             icon: <FaPen />,
 
