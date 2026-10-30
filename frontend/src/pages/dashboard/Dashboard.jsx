@@ -1276,7 +1276,7 @@ function SuperAdminDashboard({
             </h1>
 
             <p className="text-gray-600 mt-2">
-              Welcome back, Admin. Here's your school overview.
+              {welcomeMessage}
             </p>
 
           </div>
