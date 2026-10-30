@@ -2406,7 +2406,7 @@ function EditStaffNonStaff() {
                                                 {item.class_name}
 
                                                 {item.academic_level
-                                                    ? ` â€” ${item.academic_level}`
+                                                    ? ` — ${item.academic_level}`
                                                     : ""
                                                 }
 
@@ -2514,7 +2514,7 @@ function EditStaffNonStaff() {
                                                 {item.class_name}
 
                                                 {item.academic_level
-                                                    ? ` â€” ${item.academic_level}`
+                                                    ? ` — ${item.academic_level}`
                                                     : ""
                                                 }
 
@@ -2693,7 +2693,7 @@ function EditStaffNonStaff() {
                                                                     ? (
                                                                         <span className="text-gray-400">
 
-                                                                            â€”
+                                                                            —
 
                                                                         </span>
                                                                     )
