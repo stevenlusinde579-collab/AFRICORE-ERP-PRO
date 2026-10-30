@@ -4894,10 +4894,10 @@ function EnterMarks() {
                             </div>
                             {!checkingApproval && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.academic ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">ACADEMIC MASTER</p><p className="font-semibold mt-1">{approvalDetails.academic ? "âœ“ Approved" : "Pending"}</p></div>
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.deputy ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">DEPUTY HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.deputy ? "âœ“ Approved" : "Pending"}</p></div>
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.headmaster ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.headmaster ? "âœ“ Approved" : "Pending"}</p></div>
-                                    <div className={`rounded-xl p-3 border ${approvalDetails.statusApproved ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">EXAM STATUS</p><p className="font-semibold mt-1">{approvalDetails.statusApproved ? "âœ“ Approved" : "Not Approved"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.academic ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">ACADEMIC MASTER</p><p className="font-semibold mt-1">{approvalDetails.academic ? "✓ Approved" : "Pending"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.deputy ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">DEPUTY HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.deputy ? "✓ Approved" : "Pending"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.headmaster ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">HEADMASTER</p><p className="font-semibold mt-1">{approvalDetails.headmaster ? "✓ Approved" : "Pending"}</p></div>
+                                    <div className={`rounded-xl p-3 border ${approvalDetails.statusApproved ? "bg-green-100 border-green-200" : "bg-yellow-100 border-yellow-200"}`}><p className="text-xs font-bold">EXAM STATUS</p><p className="font-semibold mt-1">{approvalDetails.statusApproved ? "✓ Approved" : "Not Approved"}</p></div>
                                 </div>
                             )}
                         </div>
