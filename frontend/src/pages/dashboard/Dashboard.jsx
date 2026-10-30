@@ -1195,6 +1195,7 @@ function SuperAdminDashboard({
   primaryRole,
   activeRoles,
   schoolId = null,
+  scopeToSchool = false,
   dashboardTitle = "AfriCore ERP PRO Dashboard",
   welcomeMessage = "{welcomeMessage}",
 }) {
@@ -1583,7 +1584,10 @@ function SuperAdminDashboard({
 
       <div className="mt-8">
 
-        <StudentAnalytics schoolId={schoolId} />
+        <StudentAnalytics
+          schoolId={schoolId}
+          scopeToSchool={scopeToSchool}
+        />
 
       </div>
 
@@ -1614,6 +1618,7 @@ function HeadmasterDashboard({
       primaryRole={primaryRole}
       activeRoles={activeRoles}
       schoolId={schoolId}
+      scopeToSchool={true}
       dashboardTitle="AfriCore ERP PRO Dashboard"
       welcomeMessage="Welcome back. Here's your school overview."
     />
