@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import { useSchool } from "../../context/SchoolContext";
 
 
 function AddTimetable(){
 
 const navigate = useNavigate();
-
-
-const schoolId = 1;
+const { schoolId, loading: schoolLoading } = useSchool();
 
 
 const [classes,setClasses]=useState([]);
@@ -53,9 +52,11 @@ session:"Morning"
 
 useEffect(()=>{
 
-loadData();
+if (!schoolLoading && schoolId) {
+    loadData();
+}
 
-},[]);
+},[schoolLoading,schoolId]);
 
 
 
@@ -73,6 +74,8 @@ const {data:classData}=await supabase
 .from("classes")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .order("class_name");
 
@@ -95,6 +98,8 @@ const {data:teacherData}=await supabase
 .from("teachers")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .order("first_name");
 
@@ -151,6 +156,11 @@ const saveTimetable=async(e)=>{
 e.preventDefault();
 
 
+if (!schoolId || Number(schoolId) <= 0) {
+    setMessage("School information is still loading or unavailable. Please refresh and try again.");
+    return;
+}
+
 setLoading(true);
 
 setMessage("");
@@ -167,6 +177,8 @@ const {data:existing,error:checkError}=await supabase
 .from("class_timetables")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .eq("class_id",Number(form.class_id))
 
@@ -245,6 +257,8 @@ const {data:teacherBusy}=await supabase
 
 .select("*")
 
+.eq("school_id", Number(schoolId))
+
 .eq("teacher_id",Number(form.teacher_id))
 
 .eq("period_id",Number(form.period_id))
@@ -296,7 +310,7 @@ const {error}=await supabase
 {
 
 
-school_id:schoolId,
+school_id:Number(schoolId),
 
 
 class_id:Number(form.class_id),

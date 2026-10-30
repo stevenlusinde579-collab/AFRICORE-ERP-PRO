@@ -761,6 +761,7 @@ function SubjectTable({ filters }) {
 
 
 
+                                            { [1, 4].includes(Number(selectedRoleId)) && (
                                             <button
 
                                                 onClick={() =>
@@ -776,10 +777,12 @@ function SubjectTable({ filters }) {
                                                 Edit
 
                                             </button>
+                                            )}
 
 
 
 
+                                            { Number(selectedRoleId) === 1 && (
                                             <button
 
                                                 onClick={() =>
@@ -795,6 +798,7 @@ function SubjectTable({ filters }) {
                                                 Delete
 
                                             </button>
+                                            )}
 
 
                                         </td>

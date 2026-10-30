@@ -401,14 +401,22 @@ export default function AppRoutes() {
                 />
 
                 <Route
-                    path="subjects/add"
-                    element={<AddSubject />}
-                />
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 4]}
+                        />
+                    }
+                >
+                    <Route
+                        path="subjects/add"
+                        element={<AddSubject />}
+                    />
 
-                <Route
-                    path="subjects/edit/:id"
-                    element={<EditSubject />}
-                />
+                    <Route
+                        path="subjects/edit/:id"
+                        element={<EditSubject />}
+                    />
+                </Route>
 
                 <Route
                     path="subjects/profile/:id"
