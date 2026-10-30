@@ -10,6 +10,8 @@ import {
 test("recognizes Baby Class, primary, O-Level and A-Level separately", () => {
   assert.equal(getEducationLevelType("Baby Class"), "EARLY_YEARS");
   assert.equal(getEducationLevelType("Standard IV"), "PRIMARY");
+  assert.equal(getEducationLevelType("Class 4"), "PRIMARY");
+  assert.equal(getEducationLevelType("Primary Class 4"), "PRIMARY");
   assert.equal(getEducationLevelType("Ordinary Level Form IV"), "O_LEVEL");
   assert.equal(getEducationLevelType("Advanced Level Form VI"), "A_LEVEL");
 });
