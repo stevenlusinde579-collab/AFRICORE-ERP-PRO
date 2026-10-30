@@ -291,31 +291,46 @@ function AddExam() {
     const getClassNumber = (classItem) => {
         if (!classItem) return null;
 
-        const text = `${classItem.class_name || ""} ${
-            classItem.short_name || ""
-        }`
+        const text = [
+            classItem.class_name,
+            classItem.short_name,
+            classItem.name
+        ]
+            .filter(Boolean)
+            .join(" ")
             .trim()
             .toUpperCase();
 
-        const numericMatch = text.match(/FORM\s*[-_ ]?\s*(\d+)/);
+        const numericMatch = text.match(/(?:FORM|STANDARD|STD|CLASS)\s*[-_ ]?\s*(\d+)/);
+        if (numericMatch) return Number(numericMatch[1]);
 
-        if (numericMatch) {
-            return Number(numericMatch[1]);
-        }
+        const romanNumbers = {
+            I: 1,
+            II: 2,
+            III: 3,
+            IV: 4,
+            V: 5,
+            VI: 6,
+            VII: 7
+        };
+        const romanMatch = text.match(/(?:STANDARD|STD|CLASS)\s*[-_ ]?\s*(VII|VI|V|IV|III|II|I)\b/);
+        if (romanMatch) return romanNumbers[romanMatch[1]];
 
-        const wordForms = {
+        const wordNumbers = {
             ONE: 1,
             TWO: 2,
             THREE: 3,
             FOUR: 4,
             FIVE: 5,
-            SIX: 6
+            SIX: 6,
+            SEVEN: 7
         };
+        const wordMatch = text.match(/(?:STANDARD|STD|CLASS)\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN)\b/);
+        if (wordMatch) return wordNumbers[wordMatch[1]];
 
-        for (const word of Object.keys(wordForms)) {
-            if (text.includes(`FORM ${word}`)) {
-                return wordForms[word];
-            }
+        const formMatch = text.match(/FORM\s+(ONE|TWO|THREE|FOUR|FIVE|SIX)\b/);
+        if (formMatch) {
+            return { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6 }[formMatch[1]];
         }
 
         return null;
@@ -353,41 +368,46 @@ function AddExam() {
 
         const classNumber = getClassNumber(classItem);
 
+        const romanNumbers = {
+            I: 1,
+            II: 2,
+            III: 3,
+            IV: 4,
+            V: 5,
+            VI: 6,
+            VII: 7
+        };
+        const numberToken = "(\\d+|VII|VI|V|IV|III|II|I)";
         const rangeMatch = scope.match(
-            /FORM\s*(\d+)\s*[-–—]\s*(\d+)/
+            new RegExp("(?:FORM|STANDARD|STD|CLASS)\\s*" + numberToken + "\\s*[-–—]\\s*" + numberToken)
         );
 
         if (rangeMatch) {
-            const start = Number(rangeMatch[1]);
-            const end = Number(rangeMatch[2]);
+            const toNumber = value => /^\\d+$/.test(value)
+                ? Number(value)
+                : romanNumbers[value];
+            const start = toNumber(rangeMatch[1]);
+            const end = toNumber(rangeMatch[2]);
 
-            if (classNumber === null) return false;
-
-            return (
-                classNumber >= start &&
-                classNumber <= end
-            );
+            if (classNumber === null || !start || !end) return false;
+            return classNumber >= start && classNumber <= end;
         }
 
-        if (scope.includes("I-IV")) {
-            if (classNumber === null) return false;
-
-            return (
-                classNumber >= 1 &&
-                classNumber <= 4
-            );
-        }
-
-        const singleFormMatch = scope.match(
-            /FORM\s*(\d+)/
+        const singleScopeMatch = scope.match(
+            new RegExp("(?:FORM|STANDARD|STD|CLASS)\\s*" + numberToken)
         );
 
-        if (singleFormMatch) {
-            const requiredForm = Number(
-                singleFormMatch[1]
-            );
+        if (singleScopeMatch) {
+            const token = singleScopeMatch[1];
+            const requiredClass = /^\\d+$/.test(token)
+                ? Number(token)
+                : romanNumbers[token];
+            return classNumber === requiredClass;
+        }
 
-            return classNumber === requiredForm;
+        // Generic Primary scope applies to all Primary classes.
+        if (/^(PRIMARY|PRIMARY LEVEL|ALL PRIMARY)$/.test(scope)) {
+            return true;
         }
 
         return false;
