@@ -3400,7 +3400,7 @@ const ExamApproval = () => {
                                             }
                                             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
                                         >
-                                            â†— Open New Tab
+                                            ↗ Open New Tab
                                         </button>
 
                                     )}
@@ -3536,7 +3536,7 @@ const ExamApproval = () => {
                                 </p>
 
                                 <p className="text-xs text-gray-500">
-                                    Examination PDF â€¢ Supabase Storage
+                                    Examination PDF • Supabase Storage
                                 </p>
 
                             </div>
@@ -3784,7 +3784,7 @@ const ExamApproval = () => {
                             </h2>
 
                             <p className="text-sm text-gray-500 mt-1">
-                                Academic â†’ Deputy â†’ Headmaster
+                                Academic → Deputy → Headmaster
                             </p>
 
                         </div>
@@ -4038,7 +4038,7 @@ const ExamApproval = () => {
                                             {exam?.exam_name || exam?.name || "Examination"}
                                         </p>
                                     </div>
-                                    <button type="button" onClick={closeNotificationPanel} disabled={notificationSending} className="text-3xl text-gray-500 disabled:opacity-50">Ã—</button>
+                                    <button type="button" onClick={closeNotificationPanel} disabled={notificationSending} className="text-3xl text-gray-500 disabled:opacity-50">×</button>
                                 </div>
                             </div>
                             <div className="p-6 space-y-5">
@@ -4106,7 +4106,7 @@ const ExamApproval = () => {
                                         onClick={closeRejectModal}
                                         className="text-3xl text-gray-500"
                                     >
-                                        Ã—
+                                        ×
                                     </button>
 
                                 </div>
