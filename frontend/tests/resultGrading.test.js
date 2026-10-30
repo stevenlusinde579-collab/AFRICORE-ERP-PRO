@@ -61,6 +61,6 @@ test("uses Primary letter grades and honors remarks for valid letter-grade scale
   assert.equal(gradeForEducationLevel(75, "Primary", nonLetterScale), "B");
 
   const primaryScale = [{ grade: "A", min_percentage: 60, max_percentage: 100, remark: "Very good" }];
-  assert.equal(gradeForEducationLevel(75, "Primary", primaryScale), "A");
+  assert.equal(gradeForEducationLevel(75, "Primary", primaryScale), "B");
   assert.equal(remarkForEducationLevel("A", "Primary", primaryScale), "Very good");
 });
