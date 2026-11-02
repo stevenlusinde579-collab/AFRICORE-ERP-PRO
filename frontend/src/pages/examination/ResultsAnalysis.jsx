@@ -679,6 +679,7 @@ export default function ResultsAnalysis() {
                     question_id,
                     student_id,
                     marks_obtained,
+                    is_selected,
                     created_at
                 `)
                 .eq("exam_id", examId);
@@ -1169,25 +1170,48 @@ export default function ResultsAnalysis() {
         if (selectionType === "ALL") {
             selectedQuestions = [...subjectQuestions];
         } else {
-            const markedQuestionIds = new Set(questionMarks.map(mark => idValue(mark.question_id)));
-            const groups = new Map();
+            // Enter Marks persists the exact per-student selection in
+            // exam_question_marks.is_selected. Use that authoritative choice
+            // instead of reconstructing it from selection_count and question
+            // order (which can choose different questions and inflate the
+            // denominator, e.g. 84/100 appearing as 73.9%).
+            const hasSavedSelection = questionMarks.some(
+                mark => mark.is_selected !== null && mark.is_selected !== undefined
+            );
 
-            subjectQuestions
-                .filter(question => markedQuestionIds.has(idValue(question.id)))
-                .forEach(question => {
-                    const group = question.selection_group || `QUESTION_${question.id}`;
-                    if (!groups.has(group)) groups.set(group, []);
-                    groups.get(group).push(question);
-                });
-
-            groups.forEach(groupQuestions => {
-                const first = groupQuestions[0];
-                const required = numberValue(first.selection_count);
-                const sorted = [...groupQuestions].sort(
-                    (a, b) => numberValue(a.question_number) - numberValue(b.question_number)
+            if (hasSavedSelection) {
+                const selectedQuestionIds = new Set(
+                    questionMarks
+                        .filter(mark => mark.is_selected === true)
+                        .map(mark => idValue(mark.question_id))
                 );
-                selectedQuestions.push(...(required > 0 ? sorted.slice(0, required) : sorted));
-            });
+
+                selectedQuestions = subjectQuestions.filter(
+                    question => selectedQuestionIds.has(idValue(question.id))
+                );
+            } else {
+                // Backward compatibility for historical marks saved before
+                // per-student selection metadata was available.
+                const markedQuestionIds = new Set(questionMarks.map(mark => idValue(mark.question_id)));
+                const groups = new Map();
+
+                subjectQuestions
+                    .filter(question => markedQuestionIds.has(idValue(question.id)))
+                    .forEach(question => {
+                        const group = question.selection_group || `QUESTION_${question.id}`;
+                        if (!groups.has(group)) groups.set(group, []);
+                        groups.get(group).push(question);
+                    });
+
+                groups.forEach(groupQuestions => {
+                    const first = groupQuestions[0];
+                    const required = numberValue(first.selection_count);
+                    const sorted = [...groupQuestions].sort(
+                        (a, b) => numberValue(a.question_number) - numberValue(b.question_number)
+                    );
+                    selectedQuestions.push(...(required > 0 ? sorted.slice(0, required) : sorted));
+                });
+            }
         }
 
         let rawTotal = 0;
