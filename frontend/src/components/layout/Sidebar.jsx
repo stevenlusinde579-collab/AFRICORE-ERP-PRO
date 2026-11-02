@@ -45,7 +45,7 @@ const normalizeRole = (roleName) => {
    SIDEBAR
 ========================================================= */
 
-function Sidebar() {
+function Sidebar({ profile }) {
   const {
     loadingRoles = true,
     selectedRoleName = "",
@@ -433,15 +433,6 @@ function Sidebar() {
 
 
   /* =======================================================
-     DISPLAY ROLE
-  ======================================================= */
-
-  const displayRole = superAdmin
-    ? "Super Admin"
-    : selectedRoleName;
-
-
-  /* =======================================================
      RETURN SIDEBAR
   ======================================================= */
 
@@ -460,22 +451,33 @@ function Sidebar() {
       </div>
 
 
-      {/* CURRENT ROLE */}
-      <div className="mb-6 bg-slate-800 rounded-xl p-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
-            <FaUserShield />
+      {/* SIGNED-IN USER */}
+      <div className="mb-6 flex min-w-0 items-center gap-3 rounded-xl bg-slate-800 p-3">
+        {profile?.avatarUrl ? (
+          <img
+            src={profile.avatarUrl}
+            alt={profile.fullName || "User profile"}
+            className="h-11 w-11 shrink-0 rounded-full border-2 border-slate-600 object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+            {(profile?.fullName || "U")
+              .split(/\\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase())
+              .join("")}
           </div>
+        )}
 
-          <div className="min-w-0">
-            <p className="text-xs text-gray-400">
-              Current Role
-            </p>
-
-            <p className="text-sm font-semibold text-white truncate">
-              {displayRole}
-            </p>
-          </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            Signed in as
+          </p>
+          <p className="truncate text-sm font-semibold text-white">
+            {profile?.fullName || "Loading profile..."}
+          </p>
         </div>
       </div>
 
