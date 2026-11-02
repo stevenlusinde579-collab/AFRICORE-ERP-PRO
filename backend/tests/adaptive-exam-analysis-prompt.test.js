@@ -31,7 +31,7 @@ test("uses concise page-by-page evidence instructions without replacing establis
     assert.match(prompt, /Explain the diagram/);
     assert.match(prompt, /A main examination question must remain ONE question/i);
     assert.match(prompt, /MARK ALLOCATION MUST BE STRUCTURE-DRIVEN, NOT TEMPLATE-DRIVEN/i);
-    assert.match(prompt, /count answerable units/i);
+    assert.match(prompt, /count response slots/i);
     assert.match(prompt, /If all required questions are materially comparable and the section total divides evenly, allocate equally/i);
     assert.match(prompt, /Do not infer a 12\/8-style unequal split from subjective difficulty alone/i);
     assert.match(prompt, /Unequal allocation requires objective evidence in the paper/i);
