@@ -32,7 +32,9 @@ test("uses concise page-by-page evidence instructions without replacing establis
     assert.match(prompt, /A main examination question must remain ONE question/i);
     assert.match(prompt, /MARK ALLOCATION MUST BE STRUCTURE-DRIVEN, NOT TEMPLATE-DRIVEN/i);
     assert.match(prompt, /count answerable units/i);
-    assert.match(prompt, /Do not assume every question or sub-item has equal marks/i);
+    assert.match(prompt, /If all required questions are materially comparable and the section total divides evenly, allocate equally/i);
+    assert.match(prompt, /Do not infer a 12\/8-style unequal split from subjective difficulty alone/i);
+    assert.match(prompt, /Unequal allocation requires objective evidence in the paper/i);
     assert.match(prompt, /Keep the paper's own numbering, repeated labels, section names, item types and mark conventions/i);
 });
 
@@ -139,4 +141,26 @@ test("does not apply primary-only rules to a Form Four paper", () => {
 
     assert.match(prompt, /PRIMARY \/ EARLY-YEARS ANALYSIS GUIDANCE \(always supplied; apply only when the original PDF's visible content indicates/i);
     assert.match(prompt, /USE A PRIMARY\/EARLY-YEARS ANALYSIS MODE/i);
+});
+
+
+test("allocates equal marks to comparable required questions when a section total divides evenly", () => {
+    const prompt = buildPrompt({
+        text: [
+            "BOOKKEEPING",
+            "SECTION B: 40 MARKS",
+            "Answer all four questions.",
+            "3. Prepare the books of original entry from the transactions.",
+            "4. Post transactions to ledger accounts.",
+            "5. Prepare a trial balance from the balances.",
+            "6. Prepare a bank reconciliation statement.",
+        ].join("\\n"),
+        level: "Form Four",
+        subject: "Bookkeeping",
+    });
+
+    assert.match(prompt, /four comparable questions that must all be answered in a 40-mark section receive 10 marks each/i);
+    assert.match(prompt, /Do not infer a 12\\/8-style unequal split from subjective difficulty alone/i);
+    assert.match(prompt, /Unequal allocation requires objective evidence in the paper/i);
+    assert.match(prompt, /Never confuse the number of available selective questions with the number the student is required to answer/i);
 });
