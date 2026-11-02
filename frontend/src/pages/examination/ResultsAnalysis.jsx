@@ -50,6 +50,7 @@ import {
 
 import { supabase } from "../../services/supabase";
 import { getEducationLevelType, gradeForEducationLevel, getApplicableGradeScale, remarkForEducationLevel, gradeLabelsForEducationLevel } from "../../utils/resultGrading";
+import { normalizeExamMarksToPercentage } from "../../utils/examMarkNormalization";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 
@@ -1112,12 +1113,19 @@ export default function ResultsAnalysis() {
         const finalSubjectMark = subjectLevelMarks[0] || null;
 
         if (finalSubjectMark) {
-            // IMPORTANT: exam_marks.marks_obtained is the FINAL SUBJECT MARK
-            // already entered on a 0-100 scale. Never divide it again by
-            // exam_subjects.full_marks or by exam_questions.max_marks.
-            const rawTotal = clamp(numberValue(finalSubjectMark.marks_obtained));
-            const rawPossible = 100;
-            const percentage = rawTotal;
+            // exam_marks stores the student's raw subject mark. Normalize it
+            // against this exam subject's actual full_marks, just as Enter Marks
+            // does (raw obtained / current maximum * 100). If full_marks is not
+            // configured, fall back to the total marks available in its questions.
+            const rawTotal = numberValue(finalSubjectMark.marks_obtained);
+            const questionMaximum = subjectQuestions.reduce(
+                (sum, question) => sum + numberValue(question.max_marks),
+                0
+            );
+            const rawPossible = numberValue(examSubject?.full_marks) > 0
+                ? numberValue(examSubject.full_marks)
+                : questionMaximum;
+            const percentage = normalizeExamMarksToPercentage(rawTotal, rawPossible);
             const grade = gradeForPercentage(percentage);
             const questionLevelMarks = studentMarks.filter(
                 mark => mark.source !== "exam_marks" && mark.question_id != null
@@ -1197,12 +1205,10 @@ export default function ResultsAnalysis() {
             }
         });
 
-        // Question-level marks are also entered as the student's final marks
-        // on a 0-100 scale. The number of questions and their max_marks are
-        // used only for traceability (e.g. 10/11 questions), NOT to rescale
-        // the student's mark. Therefore 85 remains 85%, even if the selected
-        // questions have a combined max_marks of 115.
-        const percentage = clamp(rawTotal);
+        // Question-level marks are stored as raw marks. Normalize against
+        // the maximum marks of the questions actually selected for this student.
+        // This mirrors Enter Marks and supports any paper total (50, 40, 75, etc.).
+        const percentage = normalizeExamMarksToPercentage(rawTotal, rawPossible);
         const grade = gradeForPercentage(percentage);
 
         return {
