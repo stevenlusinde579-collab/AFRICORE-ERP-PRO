@@ -43,6 +43,7 @@ const PromotionMetric = ({ label, value }) => (
 
 
 function Settings() {
+    const navigate = useNavigate();
     const {
         refreshSchool,
         academicYears,
