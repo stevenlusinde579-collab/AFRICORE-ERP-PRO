@@ -1799,6 +1799,12 @@ export const analyzePaper =
         let reusedPaper =
             false;
 
+        // True only after the saved AI analysis and its exam questions
+        // have both been verified in the database. Once true, a later
+        // status/logging error must never downgrade a successful analysis.
+        let analysisPersistedAndVerified =
+            false;
+
         try {
             if (
                 !Number.isInteger(
@@ -3673,6 +3679,11 @@ export const analyzePaper =
                 }
             }
 
+            // The analysis record and all exam questions are now saved
+            // and verified. From this point onward, failures must not mark
+            // the AI analysis itself as Failed.
+            analysisPersistedAndVerified = true;
+
             // ------------------------------------------------
             // COMPLETE PAPER
             // ------------------------------------------------
@@ -3828,6 +3839,60 @@ export const analyzePaper =
             if (
                 examPaperId
             ) {
+                if (analysisPersistedAndVerified) {
+                    // Analysis is already complete. Retry only the paper
+                    // status update; never overwrite a verified success with
+                    // Failed because of a later non-analysis error.
+                    try {
+                        await updatePaperStatus(
+                            examPaperId,
+                            {
+                                status:
+                                    "Completed",
+
+                                aiStatus:
+                                    "Completed",
+
+                                errorMessage:
+                                    null,
+                            }
+                        );
+                    } catch (statusError) {
+                        console.error(
+                            "AI ANALYSIS WAS SAVED, BUT PAPER STATUS SYNC FAILED:",
+                            statusError
+                        );
+                    }
+
+                    return res
+                        .status(200)
+                        .json({
+                            success:
+                                true,
+
+                            paper_saved:
+                                true,
+
+                            analysis_completed:
+                                true,
+
+                            ai_status:
+                                "Completed",
+
+                            exam_id:
+                                examId,
+
+                            exam_subject_id:
+                                examSubjectId,
+
+                            exam_paper_id:
+                                examPaperId,
+
+                            message:
+                                "AI analysis was completed and saved successfully.",
+                        });
+                }
+
                 try {
                     await updatePaperStatus(
                         examPaperId,
