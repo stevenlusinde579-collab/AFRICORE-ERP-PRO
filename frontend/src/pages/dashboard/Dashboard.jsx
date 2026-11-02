@@ -3097,7 +3097,7 @@ function AccountantDashboard({
           description="Access available payment operations."
           icon={<MdPayments />}
           color="bg-blue-600"
-          onClick={() => navigate("/finance")}
+          onClick={() => navigate("/finance/record-payment")}
         />
 
         <DashboardCard
@@ -3105,7 +3105,7 @@ function AccountantDashboard({
           description="Review available financial information."
           icon={<MdAssessment />}
           color="bg-purple-600"
-          onClick={() => navigate("/finance")}
+          onClick={() => navigate("/finance/financial-statements")}
         />
 
       </div>
