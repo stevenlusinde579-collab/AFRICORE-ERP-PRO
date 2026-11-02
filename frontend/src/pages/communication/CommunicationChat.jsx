@@ -30,6 +30,16 @@ import {
 import { supabase } from "../../services/supabase";
 
 const CHAT_BUCKET = "chat-documents";
+
+const getProfileAvatarUrl = (profileId) => {
+    if (!profileId) return "";
+    const { data } = supabase.storage
+        .from("profile-photos")
+        .getPublicUrl(`${profileId}/avatar`);
+    return data?.publicUrl ? `${data.publicUrl}?v=${Date.now()}` : "";
+};
+
+
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -443,8 +453,9 @@ const CommunicationChat = () => {
             .eq("id", user.id)
             .maybeSingle();
         if (error) throw error;
-        setProfile(data || null);
-        return { user, profile: data || null };
+        const nextProfile = data ? { ...data, avatar_url: getProfileAvatarUrl(data.id) } : null;
+        setProfile(nextProfile);
+        return { user, profile: nextProfile };
     }, []);
 
     const loadUsers = useCallback(async (schoolId) => {
@@ -459,7 +470,7 @@ const CommunicationChat = () => {
         }
         const { data, error } = await query;
         if (error) throw error;
-        setUsers((data || []).filter((item) => item.id));
+        setUsers((data || []).filter((item) => item.id).map((item) => ({ ...item, avatar_url: getProfileAvatarUrl(item.id) })));
     }, []);
 
     const loadInbox = useCallback(async (userId, schoolId) => {
@@ -1201,8 +1212,9 @@ const CommunicationChat = () => {
                                             : ""
                                     }`}
                                 >
-                                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700">
-                                        <User className="h-5 w-5" />
+                                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
+                                        {user.full_name?.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U"}
+                                        {user.avatar_url && <img src={user.avatar_url} alt={user.full_name || "Member"} className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
                                         {online && (
                                             <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />
                                         )}
@@ -1294,8 +1306,9 @@ const CommunicationChat = () => {
                                     <ArrowLeft className="h-5 w-5" />
                                 </button>
 
-                                <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-700">
-                                    <User className="h-5 w-5" />
+                                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
+                                    {selectedUser.full_name?.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U"}
+                                    {selectedUser.avatar_url && <img src={selectedUser.avatar_url} alt={selectedUser.full_name || "Member"} className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
                                     {onlineUsers.has(selectedUser.id) && (
                                         <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
                                     )}

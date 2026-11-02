@@ -43,6 +43,14 @@ import { useSchool } from "../../context/SchoolContext";
 const APPROVER_ROLE_IDS = [1, 2, 3, 4];
 const TEACHER_ROLE_IDS = [5, 12, 13, 14, 15, 16, 17];
 
+const getProfileAvatarUrl = (profileId) => {
+    if (!profileId) return "";
+    const { data } = supabase.storage
+        .from("profile-photos")
+        .getPublicUrl(`${profileId}/avatar`);
+    return data?.publicUrl ? `${data.publicUrl}?v=${Date.now()}` : "";
+};
+
 const Communication = () => {
     const navigate = useNavigate();
     const {
@@ -127,8 +135,9 @@ const Communication = () => {
             .eq("id", user.id)
             .maybeSingle();
         if (profileError) throw profileError;
-        setProfile(profileData || null);
-        return profileData || null;
+        const nextProfile = profileData ? { ...profileData, avatar_url: getProfileAvatarUrl(profileData.id) } : null;
+        setProfile(nextProfile);
+        return nextProfile;
     }, []);
 
     const loadUsers = useCallback(async (schoolId) => {
@@ -139,7 +148,7 @@ const Communication = () => {
         if (schoolId !== null && schoolId !== undefined) query = query.eq("school_id", schoolId);
         const { data, error } = await query;
         if (error) throw error;
-        setUsers(data || []);
+        setUsers((data || []).map((item) => ({ ...item, avatar_url: getProfileAvatarUrl(item.id) })));
     }, []);
 
     const loadMessages = useCallback(async (schoolId, userId) => {
@@ -510,7 +519,7 @@ const Communication = () => {
                 </div>
 
                 <div className="mb-6 grid gap-4 lg:grid-cols-3">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-indigo-600">My Communication Account</p><h2 className="mt-2 text-xl font-bold text-slate-900">{profile?.full_name || "Current User"}</h2><p className="mt-1 text-sm text-slate-500">{roleName}</p></div><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><CircleUserRound className="h-6 w-6" /></div></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><InfoItem label="Phone" value={profile?.phone || "Not provided"} /><InfoItem label="School" value={profile?.school_id ? `School #${profile.school_id}` : "Not assigned"} /><InfoItem label="Role" value={roleName} /></div></div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-indigo-600">My Communication Account</p><h2 className="mt-2 text-xl font-bold text-slate-900">{profile?.full_name || "Current User"}</h2><p className="mt-1 text-sm text-slate-500">{roleName}</p></div><div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 text-indigo-600">{profile?.avatar_url ? <img src={profile.avatar_url} alt={profile.full_name || "Profile"} className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : <div className="flex h-full w-full items-center justify-center"><CircleUserRound className="h-6 w-6" /></div>}</div></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><InfoItem label="Phone" value={profile?.phone || "Not provided"} /><InfoItem label="School" value={profile?.school_id ? `School #${profile.school_id}` : "Not assigned"} /><InfoItem label="Role" value={roleName} /></div></div>
                     <div className="rounded-2xl bg-indigo-700 p-5 text-white shadow-sm"><div className="flex items-center justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10"><FileCheck2 className="h-5 w-5" /></div><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">Office</span></div><p className="mt-6 text-xs text-indigo-200">PERMISSION WORKFLOW</p><h3 className="mt-1 text-xl font-bold">Official Permission</h3><p className="mt-2 text-sm leading-5 text-indigo-100">Submit an office or school permission request, follow its approval status and print the official document after approval.</p><button type="button" onClick={openPermissionRequest} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Request Permission <ArrowRight className="h-4 w-4" /></button></div>
                 </div>
 
@@ -590,7 +599,7 @@ const AnalyticsPanel = ({ users, messages, meetings, notifications, stats }) => 
 
 const SystemAccessPanel = ({ profile, roleName }) => <div className="space-y-5 p-5"><div className="rounded-2xl border border-slate-200 p-5"><div className="flex items-start gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><UserCheck className="h-6 w-6" /></div><div><p className="text-xs font-bold uppercase tracking-wider text-indigo-600">Current Account</p><h3 className="mt-1 text-xl font-bold text-slate-900">{profile?.full_name || "Current User"}</h3><p className="mt-1 text-sm text-slate-500">{roleName}</p></div></div></div><div className="grid gap-4 md:grid-cols-2"><PermissionInfo icon={MessageSquare} title="Internal Chat" description="Internal messaging page is available through the Communication Center." status="Available" /><PermissionInfo icon={Video} title="Meetings" description="Meeting access uses the existing application routing and permission structure." status="Available" /><PermissionInfo icon={Bell} title="Notifications" description="Personal system notifications are available for the signed-in account." status="Available" /><PermissionInfo icon={Megaphone} title="Announcements" description="School announcement functionality is available through the Communication module." status="Available" /></div><div className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-start gap-3"><Settings2 className="mt-0.5 h-5 w-5 text-amber-600" /><div><h3 className="font-bold text-amber-900">System Permission Management</h3><p className="mt-1 text-sm leading-6 text-amber-800">This panel concerns AfriCore feature access. It is separate from the Office Permission workflow.</p></div></div></div></div>;
 
-const UsersPanel = ({ users }) => <div className="p-5">{users.length === 0 ? <EmptyState icon={Users} title="No communication users found." text="No users are available in the current school scope." /> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500"><th className="px-3 py-3">Name</th><th className="px-3 py-3">Role</th><th className="px-3 py-3">Phone</th><th className="px-3 py-3">School</th></tr></thead><tbody>{users.map((user) => <tr key={user.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50"><td className="px-3 py-3 font-semibold text-slate-800">{user.full_name || "Unnamed User"}</td><td className="px-3 py-3 text-slate-600">{user.roles?.role_name || "No role"}</td><td className="px-3 py-3 text-slate-600">{user.phone || "Not provided"}</td><td className="px-3 py-3 text-slate-600">{user.school_id ? `School #${user.school_id}` : "-"}</td></tr>)}</tbody></table></div>}</div>;
+const UsersPanel = ({ users }) => <div className="p-5">{users.length === 0 ? <EmptyState icon={Users} title="No communication users found." text="No users are available in the current school scope." /> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500"><th className="px-3 py-3">Name</th><th className="px-3 py-3">Role</th><th className="px-3 py-3">Phone</th><th className="px-3 py-3">School</th></tr></thead><tbody>{users.map((user) => <tr key={user.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50"><td className="px-3 py-3"><div className="flex items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">{user.full_name?.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U"}{user.avatar_url && <img src={user.avatar_url} alt={user.full_name || "Member"} className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</div><span className="font-semibold text-slate-800">{user.full_name || "Unnamed User"}</span></div></td><td className="px-3 py-3 text-slate-600">{user.roles?.role_name || "No role"}</td><td className="px-3 py-3 text-slate-600">{user.phone || "Not provided"}</td><td className="px-3 py-3 text-slate-600">{user.school_id ? `School #${user.school_id}` : "-"}</td></tr>)}</tbody></table></div>}</div>;
 
 const StatCard = ({ icon: Icon, label, value, description, onClick }) => <button type="button" onClick={onClick} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"><div className="flex items-center justify-between"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><Icon className="h-5 w-5" /></div><span className="text-2xl font-bold text-slate-900">{value}</span></div><p className="mt-3 text-sm font-semibold text-slate-700">{label}</p><p className="mt-1 text-xs text-slate-400">{description}</p><div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-indigo-600">Open <ArrowRight className="h-3 w-3" /></div></button>;
 const InfoItem = ({ label, value }) => <div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 truncate text-sm font-semibold text-slate-700">{value}</p></div>;
