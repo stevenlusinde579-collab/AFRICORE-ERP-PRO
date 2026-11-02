@@ -24,6 +24,7 @@ import {
     KeyRound,
     Smartphone,
     MailCheck,
+    Upload,
 } from "lucide-react";
 
 import { supabase } from "../../services/supabase";
@@ -79,6 +80,8 @@ function Settings() {
     const [savingProfile, setSavingProfile] = useState(false);
     const [changingPassword, setChangingPassword] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState("");
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
     // =====================================================
     // SCHOOL
@@ -205,6 +208,12 @@ function Settings() {
             }
 
             setUser(currentUser);
+            setAvatarUrl(
+                currentUser.user_metadata?.avatar_url ||
+                currentUser.user_metadata?.picture ||
+                currentUser.user_metadata?.photo_url ||
+                ""
+            );
 
             const {
                 data: profileData,
@@ -697,6 +706,67 @@ function Settings() {
         }
     };
 
+    // =====================================================
+    // UPLOAD PERSONAL PROFILE PHOTO
+    // =====================================================
+
+    const uploadProfilePhoto = async (event) => {
+        const file = event.target.files?.[0];
+
+        if (!file) return;
+
+        try {
+            setUploadingAvatar(true);
+            setError("");
+            setMessage("");
+
+            if (!user?.id) {
+                throw new Error("You are not logged in.");
+            }
+
+            const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+            if (!allowedTypes.includes(file.type)) {
+                throw new Error("Please choose a JPG, PNG or WEBP image.");
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                throw new Error("Profile photo must not exceed 5 MB.");
+            }
+
+            const filePath = `${user.id}/avatar`;
+            const { error: uploadError } = await supabase.storage
+                .from("profile-photos")
+                .upload(filePath, file, {
+                    cacheControl: "3600",
+                    contentType: file.type,
+                    upsert: true,
+                });
+
+            if (uploadError) throw uploadError;
+
+            const { data: publicUrlData } = supabase.storage
+                .from("profile-photos")
+                .getPublicUrl(filePath);
+
+            const nextAvatarUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`;
+            const { data: authData, error: metadataError } =
+                await supabase.auth.updateUser({
+                    data: { avatar_url: nextAvatarUrl },
+                });
+
+            if (metadataError) throw metadataError;
+
+            setAvatarUrl(nextAvatarUrl);
+            if (authData?.user) setUser(authData.user);
+            setMessage("Your profile photo was updated successfully.");
+        } catch (err) {
+            console.error("UPLOAD PROFILE PHOTO ERROR:", err);
+            setError(err?.message || "Failed to upload your profile photo.");
+        } finally {
+            setUploadingAvatar(false);
+            event.target.value = "";
+        }
+    };
     // =====================================================
     // CHANGE PASSWORD
     // =====================================================
@@ -1198,10 +1268,62 @@ function Settings() {
                     <form onSubmit={saveProfile} className="p-6">
                         <div className="space-y-5">
 
+                            {/* PERSONAL PROFILE PHOTO */}
+                            <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
+                                {avatarUrl ? (
+                                    <img
+                                        src={avatarUrl}
+                                        alt="Your profile"
+                                        className="h-20 w-20 rounded-full border-2 border-white object-cover shadow-sm"
+                                    />
+                                ) : (
+                                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white shadow-sm">
+                                        {(profileForm.full_name || user?.email || "U")
+                                            .split(/\s+/)
+                                            .filter(Boolean)
+                                            .slice(0, 2)
+                                            .map((part) => part[0]?.toUpperCase())
+                                            .join("")}
+                                    </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="text-sm font-bold text-slate-800">Profile Photo</h3>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        JPG, PNG or WEBP. Maximum file size: 5 MB.
+                                    </p>
+                                    <label
+                                        htmlFor="profile-photo-upload"
+                                        className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition ${
+                                            uploadingAvatar
+                                                ? "cursor-not-allowed bg-blue-400"
+                                                : "bg-blue-600 hover:bg-blue-700"
+                                        }`}
+                                    >
+                                        {uploadingAvatar ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Upload className="h-4 w-4" />
+                                        )}
+                                        {uploadingAvatar
+                                            ? "Uploading photo..."
+                                            : avatarUrl
+                                                ? "Change Photo"
+                                                : "Choose Photo"}
+                                    </label>
+                                    <input
+                                        id="profile-photo-upload"
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        onChange={uploadProfilePhoto}
+                                        disabled={uploadingAvatar}
+                                        className="sr-only"
+                                    />
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="mb-2 block text-sm font-semibold text-slate-700">
-                                    Full Name
-                                </label>
+                                    Full Name                                </label>
 
                                 <div className="relative">
                                     <UserRound className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
