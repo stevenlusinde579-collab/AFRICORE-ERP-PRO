@@ -1167,51 +1167,49 @@ export default function ResultsAnalysis() {
 
         let selectedQuestions = [];
 
-        if (selectionType === "ALL") {
-            selectedQuestions = [...subjectQuestions];
-        } else {
-            // Enter Marks persists the exact per-student selection in
-            // exam_question_marks.is_selected. Use that authoritative choice
-            // instead of reconstructing it from selection_count and question
-            // order (which can choose different questions and inflate the
-            // denominator, e.g. 84/100 appearing as 73.9%).
-            const hasSavedSelection = questionMarks.some(
-                mark => mark.is_selected !== null && mark.is_selected !== undefined
+        // Question-level selection can exist even when the subject-level
+        // selection mode is ALL. For example, a paper may require every
+        // question except "answer any 2 of 3" in Section C. The student's
+        // persisted is_selected flags are authoritative in both cases.
+        const hasSavedSelection = questionMarks.some(
+            mark => typeof mark.is_selected === "boolean"
+        );
+
+        if (hasSavedSelection) {
+            const selectedQuestionIds = new Set(
+                questionMarks
+                    .filter(mark => mark.is_selected === true)
+                    .map(mark => idValue(mark.question_id))
             );
 
-            if (hasSavedSelection) {
-                const selectedQuestionIds = new Set(
-                    questionMarks
-                        .filter(mark => mark.is_selected === true)
-                        .map(mark => idValue(mark.question_id))
-                );
+            selectedQuestions = subjectQuestions.filter(
+                question => selectedQuestionIds.has(idValue(question.id))
+            );
+        } else if (selectionType === "ALL") {
+            // Older non-selective records have no selection metadata.
+            selectedQuestions = [...subjectQuestions];
+        } else {
+            // Backward compatibility for historical selective papers saved
+            // before per-student selection metadata was available.
+            const markedQuestionIds = new Set(questionMarks.map(mark => idValue(mark.question_id)));
+            const groups = new Map();
 
-                selectedQuestions = subjectQuestions.filter(
-                    question => selectedQuestionIds.has(idValue(question.id))
-                );
-            } else {
-                // Backward compatibility for historical marks saved before
-                // per-student selection metadata was available.
-                const markedQuestionIds = new Set(questionMarks.map(mark => idValue(mark.question_id)));
-                const groups = new Map();
-
-                subjectQuestions
-                    .filter(question => markedQuestionIds.has(idValue(question.id)))
-                    .forEach(question => {
-                        const group = question.selection_group || `QUESTION_${question.id}`;
-                        if (!groups.has(group)) groups.set(group, []);
-                        groups.get(group).push(question);
-                    });
-
-                groups.forEach(groupQuestions => {
-                    const first = groupQuestions[0];
-                    const required = numberValue(first.selection_count);
-                    const sorted = [...groupQuestions].sort(
-                        (a, b) => numberValue(a.question_number) - numberValue(b.question_number)
-                    );
-                    selectedQuestions.push(...(required > 0 ? sorted.slice(0, required) : sorted));
+            subjectQuestions
+                .filter(question => markedQuestionIds.has(idValue(question.id)))
+                .forEach(question => {
+                    const group = question.selection_group || `QUESTION_${question.id}`;
+                    if (!groups.has(group)) groups.set(group, []);
+                    groups.get(group).push(question);
                 });
-            }
+
+            groups.forEach(groupQuestions => {
+                const first = groupQuestions[0];
+                const required = numberValue(first.selection_count);
+                const sorted = [...groupQuestions].sort(
+                    (a, b) => numberValue(a.question_number) - numberValue(b.question_number)
+                );
+                selectedQuestions.push(...(required > 0 ? sorted.slice(0, required) : sorted));
+            });
         }
 
         let rawTotal = 0;
