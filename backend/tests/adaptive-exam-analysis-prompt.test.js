@@ -160,7 +160,7 @@ test("allocates equal marks to comparable required questions when a section tota
     });
 
     assert.match(prompt, /four comparable questions that must all be answered in a 40-mark section receive 10 marks each/i);
-    assert.match(prompt, /Do not infer a 12\\/8-style unequal split from subjective difficulty alone/i);
+    assert.ok(prompt.includes("Do not infer a 12/8-style unequal split from subjective difficulty alone"));
     assert.match(prompt, /Unequal allocation requires objective evidence in the paper/i);
     assert.match(prompt, /Never confuse the number of available selective questions with the number the student is required to answer/i);
 });
