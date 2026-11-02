@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Building2,
     FileText,
@@ -811,7 +812,9 @@ function Settings() {
                 throw signOutError;
             }
 
-            window.location.href = "/login";
+            // Return to the public landing page without a full-page reload.
+            // This keeps the SPA route active after the local Supabase session is cleared.
+            navigate("/", { replace: true });
         } catch (err) {
             console.error("LOGOUT ERROR:", err);
 
