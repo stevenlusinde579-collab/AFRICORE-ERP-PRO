@@ -268,7 +268,7 @@ function ExamSubjects() {
 
             if (
                 form.class_id &&
-                !classIds.includes(Number(form.class_id))
+                !eligibleClasses.some((item) => Number(item.id) === Number(form.class_id))
             ) {
                 setForm((previous) => ({
                     ...previous,
