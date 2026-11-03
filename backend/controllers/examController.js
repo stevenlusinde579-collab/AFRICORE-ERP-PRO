@@ -303,10 +303,7 @@ export const getExamSubjects = async (req, res) => {
             });
         }
 
-        const {
-            data: examSubjects,
-            error: examSubjectsError
-        } = await supabase
+        let examSubjectsResult = await supabase
             .from("exam_subjects")
             .select(`
                 id,
@@ -315,9 +312,34 @@ export const getExamSubjects = async (req, res) => {
                 class_id,
                 full_marks,
                 pass_marks,
+                assessment_components,
                 created_at
             `)
             .eq("exam_id", id);
+
+        // Keep the existing examination workflow available while the additive
+        // assessment migration is pending. Once the column exists, the full
+        // optional setup is returned to Enter Marks.
+        if (
+            examSubjectsResult.error &&
+            ["42703", "PGRST204", "PGRST200"].includes(examSubjectsResult.error.code)
+        ) {
+            examSubjectsResult = await supabase
+                .from("exam_subjects")
+                .select(`
+                    id,
+                    exam_id,
+                    subject_id,
+                    class_id,
+                    full_marks,
+                    pass_marks,
+                    created_at
+                `)
+                .eq("exam_id", id);
+        }
+
+        const examSubjects = examSubjectsResult.data;
+        const examSubjectsError = examSubjectsResult.error;
 
         if (examSubjectsError) {
             throw examSubjectsError;
@@ -437,6 +459,11 @@ export const getExamSubjects = async (req, res) => {
 
                 pass_marks:
                     examSubject.pass_marks,
+
+                assessment_components:
+                    Array.isArray(examSubject.assessment_components)
+                        ? examSubject.assessment_components
+                        : [],
 
                 created_at:
                     examSubject.created_at,
