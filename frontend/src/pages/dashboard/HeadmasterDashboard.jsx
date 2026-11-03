@@ -80,7 +80,7 @@ function HeadmasterDashboard() {
 
             if (authError) throw authError;
             if (!user?.id) {
-                throw new Error("Session haijapatikana. Tafadhali ingia tena.");
+                throw new Error("Your session could not be found. Please sign in again.");
             }
 
             const {
@@ -96,7 +96,7 @@ function HeadmasterDashboard() {
 
             const schoolId = Number(profile?.school_id);
             if (!Number.isInteger(schoolId) || schoolId <= 0) {
-                throw new Error("Akaunti yako haijaunganishwa na shule. Wasiliana na msimamizi wa mfumo.");
+                throw new Error("Your account is not linked to a school. Please contact the system administrator.");
             }
 
             const [
@@ -247,7 +247,7 @@ function HeadmasterDashboard() {
             });
         } catch (loadError) {
             console.error("Headmaster Dashboard Error:", loadError);
-            setError(loadError?.message || "Imeshindikana kupakia taarifa za shule.");
+            setError(loadError?.message || "Failed to load school information.");
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -265,52 +265,52 @@ function HeadmasterDashboard() {
 
     const cards = [
         {
-            title: "Wanafunzi",
+            title: "Students",
             value: stats.students,
             icon: <MdPeople />,
             color: "bg-blue-600",
             detail: academicYear?.year_name
-                ? `Mwaka ${academicYear.year_name}`
-                : "Shule nzima",
+                ? `Year ${academicYear.year_name}`
+                : "All school records",
         },
         {
-            title: "Walimu",
+            title: "Teachers",
             value: stats.teachers,
             icon: <MdSchool />,
             color: "bg-emerald-600",
-            detail: "Walio kazini",
+            detail: "Currently active",
         },
         {
-            title: "Wafanyakazi wengine",
+            title: "Other Staff",
             value: stats.nonStaff,
             icon: <MdPeople />,
             color: "bg-cyan-700",
-            detail: "Wasio walimu, walio kazini",
+            detail: "Non-teaching staff currently active",
         },
         {
-            title: "Madarasa",
+            title: "Classes",
             value: stats.classes,
             icon: <MdClass />,
             color: "bg-violet-600",
             detail: academicYear?.year_name
-                ? `Mwaka ${academicYear.year_name}`
-                : "Shule nzima",
+                ? `Year ${academicYear.year_name}`
+                : "All school records",
         },
         {
-            title: "Mitihani",
+            title: "Examinations",
             value: stats.exams,
             icon: <MdAssessment />,
             color: "bg-orange-600",
             detail: academicYear?.year_name
-                ? `Mwaka ${academicYear.year_name}`
-                : "Shule nzima",
+                ? `Year ${academicYear.year_name}`
+                : "All school records",
         },
         {
-            title: "Mahudhurio leo",
+            title: "Today's Attendance",
             value: stats.attendanceTotal,
             icon: <MdCalendarToday />,
             color: "bg-indigo-600",
-            detail: `${stats.present} wapo • ${stats.absent} hawapo`,
+            detail: `${stats.present} Present • ${stats.absent} haPresent`,
         },
     ];
 
@@ -320,7 +320,7 @@ function HeadmasterDashboard() {
                 <div className="text-center">
                     <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto" />
                     <p className="mt-4 text-gray-600 font-medium">
-                        Inapakia taarifa halisi za shule...
+                        Loading live school information...
                     </p>
                 </div>
             </div>
@@ -345,12 +345,12 @@ function HeadmasterDashboard() {
 
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-                            {school?.school_name || "Dashboard ya Mkuu wa Shule"}
+                            {school?.school_name || "Headmaster Dashboard"}
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Muhtasari wa taarifa na shughuli za shule yako
+                            Overview of your school's information and activities
                             {academicYear?.year_name
-                                ? ` • Mwaka wa masomo ${academicYear.year_name}`
+                                ? ` • Year wa masomo ${academicYear.year_name}`
                                 : ""}
                         </p>
                     </div>
@@ -363,20 +363,20 @@ function HeadmasterDashboard() {
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
                 >
                     <MdRefresh className={refreshing ? "animate-spin" : ""} />
-                    {refreshing ? "Inasasisha..." : "Refresh taarifa"}
+                    {refreshing ? "Refreshing..." : "Refresh"}
                 </button>
             </div>
 
             {error && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                    <p className="font-semibold">Imeshindikana kupakia baadhi ya taarifa.</p>
+                    <p className="font-semibold">Some information could not be loaded.</p>
                     <p className="mt-1">{error}</p>
                     <button
                         type="button"
                         onClick={() => loadDashboard()}
                         className="mt-3 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
                     >
-                        Jaribu tena
+                        Try Again
                     </button>
                 </div>
             )}
@@ -384,7 +384,7 @@ function HeadmasterDashboard() {
             <section>
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-lg font-bold text-slate-900">
-                        Taarifa za shule
+                        School Information
                     </h2>
                     {academicYear?.term && (
                         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -426,10 +426,10 @@ function HeadmasterDashboard() {
                         </div>
                         <div>
                             <h2 className="font-bold text-slate-900">
-                                Salio la fedha za shule
+                                School Account Balance
                             </h2>
                             <p className="text-xs text-slate-500">
-                                Jumla ya akaunti zote hai
+                                Total balance across all active accounts
                             </p>
                         </div>
                     </div>
@@ -438,11 +438,11 @@ function HeadmasterDashboard() {
                         {formatMoney(stats.cashBalance)}
                     </p>
                     <p className="mt-2 text-xs text-slate-500">
-                        Salio limetokana na akaunti za fedha zilizosajiliwa kwenye mfumo.
+                        Balance based on financial accounts registered in the system.
                     </p>
                     <div className="mt-5 flex items-center gap-2 text-xs font-medium text-slate-500">
                         <MdAccountBalance />
-                        {accounts.length} akaunti hai
+                        {accounts.length} active accounts
                     </div>
                 </div>
 
@@ -450,10 +450,10 @@ function HeadmasterDashboard() {
                     <div className="mb-4 flex items-center justify-between">
                         <div>
                             <h2 className="font-bold text-slate-900">
-                                Salio kwa kila akaunti
+                                Balance by Account
                             </h2>
                             <p className="mt-1 text-xs text-slate-500">
-                                Benki na huduma za malipo za shule hii
+                                Banks and payment services for this school
                             </p>
                         </div>
                         <MdAccountBalance className="text-2xl text-blue-600" />
@@ -461,7 +461,7 @@ function HeadmasterDashboard() {
 
                     {accounts.length === 0 ? (
                         <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                            Hakuna akaunti hai ya fedha iliyosajiliwa kwa shule hii.
+                            Hakuna active accounts ya fedha iliyosajiliwa kwa shule hii.
                         </p>
                     ) : (
                         <div className="divide-y divide-slate-100">
@@ -475,7 +475,7 @@ function HeadmasterDashboard() {
                                             {account.account_name}
                                         </p>
                                         <p className="text-xs text-slate-500">
-                                            {account.provider_name || account.account_type || "Akaunti"}
+                                            {account.provider_name || account.account_type || "Account"}
                                             {account.account_number
                                                 ? ` • ${account.account_number}`
                                                 : ""}
@@ -494,14 +494,14 @@ function HeadmasterDashboard() {
             <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 className="font-bold text-slate-900">
-                        Mahudhurio ya leo
+                        Today's Attendance
                     </h2>
                     <p className="mt-1 text-xs text-slate-500">
-                        Taarifa zilizorekodiwa kwa tarehe ya leo
+                        Records entered for today
                     </p>
                     <div className="mt-5 grid grid-cols-3 gap-3">
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-xs text-slate-500">Yote</p>
+                            <p className="text-xs text-slate-500">Total</p>
                             <p className="mt-1 text-xl font-bold text-slate-900">
                                 {stats.attendanceTotal}
                             </p>
@@ -509,7 +509,7 @@ function HeadmasterDashboard() {
                         <div className="rounded-xl bg-emerald-50 p-3">
                             <div className="flex items-center gap-1 text-emerald-700">
                                 <MdCheckCircle />
-                                <p className="text-xs">Wapo</p>
+                                <p className="text-xs">Present</p>
                             </div>
                             <p className="mt-1 text-xl font-bold text-emerald-800">
                                 {stats.present}
@@ -518,7 +518,7 @@ function HeadmasterDashboard() {
                         <div className="rounded-xl bg-red-50 p-3">
                             <div className="flex items-center gap-1 text-red-700">
                                 <MdCancel />
-                                <p className="text-xs">Hawapo</p>
+                                <p className="text-xs">HaPresent</p>
                             </div>
                             <p className="mt-1 text-xl font-bold text-red-800">
                                 {stats.absent}
@@ -529,7 +529,7 @@ function HeadmasterDashboard() {
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 className="font-bold text-slate-900">
-                        Njia za mkato
+                        Quick Links
                     </h2>
                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <button
@@ -539,7 +539,7 @@ function HeadmasterDashboard() {
                         >
                             <MdPeople className="text-2xl text-blue-600" />
                             <span className="mt-2 block text-sm font-semibold text-slate-800">
-                                Wanafunzi
+                                Students
                             </span>
                         </button>
                         <button
@@ -549,7 +549,7 @@ function HeadmasterDashboard() {
                         >
                             <MdSchool className="text-2xl text-emerald-600" />
                             <span className="mt-2 block text-sm font-semibold text-slate-800">
-                                Walimu
+                                Teachers
                             </span>
                         </button>
                         <button
@@ -559,7 +559,7 @@ function HeadmasterDashboard() {
                         >
                             <MdAssessment className="text-2xl text-orange-600" />
                             <span className="mt-2 block text-sm font-semibold text-slate-800">
-                                Mitihani
+                                Examinations
                             </span>
                         </button>
                     </div>
@@ -569,7 +569,7 @@ function HeadmasterDashboard() {
                         className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-800"
                     >
                         <MdCampaign />
-                        Mawasiliano ya shule
+                        School Communication
                     </button>
                 </div>
             </section>
