@@ -6492,7 +6492,7 @@ function EnterMarks() {
                                 </div>
                             )}
 
-                            {assessmentComponents.length > 0 && (
+                            {studentComponents.length > 0 && (
                                 <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                                     <h3 className="font-bold text-indigo-900 mb-2">Optional Test / Practical Marks</h3>
                                     <p className="text-sm text-indigo-800 mb-4">
