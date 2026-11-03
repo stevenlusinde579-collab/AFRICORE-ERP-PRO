@@ -77,6 +77,8 @@ const {data:classData}=await supabase
 
 .eq("school_id", Number(schoolId))
 
+.eq("is_active", true)
+
 .order("class_name");
 
 
