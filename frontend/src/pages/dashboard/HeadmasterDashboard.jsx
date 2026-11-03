@@ -57,6 +57,7 @@ function HeadmasterDashboard() {
 
     const [stats, setStats] = useState(EMPTY_STATS);
     const [accounts, setAccounts] = useState([]);
+    const [classAttendance, setClassAttendance] = useState([]);
     const [school, setSchool] = useState(null);
     const [academicYear, setAcademicYear] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -149,6 +150,18 @@ function HeadmasterDashboard() {
                 .select("id", { count: "exact", head: true })
                 .eq("school_id", schoolId);
 
+            let attendanceClassesQuery = supabase
+                .from("classes")
+                .select("id, class_name, academic_level")
+                .eq("school_id", schoolId)
+                .order("class_name", { ascending: true });
+
+            let classStudentsQuery = supabase
+                .from("students")
+                .select("id, current_class_id")
+                .eq("school_id", schoolId)
+                .eq("student_status", "Active");
+
             let examsQuery = supabase
                 .from("exams")
                 .select("id", { count: "exact", head: true })
@@ -156,7 +169,7 @@ function HeadmasterDashboard() {
 
             let attendanceQuery = supabase
                 .from("class_attendance")
-                .select("status")
+                .select("class_id, student_id, status")
                 .eq("school_id", schoolId)
                 .eq("attendance_date", today);
 
@@ -166,6 +179,8 @@ function HeadmasterDashboard() {
             if (activeYearId !== null) {
                 studentsQuery = studentsQuery.eq("academic_year_id", activeYearId);
                 classesQuery = classesQuery.eq("academic_year_id", activeYearId);
+                attendanceClassesQuery = attendanceClassesQuery.eq("academic_year_id", activeYearId);
+                classStudentsQuery = classStudentsQuery.eq("academic_year_id", activeYearId);
                 examsQuery = examsQuery.eq("academic_year_id", activeYearId);
                 attendanceQuery = attendanceQuery.eq("academic_year_id", activeYearId);
             }
@@ -177,6 +192,8 @@ function HeadmasterDashboard() {
                 classesResult,
                 examsResult,
                 attendanceResult,
+                attendanceClassesResult,
+                classStudentsResult,
                 accountsResult,
             ] = await Promise.all([
                 studentsQuery,
@@ -185,6 +202,8 @@ function HeadmasterDashboard() {
                 classesQuery,
                 examsQuery,
                 attendanceQuery,
+                attendanceClassesQuery,
+                classStudentsQuery,
 
                 // finance.cash_accounts is the active finance module's
                 // source of account balances. Do not also sum the legacy
@@ -205,6 +224,8 @@ function HeadmasterDashboard() {
                 classesResult.error,
                 examsResult.error,
                 attendanceResult.error,
+                attendanceClassesResult.error,
+                classStudentsResult.error,
                 accountsResult.error,
             ].filter(Boolean);
 
@@ -215,15 +236,50 @@ function HeadmasterDashboard() {
 
             const attendanceRows = attendanceResult.data || [];
             const presentStatuses = new Set(["present", "yupo", "presenti"]);
-            const absentStatuses = new Set(["absent", "hayupo", "absent"]);
+            const absentStatuses = new Set(["absent", "hayupo"]);
+            const studentsByClass = new Map();
 
-            const present = attendanceRows.filter((row) =>
-                presentStatuses.has(String(row.status || "").trim().toLowerCase())
-            ).length;
+            (classStudentsResult.data || []).forEach((student) => {
+                const classId = Number(student.current_class_id);
+                if (!Number.isInteger(classId)) return;
+                studentsByClass.set(classId, (studentsByClass.get(classId) || 0) + 1);
+            });
 
-            const absent = attendanceRows.filter((row) =>
-                absentStatuses.has(String(row.status || "").trim().toLowerCase())
-            ).length;
+            const attendanceByClass = new Map();
+            attendanceRows.forEach((row) => {
+                const classId = Number(row.class_id);
+                const studentId = Number(row.student_id);
+                if (!Number.isInteger(classId) || !Number.isInteger(studentId)) return;
+                if (!attendanceByClass.has(classId)) attendanceByClass.set(classId, new Map());
+                attendanceByClass.get(classId).set(studentId, row.status);
+            });
+
+            const classAttendanceRows = (attendanceClassesResult.data || []).map((schoolClass) => {
+                const records = attendanceByClass.get(Number(schoolClass.id)) || new Map();
+                let presentCount = 0;
+                let absentCount = 0;
+                records.forEach((status) => {
+                    const normalizedStatus = String(status || "").trim().toLowerCase();
+                    if (presentStatuses.has(normalizedStatus)) presentCount += 1;
+                    else if (absentStatuses.has(normalizedStatus)) absentCount += 1;
+                });
+                const marked = records.size;
+                const enrolled = studentsByClass.get(Number(schoolClass.id)) || 0;
+                return {
+                    id: schoolClass.id,
+                    name: schoolClass.class_name,
+                    level: schoolClass.academic_level,
+                    enrolled,
+                    marked,
+                    present: presentCount,
+                    absent: absentCount,
+                    status: marked === 0 ? "not-taken" : marked < enrolled ? "partial" : "recorded",
+                    unmarked: Math.max(enrolled - marked, 0),
+                };
+            });
+
+            const present = classAttendanceRows.reduce((sum, item) => sum + item.present, 0);
+            const absent = classAttendanceRows.reduce((sum, item) => sum + item.absent, 0);
 
             const safeAccounts = accountsResult.data || [];
             const cashBalance = safeAccounts.reduce(
@@ -234,6 +290,7 @@ function HeadmasterDashboard() {
             setSchool(schoolResult.data || null);
             setAcademicYear(yearResult.data || null);
             setAccounts(safeAccounts);
+            setClassAttendance(classAttendanceRows);
             setStats({
                 students: studentsResult.count || 0,
                 teachers: teachersResult.count || 0,
@@ -310,7 +367,7 @@ function HeadmasterDashboard() {
             value: stats.attendanceTotal,
             icon: <MdCalendarToday />,
             color: "bg-indigo-600",
-            detail: `${stats.present} Present • ${stats.absent} haPresent`,
+            detail: `${stats.present} Present • ${stats.absent} Absent`,
         },
     ];
 
@@ -350,7 +407,7 @@ function HeadmasterDashboard() {
                         <p className="mt-1 text-sm text-slate-500">
                             Overview of your school's information and activities
                             {academicYear?.year_name
-                                ? ` • Year wa masomo ${academicYear.year_name}`
+                                ? ` • Academic Year ${academicYear.year_name}`
                                 : ""}
                         </p>
                     </div>
@@ -461,7 +518,7 @@ function HeadmasterDashboard() {
 
                     {accounts.length === 0 ? (
                         <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                            Hakuna active accounts ya fedha iliyosajiliwa kwa shule hii.
+                            No active financial accounts are registered for this school.
                         </p>
                     ) : (
                         <div className="divide-y divide-slate-100">
@@ -491,41 +548,74 @@ function HeadmasterDashboard() {
                 </div>
             </section>
 
-            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 className="font-bold text-slate-900">
-                        Today's Attendance
-                    </h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                        Records entered for today
-                    </p>
-                    <div className="mt-5 grid grid-cols-3 gap-3">
-                        <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-xs text-slate-500">Total</p>
-                            <p className="mt-1 text-xl font-bold text-slate-900">
-                                {stats.attendanceTotal}
-                            </p>
-                        </div>
-                        <div className="rounded-xl bg-emerald-50 p-3">
-                            <div className="flex items-center gap-1 text-emerald-700">
-                                <MdCheckCircle />
-                                <p className="text-xs">Present</p>
-                            </div>
-                            <p className="mt-1 text-xl font-bold text-emerald-800">
-                                {stats.present}
-                            </p>
-                        </div>
-                        <div className="rounded-xl bg-red-50 p-3">
-                            <div className="flex items-center gap-1 text-red-700">
-                                <MdCancel />
-                                <p className="text-xs">HaPresent</p>
-                            </div>
-                            <p className="mt-1 text-xl font-bold text-red-800">
-                                {stats.absent}
-                            </p>
-                        </div>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 className="font-bold text-slate-900">Class Attendance</h2>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Daily attendance status for each class
+                        </p>
                     </div>
+                    <span className="text-xs font-semibold text-slate-500">
+                        {new Date().toLocaleDateString("en-TZ", { day: "2-digit", month: "short", year: "numeric" })}
+                    </span>
                 </div>
+
+                {classAttendance.length === 0 ? (
+                    <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                        No classes were found for the active academic year.
+                    </p>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {classAttendance.map((item) => (
+                            <div key={item.id} className="rounded-xl border border-slate-200 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <h3 className="font-bold text-slate-900">{item.name}</h3>
+                                        <p className="mt-1 text-xs text-slate-500">{item.level || "Class"}</p>
+                                    </div>
+                                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                        item.status === "recorded"
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : item.status === "partial"
+                                                ? "bg-amber-100 text-amber-700"
+                                                : "bg-slate-100 text-slate-600"
+                                    }`}>
+                                        {item.status === "recorded" ? "Recorded" : item.status === "partial" ? "Partially Recorded" : "N/A — Not Taken"}
+                                    </span>
+                                </div>
+                                {item.status === "not-taken" ? (
+                                    <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                                        Attendance has not been taken for this class today.
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="mt-4 grid grid-cols-3 gap-2">
+                                            <div className="rounded-lg bg-slate-50 p-3">
+                                                <p className="text-xs text-slate-500">Enrolled</p>
+                                                <p className="mt-1 text-xl font-bold text-slate-900">{item.enrolled}</p>
+                                            </div>
+                                            <div className="rounded-lg bg-emerald-50 p-3">
+                                                <p className="text-xs text-emerald-700">Present</p>
+                                                <p className="mt-1 text-xl font-bold text-emerald-800">{item.present}</p>
+                                            </div>
+                                            <div className="rounded-lg bg-red-50 p-3">
+                                                <p className="text-xs text-red-700">Absent</p>
+                                                <p className="mt-1 text-xl font-bold text-red-800">{item.absent}</p>
+                                            </div>
+                                        </div>
+                                        {item.status === "partial" && (
+                                            <p className="mt-3 text-xs font-medium text-amber-700">
+                                                {item.marked} of {item.enrolled} students recorded; {item.unmarked} not yet recorded.
+                                            </p>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 className="font-bold text-slate-900">
