@@ -3840,7 +3840,7 @@ function EnterMarks() {
                     throw new Error("Hifadhi Max Marks kwanza.");
                 }
 
-                if (assessmentComponents.length === 0 && questions.length === 0) {
+                if (studentComponents.length === 0 && questions.length === 0) {
                     throw new Error("Hakuna maswali au Assessment Components zilizowekwa kwa somo hili.");
                 }
 
@@ -4085,7 +4085,7 @@ function EnterMarks() {
                 }, 0);
                 const componentValues = Object.fromEntries(componentRecords.map(row => [row.component_key, row.marks_obtained]));
                 const calculatedFinal = calculateAssessmentFinalMark({
-                    components: assessmentComponents,
+                    components: studentComponents,
                     marksByComponent: componentValues,
                     examMarks: selectedRawTotal,
                     examMaxMarks: selectedRawMaximum,
@@ -5516,7 +5516,7 @@ function EnterMarks() {
                     canEnterMarks &&
                     !loadingQuestions &&
                     questions.length === 0 &&
-                    assessmentComponents.length === 0 && (
+                    !students.some(student => (studentAssessmentSetups[String(student.id)] || []).length > 0) && (
 
                         <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 mb-6 text-yellow-800">
 
@@ -5742,7 +5742,7 @@ function EnterMarks() {
                 {
                     selectedExamSubjectId &&
                     canEnterMarks &&
-                    (questions.length > 0 || assessmentComponents.length > 0) &&
+                    (questions.length > 0 || studentComponents.length > 0) &&
                     (questions.length === 0 || maxMarksSaved) && (
 
                         <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
@@ -5906,8 +5906,9 @@ function EnterMarks() {
                                                             student.id
                                                         );
 
+                                                    const studentComponents = studentAssessmentSetups[String(student.id)] || [];
                                                     const studentAssessmentValues = Object.fromEntries(
-                                                        assessmentComponents.map(component => [
+                                                        studentComponents.map(component => [
                                                             component.key,
                                                             assessmentMarks[`${student.id}::${component.key}`] ?? ""
                                                         ])
@@ -6259,56 +6260,7 @@ function EnterMarks() {
                                                                         </div>
 
 
-<div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                                <div>
-                                    <h3 className="font-bold text-indigo-900 mb-2">Test / Practical Setup ya Somo Hili</h3>
-                                    <p className="text-sm text-indigo-800 mt-1">
-                                        Weka Max Marks za Test 1, Test 2 na Practical zinazotumika kwa somo hili. Max Marks hizi zitakuwa sawa kwa wanafunzi wote; marks anazopata kila mwanafunzi zitaingizwa tofauti hapa chini.
-                                    </p>
-                                </div>
-                                <span className="text-xs font-semibold rounded-full px-3 py-1 bg-white text-indigo-700">
-                                    {assessmentComponents.length > 0 ? "Setup saved" : "No optional setup"}
-                                </span>
-                            </div>
-                            <div className="grid sm:grid-cols-3 gap-4 mt-4">
-                                {[
-                                    { label: "Test 1 Max Marks", field: "test_1_max" },
-                                    { label: "Test 2 Max Marks", field: "test_2_max" },
-                                    { label: "Practical Max Marks (50)", field: "practical_max", fixedMaximum: 50 }
-                                ].map(item => (
-                                    <label key={item.field} className="block text-sm font-semibold text-gray-700">
-                                        {item.label}
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max={item.fixedMaximum}
-                                            step="0.01"
-                                            value={assessmentSetupDraft[item.field]}
-                                            onChange={event => setAssessmentSetupDraft(previous => ({
-                                                ...previous,
-                                                [item.field]: event.target.value
-                                            }))}
-                                            className="mt-1 w-full rounded-lg border border-gray-300 p-3"
-                                            placeholder="Leave blank if not used"
-                                        />
-                                    </label>
-                                ))}
-                            </div>
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
-                                <p className="text-xs text-gray-500">
-                                    Test zilizowekwa zitahesabiwa kwa wastani. Practical (ikiwa imetumika) lazima iwe /50; Theory + Practical hujumlishwa kisha hubadilishwa kutoka /150 kwenda /100.
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={saveAssessmentSetup}
-                                    disabled={savingAssessmentSetup}
-                                    className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 disabled:opacity-50"
-                                >
-                                    {savingAssessmentSetup ? "Saving setup..." : "Save Test / Practical Setup"}
-                                </button>
-                            </div>
-                        </div>
+
 
                                                                                                                                                 {/* SELECTION STATUS */}
 
@@ -6457,6 +6409,32 @@ function EnterMarks() {
 
                                                                                             
 
+                            <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                    <div><h3 className="font-bold text-indigo-900">Test / Practical Setup ya mwanafunzi huyu</h3>
+                                        <p className="text-sm text-indigo-800">Weka Max Marks kwa mwanafunzi huyu pekee. Acha tupu sehemu isiyotumika.</p></div>
+                                    <span className="text-xs font-semibold text-indigo-700">{studentComponents.length ? "Setup imehifadhiwa" : "Hakuna setup bado"}</span>
+                                </div>
+                                <div className="grid sm:grid-cols-3 gap-3 mt-4">
+                                    {[{label:"Test 1 Max Marks",field:"test_1_max"},{label:"Test 2 Max Marks",field:"test_2_max"},{label:"Practical Max Marks (50)",field:"practical_max"}].map(item => (
+                                        <label key={item.field} className="block text-sm font-semibold text-gray-700">{item.label}
+                                            <input type="number" min="0" max={item.field === "practical_max" ? 50 : undefined} step="0.01"
+                                                value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
+                                                onChange={event => setStudentAssessmentDrafts(previous => ({
+                                                    ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                }))}
+                                                className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3" placeholder="Leave blank if not used" />
+                                        </label>
+                                    ))}
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
+                                    <p className="text-xs text-gray-600">Practical ikiwa imetumika lazima iwe /50; Theory + Practical hubadilishwa kutoka /150 kwenda /100.</p>
+                                    <button type="button" onClick={() => saveAssessmentSetup(student.id)} disabled={savingAssessmentSetup}
+                                        className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 disabled:opacity-50">
+                                        {savingAssessmentSetup ? "Saving..." : "Save Setup ya Mwanafunzi"}
+                                    </button>
+                                </div>
+                            </div>
                             {calculatedStudentAssessment?.configuration_error && (
                                 <div
                                     role="alert"
@@ -6477,7 +6455,7 @@ function EnterMarks() {
                                 <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                                     <h3 className="font-bold text-emerald-900 mb-2">Muhtasari wa Alama za Mwisho</h3>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                        {assessmentComponents.map(component => {
+                                        {studentComponents.map(component => {
                                             const componentValue = studentAssessmentValues[component.key];
                                             return (
                                                 <div key={component.key} className="rounded-lg bg-white border border-emerald-100 p-3">
