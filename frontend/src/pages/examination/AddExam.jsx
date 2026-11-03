@@ -107,6 +107,7 @@ function AddExam() {
     });
 
     const [classifications, setClassifications] = useState([]);
+    const [classSubjectIds, setClassSubjectIds] = useState(null);
 
     // ============================================================
     // SYNC GLOBAL ACTIVE ACADEMIC YEAR
@@ -200,6 +201,7 @@ function AddExam() {
                 .select("*")
                 .eq("school_id", schoolId)
                 .eq("academic_year_id", academicYearId)
+                .eq("is_active", true)
                 .order("id", { ascending: true });
 
             if (fetchError) throw fetchError;
@@ -254,6 +256,47 @@ function AddExam() {
             ) || null
         );
     }, [classes, classificationForm.class_id]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadClassSubjects = async () => {
+            if (!selectedClass?.id) {
+                setClassSubjectIds(null);
+                return;
+            }
+
+            try {
+                setClassSubjectIds([]);
+                const { data, error: linkError } = await supabase
+                    .from("class_subjects")
+                    .select("subject_id, is_active")
+                    .eq("class_id", selectedClass.id);
+
+                if (linkError) throw linkError;
+                if (cancelled) return;
+
+                // null means this is a legacy class with no explicit
+                // subject setup yet; retain its previous level-based options.
+                setClassSubjectIds(
+                    (data || []).length === 0
+                        ? null
+                        : (data || [])
+                            .filter((row) => row.is_active === true)
+                            .map((row) => Number(row.subject_id))
+                );
+            } catch (linkError) {
+                if (!cancelled) {
+                    setClassSubjectIds([]);
+                    setError(linkError.message || "Unable to load class subjects.");
+                }
+            } finally {
+            }
+        };
+
+        loadClassSubjects();
+        return () => { cancelled = true; };
+    }, [selectedClass?.id]);
 
     // Keep the default grade bands appropriate to the selected education level.
     // Teachers can still edit every band before saving the examination.
@@ -416,13 +459,21 @@ function AddExam() {
     const availableSubjects = useMemo(() => {
         if (!selectedClass) return [];
 
+        if (classSubjectIds !== null) {
+            const enabledIds = new Set(classSubjectIds);
+            return subjects.filter((subject) =>
+                enabledIds.has(Number(subject.id)) &&
+                subjectBelongsToClass(subject, selectedClass)
+            );
+        }
+
         return subjects.filter(subject =>
             subjectBelongsToClass(
                 subject,
                 selectedClass
             )
         );
-    }, [subjects, selectedClass]);
+    }, [subjects, selectedClass, classSubjectIds]);
 
     const selectedSubjects = useMemo(() => {
         return subjects.filter(subject =>

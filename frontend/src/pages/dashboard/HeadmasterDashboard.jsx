@@ -148,12 +148,14 @@ function HeadmasterDashboard() {
             let classesQuery = supabase
                 .from("classes")
                 .select("id", { count: "exact", head: true })
-                .eq("school_id", schoolId);
+                .eq("school_id", schoolId)
+                .eq("is_active", true);
 
             let attendanceClassesQuery = supabase
                 .from("classes")
                 .select("id, class_name, academic_level")
                 .eq("school_id", schoolId)
+                .eq("is_active", true)
                 .order("class_name", { ascending: true });
 
             let classStudentsQuery = supabase

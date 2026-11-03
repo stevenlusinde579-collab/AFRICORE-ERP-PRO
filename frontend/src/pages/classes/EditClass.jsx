@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import { useRole } from "../../context/RoleContext";
 
 function EditClass() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { selectedRoleId } = useRole();
+    const canManageSchoolSetup = [1, 2, 3, 4].includes(Number(selectedRoleId));
 
     // =====================================================
     // GLOBAL SCHOOL + ACADEMIC YEAR
@@ -26,12 +29,50 @@ function EditClass() {
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(true);
     const [message, setMessage] = useState("");
+    const [availableSubjects, setAvailableSubjects] = useState([]);
+    const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
 
     const [form, setForm] = useState({
         academic_level: "",
         class_name: "",
         short_name: "",
+        is_active: true,
     });
+
+    const loadSubjectsForLevel = async (level, classId = id) => {
+        if (!level) {
+            setAvailableSubjects([]);
+            setSelectedSubjectIds([]);
+            return;
+        }
+
+        const [{ data: subjects, error: subjectsError }, { data: links, error: linksError }] = await Promise.all([
+            supabase
+                .from("subjects")
+                .select("id, subject_name, subject_code, education_level")
+                .eq("education_level", level)
+                .eq("is_active", true)
+                .order("subject_name", { ascending: true }),
+            supabase
+                .from("class_subjects")
+                .select("subject_id, is_active")
+                .eq("class_id", classId),
+        ]);
+
+        if (subjectsError) throw subjectsError;
+        if (linksError) throw linksError;
+
+        const availableIds = new Set((subjects || []).map((subject) => Number(subject.id)));
+        setAvailableSubjects(subjects || []);
+        setSelectedSubjectIds(
+            (links || [])
+                .filter((link) =>
+                    link.is_active !== false &&
+                    availableIds.has(Number(link.subject_id))
+                )
+                .map((link) => Number(link.subject_id))
+        );
+    };
 
     // =====================================================
     // FETCH CLASS
@@ -92,7 +133,14 @@ function EditClass() {
 
             short_name:
                 classData.short_name || "",
+            is_active: classData.is_active !== false,
         });
+
+        try {
+            await loadSubjectsForLevel(classData.academic_level, classData.id);
+        } catch (subjectLoadError) {
+            setMessage("Class details loaded, but subjects could not be loaded: " + subjectLoadError.message);
+        }
 
         setFetching(false);
     };
@@ -126,10 +174,16 @@ function EditClass() {
             value,
         } = e.target;
 
-        setForm({
-            ...form,
-            [name]: value,
-        });
+        setForm((previous) => ({
+            ...previous,
+            [name]: name === "is_active" ? checked : value,
+        }));
+
+        if (name === "academic_level" && value !== form.academic_level) {
+            loadSubjectsForLevel(value, id).catch((subjectError) => {
+                setMessage("Unable to load subjects for this level: " + subjectError.message);
+            });
+        }
     };
 
     // =====================================================
@@ -140,6 +194,11 @@ function EditClass() {
         e.preventDefault();
 
         setMessage("");
+
+        if (!canManageSchoolSetup) {
+            setMessage("Only the Headmaster, Deputy Headmaster, or Academic Master can change class and subject availability.");
+            return;
+        }
 
         // =================================================
         // CHECK SCHOOL
@@ -201,6 +260,7 @@ function EditClass() {
 
             short_name:
                 form.short_name.trim() || null,
+            is_active: Boolean(form.is_active),
         };
 
         console.log(
@@ -248,12 +308,59 @@ function EditClass() {
             return;
         }
 
+        // Keep subject activation scoped to this class (and therefore this school).
+        try {
+            const { data: existingLinks, error: linksError } = await supabase
+                .from("class_subjects")
+                .select("id, subject_id")
+                .eq("class_id", id);
+
+            if (linksError) throw linksError;
+
+            const existingBySubject = new Map(
+                (existingLinks || []).map((link) => [Number(link.subject_id), link])
+            );
+            const selectedIds = new Set(selectedSubjectIds.map(Number));
+
+            for (const link of existingLinks || []) {
+                const shouldBeActive = selectedIds.has(Number(link.subject_id));
+                const { error: updateLinkError } = await supabase
+                    .from("class_subjects")
+                    .update({ is_active: shouldBeActive })
+                    .eq("id", link.id);
+                if (updateLinkError) throw updateLinkError;
+            }
+
+            // Create a row for every available subject in this level.
+            // This records that the class has an explicit subject setup,
+            // including the case where the manager intentionally selects none.
+            const newLinks = availableSubjects
+                .map((subject) => Number(subject.id))
+                .filter((subjectId) => !existingBySubject.has(subjectId))
+                .map((subjectId) => ({
+                    class_id: Number(id),
+                    subject_id: subjectId,
+                    is_active: selectedIds.has(subjectId),
+                }));
+
+            if (newLinks.length > 0) {
+                const { error: insertLinksError } = await supabase
+                    .from("class_subjects")
+                    .insert(newLinks);
+                if (insertLinksError) throw insertLinksError;
+            }
+        } catch (subjectSaveError) {
+            setMessage("Class details were saved, but subject settings could not be saved: " + subjectSaveError.message);
+            setLoading(false);
+            return;
+        }
+
         // =================================================
         // SUCCESS
         // =================================================
 
         setMessage(
-            "Class updated successfully ✅"
+            "Class and subject settings updated successfully."
         );
 
         setTimeout(() => {
@@ -478,6 +585,54 @@ function EditClass() {
 
                     </div>
 
+                </div>
+
+                <div className="mt-6 rounded-xl border border-slate-200 p-5">
+                    <h2 className="font-semibold text-slate-900">Class Availability</h2>
+                    <label className="mt-3 flex items-center gap-3">
+                        <input
+                            type="checkbox"
+                            checked={form.is_active}
+                            disabled={!canManageSchoolSetup}
+                            onChange={(event) => setForm((previous) => ({ ...previous, is_active: event.target.checked }))}
+                            className="h-4 w-4"
+                        />
+                        <span className="text-sm text-slate-700">
+                            Active class — inactive classes will be hidden from attendance and normal class selection.
+                        </span>
+                    </label>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-slate-200 p-5">
+                    <h2 className="font-semibold text-slate-900">Subjects Available in This Class</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                        Select the subjects this school offers for this class. Changes apply only to this class and do not affect other schools.
+                    </p>
+                    {availableSubjects.length === 0 ? (
+                        <p className="mt-4 text-sm text-slate-500">No active subjects are configured for this education level.</p>
+                    ) : (
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {availableSubjects.map((subject) => (
+                                <label key={subject.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedSubjectIds.includes(Number(subject.id))}
+                                        disabled={!canManageSchoolSetup}
+                                        onChange={(event) => setSelectedSubjectIds((previous) =>
+                                            event.target.checked
+                                                ? [...new Set([...previous, Number(subject.id)])]
+                                                : previous.filter((subjectId) => subjectId !== Number(subject.id))
+                                        )}
+                                        className="h-4 w-4"
+                                    />
+                                    <span className="text-sm text-slate-700">
+                                        {subject.subject_name}
+                                        {subject.subject_code ? <span className="ml-1 text-xs text-slate-400">({subject.subject_code})</span> : null}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* =================================================

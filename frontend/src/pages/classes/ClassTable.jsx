@@ -34,6 +34,8 @@ function ClassTable({ filters = {} }) {
             .trim()
             .toLowerCase() === "subject teacher";
 
+    const canManageSchoolSetup = [1, 2, 3, 4].includes(Number(selectedRoleId));
+
     // =====================================================
     // FETCH CLASSES
     // =====================================================
@@ -235,6 +237,7 @@ function ClassTable({ filters = {} }) {
                     "academic_year_id",
                     activeAcademicYearId
                 )
+                .eq("is_active", true)
                 .in("id", assignedClassIds)
                 .order("created_at", {
                     ascending: false,
@@ -550,9 +553,12 @@ function ClassTable({ filters = {} }) {
 
                                 <td className="p-4">
 
-                                    <span className="px-3 py-1 rounded-full text-sm bg-green-100 text-green-700">
-                                        {item.status ||
-                                            "Active"}
+                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                        item.is_active === false
+                                            ? "bg-slate-100 text-slate-600"
+                                            : "bg-green-100 text-green-700"
+                                    }`}>
+                                        {item.is_active === false ? "Inactive" : "Active"}
                                     </span>
 
                                 </td>
@@ -578,16 +584,18 @@ function ClassTable({ filters = {} }) {
 
                                     {!isSubjectTeacher && (
                                         <>
-                                            <button
-                                                onClick={() =>
-                                                    navigate(
-                                                        `/classes/edit/${item.id}`
-                                                    )
-                                                }
-                                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded mr-2"
-                                            >
-                                                Edit
-                                            </button>
+                                            {canManageSchoolSetup && (
+                                                <button
+                                                    onClick={() =>
+                                                        navigate(
+                                                            `/classes/edit/${item.id}`
+                                                        )
+                                                    }
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded mr-2"
+                                                >
+                                                    Edit
+                                                </button>
+                                            )}
 
                                             <button
                                                 onClick={() =>
