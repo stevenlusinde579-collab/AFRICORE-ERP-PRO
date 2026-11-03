@@ -70,6 +70,12 @@ create policy af_score_exam_assessment_marks_tenant_guard
                 where st.id = exam_assessment_marks.student_id
                   and st.school_id = public.get_current_user_school_id()
             )
+            and exists (
+                select 1
+                from public.exam_subjects es
+                where es.id = exam_assessment_marks.exam_subject_id
+                  and es.exam_id = exam_assessment_marks.exam_id
+            )
         )
     )
     with check (
@@ -86,6 +92,12 @@ create policy af_score_exam_assessment_marks_tenant_guard
                 from public.students st
                 where st.id = exam_assessment_marks.student_id
                   and st.school_id = public.get_current_user_school_id()
+            )
+            and exists (
+                select 1
+                from public.exam_subjects es
+                where es.id = exam_assessment_marks.exam_subject_id
+                  and es.exam_id = exam_assessment_marks.exam_id
             )
         )
     );
