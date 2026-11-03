@@ -56,7 +56,13 @@ export function calculateAssessmentFinalMark({
             tests.push(obtained);
         } else {
             if (maximum !== 50) {
-                throw new Error("Practical Max Marks lazima iwe 50.");
+                return {
+                    complete: false,
+                    configuration_error: "Practical Max Marks lazima iwe 50. Rekebisha usanidi wa somo hili kabla ya kuingiza marks.",
+                    percentage: null,
+                    marks_obtained: null,
+                    full_marks: Number(subjectFullMarks) || 100
+                };
             }
             practicals.push({ obtained, maximum: 50 });
         }
