@@ -3967,6 +3967,17 @@ function EnterMarks() {
                 // UPSERT prevents duplicate-key failures.
                 // -------------------------------------------------
 
+                for (const component of assessmentComponents) {
+                    const componentValue = assessmentMarks[`${student.id}::${component.key}`];
+                    const maximum = Number(component.max_marks);
+                    const obtained = Number(componentValue);
+                    if (componentValue === "" || componentValue === null || componentValue === undefined) {
+                        throw new Error(`Weka marks za ${component.label || component.key} kwa ${getStudentName(student)}.`);
+                    }
+                    if (!Number.isFinite(obtained) || obtained < 0 || obtained > maximum) {
+                        throw new Error(`Marks za ${component.label || component.key} lazima ziwe kati ya 0 na ${maximum}.`);
+                    }
+                }
                 if (records.length > 0) {
                     const { error: deleteError } = await supabase
                         .from("exam_question_marks")
@@ -4449,7 +4460,9 @@ function EnterMarks() {
 
 
                 setMessage(
-                    `Marks za ${getStudentName(student)} zimehifadhiwa. Total: ${formatMark(savedRawTotal)} / ${formatMark(savedMax)} = ${formatMark(savedPercentage)} / 100.`
+                    calculatedFinal?.complete
+                        ? `Marks za ${getStudentName(student)} zimehifadhiwa. Final Marks: ${formatMark(calculatedFinal.marks_obtained)} / ${formatMark(calculatedFinal.full_marks)}.`
+                        : `Marks za ${getStudentName(student)} zimehifadhiwa. Total: ${formatMark(savedRawTotal)} / ${formatMark(savedMax)} = ${formatMark(savedPercentage)} / 100.`
                 );
 
             } catch (err) {
@@ -5485,7 +5498,8 @@ function EnterMarks() {
                     selectedExamSubjectId &&
                     canEnterMarks &&
                     !loadingQuestions &&
-                    questions.length === 0 && (
+                    questions.length === 0 &&
+                    assessmentComponents.length === 0 && (
 
                         <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 mb-6 text-yellow-800">
 
@@ -5801,8 +5815,8 @@ function EnterMarks() {
                 {
                     selectedExamSubjectId &&
                     canEnterMarks &&
-                    questions.length > 0 &&
-                    maxMarksSaved && (
+                    (questions.length > 0 || assessmentComponents.length > 0) &&
+                    (questions.length === 0 || maxMarksSaved) && (
 
                         loadingStudents
 
@@ -7007,7 +7021,7 @@ function EnterMarks() {
                                                                                 disabled={
                                                                                     isSaving ||
                                                                                     loadingExistingMarks ||
-                                                                                    !maxMarksSaved ||
+                                                                                    (questions.length > 0 && !maxMarksSaved) ||
                                                                                     hasSelectionProblem ||
                                                                                     !canEnterMarks
                                                                                 }
