@@ -8,7 +8,7 @@ function EditClass() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { selectedRoleId } = useRole();
-    const canManageSchoolSetup = [1, 2, 4].includes(Number(selectedRoleId));
+    const canManageSchoolSetup = [1, 2, 3, 4].includes(Number(selectedRoleId));
 
     // =====================================================
     // GLOBAL SCHOOL + ACADEMIC YEAR
@@ -62,10 +62,14 @@ function EditClass() {
         if (subjectsError) throw subjectsError;
         if (linksError) throw linksError;
 
+        const availableIds = new Set((subjects || []).map((subject) => Number(subject.id)));
         setAvailableSubjects(subjects || []);
         setSelectedSubjectIds(
             (links || [])
-                .filter((link) => link.is_active !== false)
+                .filter((link) =>
+                    link.is_active !== false &&
+                    availableIds.has(Number(link.subject_id))
+                )
                 .map((link) => Number(link.subject_id))
         );
     };
