@@ -1692,7 +1692,8 @@ function EnterMarks() {
                     exam_id,
                     subject_id,
                     class_id,
-                    full_marks
+                    full_marks,
+                    assessment_components
                 `)
                 .eq(
                     "id",
@@ -1723,11 +1724,12 @@ function EnterMarks() {
                 );
             }
 
-            const selectedSubjectSetup = examSubjects.find(
-                item => String(item.id) === String(selectedExamSubjectId)
-            );
-            const loadedComponents = Array.isArray(selectedSubjectSetup?.assessment_components)
-                ? selectedSubjectSetup.assessment_components
+            // Read the assessment setup directly from this exact exam_subject row.
+            // The API subject list may omit assessment_components, which previously
+            // caused the calculator to receive an empty component list and silently
+            // keep only the examination paper mark.
+            const loadedComponents = Array.isArray(examSubject.assessment_components)
+                ? examSubject.assessment_components
                 : [];
             setAssessmentComponents(loadedComponents);
             setAssessmentSetupDraft({
