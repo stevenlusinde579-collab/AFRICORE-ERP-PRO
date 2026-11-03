@@ -1,16 +1,13 @@
 /**
  * Optional Test/Practical calculation.
  *
- * Theory is the simple average of every configured Test used and the
- * examination paper percentage. If no Tests are configured, the paper alone
- * is the Theory mark. When Practical is configured, the final mark follows
- * the NECTA-style 70% Theory + 30% Practical weighting.
- *
- * Each assessment is first normalized against its own maximum marks so
- * different configured maxima do not distort the average.
+ * Theory is the arithmetic average of the raw marks for each configured Test
+ * and the examination paper. Tests are deliberately averaged as marks (not
+ * weighted by their configured maxima), matching the school's assessment
+ * rule. With Practical configured, combine Theory 70% and Practical 30%.
  *
  * Returns null when no optional components are configured, preserving the
- * existing question-by-question calculation path.
+ * legacy question-by-question calculation path.
  */
 export function calculateAssessmentFinalMark({
     components = [],
@@ -54,11 +51,10 @@ export function calculateAssessmentFinalMark({
             );
         }
 
-        const percentage = (obtained / maximum) * 100;
         if (String(component.type).toLowerCase() === "test") {
-            tests.push(percentage);
+            tests.push(obtained);
         } else {
-            practicals.push(percentage);
+            practicals.push((obtained / maximum) * 100);
         }
     }
 
@@ -78,8 +74,10 @@ export function calculateAssessmentFinalMark({
         throw new Error(`Examination marks must be between 0 and ${paperMaximum}.`);
     }
 
-    const theoryParts = [...tests, (paperObtained / paperMaximum) * 100];
-    const theoryPercentage = theoryParts.reduce((sum, value) => sum + value, 0) / theoryParts.length;
+    const fullMarks = Number(subjectFullMarks) > 0 ? Number(subjectFullMarks) : 100;
+    const theoryParts = [...tests, paperObtained];
+    const theoryMarks = theoryParts.reduce((sum, value) => sum + value, 0) / theoryParts.length;
+    const theoryPercentage = (theoryMarks / fullMarks) * 100;
 
     const practicalPercentage = practicals.length
         ? practicals.reduce((sum, value) => sum + value, 0) / practicals.length
@@ -89,18 +87,18 @@ export function calculateAssessmentFinalMark({
         ? theoryPercentage
         : (theoryPercentage * 0.70) + (practicalPercentage * 0.30);
 
-    const fullMarks = Number(subjectFullMarks) > 0 ? Number(subjectFullMarks) : 100;
-    const roundedPercentage = Math.round(percentage * 100) / 100;
+    const finalMarks = (percentage / 100) * fullMarks;
 
     return {
         complete: true,
+        theory_marks: Math.round(theoryMarks * 100) / 100,
         theory_percentage: Math.round(theoryPercentage * 100) / 100,
         practical_percentage: practicalPercentage === null
             ? null
             : Math.round(practicalPercentage * 100) / 100,
-        percentage: roundedPercentage,
+        percentage: Math.round(percentage * 100) / 100,
         // exam_marks.marks_obtained is an integer column in the current schema.
-        marks_obtained: Math.round((percentage / 100) * fullMarks),
+        marks_obtained: Math.round(finalMarks),
         full_marks: fullMarks
     };
 }
