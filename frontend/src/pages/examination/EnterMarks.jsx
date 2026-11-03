@@ -1596,6 +1596,9 @@ function EnterMarks() {
 
             setQuestions([]);
 
+            setAssessmentComponents([]);
+            setAssessmentMarks({});
+
             setMaxMarks({});
 
             setMaxMarksSaved(false);
@@ -2104,6 +2107,7 @@ function EnterMarks() {
                 const loadedAssessmentMarks = {};
                 (componentRows || []).forEach(row => {
                     loadedAssessmentMarks[`${row.student_id}::${row.component_key}`] = String(row.marks_obtained ?? "");
+                    studentSavedMap[String(row.student_id)] = true;
                 });
                 setAssessmentMarks(loadedAssessmentMarks);
 
