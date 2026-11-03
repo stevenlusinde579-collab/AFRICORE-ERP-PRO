@@ -4064,12 +4064,6 @@ function EnterMarks() {
                 }
 
 
-                console.log(
-                    "SAVED MARKS:",
-                    data
-                );
-
-
                 // -------------------------------------------------
                 // RELOAD SAVED MARKS
                 // -------------------------------------------------
@@ -4117,9 +4111,11 @@ function EnterMarks() {
                 const mapped =
                     {};
 
-                const savedMap =
-                    {};
+                const savedMap = {};
 
+                if (componentRecords.length > 0) {
+                    savedMap[String(student.id)] = true;
+                }
 
                 (
                     refreshedMarks || []
