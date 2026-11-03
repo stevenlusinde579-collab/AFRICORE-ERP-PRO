@@ -505,6 +505,7 @@ function AddStudent() {
           "academic_year_id",
           currentAcademicYearId
         )
+        .eq("is_active", true)
         .order(
           "class_name"
         );
