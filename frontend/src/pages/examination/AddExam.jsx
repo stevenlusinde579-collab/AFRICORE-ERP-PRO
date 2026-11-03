@@ -268,6 +268,7 @@ function AddExam() {
             }
 
             try {
+                setClassSubjectIds([]);
                 setClassSubjectSetupLoading(true);
                 const { data, error: linkError } = await supabase
                     .from("class_subjects")
