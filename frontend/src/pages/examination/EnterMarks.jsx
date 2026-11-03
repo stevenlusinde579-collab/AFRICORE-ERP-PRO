@@ -6265,7 +6265,57 @@ function EnterMarks() {
                                                                         </div>
 
 
-                                                                        {/* SELECTION STATUS */}
+<div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                <div>
+                                    <h3 className="font-bold text-indigo-900 mb-2">Test / Practical Setup ya Somo Hili</h3>
+                                    <p className="text-sm text-indigo-800 mt-1">
+                                        Weka Max Marks za Test 1, Test 2 na Practical zinazotumika kwa somo hili. Max Marks hizi zitakuwa sawa kwa wanafunzi wote; marks anazopata kila mwanafunzi zitaingizwa tofauti hapa chini.
+                                    </p>
+                                </div>
+                                <span className="text-xs font-semibold rounded-full px-3 py-1 bg-white text-indigo-700">
+                                    {assessmentComponents.length > 0 ? "Setup saved" : "No optional setup"}
+                                </span>
+                            </div>
+                            <div className="grid sm:grid-cols-3 gap-4 mt-4">
+                                {[
+                                    { label: "Test 1 Max Marks", field: "test_1_max" },
+                                    { label: "Test 2 Max Marks", field: "test_2_max" },
+                                    { label: "Practical Max Marks", field: "practical_max" }
+                                ].map(item => (
+                                    <label key={item.field} className="block text-sm font-semibold text-gray-700">
+                                        {item.label}
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={assessmentSetupDraft[item.field]}
+                                            onChange={event => setAssessmentSetupDraft(previous => ({
+                                                ...previous,
+                                                [item.field]: event.target.value
+                                            }))}
+                                            className="mt-1 w-full rounded-lg border border-gray-300 p-3"
+                                            placeholder="Leave blank if not used"
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
+                                <p className="text-xs text-gray-500">
+                                    Test zilizowekwa zitahesabiwa kwa wastani. Practical itaongezwa tu ikiwa umeiweka.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={saveAssessmentSetup}
+                                    disabled={savingAssessmentSetup}
+                                    className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 disabled:opacity-50"
+                                >
+                                    {savingAssessmentSetup ? "Saving setup..." : "Save Test / Practical Setup"}
+                                </button>
+                            </div>
+                        </div>
+
+                                                                                                                                                {/* SELECTION STATUS */}
 
                                                                         {
                                                                             selectiveGroups.length >
@@ -6410,55 +6460,7 @@ function EnterMarks() {
                                                                     </div>
 
 
-                                                                                            <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                                <div>
-                                    <h3 className="font-bold text-indigo-900 mb-2">Test / Practical Setup ya Somo Hili</h3>
-                                    <p className="text-sm text-indigo-800 mt-1">
-                                        Weka Max Marks za Test 1, Test 2 na Practical zinazotumika kwa somo hili. Max Marks hizi zitakuwa sawa kwa wanafunzi wote; marks anazopata kila mwanafunzi zitaingizwa tofauti hapa chini.
-                                    </p>
-                                </div>
-                                <span className="text-xs font-semibold rounded-full px-3 py-1 bg-white text-indigo-700">
-                                    {assessmentComponents.length > 0 ? "Setup saved" : "No optional setup"}
-                                </span>
-                            </div>
-                            <div className="grid sm:grid-cols-3 gap-4 mt-4">
-                                {[
-                                    { label: "Test 1 Max Marks", field: "test_1_max" },
-                                    { label: "Test 2 Max Marks", field: "test_2_max" },
-                                    { label: "Practical Max Marks", field: "practical_max" }
-                                ].map(item => (
-                                    <label key={item.field} className="block text-sm font-semibold text-gray-700">
-                                        {item.label}
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={assessmentSetupDraft[item.field]}
-                                            onChange={event => setAssessmentSetupDraft(previous => ({
-                                                ...previous,
-                                                [item.field]: event.target.value
-                                            }))}
-                                            className="mt-1 w-full rounded-lg border border-gray-300 p-3"
-                                            placeholder="Leave blank if not used"
-                                        />
-                                    </label>
-                                ))}
-                            </div>
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
-                                <p className="text-xs text-gray-500">
-                                    Test zilizowekwa zitahesabiwa kwa wastani. Practical itaongezwa tu ikiwa umeiweka.
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={saveAssessmentSetup}
-                                    disabled={savingAssessmentSetup}
-                                    className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 disabled:opacity-50"
-                                >
-                                    {savingAssessmentSetup ? "Saving setup..." : "Save Test / Practical Setup"}
-                                </button>
-                            </div>
-                        </div>
+                                                                                            
 
                             {assessmentComponents.length > 0 && (
                                 <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
