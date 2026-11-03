@@ -617,6 +617,7 @@ function HeadmasterDashboard() {
                 )}
             </section>
 
+            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 className="font-bold text-slate-900">
                         Quick Links
