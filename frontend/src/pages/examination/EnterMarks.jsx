@@ -5943,6 +5943,26 @@ function EnterMarks() {
                                                             student.id
                                                         );
 
+                                                    const studentAssessmentValues = Object.fromEntries(
+                                                        assessmentComponents.map(component => [
+                                                            component.key,
+                                                            assessmentMarks[`${student.id}::${component.key}`] ?? ""
+                                                        ])
+                                                    );
+                                                    const calculatedStudentAssessment = assessmentComponents.length > 0
+                                                        ? calculateAssessmentFinalMark({
+                                                            components: assessmentComponents,
+                                                            marksByComponent: studentAssessmentValues,
+                                                            examMarks: studentTotal,
+                                                            examMaxMarks: studentMax,
+                                                            subjectFullMarks: Number(
+                                                                examSubjects.find(item =>
+                                                                    String(item.id) === String(selectedExamSubjectId)
+                                                                )?.full_marks
+                                                            ) || 100
+                                                        })
+                                                        : null;
+
 
                                                     const enteredCount =
                                                         getStudentEnteredCount(
@@ -6136,7 +6156,7 @@ function EnterMarks() {
 
                                                                             <p className="text-xs text-green-600 font-semibold">
 
-                                                                                TOTAL /100
+                                                                                {calculatedStudentAssessment?.complete ? "FINAL MARK" : "TOTAL /100"}
 
                                                                             </p>
 
@@ -6145,9 +6165,18 @@ function EnterMarks() {
 
                                                                                 {
                                                                                     formatMark(
-                                                                                        studentPercentage
+                                                                                        calculatedStudentAssessment?.complete
+                                                                                            ? calculatedStudentAssessment.marks_obtained
+                                                                                            : studentPercentage
                                                                                     )
                                                                                 }
+
+                                                                                {calculatedStudentAssessment?.complete ? (
+                                                                                    <span className="text-xs font-medium text-gray-500">
+                                                                                        {" / "}
+                                                                                        {formatMark(calculatedStudentAssessment.full_marks)}
+                                                                                    </span>
+                                                                                ) : null}
 
                                                                             </p>
 
@@ -6463,6 +6492,45 @@ function EnterMarks() {
 
 
                                                                                             
+
+                            {assessmentComponents.length > 0 && (
+                                <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                                    <h3 className="font-bold text-emerald-900 mb-2">Muhtasari wa Alama za Mwisho</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                        {assessmentComponents.map(component => {
+                                            const componentValue = studentAssessmentValues[component.key];
+                                            return (
+                                                <div key={component.key} className="rounded-lg bg-white border border-emerald-100 p-3">
+                                                    <p className="text-xs text-gray-500">{component.label}</p>
+                                                    <p className="font-bold text-gray-900">
+                                                        {componentValue === "" ? "Haijaingizwa" : `${formatMark(componentValue)} / ${formatMark(component.max_marks)}`}
+                                                    </p>
+                                                </div>
+                                            );
+                                        })}
+                                        <div className="rounded-lg bg-white border border-emerald-100 p-3">
+                                            <p className="text-xs text-gray-500">Mtihani wa Somo</p>
+                                            <p className="font-bold text-gray-900">{formatMark(studentTotal)} / {formatMark(studentMax)}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-emerald-100 border border-emerald-200 p-3">
+                                            <p className="text-xs text-emerald-800">Final Calculated Marks</p>
+                                            <p className="text-lg font-extrabold text-emerald-900">
+                                                {calculatedStudentAssessment?.complete
+                                                    ? `${formatMark(calculatedStudentAssessment.marks_obtained)} / ${formatMark(calculatedStudentAssessment.full_marks)}`
+                                                    : "Subiri marks zote"}
+                                            </p>
+                                            {calculatedStudentAssessment?.complete && (
+                                                <p className="text-xs text-emerald-800">
+                                                    {formatMark(calculatedStudentAssessment.percentage)}%
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <p className="mt-3 text-xs text-emerald-800">
+                                        Alama ya mwisho inajumuisha Test zilizotumika, mtihani wa somo na Practical inapokuwepo; si alama ya mtihani wa somo pekee.
+                                    </p>
+                                </div>
+                            )}
 
                             {assessmentComponents.length > 0 && (
                                 <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
