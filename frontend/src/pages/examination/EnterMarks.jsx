@@ -1631,7 +1631,8 @@ function EnterMarks() {
 
             setQuestions([]);
 
-            setAssessmentComponents([]);
+            setStudentAssessmentSetups({});
+            setStudentAssessmentDrafts({});
             setAssessmentMarks({});
 
             setMaxMarks({});
@@ -1689,15 +1690,7 @@ function EnterMarks() {
             // The API subject list may omit assessment_components, which previously
             // caused the calculator to receive an empty component list and silently
             // keep only the examination paper mark.
-            const loadedComponents = Array.isArray(examSubject.assessment_components)
-                ? examSubject.assessment_components
-                : [];
-            setAssessmentComponents(loadedComponents);
-            setAssessmentSetupDraft({
-                test_1_max: loadedComponents.find(component => component.key === "test_1")?.max_marks ?? "",
-                test_2_max: loadedComponents.find(component => component.key === "test_2")?.max_marks ?? "",
-                practical_max: loadedComponents.find(component => component.key === "practical")?.max_marks ?? ""
-            });
+            // Optional assessment setup is loaded separately for each student.
 
             const subjectId =
                 Number(
@@ -2143,25 +2136,34 @@ function EnterMarks() {
                 const mapped = {};
                 const studentSavedMap = {};
 
-                const { data: componentRows, error: componentMarksError } = await supabase
-                    .from("exam_assessment_marks")
-                    .select("student_id, component_key, marks_obtained")
-                    .eq("exam_id", Number(examId))
-                    .eq("exam_subject_id", Number(selectedExamSubjectId));
-
-                if (
-                    componentMarksError &&
-                    !["42P01", "PGRST205"].includes(componentMarksError.code)
-                ) {
-                    throw componentMarksError;
-                }
-
+                const [{ data: componentRows, error: componentMarksError }, { data: setupRows, error: setupError }] = await Promise.all([
+                    supabase.from("exam_assessment_marks").select("student_id, component_key, marks_obtained")
+                        .eq("exam_id", Number(examId)).eq("exam_subject_id", Number(selectedExamSubjectId)),
+                    supabase.from("exam_student_assessment_setups").select("student_id, assessment_components")
+                        .eq("exam_id", Number(examId)).eq("exam_subject_id", Number(selectedExamSubjectId))
+                ]);
+                if (componentMarksError) throw componentMarksError;
+                if (setupError) throw setupError;
                 const loadedAssessmentMarks = {};
                 (componentRows || []).forEach(row => {
                     loadedAssessmentMarks[`${row.student_id}::${row.component_key}`] = String(row.marks_obtained ?? "");
                     studentSavedMap[String(row.student_id)] = true;
                 });
+                const loadedSetups = {};
+                const loadedDrafts = {};
+                (setupRows || []).forEach(row => {
+                    const components = Array.isArray(row.assessment_components) ? row.assessment_components : [];
+                    const studentKey = String(row.student_id);
+                    loadedSetups[studentKey] = components;
+                    loadedDrafts[studentKey] = {
+                        test_1_max: components.find(item => item.key === "test_1")?.max_marks ?? "",
+                        test_2_max: components.find(item => item.key === "test_2")?.max_marks ?? "",
+                        practical_max: components.find(item => item.key === "practical")?.max_marks ?? ""
+                    };
+                });
                 setAssessmentMarks(loadedAssessmentMarks);
+                setStudentAssessmentSetups(loadedSetups);
+                setStudentAssessmentDrafts(loadedDrafts);
 
                 (
                     data || []
