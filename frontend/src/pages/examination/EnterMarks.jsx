@@ -6498,6 +6498,22 @@ function EnterMarks() {
 
                                                                                             
 
+                            {calculatedStudentAssessment?.configuration_error && (
+                                <div
+                                    role="alert"
+                                    className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900"
+                                >
+                                    <p className="font-bold">Usanidi wa Practical unahitaji kurekebishwa</p>
+                                    <p className="mt-1 text-sm">
+                                        {calculatedStudentAssessment.configuration_error}
+                                    </p>
+                                    <p className="mt-1 text-sm">
+                                        Fungua sehemu ya Exam Subjects, rekebisha Practical Max Marks iwe 50, kisha rudi hapa.
+                                        Final Marks hazitahesabiwa mpaka usanidi uwe sahihi.
+                                    </p>
+                                </div>
+                            )}
+
                             {assessmentComponents.length > 0 && (
                                 <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                                     <h3 className="font-bold text-emerald-900 mb-2">Muhtasari wa Alama za Mwisho</h3>
