@@ -1585,6 +1585,10 @@ function EnterMarks() {
                 setError(`${definition.label}: Max Marks lazima iwe namba kubwa kuliko sifuri.`);
                 return;
             }
+            if (definition.type === "practical" && maximum !== 50) {
+                setError("Practical Max Marks lazima iwe 50. Jumla ya Theory na Practical itakuwa 150 kabla ya ku-convert kuwa 100.");
+                return;
+            }
             nextComponents.push({
                 key: definition.key,
                 label: definition.label,
@@ -6312,13 +6316,14 @@ function EnterMarks() {
                                 {[
                                     { label: "Test 1 Max Marks", field: "test_1_max" },
                                     { label: "Test 2 Max Marks", field: "test_2_max" },
-                                    { label: "Practical Max Marks", field: "practical_max" }
+                                    { label: "Practical Max Marks (50)", field: "practical_max", fixedMaximum: 50 }
                                 ].map(item => (
                                     <label key={item.field} className="block text-sm font-semibold text-gray-700">
                                         {item.label}
                                         <input
                                             type="number"
                                             min="0"
+                                            max={item.fixedMaximum}
                                             step="0.01"
                                             value={assessmentSetupDraft[item.field]}
                                             onChange={event => setAssessmentSetupDraft(previous => ({
@@ -6333,7 +6338,7 @@ function EnterMarks() {
                             </div>
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
                                 <p className="text-xs text-gray-500">
-                                    Test zilizowekwa zitahesabiwa kwa wastani. Practical itaongezwa tu ikiwa umeiweka.
+                                    Test zilizowekwa zitahesabiwa kwa wastani. Practical (ikiwa imetumika) lazima iwe /50; Theory + Practical hujumlishwa kisha hubadilishwa kutoka /150 kwenda /100.
                                 </p>
                                 <button
                                     type="button"
