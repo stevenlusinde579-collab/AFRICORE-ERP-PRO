@@ -1618,8 +1618,7 @@ function EnterMarks() {
                     exam_id,
                     subject_id,
                     class_id,
-                    full_marks,
-                    assessment_components
+                    full_marks
                 `)
                 .eq(
                     "id",
@@ -1650,7 +1649,14 @@ function EnterMarks() {
                 );
             }
 
-            setAssessmentComponents(Array.isArray(examSubject.assessment_components) ? examSubject.assessment_components : []);
+            const selectedSubjectSetup = examSubjects.find(
+                item => String(item.id) === String(selectedExamSubjectId)
+            );
+            setAssessmentComponents(
+                Array.isArray(selectedSubjectSetup?.assessment_components)
+                    ? selectedSubjectSetup.assessment_components
+                    : []
+            );
 
             const subjectId =
                 Number(
