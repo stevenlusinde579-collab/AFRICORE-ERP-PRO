@@ -134,6 +134,8 @@ const {data:classData}=await supabase
 
 .select("*")
 
+.eq("is_active", true)
+
 .order("class_name");
 
 
