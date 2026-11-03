@@ -105,6 +105,8 @@ function EditStudent() {
           Number(currentAcademicYearId)
         )
 
+        .eq("is_active", true)
+
         .order(
           "class_name"
         );
