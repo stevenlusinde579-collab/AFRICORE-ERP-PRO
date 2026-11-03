@@ -55,6 +55,12 @@ function EnterMarks() {
 
     const [assessmentComponents, setAssessmentComponents] = useState([]);
     const [assessmentMarks, setAssessmentMarks] = useState({});
+    const [assessmentSetupDraft, setAssessmentSetupDraft] = useState({
+        test_1_max: "",
+        test_2_max: "",
+        practical_max: ""
+    });
+    const [savingAssessmentSetup, setSavingAssessmentSetup] = useState(false);
 
     const [students, setStudents] = useState([]);
 
@@ -1556,6 +1562,74 @@ function EnterMarks() {
 
 
     // =========================================================
+    // SAVE OPTIONAL TEST / PRACTICAL SETUP FOR EXISTING SUBJECTS
+    // =========================================================
+    const saveAssessmentSetup = async () => {
+        if (!selectedExamSubjectId) {
+            setError("Chagua somo la mtihani kwanza.");
+            return;
+        }
+
+        const definitions = [
+            { key: "test_1", label: "Test 1", type: "test", field: "test_1_max" },
+            { key: "test_2", label: "Test 2", type: "test", field: "test_2_max" },
+            { key: "practical", label: "Practical", type: "practical", field: "practical_max" }
+        ];
+
+        const nextComponents = [];
+        for (const definition of definitions) {
+            const raw = assessmentSetupDraft[definition.field];
+            if (raw === "" || raw === null || raw === undefined) continue;
+            const maximum = Number(raw);
+            if (!Number.isFinite(maximum) || maximum <= 0) {
+                setError(`${definition.label}: Max Marks lazima iwe namba kubwa kuliko sifuri.`);
+                return;
+            }
+            nextComponents.push({
+                key: definition.key,
+                label: definition.label,
+                type: definition.type,
+                max_marks: maximum
+            });
+        }
+
+        try {
+            setSavingAssessmentSetup(true);
+            setError("");
+            setMessage("");
+
+            const { data, error: updateError } = await supabase
+                .from("exam_subjects")
+                .update({ assessment_components: nextComponents })
+                .eq("id", Number(selectedExamSubjectId))
+                .eq("exam_id", Number(examId))
+                .select("id, assessment_components")
+                .single();
+
+            if (updateError) throw updateError;
+            if (!data) throw new Error("Setup haikuhifadhiwa. Hakuna Exam Subject iliyosasishwa.");
+
+            setAssessmentComponents(nextComponents);
+            setExamSubjects(previous => previous.map(item =>
+                String(item.id) === String(selectedExamSubjectId)
+                    ? { ...item, assessment_components: nextComponents }
+                    : item
+            ));
+            setAssessmentMarks({});
+            setSavedStudents({});
+            setMessage(nextComponents.length
+                ? "Test / Practical setup imehifadhiwa. Sasa ingiza marks za wanafunzi."
+                : "Test / Practical setup imeondolewa. Mfumo utatumia question-by-question kama kawaida.");
+        } catch (saveError) {
+            console.error("SAVE ASSESSMENT SETUP ERROR:", saveError);
+            setError(saveError.message || "Imeshindikana kuhifadhi Test / Practical setup.");
+        } finally {
+            setSavingAssessmentSetup(false);
+        }
+    };
+
+
+    // =========================================================
     // LOAD QUESTIONS
     // =========================================================
 
@@ -1652,11 +1726,15 @@ function EnterMarks() {
             const selectedSubjectSetup = examSubjects.find(
                 item => String(item.id) === String(selectedExamSubjectId)
             );
-            setAssessmentComponents(
-                Array.isArray(selectedSubjectSetup?.assessment_components)
-                    ? selectedSubjectSetup.assessment_components
-                    : []
-            );
+            const loadedComponents = Array.isArray(selectedSubjectSetup?.assessment_components)
+                ? selectedSubjectSetup.assessment_components
+                : [];
+            setAssessmentComponents(loadedComponents);
+            setAssessmentSetupDraft({
+                test_1_max: loadedComponents.find(component => component.key === "test_1")?.max_marks ?? "",
+                test_2_max: loadedComponents.find(component => component.key === "test_2")?.max_marks ?? "",
+                practical_max: loadedComponents.find(component => component.key === "practical")?.max_marks ?? ""
+            });
 
             const subjectId =
                 Number(
@@ -5006,6 +5084,63 @@ function EnterMarks() {
                 {/* =================================================
                     MAX MARKS SETUP
                 ================================================= */}
+
+                {
+                    selectedExamSubjectId &&
+                    canEnterMarks && (
+                        <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 mb-6">
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-900">Optional Test / Practical Setup</h2>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        Sanidi vipengele vinavyotumika kwa somo hili. Unaweza kuweka Test 1, Test 2, Practical, au kuacha vyote wazi.
+                                        Bila setup, mfumo utaendelea kutumia question-by-question kama kawaida.
+                                    </p>
+                                </div>
+                                <span className="text-xs font-semibold rounded-full px-3 py-1 bg-indigo-50 text-indigo-700">
+                                    {assessmentComponents.length > 0 ? "Setup saved" : "No optional setup"}
+                                </span>
+                            </div>
+                            <div className="grid sm:grid-cols-3 gap-4 mt-4">
+                                {[
+                                    { label: "Test 1 Max Marks", field: "test_1_max" },
+                                    { label: "Test 2 Max Marks", field: "test_2_max" },
+                                    { label: "Practical Max Marks", field: "practical_max" }
+                                ].map(item => (
+                                    <label key={item.field} className="block text-sm font-semibold text-gray-700">
+                                        {item.label}
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={assessmentSetupDraft[item.field]}
+                                            onChange={event => setAssessmentSetupDraft(previous => ({
+                                                ...previous,
+                                                [item.field]: event.target.value
+                                            }))}
+                                            className="mt-1 w-full rounded-lg border border-gray-300 p-3"
+                                            placeholder="Leave blank if not used"
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
+                                <p className="text-xs text-gray-500">
+                                    Test zilizowekwa zitahesabiwa kwa wastani. Practical itaongezwa tu ikiwa umeiweka.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={saveAssessmentSetup}
+                                    disabled={savingAssessmentSetup}
+                                    className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 disabled:opacity-50"
+                                >
+                                    {savingAssessmentSetup ? "Saving setup..." : "Save Test / Practical Setup"}
+                                </button>
+                            </div>
+                        </div>
+                    )
+                }
+
 
                 {
                     selectedExamSubjectId &&
