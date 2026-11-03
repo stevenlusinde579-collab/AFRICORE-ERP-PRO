@@ -6,11 +6,11 @@ test("returns null when optional assessment setup is not used", () => {
     assert.equal(calculateAssessmentFinalMark({ components: [] }), null);
 });
 
-test("averages two Test marks and the examination mark equally (Joseph's saved marks)", () => {
+test("averages two Test marks and the examination mark equally", () => {
     const result = calculateAssessmentFinalMark({
         components: [
-            { key: "test_1", label: "Test 1", type: "test", max_marks: 76 },
-            { key: "test_2", label: "Test 2", type: "test", max_marks: 80 }
+            { key: "test_1", label: "Test 1", type: "test", max_marks: 100 },
+            { key: "test_2", label: "Test 2", type: "test", max_marks: 100 }
         ],
         marksByComponent: { test_1: 76, test_2: 80 },
         examMarks: 75,
@@ -22,7 +22,7 @@ test("averages two Test marks and the examination mark equally (Joseph's saved m
     assert.equal(result.marks_obtained, 77);
 });
 
-test("averages two Test marks and paper mark using the stated 74, 80, 75 example", () => {
+test("averages the stated 74, 80 and 75 Theory marks", () => {
     const result = calculateAssessmentFinalMark({
         components: [
             { key: "test_1", type: "test", max_marks: 100 },
@@ -52,41 +52,60 @@ test("uses the examination paper alone as Theory when no Test is configured", ()
         components: [{ key: "practical", type: "practical", max_marks: 50 }],
         marksByComponent: { practical: 40 },
         examMarks: 80,
-        examMaxMarks: 100
+        examMaxMarks: 100,
+        subjectFullMarks: 100
     });
     assert.equal(result.theory_marks, 80);
+    assert.equal(result.combined_marks, 120);
+    assert.equal(result.combined_full_marks, 150);
     assert.equal(result.percentage, 80);
 });
 
-test("combines Theory 70 percent and Practical 30 percent", () => {
+test("adds Practical out of 50 to Theory and converts total out of 150 to 100", () => {
+    const result = calculateAssessmentFinalMark({
+        components: [{ key: "practical", type: "practical", max_marks: 50 }],
+        marksByComponent: { practical: 30 },
+        examMarks: 80,
+        examMaxMarks: 100,
+        subjectFullMarks: 100
+    });
+    assert.equal(result.theory_marks, 80);
+    assert.equal(result.practical_marks, 30);
+    assert.equal(result.combined_marks, 110);
+    assert.equal(result.combined_full_marks, 150);
+    assert.equal(result.percentage, 73.33);
+    assert.equal(result.marks_obtained, 73);
+});
+
+test("adds Practical to the average of configured Tests and paper marks", () => {
     const result = calculateAssessmentFinalMark({
         components: [
             { key: "test_1", type: "test", max_marks: 100 },
             { key: "test_2", type: "test", max_marks: 100 },
             { key: "practical", type: "practical", max_marks: 50 }
         ],
-        marksByComponent: { test_1: 70, test_2: 90, practical: 40 },
-        examMarks: 80,
+        marksByComponent: { test_1: 74, test_2: 80, practical: 30 },
+        examMarks: 75,
         examMaxMarks: 100,
         subjectFullMarks: 100
     });
-    assert.equal(result.theory_marks, 80);
-    assert.equal(result.theory_percentage, 80);
-    assert.equal(result.practical_percentage, 80);
-    assert.equal(result.percentage, 80);
-    assert.equal(result.marks_obtained, 80);
+    assert.equal(result.theory_marks, 76.33);
+    assert.equal(result.combined_full_marks, 150);
+    assert.equal(result.percentage, 70.89);
+    assert.equal(result.marks_obtained, 71);
 });
 
-test("normalizes Practical against its own maximum before 70/30 weighting", () => {
+test("normalizes to /100 when Practical maximum is not 50 but another configured maximum", () => {
     const result = calculateAssessmentFinalMark({
-        components: [{ key: "practical", type: "practical", max_marks: 50 }],
-        marksByComponent: { practical: 25 },
+        components: [{ key: "practical", type: "practical", max_marks: 25 }],
+        marksByComponent: { practical: 10 },
         examMarks: 80,
         examMaxMarks: 100,
         subjectFullMarks: 100
     });
-    assert.equal(result.percentage, 71);
-    assert.equal(result.marks_obtained, 71);
+    assert.equal(result.combined_full_marks, 125);
+    assert.equal(result.percentage, 72);
+    assert.equal(result.marks_obtained, 72);
 });
 
 test("does not calculate a final mark while a configured component is missing", () => {
