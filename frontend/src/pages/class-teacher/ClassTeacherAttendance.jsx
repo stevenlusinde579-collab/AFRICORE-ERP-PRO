@@ -314,6 +314,7 @@ function ClassTeacherAttendance() {
                         "academic_year_id",
                         Number(activeAcademicYearId)
                     )
+                    .eq("is_active", true)
                     .in(
                         "id",
                         classIds
