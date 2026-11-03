@@ -82,3 +82,15 @@ grant usage, select
     on sequence public.exam_student_assessment_setups_id_seq to authenticated;
 
 commit;
+
+-- Preserve the previous setup only for students who already had assessment marks.
+-- Students without saved assessment marks start with no optional components.
+insert into public.exam_student_assessment_setups
+    (exam_id, exam_subject_id, student_id, assessment_components, created_at, updated_at)
+select distinct
+    es.exam_id, es.id, eam.student_id, es.assessment_components, now(), now()
+from public.exam_assessment_marks eam
+join public.exam_subjects es on es.id = eam.exam_subject_id
+where jsonb_typeof(es.assessment_components) = 'array'
+  and jsonb_array_length(es.assessment_components) > 0
+on conflict (exam_subject_id, student_id) do nothing;
