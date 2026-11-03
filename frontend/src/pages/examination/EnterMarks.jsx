@@ -25,6 +25,7 @@ import {
 } from "react-icons/fa";
 
 import { supabase } from "../../services/supabase";
+import { calculateAssessmentFinalMark } from "../../utils/examAssessmentCalculator";
 
 
 const API_URL = "https://africore-erp-pro.onrender.com/api";
@@ -51,6 +52,9 @@ function EnterMarks() {
     const [examSubjects, setExamSubjects] = useState([]);
 
     const [questions, setQuestions] = useState([]);
+
+    const [assessmentComponents, setAssessmentComponents] = useState([]);
+    const [assessmentMarks, setAssessmentMarks] = useState({});
 
     const [students, setStudents] = useState([]);
 
@@ -1610,7 +1614,9 @@ function EnterMarks() {
                     id,
                     exam_id,
                     subject_id,
-                    class_id
+                    class_id,
+                    full_marks,
+                    assessment_components
                 `)
                 .eq(
                     "id",
@@ -1641,6 +1647,7 @@ function EnterMarks() {
                 );
             }
 
+            setAssessmentComponents(Array.isArray(examSubject.assessment_components) ? examSubject.assessment_components : []);
 
             const subjectId =
                 Number(
@@ -2083,12 +2090,22 @@ function EnterMarks() {
                 }
 
 
-                const mapped =
-                    {};
+                const mapped = {};
+                const studentSavedMap = {};
 
-                const studentSavedMap =
-                    {};
+                const { data: componentRows, error: componentMarksError } = await supabase
+                    .from("exam_assessment_marks")
+                    .select("student_id, component_key, marks_obtained")
+                    .eq("exam_id", Number(examId))
+                    .eq("exam_subject_id", Number(selectedExamSubjectId));
 
+                if (componentMarksError) throw componentMarksError;
+
+                const loadedAssessmentMarks = {};
+                (componentRows || []).forEach(row => {
+                    loadedAssessmentMarks[`${row.student_id}::${row.component_key}`] = String(row.marks_obtained ?? "");
+                });
+                setAssessmentMarks(loadedAssessmentMarks);
 
                 (
                     data || []
@@ -3761,13 +3778,12 @@ function EnterMarks() {
                 }
 
 
-                if (
-                    !maxMarksSaved
-                ) {
+                if (questions.length > 0 && !maxMarksSaved) {
+                    throw new Error("Hifadhi Max Marks kwanza.");
+                }
 
-                    throw new Error(
-                        "Hifadhi Max Marks kwanza."
-                    );
+                if (assessmentComponents.length === 0 && questions.length === 0) {
+                    throw new Error("Hakuna maswali au Assessment Components zilizowekwa kwa somo hili.");
                 }
 
 
@@ -3822,14 +3838,8 @@ function EnterMarks() {
                     );
 
 
-                if (
-                    selectedQuestionsForStudent.length ===
-                    0
-                ) {
-
-                    throw new Error(
-                        "Hakuna questions zilizochaguliwa kwa mwanafunzi huyu."
-                    );
+                if (questions.length > 0 && selectedQuestionsForStudent.length === 0) {
+                    throw new Error("Hakuna questions zilizochaguliwa kwa mwanafunzi huyu.");
                 }
 
 
@@ -3957,66 +3967,89 @@ function EnterMarks() {
                 // UPSERT prevents duplicate-key failures.
                 // -------------------------------------------------
 
-                const {
-                    error: deleteError
-                } = await supabase
-                    .from(
-                        "exam_question_marks"
-                    )
-                    .delete()
-                    .eq(
-                        "exam_id",
-                        Number(examId)
-                    )
-                    .eq(
-                        "exam_subject_id",
-                        Number(
-                            selectedExamSubjectId
-                        )
-                    )
-                    .eq(
-                        "student_id",
-                        Number(
-                            student.id
-                        )
-                    );
+                if (records.length > 0) {
+                    const { error: deleteError } = await supabase
+                        .from("exam_question_marks")
+                        .delete()
+                        .eq("exam_id", Number(examId))
+                        .eq("exam_subject_id", Number(selectedExamSubjectId))
+                        .eq("student_id", Number(student.id));
+                    if (deleteError) throw deleteError;
 
-
-                if (
-                    deleteError
-                ) {
-
-                    throw deleteError;
+                    const { error: saveError } = await supabase
+                        .from("exam_question_marks")
+                        .upsert(records, { onConflict: "exam_subject_id,question_id,student_id" });
+                    if (saveError) throw saveError;
                 }
 
+                const componentRecords = assessmentComponents.map(component => {
+                    const key = `${student.id}::${component.key}`;
+                    const value = assessmentMarks[key];
+                    if (value === "" || value === null || value === undefined) {
+                        throw new Error(`Weka marks za ${component.label || component.key} kwa ${getStudentName(student)}.`);
+                    }
+                    const obtained = Number(value);
+                    const maximum = Number(component.max_marks);
+                    if (!Number.isFinite(obtained) || obtained < 0 || obtained > maximum) {
+                        throw new Error(`Marks za ${component.label || component.key} lazima ziwe kati ya 0 na ${maximum}.`);
+                    }
+                    return {
+                        exam_id: Number(examId),
+                        exam_subject_id: Number(selectedExamSubjectId),
+                        student_id: Number(student.id),
+                        component_key: String(component.key),
+                        marks_obtained: obtained
+                    };
+                });
 
-                // -------------------------------------------------
-                // INSERT CURRENT MARKS
-                // -------------------------------------------------
+                if (componentRecords.length > 0) {
+                    const { error: componentSaveError } = await supabase
+                        .from("exam_assessment_marks")
+                        .upsert(componentRecords, { onConflict: "exam_subject_id,student_id,component_key" });
+                    if (componentSaveError) throw componentSaveError;
+                }
 
-                const {
-                    data,
-                    error:
-                        saveError
-                } = await supabase
-                    .from(
-                        "exam_question_marks"
-                    )
-                    .upsert(
-                        records,
-                        {
-                            onConflict:
-                                "exam_subject_id,question_id,student_id"
-                        }
-                    )
-                    .select();
+                const selectedRawTotal = records.reduce((sum, row) => sum + Number(row.marks_obtained || 0), 0);
+                const selectedRawMaximum = records.reduce((sum, row) => {
+                    const question = questions.find(item => Number(item.id) === Number(row.question_id));
+                    return sum + Number(maxMarks[String(question?.id)] || 0);
+                }, 0);
+                const componentValues = Object.fromEntries(componentRecords.map(row => [row.component_key, row.marks_obtained]));
+                const calculatedFinal = calculateAssessmentFinalMark({
+                    components: assessmentComponents,
+                    marksByComponent: componentValues,
+                    examMarks: selectedRawTotal,
+                    examMaxMarks: selectedRawMaximum,
+                    subjectFullMarks: Number(examSubjects.find(item => String(item.id) === String(selectedExamSubjectId))?.full_marks) || 100
+                });
 
+                if (calculatedFinal?.complete) {
+                    const finalPayload = {
+                        exam_id: Number(examId),
+                        exam_subject_id: Number(selectedExamSubjectId),
+                        student_id: Number(student.id),
+                        marks_obtained: calculatedFinal.marks_obtained,
+                        grade: null,
+                        remark: "Calculated from configured examination assessments"
+                    };
+                    const { data: previousFinal, error: previousFinalError } = await supabase
+                        .from("exam_marks")
+                        .select("id")
+                        .eq("exam_id", Number(examId))
+                        .eq("exam_subject_id", Number(selectedExamSubjectId))
+                        .eq("student_id", Number(student.id))
+                        .order("created_at", { ascending: false })
+                        .limit(1);
+                    if (previousFinalError) throw previousFinalError;
 
-                if (
-                    saveError
-                ) {
-
-                    throw saveError;
+                    if (previousFinal?.[0]?.id) {
+                        const { error: updateFinalError } = await supabase
+                            .from("exam_marks").update(finalPayload).eq("id", previousFinal[0].id);
+                        if (updateFinalError) throw updateFinalError;
+                    } else {
+                        const { error: insertFinalError } = await supabase.from("exam_marks").insert(finalPayload);
+                        if (insertFinalError) throw insertFinalError;
+                    }
                 }
 
 
@@ -5080,6 +5113,39 @@ function EnterMarks() {
                             </div>
 
 
+                            {assessmentComponents.length > 0 && (
+                                <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                                    <h3 className="font-bold text-indigo-900 mb-2">Optional Test / Practical Marks</h3>
+                                    <p className="text-sm text-indigo-800 mb-4">
+                                        Ingiza marks kwa assessments zilizowekwa. Hesabu itatumia maximum marks za kila sehemu.
+                                    </p>
+                                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {assessmentComponents.map(component => {
+                                            const componentKey = `${student.id}::${component.key}`;
+                                            return (
+                                                <label key={component.key} className="block text-sm font-medium text-gray-700">
+                                                    {component.label} (/{component.max_marks})
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={component.max_marks}
+                                                        step="0.01"
+                                                        value={assessmentMarks[componentKey] ?? ""}
+                                                        onChange={event => {
+                                                            const value = event.target.value;
+                                                            setAssessmentMarks(previous => ({ ...previous, [componentKey]: value }));
+                                                            setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
+                                                        }}
+                                                        className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-3"
+                                                        placeholder="Enter marks"
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* QUESTIONS */}
 
                             <div className="space-y-3">
@@ -5645,8 +5711,8 @@ function EnterMarks() {
                 {
                     selectedExamSubjectId &&
                     canEnterMarks &&
-                    questions.length > 0 &&
-                    maxMarksSaved && (
+                    (questions.length > 0 || assessmentComponents.length > 0) &&
+                    (questions.length === 0 || maxMarksSaved) && (
 
                         <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
 
