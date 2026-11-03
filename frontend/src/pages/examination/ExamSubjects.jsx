@@ -22,6 +22,9 @@ function ExamSubjects() {
         class_id: "",
         full_marks: 100,
         pass_marks: 40,
+        test_1_max: "",
+        test_2_max: "",
+        practical_max: "",
     });
 
     useEffect(() => {
@@ -320,6 +323,17 @@ function ExamSubjects() {
             return;
         }
 
+        const optionalComponents = [
+            { key: "test_1", label: "Test 1", type: "test", max_marks: Number(form.test_1_max) },
+            { key: "test_2", label: "Test 2", type: "test", max_marks: Number(form.test_2_max) },
+            { key: "practical", label: "Practical", type: "practical", max_marks: Number(form.practical_max) },
+        ].filter(component => component.max_marks > 0);
+
+        if (optionalComponents.some(component => !Number.isFinite(component.max_marks))) {
+            alert("Assessment maximum marks must be valid positive numbers.");
+            return;
+        }
+
         setSaving(true);
 
         try {
@@ -435,6 +449,7 @@ function ExamSubjects() {
                 class_id: Number(form.class_id),
                 full_marks: fullMarks,
                 pass_marks: passMarks,
+                assessment_components: optionalComponents,
             };
 
             console.log(
@@ -469,6 +484,9 @@ function ExamSubjects() {
                 class_id: "",
                 full_marks: 100,
                 pass_marks: 40,
+                test_1_max: "",
+                test_2_max: "",
+                practical_max: "",
             });
 
             setClasses([]);
@@ -689,6 +707,39 @@ function ExamSubjects() {
                         placeholder="Pass Marks"
                     />
 
+
+                    {/* =================================================
+                        OPTIONAL ASSESSMENT SETUP
+                    ================================================= */}
+                    <div className="md:col-span-5 rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+                        <div>
+                            <p className="font-semibold text-blue-900">Optional Test / Practical Setup</p>
+                            <p className="text-sm text-blue-800">
+                                Leave every field empty to keep the current question-by-question marks process.
+                                Enter only the assessments this subject will use. Science does not require Practical.
+                            </p>
+                        </div>
+                        <div className="grid sm:grid-cols-3 gap-3">
+                            <label className="text-sm text-gray-700">
+                                Test 1 maximum marks
+                                <input type="number" min="1" step="0.01" name="test_1_max"
+                                    value={form.test_1_max} onChange={handleChange}
+                                    className="mt-1 w-full border p-2 rounded" placeholder="Optional" />
+                            </label>
+                            <label className="text-sm text-gray-700">
+                                Test 2 maximum marks
+                                <input type="number" min="1" step="0.01" name="test_2_max"
+                                    value={form.test_2_max} onChange={handleChange}
+                                    className="mt-1 w-full border p-2 rounded" placeholder="Optional" />
+                            </label>
+                            <label className="text-sm text-gray-700">
+                                Practical maximum marks
+                                <input type="number" min="1" step="0.01" name="practical_max"
+                                    value={form.practical_max} onChange={handleChange}
+                                    className="mt-1 w-full border p-2 rounded" placeholder="Optional" />
+                            </label>
+                        </div>
+                    </div>
 
                     {/* =================================================
                         SAVE
