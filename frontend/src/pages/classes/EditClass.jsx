@@ -331,12 +331,16 @@ function EditClass() {
                 if (updateLinkError) throw updateLinkError;
             }
 
-            const newLinks = [...selectedIds]
+            // Create a row for every available subject in this level.
+            // This records that the class has an explicit subject setup,
+            // including the case where the manager intentionally selects none.
+            const newLinks = availableSubjects
+                .map((subject) => Number(subject.id))
                 .filter((subjectId) => !existingBySubject.has(subjectId))
                 .map((subjectId) => ({
                     class_id: Number(id),
                     subject_id: subjectId,
-                    is_active: true,
+                    is_active: selectedIds.has(subjectId),
                 }));
 
             if (newLinks.length > 0) {
