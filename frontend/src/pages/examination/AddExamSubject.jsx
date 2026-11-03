@@ -118,48 +118,39 @@ setLoading(true);
 
 
 
-const {error}=await supabase
-
-.from("exam_subjects")
-
-.insert([
-
-{
-
-exam_id:examId,
-
-subject_id:form.subject_id,
-
-class_id:form.class_id,
-
-full_marks:Number(form.full_marks),
-
-pass_marks:Number(form.pass_marks),
-assessment_components:[
+const optionalComponents = [
 {key:"test_1",label:"Test 1",type:"test",max_marks:Number(form.test_1_max)},
 {key:"test_2",label:"Test 2",type:"test",max_marks:Number(form.test_2_max)},
 {key:"practical",label:"Practical",type:"practical",max_marks:Number(form.practical_max)}
-].filter(item=>item.max_marks>0)
+].filter(item=>item.max_marks>0);
 
+const payload = {
+exam_id:examId,
+subject_id:form.subject_id,
+class_id:form.class_id,
+full_marks:Number(form.full_marks),
+pass_marks:Number(form.pass_marks),
+assessment_components:optionalComponents
+};
+
+let {error}=await supabase.from("exam_subjects").insert([payload]);
+
+if(error && ["42703","PGRST204"].includes(error.code) && optionalComponents.length===0){
+const legacyPayload={...payload};
+delete legacyPayload.assessment_components;
+const retry=await supabase.from("exam_subjects").insert([legacyPayload]);
+error=retry.error;
 }
-
-]);
-
-
-
-
 
 if(error){
-
-alert(error.message);
-
+alert(
+optionalComponents.length>0 && ["42703","PGRST204"].includes(error.code)
+? "Apply the optional exam assessments database migration before configuring Tests or Practical."
+: error.message
+);
 setLoading(false);
-
 return;
-
 }
-
-
 
 alert("Subject added successfully");
 
