@@ -7,7 +7,7 @@ const normalizeClassName = (value) =>
     String(value || "")
         .trim()
         .toLowerCase()
-        .replace(/\\s+/g, " ");
+        .replace(/\s+/g, " ");
 
 export function isTeacherAssignedToExamSubject(
     assignment,
