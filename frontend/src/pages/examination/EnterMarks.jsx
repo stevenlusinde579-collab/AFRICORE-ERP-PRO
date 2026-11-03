@@ -53,13 +53,9 @@ function EnterMarks() {
 
     const [questions, setQuestions] = useState([]);
 
-    const [assessmentComponents, setAssessmentComponents] = useState([]);
+    const [studentAssessmentSetups, setStudentAssessmentSetups] = useState({});
     const [assessmentMarks, setAssessmentMarks] = useState({});
-    const [assessmentSetupDraft, setAssessmentSetupDraft] = useState({
-        test_1_max: "",
-        test_2_max: "",
-        practical_max: ""
-    });
+    const [studentAssessmentDrafts, setStudentAssessmentDrafts] = useState({});
     const [savingAssessmentSetup, setSavingAssessmentSetup] = useState(false);
 
     const [students, setStudents] = useState([]);
@@ -1561,77 +1557,38 @@ function EnterMarks() {
         };
 
 
-    // =========================================================
-    // SAVE OPTIONAL TEST / PRACTICAL SETUP FOR EXISTING SUBJECTS
-    // =========================================================
-    const saveAssessmentSetup = async () => {
-        if (!selectedExamSubjectId) {
-            setError("Chagua somo la mtihani kwanza.");
-            return;
-        }
-
+    // Save optional assessment setup for one student only.
+    const saveAssessmentSetup = async (studentId) => {
+        if (!selectedExamSubjectId || !studentId) { setError("Chagua somo na mwanafunzi kwanza."); return; }
+        const draft = studentAssessmentDrafts[String(studentId)] || {};
         const definitions = [
             { key: "test_1", label: "Test 1", type: "test", field: "test_1_max" },
             { key: "test_2", label: "Test 2", type: "test", field: "test_2_max" },
             { key: "practical", label: "Practical", type: "practical", field: "practical_max" }
         ];
-
         const nextComponents = [];
-        for (const definition of definitions) {
-            const raw = assessmentSetupDraft[definition.field];
+        for (const item of definitions) {
+            const raw = draft[item.field] ?? "";
             if (raw === "" || raw === null || raw === undefined) continue;
             const maximum = Number(raw);
-            if (!Number.isFinite(maximum) || maximum <= 0) {
-                setError(`${definition.label}: Max Marks lazima iwe namba kubwa kuliko sifuri.`);
-                return;
-            }
-            if (definition.type === "practical" && maximum !== 50) {
-                setError("Practical Max Marks lazima iwe 50. Jumla ya Theory na Practical itakuwa 150 kabla ya ku-convert kuwa 100.");
-                return;
-            }
-            nextComponents.push({
-                key: definition.key,
-                label: definition.label,
-                type: definition.type,
-                max_marks: maximum
-            });
+            if (!Number.isFinite(maximum) || maximum <= 0) { setError(item.label + ": Max Marks lazima iwe zaidi ya sifuri."); return; }
+            if (item.type === "practical" && maximum !== 50) { setError("Practical Max Marks lazima iwe 50."); return; }
+            nextComponents.push({ key: item.key, label: item.label, type: item.type, max_marks: maximum });
         }
-
         try {
-            setSavingAssessmentSetup(true);
-            setError("");
-            setMessage("");
-
-            const { data, error: updateError } = await supabase
-                .from("exam_subjects")
-                .update({ assessment_components: nextComponents })
-                .eq("id", Number(selectedExamSubjectId))
-                .eq("exam_id", Number(examId))
-                .select("id, assessment_components")
-                .single();
-
-            if (updateError) throw updateError;
-            if (!data) throw new Error("Setup haikuhifadhiwa. Hakuna Exam Subject iliyosasishwa.");
-
-            setAssessmentComponents(nextComponents);
-            setExamSubjects(previous => previous.map(item =>
-                String(item.id) === String(selectedExamSubjectId)
-                    ? { ...item, assessment_components: nextComponents }
-                    : item
-            ));
-            setAssessmentMarks({});
-            setSavedStudents({});
-            setMessage(nextComponents.length
-                ? "Test / Practical setup imehifadhiwa. Sasa ingiza marks za wanafunzi."
-                : "Test / Practical setup imeondolewa. Mfumo utatumia question-by-question kama kawaida.");
-        } catch (saveError) {
-            console.error("SAVE ASSESSMENT SETUP ERROR:", saveError);
-            setError(saveError.message || "Imeshindikana kuhifadhi Test / Practical setup.");
-        } finally {
-            setSavingAssessmentSetup(false);
-        }
+            setSavingAssessmentSetup(true); setError(""); setMessage("");
+            const result = await supabase.from("exam_student_assessment_setups").upsert({
+                exam_id: Number(examId), exam_subject_id: Number(selectedExamSubjectId),
+                student_id: Number(studentId), assessment_components: nextComponents,
+                updated_at: new Date().toISOString()
+            }, { onConflict: "exam_subject_id,student_id" });
+            if (result.error) throw result.error;
+            setStudentAssessmentSetups(previous => ({ ...previous, [String(studentId)]: nextComponents }));
+            setSavedStudents(previous => ({ ...previous, [String(studentId)]: false }));
+            setMessage("Setup ya mwanafunzi huyu imehifadhiwa kivyake.");
+        } catch (error) { console.error("SAVE STUDENT ASSESSMENT SETUP ERROR:", error); setError(error.message || "Imeshindikana kuhifadhi setup."); }
+        finally { setSavingAssessmentSetup(false); }
     };
-
 
     // =========================================================
     // LOAD QUESTIONS
