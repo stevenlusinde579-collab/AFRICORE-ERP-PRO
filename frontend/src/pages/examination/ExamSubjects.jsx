@@ -457,19 +457,32 @@ function ExamSubjects() {
                 payload
             );
 
-            const {
-                error: insertError,
-            } = await supabase
+            let { error: insertError } = await supabase
                 .from("exam_subjects")
                 .insert([payload]);
 
-            if (insertError) {
-                console.log(
-                    "INSERT EXAM SUBJECT ERROR:",
-                    insertError
-                );
+            // Backward compatibility: schools that have not applied the
+            // optional-assessment migration can still add ordinary subjects.
+            if (
+                insertError &&
+                ["42703", "PGRST204"].includes(insertError.code) &&
+                optionalComponents.length === 0
+            ) {
+                const legacyPayload = { ...payload };
+                delete legacyPayload.assessment_components;
+                const retry = await supabase
+                    .from("exam_subjects")
+                    .insert([legacyPayload]);
+                insertError = retry.error;
+            }
 
-                alert(insertError.message);
+            if (insertError) {
+                console.log("INSERT EXAM SUBJECT ERROR:", insertError);
+                alert(
+                    optionalComponents.length > 0 && ["42703", "PGRST204"].includes(insertError.code)
+                        ? "Apply the optional exam assessments database migration before configuring Tests or Practical."
+                        : insertError.message
+                );
                 return;
             }
 
