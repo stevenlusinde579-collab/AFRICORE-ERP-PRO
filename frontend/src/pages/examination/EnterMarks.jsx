@@ -6564,7 +6564,7 @@ function EnterMarks() {
                                             const componentKey = `${student.id}::${component.key}`;
                                             return (
                                                 <label key={component.key} className="block text-sm font-medium text-gray-700">
-                                                    {component.label} (/{component.max_marks})
+                                                    {component.type === "practical" ? `Practical – alama alizopata (0–${component.max_marks})` : `${component.label} (/${component.max_marks})`}
                                                     <input
                                                         type="number"
                                                         min="0"
