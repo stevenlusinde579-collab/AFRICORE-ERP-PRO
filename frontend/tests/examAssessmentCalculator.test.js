@@ -179,3 +179,28 @@ test("returns a validation message instead of throwing when a Test mark exceeds 
     assert.equal(result.invalid_component, "test_2");
     assert.equal(result.marks_obtained, null);
 });
+test("returns a validation message instead of throwing when examination-paper marks exceed their maximum", () => {
+    const result = calculateAssessmentFinalMark({
+        components: [{ key: "test_1", type: "test", max_marks: 100 }],
+        marksByComponent: { test_1: 80 },
+        examMarks: 76,
+        examMaxMarks: 75,
+        subjectFullMarks: 100
+    });
+    assert.equal(result.complete, false);
+    assert.match(result.validation_error, /Examination Paper.*0 na 75/);
+    assert.equal(result.invalid_component, "examination_paper");
+    assert.equal(result.marks_obtained, null);
+});
+
+test("returns a validation message instead of throwing for negative examination-paper marks", () => {
+    const result = calculateAssessmentFinalMark({
+        components: [{ key: "test_1", type: "test", max_marks: 100 }],
+        marksByComponent: { test_1: 80 },
+        examMarks: -1,
+        examMaxMarks: 75
+    });
+    assert.equal(result.complete, false);
+    assert.equal(result.invalid_component, "examination_paper");
+    assert.equal(result.marks_obtained, null);
+});
