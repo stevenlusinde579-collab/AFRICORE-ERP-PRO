@@ -622,22 +622,6 @@ function SubjectTeacherExamUpload() {
 
 
             // ====================================================
-            // ALLOWED PAIRS
-            // ====================================================
-
-            const allowedPairs =
-                new Set(
-                    safeAssignments.map(
-                        (row) =>
-                            assignmentPair(
-                                row.subject_id,
-                                row.class_id
-                            )
-                    )
-                );
-
-
-            // ====================================================
             // NO EXAM SUBJECTS
             // ====================================================
 
