@@ -29,21 +29,18 @@ export function calculateAssessmentFinalMark({
 
     if (configured.length === 0) return null;
 
+    // A component is used only when this particular student has entered a value.
+    // Blank means "not entered"; numeric zero is a real mark and must be included.
+    const enteredComponents = configured.filter(component => {
+        const value = marksByComponent[String(component.key)];
+        return value !== "" && value !== null && value !== undefined;
+    });
+
     const tests = [];
     const practicals = [];
 
-    for (const component of configured) {
+    for (const component of enteredComponents) {
         const rawValue = marksByComponent[String(component.key)];
-        if (rawValue === "" || rawValue === null || rawValue === undefined) {
-            return {
-                complete: false,
-                missing: component.label || component.key,
-                percentage: null,
-                marks_obtained: null,
-                full_marks: Number(subjectFullMarks) || 100
-            };
-        }
-
         const obtained = Number(rawValue);
         const maximum = Number(component.max_marks);
         if (!Number.isFinite(obtained) || obtained < 0 || obtained > maximum) {
