@@ -167,11 +167,15 @@ test("requires an examination mark before calculating configured assessments", (
     assert.equal(result.missing, "Examination marks");
 });
 
-test("rejects a component mark above its maximum", () => {
-    assert.throws(() => calculateAssessmentFinalMark({
-        components: [{ key: "test_1", type: "test", max_marks: 20 }],
-        marksByComponent: { test_1: 21 },
-        examMarks: 10,
-        examMaxMarks: 20
-    }), /between 0 and 20/);
+test("returns a validation message instead of throwing when a Test mark exceeds its maximum", () => {
+    const result = calculateAssessmentFinalMark({
+        components: [{ key: "test_2", label: "Test 2", type: "test", max_marks: 75 }],
+        marksByComponent: { test_2: 76 },
+        examMarks: 60,
+        examMaxMarks: 100
+    });
+    assert.equal(result.complete, false);
+    assert.match(result.validation_error, /Test 2.*0 na 75/);
+    assert.equal(result.invalid_component, "test_2");
+    assert.equal(result.marks_obtained, null);
 });
