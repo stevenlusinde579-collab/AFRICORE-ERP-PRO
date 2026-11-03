@@ -1587,7 +1587,7 @@ function EnterMarks() {
                 return;
             }
             if (item.type === "practical" && maximum !== 50) {
-                fail("Practical Max Marks lazima iwe 50.");
+                fail("Practical Max Marks (kiwango cha juu) lazima iwe 50. Hii haimaanishi mwanafunzi lazima apate 50; unaweza kuingiza alama yoyote kuanzia 0 hadi 50.");
                 return;
             }
             nextComponents.push({ key: item.key, label: item.label, type: item.type, max_marks: maximum });
@@ -6474,7 +6474,7 @@ function EnterMarks() {
                                     <span className="text-xs font-semibold text-indigo-700">{studentComponents.length ? "Setup imehifadhiwa" : "Hakuna setup bado"}</span>
                                 </div>
                                 <div className="grid sm:grid-cols-3 gap-3 mt-4">
-                                    {[{label:"Test 1 Max Marks",field:"test_1_max"},{label:"Test 2 Max Marks",field:"test_2_max"},{label:"Practical Max Marks (50)",field:"practical_max"}].map(item => (
+                                    {[{label:"Test 1 Max Marks",field:"test_1_max"},{label:"Test 2 Max Marks",field:"test_2_max"},{label:"Practical Max Marks (kiwango cha juu: 50)",field:"practical_max"}].map(item => (
                                         <label key={item.field} className="block text-sm font-semibold text-gray-700">{item.label}
                                             <input type="number" min="0" max={item.field === "practical_max" ? 50 : undefined} step="0.01"
                                                 value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
@@ -6486,7 +6486,7 @@ function EnterMarks() {
                                     ))}
                                 </div>
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
-                                    <p className="text-xs text-gray-600">Practical ikiwa imetumika lazima iwe /50; Theory + Practical hubadilishwa kutoka /150 kwenda /100.</p>
+                                    <p className="text-xs text-gray-600">Practical ina kiwango cha juu cha 50. Ingiza alama halisi alizopata mwanafunzi kuanzia 0 hadi 50 (si lazima apate 50). Theory + Practical hubadilishwa kutoka /150 kwenda /100.</p>
                                     <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); saveAssessmentSetup(student.id); }} disabled={savingAssessmentSetup}
                                         className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 disabled:opacity-50">
                                         {savingAssessmentSetup ? "Saving..." : "Save Setup ya Mwanafunzi"}
@@ -6508,7 +6508,7 @@ function EnterMarks() {
                                         {calculatedStudentAssessment.configuration_error}
                                     </p>
                                     <p className="mt-1 text-sm">
-                                        Fungua sehemu ya Exam Subjects, rekebisha Practical Max Marks iwe 50, kisha rudi hapa.
+                                        Rekebisha Practical Max Marks (kiwango cha juu) iwe 50. Alama ya mwanafunzi inaweza kuwa 0 hadi 50.
                                         Final Marks hazitahesabiwa mpaka usanidi uwe sahihi.
                                     </p>
                                 </div>
