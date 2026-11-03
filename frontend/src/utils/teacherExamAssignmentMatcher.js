@@ -57,6 +57,13 @@ export function isTeacherAssignedToExamSubject(
         return false;
     }
 
+    const assignedYearId = normalizeId(assignedClass.academic_year_id);
+    const examYearId = normalizeId(examClass.academic_year_id);
+
+    // This compatibility path is only for a legacy assignment class row
+    // (no academic year) matching the current-year exam class row.
+    if (Boolean(assignedYearId) === Boolean(examYearId)) return false;
+
     const assignedLevel = normalizeClassName(assignedClass.academic_level);
     const examLevel = normalizeClassName(examClass.academic_level);
     const assignedName = normalizeClassName(
