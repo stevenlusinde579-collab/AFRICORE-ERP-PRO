@@ -6511,6 +6511,14 @@ function EnterMarks() {
                                     </p>
                                 )}
                             </div>
+                            {calculatedStudentAssessment?.validation_error && (
+                                <div role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-red-900">
+                                    <p className="font-bold">Alama ya assessment haiko kwenye kiwango kilichowekwa</p>
+                                    <p className="mt-1 text-sm">{calculatedStudentAssessment.validation_error}</p>
+                                    <p className="mt-1 text-sm">Mfano: Test 2 ikiwa Max Marks ni 75, alama inayokubalika ni 0 hadi 75. Hakuna alama iliyobadilishwa moja kwa moja.</p>
+                                </div>
+                            )}
+
                             {calculatedStudentAssessment?.configuration_error && (
                                 <div
                                     role="alert"
