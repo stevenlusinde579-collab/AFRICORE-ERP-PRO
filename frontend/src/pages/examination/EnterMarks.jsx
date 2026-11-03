@@ -4066,17 +4066,6 @@ function EnterMarks() {
                 // UPSERT prevents duplicate-key failures.
                 // -------------------------------------------------
 
-                for (const component of assessmentComponents) {
-                    const componentValue = assessmentMarks[`${student.id}::${component.key}`];
-                    const maximum = Number(component.max_marks);
-                    const obtained = Number(componentValue);
-                    if (componentValue === "" || componentValue === null || componentValue === undefined) {
-                        throw new Error(`Weka marks za ${component.label || component.key} kwa ${getStudentName(student)}.`);
-                    }
-                    if (!Number.isFinite(obtained) || obtained < 0 || obtained > maximum) {
-                        throw new Error(`Marks za ${component.label || component.key} lazima ziwe kati ya 0 na ${maximum}.`);
-                    }
-                }
                 if (records.length > 0) {
                     const { error: deleteError } = await supabase
                         .from("exam_question_marks")
@@ -4092,24 +4081,24 @@ function EnterMarks() {
                     if (saveError) throw saveError;
                 }
 
-                const componentRecords = assessmentComponents.map(component => {
+                // Save only marks entered for this student. Blank means not entered; 0 is valid.
+                const componentRecords = assessmentComponents.flatMap(component => {
                     const key = `${student.id}::${component.key}`;
                     const value = assessmentMarks[key];
-                    if (value === "" || value === null || value === undefined) {
-                        throw new Error(`Weka marks za ${component.label || component.key} kwa ${getStudentName(student)}.`);
-                    }
+                    if (value === "" || value === null || value === undefined) return [];
+
                     const obtained = Number(value);
                     const maximum = Number(component.max_marks);
                     if (!Number.isFinite(obtained) || obtained < 0 || obtained > maximum) {
                         throw new Error(`Marks za ${component.label || component.key} lazima ziwe kati ya 0 na ${maximum}.`);
                     }
-                    return {
+                    return [{
                         exam_id: Number(examId),
                         exam_subject_id: Number(selectedExamSubjectId),
                         student_id: Number(student.id),
                         component_key: String(component.key),
                         marks_obtained: obtained
-                    };
+                    }];
                 });
 
                 if (componentRecords.length > 0) {
@@ -4119,6 +4108,17 @@ function EnterMarks() {
                     if (componentSaveError) throw componentSaveError;
                 }
 
+                // Delete this student component row if the input field was cleared.
+                const enteredComponentKeys = new Set(componentRecords.map(row => row.component_key));
+                for (const component of assessmentComponents.filter(item => !enteredComponentKeys.has(String(item.key)))) {
+                    const { error: clearComponentError } = await supabase
+                        .from("exam_assessment_marks")
+                        .delete()
+                        .eq("exam_subject_id", Number(selectedExamSubjectId))
+                        .eq("student_id", Number(student.id))
+                        .eq("component_key", String(component.key));
+                    if (clearComponentError) throw clearComponentError;
+                }
                 const selectedRawTotal = records.reduce((sum, row) => sum + Number(row.marks_obtained || 0), 0);
                 const selectedRawMaximum = records.reduce((sum, row) => {
                     const question = questions.find(item => Number(item.id) === Number(row.question_id));
