@@ -1,10 +1,11 @@
 /**
  * Optional Test/Practical calculation.
  *
- * Theory is the arithmetic average of the raw marks for each configured Test
- * and the examination paper. Tests are deliberately averaged as marks (not
- * weighted by their configured maxima), matching the school's assessment
- * rule. With Practical configured, combine Theory 70% and Practical 30%.
+ * Test marks (when configured) and the examination-paper mark are averaged
+ * to produce the Theory mark. If Practical is configured, its raw mark is
+ * added to Theory and the combined total is converted to the subject's
+ * /100 scale. For a 100-mark Theory and 50-mark Practical, the denominator
+ * is 150. Practical is NOT weighted 70/30.
  *
  * Returns null when no optional components are configured, preserving the
  * legacy question-by-question calculation path.
@@ -54,7 +55,7 @@ export function calculateAssessmentFinalMark({
         if (String(component.type).toLowerCase() === "test") {
             tests.push(obtained);
         } else {
-            practicals.push((obtained / maximum) * 100);
+            practicals.push({ obtained, maximum });
         }
     }
 
@@ -74,31 +75,39 @@ export function calculateAssessmentFinalMark({
         throw new Error(`Examination marks must be between 0 and ${paperMaximum}.`);
     }
 
-    const fullMarks = Number(subjectFullMarks) > 0 ? Number(subjectFullMarks) : 100;
+    const theoryFullMarks = Number(subjectFullMarks) > 0 ? Number(subjectFullMarks) : 100;
     const theoryParts = [...tests, paperObtained];
     const theoryMarks = theoryParts.reduce((sum, value) => sum + value, 0) / theoryParts.length;
-    const theoryPercentage = (theoryMarks / fullMarks) * 100;
 
-    const practicalPercentage = practicals.length
-        ? practicals.reduce((sum, value) => sum + value, 0) / practicals.length
+    const practicalMarks = practicals.length
+        ? practicals.reduce((sum, item) => sum + item.obtained, 0)
         : null;
+    const practicalFullMarks = practicals.length
+        ? practicals.reduce((sum, item) => sum + item.maximum, 0)
+        : 0;
 
-    const percentage = practicalPercentage === null
-        ? theoryPercentage
-        : (theoryPercentage * 0.70) + (practicalPercentage * 0.30);
-
-    const finalMarks = (percentage / 100) * fullMarks;
+    const combinedObtained = practicalMarks === null
+        ? theoryMarks
+        : theoryMarks + practicalMarks;
+    const combinedMaximum = practicalMarks === null
+        ? theoryFullMarks
+        : theoryFullMarks + practicalFullMarks;
+    const percentage = (combinedObtained / combinedMaximum) * 100;
+    const finalMarks = (percentage / 100) * theoryFullMarks;
 
     return {
         complete: true,
         theory_marks: Math.round(theoryMarks * 100) / 100,
-        theory_percentage: Math.round(theoryPercentage * 100) / 100,
-        practical_percentage: practicalPercentage === null
+        theory_full_marks: theoryFullMarks,
+        practical_marks: practicalMarks === null
             ? null
-            : Math.round(practicalPercentage * 100) / 100,
+            : Math.round(practicalMarks * 100) / 100,
+        practical_full_marks: practicalFullMarks || null,
+        combined_marks: Math.round(combinedObtained * 100) / 100,
+        combined_full_marks: combinedMaximum,
         percentage: Math.round(percentage * 100) / 100,
         // exam_marks.marks_obtained is an integer column in the current schema.
         marks_obtained: Math.round(finalMarks),
-        full_marks: fullMarks
+        full_marks: theoryFullMarks
     };
 }
