@@ -37,6 +37,10 @@ create index if not exists idx_exam_assessment_marks_exam_subject_id
 create index if not exists idx_exam_assessment_marks_student_id
     on public.exam_assessment_marks(student_id);
 
+-- Speed up the final-mark upsert lookup used by Enter Marks.
+create index if not exists idx_exam_marks_exam_subject_student_created_at
+    on public.exam_marks(exam_id, exam_subject_id, student_id, created_at desc);
+
 alter table public.exam_assessment_marks enable row level security;
 
 drop policy if exists af_score_exam_assessment_marks_authenticated_base
