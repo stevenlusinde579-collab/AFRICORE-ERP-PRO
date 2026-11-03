@@ -3836,6 +3836,8 @@ function EnterMarks() {
                 }
 
 
+                const studentComponents = studentAssessmentSetups[String(student.id)] || [];
+
                 if (questions.length > 0 && !maxMarksSaved) {
                     throw new Error("Hifadhi Max Marks kwanza.");
                 }
@@ -4041,7 +4043,7 @@ function EnterMarks() {
                 }
 
                 // Save only marks entered for this student. Blank means not entered; 0 is valid.
-                const componentRecords = assessmentComponents.flatMap(component => {
+                const componentRecords = studentComponents.flatMap(component => {
                     const key = `${student.id}::${component.key}`;
                     const value = assessmentMarks[key];
                     if (value === "" || value === null || value === undefined) return [];
@@ -4069,7 +4071,7 @@ function EnterMarks() {
 
                 // Delete this student component row if the input field was cleared.
                 const enteredComponentKeys = new Set(componentRecords.map(row => row.component_key));
-                for (const component of assessmentComponents.filter(item => !enteredComponentKeys.has(String(item.key)))) {
+                for (const component of studentComponents.filter(item => !enteredComponentKeys.has(String(item.key)))) {
                     const { error: clearComponentError } = await supabase
                         .from("exam_assessment_marks")
                         .delete()
@@ -5742,7 +5744,7 @@ function EnterMarks() {
                 {
                     selectedExamSubjectId &&
                     canEnterMarks &&
-                    (questions.length > 0 || studentComponents.length > 0) &&
+                    (questions.length > 0 || students.length > 0) &&
                     (questions.length === 0 || maxMarksSaved) && (
 
                         <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
@@ -5832,7 +5834,7 @@ function EnterMarks() {
                 {
                     selectedExamSubjectId &&
                     canEnterMarks &&
-                    (questions.length > 0 || assessmentComponents.length > 0) &&
+                    (questions.length > 0 || students.length > 0) &&
                     (questions.length === 0 || maxMarksSaved) && (
 
                         loadingStudents
@@ -5913,9 +5915,9 @@ function EnterMarks() {
                                                             assessmentMarks[`${student.id}::${component.key}`] ?? ""
                                                         ])
                                                     );
-                                                    const calculatedStudentAssessment = assessmentComponents.length > 0
+                                                    const calculatedStudentAssessment = studentComponents.length > 0
                                                         ? calculateAssessmentFinalMark({
-                                                            components: assessmentComponents,
+                                                            components: studentComponents,
                                                             marksByComponent: studentAssessmentValues,
                                                             examMarks: studentTotal,
                                                             examMaxMarks: studentMax,
@@ -6451,7 +6453,7 @@ function EnterMarks() {
                                 </div>
                             )}
 
-                            {assessmentComponents.length > 0 && (
+                            {studentComponents.length > 0 && (
                                 <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                                     <h3 className="font-bold text-emerald-900 mb-2">Muhtasari wa Alama za Mwisho</h3>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -6497,7 +6499,7 @@ function EnterMarks() {
                                         Ingiza marks kwa assessments zilizowekwa. Hesabu itatumia maximum marks za kila sehemu.
                                     </p>
                                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {assessmentComponents.map(component => {
+                                        {studentComponents.map(component => {
                                             const componentKey = `${student.id}::${component.key}`;
                                             return (
                                                 <label key={component.key} className="block text-sm font-medium text-gray-700">
