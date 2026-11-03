@@ -24,7 +24,10 @@ const [form,setForm]=useState({
 subject_id:"",
 class_id:"",
 full_marks:100,
-pass_marks:40
+pass_marks:40,
+test_1_max:"",
+test_2_max:"",
+practical_max:""
 
 });
 
@@ -131,7 +134,12 @@ class_id:form.class_id,
 
 full_marks:Number(form.full_marks),
 
-pass_marks:Number(form.pass_marks)
+pass_marks:Number(form.pass_marks),
+assessment_components:[
+{key:"test_1",label:"Test 1",type:"test",max_marks:Number(form.test_1_max)},
+{key:"test_2",label:"Test 2",type:"test",max_marks:Number(form.test_2_max)},
+{key:"practical",label:"Practical",type:"practical",max_marks:Number(form.practical_max)}
+].filter(item=>item.max_marks>0)
 
 }
 
@@ -340,6 +348,22 @@ className="w-full border p-3 rounded"
 
 
 
+
+<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<label>Test 1 maximum
+<input type="number" min="1" step="0.01" name="test_1_max" value={form.test_1_max} onChange={handleChange} className="w-full border p-3 rounded" placeholder="Optional" />
+</label>
+<label>Test 2 maximum
+<input type="number" min="1" step="0.01" name="test_2_max" value={form.test_2_max} onChange={handleChange} className="w-full border p-3 rounded" placeholder="Optional" />
+</label>
+<label>Practical maximum
+<input type="number" min="1" step="0.01" name="practical_max" value={form.practical_max} onChange={handleChange} className="w-full border p-3 rounded" placeholder="Optional" />
+</label>
+</div>
+
+<div className="text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded p-3">
+Assessment setup ni hiari. Acha fields zote wazi ili kutumia mfumo wa sasa wa kuingiza marks kwa kila swali.
+</div>
 
 <div>
 
