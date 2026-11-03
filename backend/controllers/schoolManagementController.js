@@ -147,8 +147,7 @@ export const createSchool = async (req, res) => {
         ].map((item) => ({
             ...item,
             school_id: createdSchoolId,
-            academic_year_id: academicYear.id,
-            is_active: false
+            academic_year_id: academicYear.id
         }));
 
         const { data: classes, error: classesError } = await supabase
