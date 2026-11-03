@@ -55,7 +55,10 @@ export function calculateAssessmentFinalMark({
         if (String(component.type).toLowerCase() === "test") {
             tests.push(obtained);
         } else {
-            practicals.push({ obtained, maximum });
+            if (maximum !== 50) {
+                throw new Error("Practical Max Marks lazima iwe 50.");
+            }
+            practicals.push({ obtained, maximum: 50 });
         }
     }
 
