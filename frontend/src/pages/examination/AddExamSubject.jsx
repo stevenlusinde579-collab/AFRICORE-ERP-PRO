@@ -14,6 +14,7 @@ const navigate=useNavigate();
 const [subjects,setSubjects]=useState([]);
 
 const [classes,setClasses]=useState([]);
+const [classSubjectIds,setClassSubjectIds]=useState(null);
 
 const [loading,setLoading]=useState(false);
 
@@ -56,6 +57,8 @@ const {data:subjectData}=await supabase
 
 .select("*")
 
+.eq("is_active", true)
+
 .order("subject_name");
 
 
@@ -65,6 +68,8 @@ const {data:classData}=await supabase
 .from("classes")
 
 .select("*")
+
+.eq("is_active", true)
 
 .order("class_name");
 
@@ -86,19 +91,44 @@ setClasses(classData || []);
 
 
 
-const handleChange=(e)=>{
+const handleChange=async(e)=>{
 
+const { name, value } = e.target;
 
-setForm({
+setForm(previous => ({
+    ...previous,
+    [name]: value
+}));
 
-...form,
+if (name === "class_id") {
+    setClassSubjectIds(null);
+    if (!value) return;
 
-[e.target.name]:e.target.value
+    const { data: links, error } = await supabase
+        .from("class_subjects")
+        .select("subject_id, is_active")
+        .eq("class_id", Number(value));
 
-});
+    if (error) {
+        setClassSubjectIds([]);
+        alert(error.message);
+        return;
+    }
 
+    setClassSubjectIds(
+        (links || []).length === 0
+            ? null
+            : (links || [])
+                .filter(link => link.is_active === true)
+                .map(link => Number(link.subject_id))
+    );
+}
 
 };
+
+const visibleSubjects = classSubjectIds === null
+    ? subjects
+    : subjects.filter(subject => classSubjectIds.includes(Number(subject.id)));
 
 
 
@@ -218,7 +248,7 @@ Select Subject
 
 {
 
-subjects.map(sub=>(
+visibleSubjects.map(sub=>(
 
 
 <option
