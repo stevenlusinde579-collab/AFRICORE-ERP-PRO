@@ -191,6 +191,11 @@ function EditClass() {
 
         setMessage("");
 
+        if (!canManageSchoolSetup) {
+            setMessage("Only the Headmaster, Deputy Headmaster, or Academic Master can change class and subject availability.");
+            return;
+        }
+
         // =================================================
         // CHECK SCHOOL
         // =================================================
@@ -580,6 +585,7 @@ function EditClass() {
                         <input
                             type="checkbox"
                             checked={form.is_active}
+                            disabled={!canManageSchoolSetup}
                             onChange={(event) => setForm((previous) => ({ ...previous, is_active: event.target.checked }))}
                             className="h-4 w-4"
                         />
@@ -603,6 +609,7 @@ function EditClass() {
                                     <input
                                         type="checkbox"
                                         checked={selectedSubjectIds.includes(Number(subject.id))}
+                                        disabled={!canManageSchoolSetup}
                                         onChange={(event) => setSelectedSubjectIds((previous) =>
                                             event.target.checked
                                                 ? [...new Set([...previous, Number(subject.id)])]
