@@ -235,6 +235,7 @@ function ClassTable({ filters = {} }) {
                     "academic_year_id",
                     activeAcademicYearId
                 )
+                .eq("is_active", true)
                 .in("id", assignedClassIds)
                 .order("created_at", {
                     ascending: false,
@@ -550,9 +551,12 @@ function ClassTable({ filters = {} }) {
 
                                 <td className="p-4">
 
-                                    <span className="px-3 py-1 rounded-full text-sm bg-green-100 text-green-700">
-                                        {item.status ||
-                                            "Active"}
+                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                        item.is_active === false
+                                            ? "bg-slate-100 text-slate-600"
+                                            : "bg-green-100 text-green-700"
+                                    }`}>
+                                        {item.is_active === false ? "Inactive" : "Active"}
                                     </span>
 
                                 </td>
