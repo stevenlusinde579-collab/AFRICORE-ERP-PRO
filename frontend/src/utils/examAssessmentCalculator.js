@@ -83,7 +83,14 @@ export function calculateAssessmentFinalMark({
     }
 
     if (!Number.isFinite(paperObtained) || paperObtained < 0 || paperObtained > paperMaximum) {
-        throw new Error(`Examination marks must be between 0 and ${paperMaximum}.`);
+        return {
+            complete: false,
+            validation_error: `Marks za Examination Paper lazima ziwe kati ya 0 na ${paperMaximum}. Rekebisha alama za maswali; kiwango cha juu hakijabadilishwa.`,
+            invalid_component: "examination_paper",
+            percentage: null,
+            marks_obtained: null,
+            full_marks: Number(subjectFullMarks) || 100
+        };
     }
 
     const theoryFullMarks = Number(subjectFullMarks) > 0 ? Number(subjectFullMarks) : 100;
