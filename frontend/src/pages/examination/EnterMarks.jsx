@@ -1587,7 +1587,7 @@ function EnterMarks() {
                 return;
             }
             if (item.type === "practical" && maximum !== 50) {
-                fail("Practical Max Marks (kiwango cha juu) lazima iwe 50. Hii haimaanishi mwanafunzi lazima apate 50; unaweza kuingiza alama yoyote kuanzia 0 hadi 50.");
+                fail("Chagua 'Tumia Practical (Max Marks 50)'. Practical Max Marks ni kiwango cha juu; alama ya mwanafunzi inaweza kuwa 0 hadi 50.");
                 return;
             }
             nextComponents.push({ key: item.key, label: item.label, type: item.type, max_marks: maximum });
@@ -6470,18 +6470,31 @@ function EnterMarks() {
                             <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                                     <div><h3 className="font-bold text-indigo-900">Test / Practical Setup ya mwanafunzi huyu</h3>
-                                        <p className="text-sm text-indigo-800">Weka Max Marks kwa mwanafunzi huyu pekee. Acha tupu sehemu isiyotumika.</p></div>
+                                        <p className="text-sm text-indigo-800">Weka Max Marks za Test kwa mwanafunzi huyu. Kwa Practical, chagua kama itatumika; mfumo utaweka kiwango cha juu kuwa 50 moja kwa moja.</p></div>
                                     <span className="text-xs font-semibold text-indigo-700">{studentComponents.length ? "Setup imehifadhiwa" : "Hakuna setup bado"}</span>
                                 </div>
                                 <div className="grid sm:grid-cols-3 gap-3 mt-4">
                                     {[{label:"Test 1 Max Marks",field:"test_1_max"},{label:"Test 2 Max Marks",field:"test_2_max"},{label:"Practical Max Marks (kiwango cha juu: 50)",field:"practical_max"}].map(item => (
                                         <label key={item.field} className="block text-sm font-semibold text-gray-700">{item.label}
-                                            <input type="number" min="0" max={item.field === "practical_max" ? 50 : undefined} step="0.01"
-                                                value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
-                                                onChange={event => setStudentAssessmentDrafts(previous => ({
-                                                    ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
-                                                }))}
-                                                className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3" placeholder="Leave blank if not used" />
+                                            {item.field === "practical_max" ? (
+                                                <select
+                                                    value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
+                                                    onChange={event => setStudentAssessmentDrafts(previous => ({
+                                                        ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                    }))}
+                                                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3"
+                                                >
+                                                    <option value="">Usitumie Practical</option>
+                                                    <option value="50">Tumia Practical (Max Marks 50)</option>
+                                                </select>
+                                            ) : (
+                                                <input type="number" min="0" step="0.01"
+                                                    value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
+                                                    onChange={event => setStudentAssessmentDrafts(previous => ({
+                                                        ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                    }))}
+                                                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3" placeholder="Leave blank if not used" />
+                                            )}
                                         </label>
                                     ))}
                                 </div>
