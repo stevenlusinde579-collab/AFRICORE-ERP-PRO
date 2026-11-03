@@ -31,10 +31,10 @@ test("uses concise page-by-page evidence instructions without replacing establis
     assert.match(prompt, /Explain the diagram/);
     assert.match(prompt, /A main examination question must remain ONE question/i);
     assert.match(prompt, /MARK ALLOCATION MUST BE STRUCTURE-DRIVEN, NOT TEMPLATE-DRIVEN/i);
-    assert.match(prompt, /compare the required main questions\x27 observable structure/i);
-    assert.match(prompt, /If all required questions are materially comparable and the section total divides evenly, allocate equally/i);
-    assert.match(prompt, /Do not infer a 12\/8-style unequal split from subjective difficulty alone/i);
-    assert.match(prompt, /Unequal allocation requires objective evidence in the paper/i);
+    assert.match(prompt, /count the main questions the student is required to answer/i);
+    assert.match(prompt, /Unless the paper explicitly assigns different marks or gives an explicit instruction for unequal weighting, divide the section total equally/i);
+    assert.match(prompt, /Do not invent unequal marks based on perceived difficulty/i);
+    assert.match(prompt, /Unequal allocation is allowed only when supported by explicit printed question marks or a clear printed instruction\/mark scheme assigning different weights/i);
     assert.match(prompt, /Keep the paper's own numbering, repeated labels, section names, item types and mark conventions/i);
 });
 
@@ -144,7 +144,7 @@ test("does not apply primary-only rules to a Form Four paper", () => {
 });
 
 
-test("allocates equal marks to comparable required questions when a section total divides evenly", () => {
+test("allocates section marks equally across required questions unless the paper explicitly assigns unequal marks", () => {
     const prompt = buildPrompt({
         text: [
             "BOOKKEEPING",
@@ -159,8 +159,29 @@ test("allocates equal marks to comparable required questions when a section tota
         subject: "Bookkeeping",
     });
 
-    assert.match(prompt, /four comparable questions that must all be answered in a 40-mark section receive 10 marks each/i);
-    assert.ok(prompt.includes("Do not infer a 12/8-style unequal split from subjective difficulty alone"));
-    assert.match(prompt, /Unequal allocation requires objective evidence in the paper/i);
-    assert.match(prompt, /Never confuse the number of available selective questions with the number the student is required to answer/i);
+    assert.match(prompt, /a 40-mark section with four required questions = 10 marks per question/i);
+    assert.ok(prompt.includes("Do not invent unequal marks based on perceived difficulty"));
+    assert.match(prompt, /Unequal allocation is allowed only when supported by explicit printed question marks or a clear printed instruction\/mark scheme assigning different weights/i);
+    assert.match(prompt, /account for selective questions/i);
+});
+
+
+test("uses the required answer count for selective questions instead of all available choices", () => {
+    const prompt = buildPrompt({
+        text: [
+            "BOOKKEEPING",
+            "SECTION B: 40 MARKS",
+            "Answer any TWO questions out of FOUR.",
+            "3. Prepare books of original entry.",
+            "4. Post transactions to ledger accounts.",
+            "5. Prepare a trial balance.",
+            "6. Prepare a bank reconciliation statement.",
+        ].join("\\n"),
+        level: "Form Four",
+        subject: "Bookkeeping",
+    });
+
+    assert.match(prompt, /answer any 2 out of 4/i);
+    assert.match(prompt, /allocate 20 marks to each attempted question/i);
+    assert.match(prompt, /retaining four available choices/i);
 });
