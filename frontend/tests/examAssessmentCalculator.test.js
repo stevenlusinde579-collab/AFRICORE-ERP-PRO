@@ -108,18 +108,54 @@ test("returns a configuration error for Practical setup that is not out of 50 wi
     assert.equal(result.marks_obtained, null);
 });
 
-test("does not calculate a final mark while a configured component is missing", () => {
+test("ignores blank components and calculates using only this student's entered Test marks", () => {
     const result = calculateAssessmentFinalMark({
         components: [
             { key: "test_1", type: "test", max_marks: 50 },
+            { key: "test_2", type: "test", max_marks: 50 },
             { key: "practical", label: "Practical", type: "practical", max_marks: 50 }
         ],
-        marksByComponent: { test_1: 30 },
+        marksByComponent: { test_1: 30, test_2: "", practical: "" },
         examMarks: 70,
         examMaxMarks: 100
     });
-    assert.equal(result.complete, false);
-    assert.equal(result.missing, "Practical");
+    assert.equal(result.complete, true);
+    assert.equal(result.theory_marks, 50);
+    assert.equal(result.practical_marks, null);
+    assert.equal(result.marks_obtained, 50);
+});
+
+test("uses the examination paper alone when every optional component is blank", () => {
+    const result = calculateAssessmentFinalMark({
+        components: [
+            { key: "test_1", type: "test", max_marks: 50 },
+            { key: "practical", type: "practical", max_marks: 50 }
+        ],
+        marksByComponent: { test_1: "", practical: "" },
+        examMarks: 70,
+        examMaxMarks: 100
+    });
+    assert.equal(result.complete, true);
+    assert.equal(result.theory_marks, 70);
+    assert.equal(result.practical_marks, null);
+    assert.equal(result.marks_obtained, 70);
+});
+
+test("counts a zero component mark as entered and includes it in the calculation", () => {
+    const result = calculateAssessmentFinalMark({
+        components: [
+            { key: "test_1", type: "test", max_marks: 100 },
+            { key: "practical", type: "practical", max_marks: 50 }
+        ],
+        marksByComponent: { test_1: 0, practical: 0 },
+        examMarks: 80,
+        examMaxMarks: 100
+    });
+    assert.equal(result.complete, true);
+    assert.equal(result.theory_marks, 40);
+    assert.equal(result.practical_marks, 0);
+    assert.equal(result.percentage, 26.67);
+    assert.equal(result.marks_obtained, 27);
 });
 
 test("requires an examination mark before calculating configured assessments", () => {
