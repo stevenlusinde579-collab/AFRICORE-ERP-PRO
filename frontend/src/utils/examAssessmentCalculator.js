@@ -12,6 +12,8 @@
 export function calculateAssessmentFinalMark({
     components = [],
     marksByComponent = {},
+    examMarks = 0,
+    examMaxMarks = 0,
     subjectFullMarks = 100
 } = {}) {
     const configured = Array.isArray(components)
@@ -63,6 +65,28 @@ export function calculateAssessmentFinalMark({
             percentage: group.reduce((sum, item) => sum + item.percentage, 0) / group.length,
             weight: group.reduce((sum, item) => sum + item.maximum, 0) / group.length
         }));
+
+    const paperMaximum = Number(examMaxMarks);
+    const paperObtained = Number(examMarks);
+    if (paperMaximum > 0) {
+        if (!Number.isFinite(paperObtained) || paperObtained < 0 || paperObtained > paperMaximum) {
+            throw new Error(`Examination marks must be between 0 and ${paperMaximum}.`);
+        }
+        weightedGroups.push({
+            percentage: (paperObtained / paperMaximum) * 100,
+            weight: paperMaximum
+        });
+    }
+
+    if (weightedGroups.length === 0) {
+        return {
+            complete: false,
+            missing: "Examination marks or an assessment component",
+            percentage: null,
+            marks_obtained: null,
+            full_marks: Number(subjectFullMarks) || 100
+        };
+    }
 
     const totalWeight = weightedGroups.reduce((sum, group) => sum + group.weight, 0);
     const percentage = totalWeight > 0
