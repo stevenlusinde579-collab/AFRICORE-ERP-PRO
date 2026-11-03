@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 
 import { supabase } from "../../services/supabase";
+import { isTeacherAssignedToExamSubject } from "../../utils/teacherExamAssignmentMatcher";
 import { useRole } from "../../context/RoleContext";
 
 import ExaminationDashboard from "./ExaminationDashboard";
@@ -37,18 +38,6 @@ function normalizeRoleName(value) {
         .replace(/\s+/g, " ");
 }
 
-function makePairKey(subjectId, classId) {
-    if (
-        subjectId === null ||
-        subjectId === undefined ||
-        classId === null ||
-        classId === undefined
-    ) {
-        return "";
-    }
-
-    return `${String(subjectId).trim()}:${String(classId).trim()}`;
-}
 
 function isApprovedStatus(status) {
     return String(status || "").trim().toLowerCase() === "approved";
@@ -596,42 +585,22 @@ function SubjectTeacherDashboard({ profile }) {
                     return;
                 }
 
-                const pairs = new Set();
-
-                assignmentRows.forEach((assignment) => {
-                    const key = makePairKey(
-                        assignment.subject_id,
-                        assignment.class_id
-                    );
-
-                    if (key) pairs.add(key);
-                });
-
-                if (!pairs.size) {
-                    setWorkItems([]);
-                    return;
-                }
-
                 const subjectIds = [
                     ...new Set(
                         assignmentRows
                             .map((row) => row.subject_id)
-                            .filter(
-                                (id) => id !== null && id !== undefined
-                            )
+                            .filter((id) => id !== null && id !== undefined)
                     ),
                 ];
 
-                const classIds = [
-                    ...new Set(
-                        assignmentRows
-                            .map((row) => row.class_id)
-                            .filter(
-                                (id) => id !== null && id !== undefined
-                            )
-                    ),
-                ];
+                if (!subjectIds.length) {
+                    setWorkItems([]);
+                    return;
+                }
 
+                // Fetch exam subjects by assigned subject, not by the legacy
+                // assignment class_id. The same class can have a different
+                // row ID in the active academic year.
                 const {
                     data: examSubjects,
                     error: examSubjectError,
@@ -650,14 +619,57 @@ function SubjectTeacherDashboard({ profile }) {
                         approved_by_deputy,
                         approved_by_headmaster
                     `)
-                    .in("subject_id", subjectIds)
-                    .in("class_id", classIds);
+                    .in("subject_id", subjectIds);
 
                 if (examSubjectError) throw examSubjectError;
 
-                const matching = (examSubjects || []).filter((row) =>
-                    pairs.has(makePairKey(row.subject_id, row.class_id))
+                const examSubjectRows = examSubjects || [];
+
+                if (!examSubjectRows.length) {
+                    setWorkItems([]);
+                    return;
+                }
+
+                const classIds = [
+                    ...new Set(
+                        [
+                            ...assignmentRows.map((row) => row.class_id),
+                            ...examSubjectRows.map((row) => row.class_id),
+                        ].filter((id) => id !== null && id !== undefined)
+                    ),
+                ];
+
+                const { data: classRows, error: classError } = await supabase
+                    .from("classes")
+                    .select("id, school_id, academic_level, class_name, short_name, academic_year_id")
+                    .in("id", classIds);
+
+                if (classError) throw classError;
+
+                const classMap = new Map(
+                    (classRows || []).map((row) => [String(row.id), row])
                 );
+
+                const enrichedAssignments = assignmentRows.map((row) => ({
+                    ...row,
+                    school_id: profile.school_id,
+                    classRow: classMap.get(String(row.class_id)) || null,
+                }));
+
+                const matching = examSubjectRows
+                    .map((row) => ({
+                        ...row,
+                        classRow: classMap.get(String(row.class_id)) || null,
+                    }))
+                    .filter((row) =>
+                        enrichedAssignments.some((assignment) =>
+                            isTeacherAssignedToExamSubject(
+                                assignment,
+                                row,
+                                profile.school_id
+                            )
+                        )
+                    );
 
                 if (!matching.length) {
                     setWorkItems([]);
@@ -687,7 +699,6 @@ function SubjectTeacherDashboard({ profile }) {
                 const [
                     examResult,
                     subjectResult,
-                    classResult,
                     paperResult,
                 ] = await Promise.all([
                     examIds.length
@@ -718,16 +729,6 @@ function SubjectTeacherDashboard({ profile }) {
                             error: null,
                         }),
 
-                    classIds.length
-                        ? supabase
-                            .from("classes")
-                            .select("id, class_name, short_name")
-                            .in("id", classIds)
-                        : Promise.resolve({
-                            data: [],
-                            error: null,
-                        }),
-
                     examSubjectIds.length
                         ? supabase
                             .from("exam_papers")
@@ -749,7 +750,6 @@ function SubjectTeacherDashboard({ profile }) {
 
                 if (examResult.error) throw examResult.error;
                 if (subjectResult.error) throw subjectResult.error;
-                if (classResult.error) throw classResult.error;
                 if (paperResult.error) throw paperResult.error;
 
                 const examMap = new Map(
@@ -761,13 +761,6 @@ function SubjectTeacherDashboard({ profile }) {
 
                 const subjectMap = new Map(
                     (subjectResult.data || []).map((row) => [
-                        String(row.id),
-                        row,
-                    ])
-                );
-
-                const classMap = new Map(
-                    (classResult.data || []).map((row) => [
                         String(row.id),
                         row,
                     ])
