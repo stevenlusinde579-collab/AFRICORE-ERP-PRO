@@ -95,17 +95,14 @@ test("adds Practical to the average of configured Tests and paper marks", () => 
     assert.equal(result.marks_obtained, 71);
 });
 
-test("normalizes to /100 when Practical maximum is not 50 but another configured maximum", () => {
-    const result = calculateAssessmentFinalMark({
+test("rejects a Practical setup that is not out of 50", () => {
+    assert.throws(() => calculateAssessmentFinalMark({
         components: [{ key: "practical", type: "practical", max_marks: 25 }],
         marksByComponent: { practical: 10 },
         examMarks: 80,
         examMaxMarks: 100,
         subjectFullMarks: 100
-    });
-    assert.equal(result.combined_full_marks, 125);
-    assert.equal(result.percentage, 72);
-    assert.equal(result.marks_obtained, 72);
+    }), /Practical Max Marks lazima iwe 50/);
 });
 
 test("does not calculate a final mark while a configured component is missing", () => {
