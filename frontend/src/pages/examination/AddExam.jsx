@@ -108,7 +108,6 @@ function AddExam() {
 
     const [classifications, setClassifications] = useState([]);
     const [classSubjectIds, setClassSubjectIds] = useState(null);
-    const [classSubjectSetupLoading, setClassSubjectSetupLoading] = useState(false);
 
     // ============================================================
     // SYNC GLOBAL ACTIVE ACADEMIC YEAR
@@ -269,7 +268,6 @@ function AddExam() {
 
             try {
                 setClassSubjectIds([]);
-                setClassSubjectSetupLoading(true);
                 const { data, error: linkError } = await supabase
                     .from("class_subjects")
                     .select("subject_id, is_active")
@@ -293,7 +291,6 @@ function AddExam() {
                     setError(linkError.message || "Unable to load class subjects.");
                 }
             } finally {
-                if (!cancelled) setClassSubjectSetupLoading(false);
             }
         };
 
