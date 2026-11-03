@@ -315,6 +315,7 @@ export const getExamSubjects = async (req, res) => {
                 class_id,
                 full_marks,
                 pass_marks,
+                assessment_components,
                 created_at
             `)
             .eq("exam_id", id);
@@ -437,6 +438,11 @@ export const getExamSubjects = async (req, res) => {
 
                 pass_marks:
                     examSubject.pass_marks,
+
+                assessment_components:
+                    Array.isArray(examSubject.assessment_components)
+                        ? examSubject.assessment_components
+                        : [],
 
                 created_at:
                     examSubject.created_at,
