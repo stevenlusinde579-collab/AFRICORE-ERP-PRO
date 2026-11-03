@@ -24,6 +24,7 @@ import {
 } from "react-icons/fa";
 
 import { supabase } from "../../services/supabase";
+import { isTeacherAssignedToExamSubject } from "../../utils/teacherExamAssignmentMatcher";
 
 
 // ============================================================
@@ -115,13 +116,6 @@ function SubjectTeacherExamUpload() {
 
         return String(value);
     };
-
-
-    const assignmentPair = (
-        subjectId,
-        classId
-    ) =>
-        `${normalizeId(subjectId)}:${normalizeId(classId)}`;
 
 
     // ============================================================
@@ -553,11 +547,6 @@ function SubjectTeacherExamUpload() {
                 assignments || [];
 
 
-            setTeacherAssignments(
-                safeAssignments
-            );
-
-
             // ====================================================
             // EXAM SUBJECTS
             // ====================================================
@@ -690,16 +679,14 @@ function SubjectTeacherExamUpload() {
 
             const classIds = [
                 ...new Set(
-                    safeSubjectRows
-                        .map(
-                            (row) =>
-                                row.class_id
-                        )
-                        .filter(
-                            (value) =>
-                                value !== null &&
-                                value !== undefined
-                        )
+                    [
+                        ...safeSubjectRows.map((row) => row.class_id),
+                        ...safeAssignments.map((row) => row.class_id),
+                    ].filter(
+                        (value) =>
+                            value !== null &&
+                            value !== undefined
+                    )
                 ),
             ];
 
@@ -734,7 +721,7 @@ function SubjectTeacherExamUpload() {
                         ? supabase
                             .from("classes")
                             .select(
-                                "id, class_name, short_name"
+                                "id, school_id, academic_level, class_name, short_name, academic_year_id"
                             )
                             .in(
                                 "id",
@@ -861,50 +848,44 @@ function SubjectTeacherExamUpload() {
 
 
             // ====================================================
-            // STRICT MATCH
+            // MATCH ALL ASSIGNED SUBJECTS
             // ====================================================
+            // Some older teacher assignments point to a legacy class row
+            // (academic_year_id IS NULL), while the current examination
+            // points to the active-year class row. Match those rows by the
+            // same school + level + class identity, without widening access
+            // to a different class or an unassigned subject.
+
+            const enrichedAssignments =
+                safeAssignments.map((assignment) => ({
+                    ...assignment,
+                    classRow:
+                        classMap.get(String(assignment.class_id)) || null,
+                }));
+
+            setTeacherAssignments(enrichedAssignments);
+
+            const examRowsWithDetails =
+                safeSubjectRows.map((row) => ({
+                    ...row,
+                    subject:
+                        subjectMap.get(String(row.subject_id)) || null,
+                    classRow:
+                        classMap.get(String(row.class_id)) || null,
+                    paper:
+                        paperMap.get(String(row.id)) || null,
+                }));
 
             const allowedRows =
-                safeSubjectRows
-                    .filter(
-                        (row) =>
-                            allowedPairs.has(
-                                assignmentPair(
-                                    row.subject_id,
-                                    row.class_id
-                                )
-                            )
+                examRowsWithDetails.filter((row) =>
+                    enrichedAssignments.some((assignment) =>
+                        isTeacherAssignedToExamSubject(
+                            assignment,
+                            row,
+                            schoolId
+                        )
                     )
-                    .map(
-                        (row) => ({
-
-                            ...row,
-
-                            subject:
-                                subjectMap.get(
-                                    String(
-                                        row.subject_id
-                                    )
-                                ) ||
-                                null,
-
-                            classRow:
-                                classMap.get(
-                                    String(
-                                        row.class_id
-                                    )
-                                ) ||
-                                null,
-
-                            paper:
-                                paperMap.get(
-                                    String(
-                                        row.id
-                                    )
-                                ) ||
-                                null,
-                        })
-                    );
+                );
 
 
             setExamSubjects(
@@ -1257,22 +1238,12 @@ function SubjectTeacherExamUpload() {
             // ====================================================
 
             const matchingAssignment =
-                teacherAssignments.find(
-                    (assignment) =>
-
-                        normalizeId(
-                            assignment.subject_id
-                        ) ===
-                        normalizeId(
-                            selectedRow.subject_id
-                        ) &&
-
-                        normalizeId(
-                            assignment.class_id
-                        ) ===
-                        normalizeId(
-                            selectedRow.class_id
-                        )
+                teacherAssignments.find((assignment) =>
+                    isTeacherAssignedToExamSubject(
+                        assignment,
+                        selectedRow,
+                        profile?.school_id
+                    )
                 );
 
 
