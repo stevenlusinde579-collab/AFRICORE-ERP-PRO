@@ -68,6 +68,7 @@ function ExamSubjects() {
             } = await supabase
                 .from("subjects")
                 .select("id, subject_name")
+                .eq("is_active", true)
                 .order("subject_name");
 
             if (subError) {
@@ -210,6 +211,7 @@ function ExamSubjects() {
             let classQuery = supabase
                 .from("classes")
                 .select("id, class_name")
+                .eq("is_active", true)
                 .in("id", classIds)
                 .order("class_name");
 
@@ -228,7 +230,36 @@ function ExamSubjects() {
                 return;
             }
 
-            setClasses(classData || []);
+            const { data: subjectLinks, error: linksError } = await supabase
+                .from("class_subjects")
+                .select("class_id, subject_id, is_active")
+                .in("class_id", classIds);
+
+            if (linksError) {
+                console.log("CLASS SUBJECT SETTINGS ERROR:", linksError);
+                setClasses([]);
+                return;
+            }
+
+            const linksByClass = new Map();
+            (subjectLinks || []).forEach((link) => {
+                const key = Number(link.class_id);
+                if (!linksByClass.has(key)) linksByClass.set(key, []);
+                linksByClass.get(key).push(link);
+            });
+
+            const eligibleClasses = (classData || []).filter((classItem) => {
+                const links = linksByClass.get(Number(classItem.id)) || [];
+                // Legacy classes with no explicit setup retain the previous
+                // teacher-assignment rule until their subjects are configured.
+                if (links.length === 0) return true;
+                return links.some((link) =>
+                    Number(link.subject_id) === Number(subjectId) &&
+                    link.is_active === true
+                );
+            });
+
+            setClasses(eligibleClasses);
 
             // ----------------------------------------------------
             // IF CURRENTLY SELECTED CLASS IS NO LONGER VALID,
