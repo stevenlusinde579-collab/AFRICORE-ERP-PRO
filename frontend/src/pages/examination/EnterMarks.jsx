@@ -5122,39 +5122,6 @@ function EnterMarks() {
                             </div>
 
 
-                            {assessmentComponents.length > 0 && (
-                                <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                                    <h3 className="font-bold text-indigo-900 mb-2">Optional Test / Practical Marks</h3>
-                                    <p className="text-sm text-indigo-800 mb-4">
-                                        Ingiza marks kwa assessments zilizowekwa. Hesabu itatumia maximum marks za kila sehemu.
-                                    </p>
-                                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {assessmentComponents.map(component => {
-                                            const componentKey = `${student.id}::${component.key}`;
-                                            return (
-                                                <label key={component.key} className="block text-sm font-medium text-gray-700">
-                                                    {component.label} (/{component.max_marks})
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        max={component.max_marks}
-                                                        step="0.01"
-                                                        value={assessmentMarks[componentKey] ?? ""}
-                                                        onChange={event => {
-                                                            const value = event.target.value;
-                                                            setAssessmentMarks(previous => ({ ...previous, [componentKey]: value }));
-                                                            setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
-                                                        }}
-                                                        className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-3"
-                                                        placeholder="Enter marks"
-                                                    />
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* QUESTIONS */}
 
                             <div className="space-y-3">
@@ -6354,7 +6321,40 @@ function EnterMarks() {
                                                                     </div>
 
 
-                                                                    {/* QUESTIONS */}
+                                                                    {assessmentComponents.length > 0 && (
+                                <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                                    <h3 className="font-bold text-indigo-900 mb-2">Optional Test / Practical Marks</h3>
+                                    <p className="text-sm text-indigo-800 mb-4">
+                                        Ingiza marks kwa assessments zilizowekwa. Hesabu itatumia maximum marks za kila sehemu.
+                                    </p>
+                                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {assessmentComponents.map(component => {
+                                            const componentKey = `${student.id}::${component.key}`;
+                                            return (
+                                                <label key={component.key} className="block text-sm font-medium text-gray-700">
+                                                    {component.label} (/{component.max_marks})
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={component.max_marks}
+                                                        step="0.01"
+                                                        value={assessmentMarks[componentKey] ?? ""}
+                                                        onChange={event => {
+                                                            const value = event.target.value;
+                                                            setAssessmentMarks(previous => ({ ...previous, [componentKey]: value }));
+                                                            setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
+                                                        }}
+                                                        className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-3"
+                                                        placeholder="Enter marks"
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* QUESTIONS */}
 
                                                                     <div className="p-5 space-y-4">
 
