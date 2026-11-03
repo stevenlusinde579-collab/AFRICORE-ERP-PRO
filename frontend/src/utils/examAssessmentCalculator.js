@@ -1,13 +1,16 @@
 /**
  * Optional Test/Practical calculation.
  *
- * Tests are averaged equally inside the Test group. The Test group and
- * Practical group are then weighted by their configured maximum marks.
- * This lets the school use the actual paper maxima (for example Theory 100
- * and Practical 50) without imposing one universal Science percentage.
+ * Theory is the simple average of every configured Test used and the
+ * examination paper percentage. If no Tests are configured, the paper alone
+ * is the Theory mark. When Practical is configured, the final mark follows
+ * the NECTA-style 70% Theory + 30% Practical weighting.
  *
- * Returns null when no optional components are configured, so callers can
- * keep the legacy question-level calculation unchanged.
+ * Each assessment is first normalized against its own maximum marks so
+ * different configured maxima do not distort the average.
+ *
+ * Returns null when no optional components are configured, preserving the
+ * existing question-by-question calculation path.
  */
 export function calculateAssessmentFinalMark({
     components = [],
@@ -28,10 +31,8 @@ export function calculateAssessmentFinalMark({
 
     if (configured.length === 0) return null;
 
-    const groups = {
-        test: [],
-        practical: []
-    };
+    const tests = [];
+    const practicals = [];
 
     for (const component of configured) {
         const rawValue = marksByComponent[String(component.key)];
@@ -53,50 +54,52 @@ export function calculateAssessmentFinalMark({
             );
         }
 
-        groups[String(component.type).toLowerCase()].push({
-            percentage: (obtained / maximum) * 100,
-            maximum
-        });
+        const percentage = (obtained / maximum) * 100;
+        if (String(component.type).toLowerCase() === "test") {
+            tests.push(percentage);
+        } else {
+            practicals.push(percentage);
+        }
     }
-
-    const weightedGroups = Object.values(groups)
-        .filter(group => group.length > 0)
-        .map(group => ({
-            percentage: group.reduce((sum, item) => sum + item.percentage, 0) / group.length,
-            weight: group.reduce((sum, item) => sum + item.maximum, 0) / group.length
-        }));
 
     const paperMaximum = Number(examMaxMarks);
     const paperObtained = Number(examMarks);
-    if (paperMaximum > 0) {
-        if (!Number.isFinite(paperObtained) || paperObtained < 0 || paperObtained > paperMaximum) {
-            throw new Error(`Examination marks must be between 0 and ${paperMaximum}.`);
-        }
-        weightedGroups.push({
-            percentage: (paperObtained / paperMaximum) * 100,
-            weight: paperMaximum
-        });
-    }
-
-    if (weightedGroups.length === 0) {
+    if (!Number.isFinite(paperMaximum) || paperMaximum <= 0) {
         return {
             complete: false,
-            missing: "Examination marks or an assessment component",
+            missing: "Examination marks",
             percentage: null,
             marks_obtained: null,
             full_marks: Number(subjectFullMarks) || 100
         };
     }
 
-    const totalWeight = weightedGroups.reduce((sum, group) => sum + group.weight, 0);
-    const percentage = totalWeight > 0
-        ? weightedGroups.reduce((sum, group) => sum + group.percentage * group.weight, 0) / totalWeight
-        : 0;
+    if (!Number.isFinite(paperObtained) || paperObtained < 0 || paperObtained > paperMaximum) {
+        throw new Error(`Examination marks must be between 0 and ${paperMaximum}.`);
+    }
+
+    const theoryParts = [...tests, (paperObtained / paperMaximum) * 100];
+    const theoryPercentage = theoryParts.reduce((sum, value) => sum + value, 0) / theoryParts.length;
+
+    const practicalPercentage = practicals.length
+        ? practicals.reduce((sum, value) => sum + value, 0) / practicals.length
+        : null;
+
+    const percentage = practicalPercentage === null
+        ? theoryPercentage
+        : (theoryPercentage * 0.70) + (practicalPercentage * 0.30);
+
     const fullMarks = Number(subjectFullMarks) > 0 ? Number(subjectFullMarks) : 100;
+    const roundedPercentage = Math.round(percentage * 100) / 100;
 
     return {
         complete: true,
-        percentage: Math.round(percentage * 100) / 100,
+        theory_percentage: Math.round(theoryPercentage * 100) / 100,
+        practical_percentage: practicalPercentage === null
+            ? null
+            : Math.round(practicalPercentage * 100) / 100,
+        percentage: roundedPercentage,
+        // exam_marks.marks_obtained is an integer column in the current schema.
         marks_obtained: Math.round((percentage / 100) * fullMarks),
         full_marks: fullMarks
     };
