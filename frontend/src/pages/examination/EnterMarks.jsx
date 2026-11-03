@@ -2108,7 +2108,12 @@ function EnterMarks() {
                     .eq("exam_id", Number(examId))
                     .eq("exam_subject_id", Number(selectedExamSubjectId));
 
-                if (componentMarksError) throw componentMarksError;
+                if (
+                    componentMarksError &&
+                    !["42P01", "PGRST205"].includes(componentMarksError.code)
+                ) {
+                    throw componentMarksError;
+                }
 
                 const loadedAssessmentMarks = {};
                 (componentRows || []).forEach(row => {
