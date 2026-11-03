@@ -44,9 +44,14 @@ export function calculateAssessmentFinalMark({
         const obtained = Number(rawValue);
         const maximum = Number(component.max_marks);
         if (!Number.isFinite(obtained) || obtained < 0 || obtained > maximum) {
-            throw new Error(
-                `Marks for ${component.label || component.key} must be between 0 and ${maximum}.`
-            );
+            return {
+                complete: false,
+                validation_error: `Marks za ${component.label || component.key} lazima ziwe kati ya 0 na ${maximum}. Rekebisha alama iliyoingizwa; kiwango cha juu hakijabadilishwa.`,
+                invalid_component: String(component.key),
+                percentage: null,
+                marks_obtained: null,
+                full_marks: Number(subjectFullMarks) || 100
+            };
         }
 
         if (String(component.type).toLowerCase() === "test") {
