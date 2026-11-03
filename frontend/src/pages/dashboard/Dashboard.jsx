@@ -32,6 +32,7 @@ import { useRole } from "../../context/RoleContext";
 import { useSchool } from "../../context/SchoolContext";
 
 import StudentAnalytics from "./StudentAnalytics";
+import HeadmasterDashboardLive from "./HeadmasterDashboard";
 
 
 /* =========================================================
@@ -816,14 +817,7 @@ function Dashboard() {
 
     return (
 
-      <HeadmasterDashboard
-        navigate={navigate}
-        stats={stats}
-        recentStudents={recentStudents}
-        primaryRole={primaryRole}
-        activeRoles={activeRoles}
-        schoolId={schoolId}
-      />
+      <HeadmasterDashboardLive />
 
     );
 
