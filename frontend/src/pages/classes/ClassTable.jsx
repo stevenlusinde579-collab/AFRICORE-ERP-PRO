@@ -34,6 +34,8 @@ function ClassTable({ filters = {} }) {
             .trim()
             .toLowerCase() === "subject teacher";
 
+    const canManageSchoolSetup = [1, 2, 3, 4].includes(Number(selectedRoleId));
+
     // =====================================================
     // FETCH CLASSES
     // =====================================================
@@ -582,16 +584,18 @@ function ClassTable({ filters = {} }) {
 
                                     {!isSubjectTeacher && (
                                         <>
-                                            <button
-                                                onClick={() =>
-                                                    navigate(
-                                                        `/classes/edit/${item.id}`
-                                                    )
-                                                }
-                                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded mr-2"
-                                            >
-                                                Edit
-                                            </button>
+                                            {canManageSchoolSetup && (
+                                                <button
+                                                    onClick={() =>
+                                                        navigate(
+                                                            `/classes/edit/${item.id}`
+                                                        )
+                                                    }
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded mr-2"
+                                                >
+                                                    Edit
+                                                </button>
+                                            )}
 
                                             <button
                                                 onClick={() =>
