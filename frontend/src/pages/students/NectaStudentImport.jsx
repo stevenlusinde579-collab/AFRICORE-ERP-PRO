@@ -236,9 +236,9 @@ export default function NectaStudentImport() {
     if (rowsToImport.some((row) => normalizePremsForm(row.profile.form) !== classForm)) {
       return setMessage("Form ya PReMS haifanani na class uliyochagua.");
     }
-    const currentSchoolCode = String(school?.registration_number || "").trim().match(/^S\\d+/i)?.[0]?.toUpperCase();
+    const currentSchoolCode = String(school?.registration_number || "").trim().match(/^S\d+/i)?.[0]?.toUpperCase();
     const foreignSchool = rowsToImport.some((row) => {
-      const sourceCode = String(row.profile.school || "").trim().match(/^S\\d+/i)?.[0]?.toUpperCase();
+      const sourceCode = String(row.profile.school || "").trim().match(/^S\d+/i)?.[0]?.toUpperCase();
       return currentSchoolCode && sourceCode && currentSchoolCode !== sourceCode;
     });
     if (foreignSchool) return setMessage("PReMS profile inaonyesha NECTA school number tofauti na shule ya AfriCore. Import imesimamishwa.");
