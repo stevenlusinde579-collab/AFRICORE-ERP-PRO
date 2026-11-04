@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test:result-grading": "node --test tests/resultGrading.test.js",
     "test:exam-mark-normalization": "node --test tests/examMarkNormalization.test.js",
-    "test:exam-assessment": "node --test tests/examAssessmentCalculator.test.js"
+    "test:exam-assessment": "node --test tests/examAssessmentCalculator.test.js",
+    "test:necta-prems": "node --test tests/nectaPremsTextParser.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
