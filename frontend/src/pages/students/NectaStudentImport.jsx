@@ -171,6 +171,10 @@ export default function NectaStudentImport() {
   const readFile = async (file) => {
     setMessage(""); setParsed(null); setFileName(file?.name || "");
     if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      setMessage("The Excel file is larger than 20 MB. Please split it into smaller files before importing.");
+      return;
+    }
     try { setParsed(await parseNectaWorkbook(file)); }
     catch (error) { setMessage(error.message || "Could not read the Excel file."); }
   };
