@@ -148,7 +148,7 @@ export default function AddHeadmaster() {
                         <select
                             value={schoolId}
                             onChange={(event) => setSchoolId(event.target.value)}
-                            disabled={loadingSchools || saving || Boolean(requestedSchoolId)}
+                            disabled={loadingSchools || saving || Boolean(requestedSchoolId && selectedSchool)}
                             className={inputClass}
                             required
                         >
