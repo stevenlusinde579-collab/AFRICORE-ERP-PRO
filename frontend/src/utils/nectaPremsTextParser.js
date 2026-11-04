@@ -73,9 +73,9 @@ export function parseNectaStudentProfile(text) {
   const conditionAt = source.search(/Student's difficulties/i);
   const conditionText = conditionAt >= 0 ? source.slice(conditionAt) : "";
   const qualifications = section(source, "Qualifications", "Guardian");
-  const difficultyMatch = conditionText.match(/Student's difficulties\\s*:?\\s*([\\s\\S]*?)(?=Student's disabilities|$)/i);
-  const disabilityMatch = conditionText.match(/Student's disabilities\\s*:?\\s*([\\s\\S]*?)(?=^\\s*#{1,6}\\s|$)/im);
-  const cleanCondition = (value) => String(value || "").replace(/\\*\\*/g, "").replace(/^\\s*[:：-]\\s*/, "").trim();
+  const difficultyMatch = conditionText.match(/Student's difficulties\s*:?\s*([\s\S]*?)(?=Student's disabilities|$)/i);
+  const disabilityMatch = conditionText.match(/Student's disabilities\s*:?\s*([\s\S]*?)(?=^\s*#{1,6}\s|$)/im);
+  const cleanCondition = (value) => String(value || "").replace(/\*\*/g, "").replace(/^\s*[:：-]\s*/, "").trim();
   const difficulties = cleanCondition(difficultyMatch?.[1]);
   const disabilities = cleanCondition(disabilityMatch?.[1]);
   const noDifficulties = /no difficulties/i.test(difficulties);
@@ -115,7 +115,7 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
   const byPrem = new Map();
   const duplicateProfiles = new Set();
   for (const profile of profileRows) {
-    const prem = String(profile?.prem_number || "").replace(/\\s/g, "");
+    const prem = String(profile?.prem_number || "").replace(/\s/g, "");
     if (!prem) continue;
     if (byPrem.has(prem)) duplicateProfiles.add(prem);
     else byPrem.set(prem, profile);
@@ -125,8 +125,8 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
     const profile = byPrem.get(row.prem_number) || null;
     if (profile) matched.add(row.prem_number);
     const nameMatches = !profile?.full_name ||
-      profile.full_name.trim().toLowerCase().replace(/\\s+/g, " ") ===
-      row.full_name.trim().toLowerCase().replace(/\\s+/g, " ");
+      profile.full_name.trim().toLowerCase().replace(/\s+/g, " ") ===
+      row.full_name.trim().toLowerCase().replace(/\s+/g, " ");
     const sexMatches = !profile?.gender ||
       normalizeProfileSex(profile.gender) === normalizeProfileSex(row.gender);
     return {
@@ -143,8 +143,8 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
     };
   });
   const unmatchedProfiles = profileRows.filter((profile) =>
-    profile?.prem_number && !matched.has(String(profile.prem_number).replace(/\\s/g, ""))
-  ).map((profile) => String(profile.prem_number).replace(/\\s/g, ""));
+    profile?.prem_number && !matched.has(String(profile.prem_number).replace(/\s/g, ""))
+  ).map((profile) => String(profile.prem_number).replace(/\s/g, ""));
   return {
     students,
     unmatched_profile_prem_numbers: [...new Set(unmatchedProfiles)],
@@ -166,7 +166,7 @@ function normalizeProfileSex(value) {
 export function parseNectaStudentProfiles(text) {
   const source = String(text || "").trim();
   if (!source) throw new Error("Paste at least one PReMS Student Profile.");
-  const starts = [...source.matchAll(/^\\s*#\\s*Student Profile\\s*$/gim)].map((match) => match.index);
+  const starts = [...source.matchAll(/^\s*#\s*Student Profile\s*$/gim)].map((match) => match.index);
   const chunks = starts.length > 1
     ? starts.map((start, index) => source.slice(start, starts[index + 1] ?? source.length).trim()).filter(Boolean)
     : [source];
