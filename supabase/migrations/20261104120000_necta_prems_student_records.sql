@@ -75,6 +75,27 @@ with check (
     )
 );
 
+drop policy if exists necta_student_records_create_permission on public.necta_student_records;
+create policy necta_student_records_create_permission
+on public.necta_student_records
+as restrictive
+for insert
+to authenticated
+with check (
+    public.is_current_user_super_admin()
+    or exists (
+        select 1
+        from public.profile_roles pr
+        join public.role_permissions rp on rp.role_id = pr.role_id
+        join public.permissions pm on pm.id = rp.permission_id
+        where pr.profile_id = auth.uid()
+          and pr.school_id = necta_student_records.school_id
+          and pr.is_active is true
+          and lower(trim(pm.permission_name)) = 'create_students'
+          and pm.is_active is true
+    )
+);
+
 drop policy if exists necta_student_records_authenticated_access on public.necta_student_records;
 create policy necta_student_records_authenticated_access
 on public.necta_student_records
@@ -83,7 +104,7 @@ to authenticated
 using (true)
 with check (true);
 
-grant select, insert, update on public.necta_student_records to authenticated;
+grant select, insert on public.necta_student_records to authenticated;
 grant usage, select on sequence public.necta_student_records_id_seq to authenticated;
 
 
