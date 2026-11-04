@@ -16,17 +16,16 @@ test("parses a copied PReMS Qualified markdown table", () => {
   assert.equal(result.students[0].gender, "Female");
 });
 
-test("reports duplicate PREM numbers without discarding rows", () => {
-  const source = `Prem Number\\tCert. Entry Number\\tFull Name\\tSex
-20190079473\\t\\tABIGAELI LUKA SKOINE\\tFemale
-20190079473\\t\\tABIGAELI LUKA SKOINE\\tFemale`;
+test("parses copied tab-separated Qualified rows and reports duplicates", () => {
+  const source = ["Prem Number\tCert. Entry Number\tFull Name\tSex",
+    "20190079473\t\tABIGAELI LUKA SKOINE\tFemale",
+    "20190079473\t\tABIGAELI LUKA SKOINE\tFemale"].join("\n");
   const result = parseNectaQualifiedList(source);
   assert.equal(result.row_count, 2);
   assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
 });
 
-test("parses profile fields and preserves unknown condition state", () => {
-  const source = `# Student Profile
+const profileBase = `# Student Profile
 ### ABIGAELI LUKA SKOINE
 #### PREM# : 20190079473
 - **Sex**Female
@@ -62,7 +61,9 @@ Student's difficulties
 No Difficulties
 Student's disabilities
 No Disabilities`;
-  const result = parseNectaStudentProfile(source);
+
+test("parses profile data and preserves explicit no-difficulties state", () => {
+  const result = parseNectaStudentProfile(profileBase);
   assert.equal(result.prem_number, "20190079473");
   assert.equal(result.full_name, "ABIGAELI LUKA SKOINE");
   assert.equal(result.admission_number, "2612");
@@ -73,4 +74,19 @@ No Disabilities`;
   assert.equal(result.condition.difficulties_status, "none");
   assert.equal(result.condition.disabilities_status, "none");
   assert.equal(result.guardian.full_name, "");
+});
+
+test("does not convert missing condition data into none", () => {
+  const source = profileBase.slice(0, profileBase.indexOf("### Difficulties"));
+  const result = parseNectaStudentProfile(source);
+  assert.equal(result.condition.difficulties_status, "unknown");
+  assert.equal(result.condition.disabilities_status, "unknown");
+});
+
+test("keeps recorded condition text distinct from no difficulties", () => {
+  const source = profileBase.replace("No Difficulties", "Uses a hearing aid").replace("No Disabilities", "Hearing impairment");
+  const result = parseNectaStudentProfile(source);
+  assert.equal(result.condition.difficulties_status, "recorded");
+  assert.equal(result.condition.disabilities_status, "recorded");
+  assert.match(result.condition.difficulties, /hearing aid/i);
 });
