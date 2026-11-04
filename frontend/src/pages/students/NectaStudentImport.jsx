@@ -4,6 +4,7 @@ import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 import { parseNectaWorkbook } from "../../utils/nectaPremsWorkbook";
+import { mergeNectaQualifiedProfiles, parseNectaQualifiedList, parseNectaStudentProfiles } from "../../utils/nectaPremsTextParser";
 
 const normalizeSchoolNumber = (value) => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 
@@ -72,6 +73,10 @@ export default function NectaStudentImport() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [fileName, setFileName] = useState("");
+  const [sourceMode, setSourceMode] = useState("workbook");
+  const [qualifiedText, setQualifiedText] = useState("");
+  const [profileText, setProfileText] = useState("");
+  const [qualifiedPreview, setQualifiedPreview] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -177,6 +182,25 @@ export default function NectaStudentImport() {
     }
     try { setParsed(await parseNectaWorkbook(file)); }
     catch (error) { setMessage(error.message || "Could not read the Excel file."); }
+  };
+
+
+  const previewCopiedPrems = () => {
+    setMessage("");
+    setQualifiedPreview(null);
+    try {
+      const qualified = parseNectaQualifiedList(qualifiedText);
+      const profiles = parseNectaStudentProfiles(profileText);
+      const merged = mergeNectaQualifiedProfiles(qualified, profiles.profiles);
+      setQualifiedPreview({ ...merged, qualified_duplicates: qualified.duplicate_prem_numbers,
+        profile_duplicates: profiles.duplicate_prem_numbers, total_qualified: qualified.row_count });
+      if (qualified.duplicate_prem_numbers.length || profiles.duplicate_prem_numbers.length ||
+          merged.unmatched_profile_prem_numbers.length || merged.mismatch_count) {
+        setMessage("Preview imekamilika, lakini kuna marudio au kutolingana. Rekebisha kabla ya hatua ya kuingiza.");
+      }
+    } catch (error) {
+      setMessage(error.message || "Imeshindikana kusoma maandishi ya PReMS.");
+    }
   };
 
   const toggleSubject = (id) => setSubjectIds((old) =>
@@ -333,6 +357,66 @@ export default function NectaStudentImport() {
       <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
         The import uses the currently selected AfriCore school and active academic year. It does not create classes or guess subject combinations. Guardian, disability, health and other profile fields are not in the 11-column PReMS template and will not be fabricated.
       </div>
+
+      <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold text-gray-800">Njia ya pili: PReMS Qualified List + Student Profile</h2>
+          <p className="text-sm text-gray-600">Bandika orodha ya Qualified na profiles ulizonakili kutoka PReMS. Mfumo utaoanisha kwa PREM Number na kuonyesha preview tu.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => { setSourceMode("workbook"); setQualifiedPreview(null); }}
+            className={`px-3 py-2 rounded-lg text-sm ${sourceMode === "workbook" ? "bg-blue-600 text-white" : "bg-white border"}`}>Excel workbook</button>
+          <button type="button" onClick={() => { setSourceMode("copied"); setParsed(null); setFileName(""); }}
+            className={`px-3 py-2 rounded-lg text-sm ${sourceMode === "copied" ? "bg-blue-600 text-white" : "bg-white border"}`}>Copied PReMS text</button>
+        </div>
+        {sourceMode === "copied" && <>
+          <label className="block text-sm font-medium">Qualified List (copy table yote kutoka PReMS)
+            <textarea value={qualifiedText} onChange={(e) => setQualifiedText(e.target.value)}
+              rows={7} className="mt-1 w-full border rounded-lg p-3 font-mono text-xs"
+              placeholder="Prem Number | Cert. Entry Number | Full Name | Sex | Status..." />
+          </label>
+          <label className="block text-sm font-medium">Student Profile(s) (bandika profile moja au nyingi)
+            <textarea value={profileText} onChange={(e) => setProfileText(e.target.value)}
+              rows={10} className="mt-1 w-full border rounded-lg p-3 font-mono text-xs"
+              placeholder="Bandika maandishi ya Student Profile hapa..." />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={previewCopiedPrems}
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white">Tengeneza preview</button>
+            <button type="button" onClick={() => { setQualifiedText(""); setProfileText(""); setQualifiedPreview(null); setMessage(""); }}
+              className="px-4 py-2 rounded-lg bg-white border">Futa maandishi</button>
+          </div>
+          {qualifiedPreview && <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.total_qualified}</b><div>Qualified rows</div></div>
+              <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.matched_count}</b><div>Profiles matched</div></div>
+              <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.missing_profile_count}</b><div>Profiles missing</div></div>
+              <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.mismatch_count}</b><div>Mismatch/duplicate</div></div>
+            </div>
+            {(qualifiedPreview.qualified_duplicates.length || qualifiedPreview.profile_duplicates.length ||
+              qualifiedPreview.unmatched_profile_prem_numbers.length) > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <b>Ukaguzi unahitajika:</b>
+              {qualifiedPreview.qualified_duplicates.length > 0 && <p>PREM zilizojirudia Qualified: {qualifiedPreview.qualified_duplicates.join(", ")}</p>}
+              {qualifiedPreview.profile_duplicates.length > 0 && <p>PREM zilizojirudia Profiles: {qualifiedPreview.profile_duplicates.join(", ")}</p>}
+              {qualifiedPreview.unmatched_profile_prem_numbers.length > 0 && <p>Profiles zisizopatikana Qualified list: {qualifiedPreview.unmatched_profile_prem_numbers.join(", ")}</p>}
+            </div>}
+            <div className="overflow-auto border rounded-lg bg-white">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-100"><tr>{["PREM Number","Full Name (Qualified)","Sex","Admission No.","DOB","Profile check","Warnings"].map((h)=><th key={h} className="text-left p-2 whitespace-nowrap">{h}</th>)}</tr></thead>
+                <tbody>{qualifiedPreview.students.slice(0,100).map((row)=><tr key={row.prem_number} className="border-t">
+                  <td className="p-2 whitespace-nowrap">{row.prem_number}</td><td className="p-2">{row.full_name}</td>
+                  <td className="p-2">{row.gender || row.source_sex}</td><td className="p-2">{row.profile?.admission_number || "—"}</td>
+                  <td className="p-2">{row.profile?.date_of_birth || "—"}</td><td className="p-2">{row.profile_status}</td>
+                  <td className="p-2">{row.profile_warnings.join("; ") || "—"}</td>
+                </tr>)}</tbody>
+              </table>
+              {qualifiedPreview.students.length > 100 && <p className="p-2 text-gray-500">Inaonyesha 100 kati ya {qualifiedPreview.students.length}.</p>}
+            </div>
+            <p className="text-xs text-amber-800">Hii ni preview pekee. Bado haijahifadhi wanafunzi wala taarifa za profile kwenye AfriCore.</p>
+          </>}
+        </>}
+      </div>
+      {sourceMode === "workbook" && <>
       <label className="block font-medium">PReMS Excel workbook (.xlsx)
         <input ref={fileRef} type="file" accept=".xlsx" onChange={(e) => readFile(e.target.files?.[0])}
           className="block w-full mt-2 border rounded-lg p-3" />
@@ -384,6 +468,7 @@ export default function NectaStudentImport() {
           {busy ? "Importing..." : `Import ${rows.length || 0} Student(s)`}
         </button>
       </div>
+      </>}
       <p className="text-xs text-gray-500">Active academic year: {activeAcademicYear?.year_name || (academicYearLoading ? "Loading..." : "Not configured")}. Duplicate admission numbers are checked before import. If any row fails during saving, the importer attempts to remove all students created by that batch.</p>
     </div>
   </div>;
