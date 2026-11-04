@@ -233,15 +233,24 @@ export default function NectaStudentImport() {
       }
     }
     const classForm = normalizePremsForm(selectedClass.class_name) || normalizePremsForm(selectedClass.short_name);
-    if (rowsToImport.some((row) => normalizePremsForm(row.profile.form) !== classForm)) {
-      return setMessage("Form ya PReMS haifanani na class uliyochagua.");
+    if (!classForm) return setMessage("Class uliyochagua haitambuliki kama Form I hadi VI.");
+    if (rowsToImport.some((row) => !normalizePremsForm(row.profile.form) ||
+        normalizePremsForm(row.profile.form) !== classForm)) {
+      return setMessage("Form ya PReMS haifanani na class uliyochagua au haijatambuliwa.");
+    }
+    const sourceSchoolCodes = rowsToImport.map((row) =>
+      String(row.profile.school || "").trim().match(/^S\d+/i)?.[0]?.toUpperCase() || ""
+    );
+    if (sourceSchoolCodes.some((code) => !code)) {
+      return setMessage("Baadhi ya Student Profiles hazina NECTA School Number. Hakikisha taarifa ya shule ipo kabla ya import.");
     }
     const currentSchoolCode = String(school?.registration_number || "").trim().match(/^S\d+/i)?.[0]?.toUpperCase();
-    const foreignSchool = rowsToImport.some((row) => {
-      const sourceCode = String(row.profile.school || "").trim().match(/^S\d+/i)?.[0]?.toUpperCase();
-      return currentSchoolCode && sourceCode && currentSchoolCode !== sourceCode;
-    });
-    if (foreignSchool) return setMessage("PReMS profile inaonyesha NECTA school number tofauti na shule ya AfriCore. Import imesimamishwa.");
+    if (currentSchoolCode && sourceSchoolCodes.some((code) => code !== currentSchoolCode)) {
+      return setMessage("PReMS profile inaonyesha NECTA school number tofauti na shule ya AfriCore. Import imesimamishwa.");
+    }
+    if (classTeacherSelected && !assignedClassIds.includes(Number(selectedClass.id))) {
+      return setMessage("Unaweza kuingiza wanafunzi kwenye darasa ulilopangiwa tu.");
+    }
     setBusy(true); setMessage("");
     try {
       const payload = rowsToImport.map((row) => ({
