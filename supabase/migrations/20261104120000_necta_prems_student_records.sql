@@ -130,6 +130,26 @@ begin
         raise exception 'At least one subject must be selected.';
     end if;
 
+    if exists (
+        select 1
+        from jsonb_array_elements(p_students) as rows(item)
+        group by lower(trim(coalesce(item->>'admission_number', '')))
+        having count(*) > 1
+    ) then
+        raise exception 'The workbook contains duplicate admission numbers.';
+    end if;
+
+    if exists (
+        select 1
+        from public.students s
+        where lower(trim(s.admission_number)) in (
+            select lower(trim(item->>'admission_number'))
+            from jsonb_array_elements(p_students) as rows(item)
+        )
+    ) then
+        raise exception 'One or more admission numbers are already registered in AfriCore.';
+    end if;
+
     -- Match the application's create_students permission at the database boundary.
     if not public.is_current_user_super_admin()
        and not exists (
