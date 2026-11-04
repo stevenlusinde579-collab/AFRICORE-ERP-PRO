@@ -94,7 +94,7 @@ const parseSheet = (xml, sharedStrings) => {
 };
 
 const normalizeHeader = (value) =>
-  String(value || "").trim().toUpperCase().replace(/[\\s_-]+/g, " ").replace(/[^A-Z0-9 /]/g, "");
+  String(value || "").trim().toUpperCase().replace(/[\s_-]+/g, " ").replace(/[^A-Z0-9 /]/g, "");
 
 const HEADER_ALIASES = {
   SERIAL: ["SERIAL", "S/N", "SN"],
@@ -111,7 +111,7 @@ const HEADER_ALIASES = {
 };
 
 export async function parseNectaWorkbook(file) {
-  if (!file || !/\\.xlsx$/i.test(file.name)) {
+  if (!file || !/\.xlsx$/i.test(file.name)) {
     throw new Error("Select the original NECTA PReMS Excel template (.xlsx).");
   }
   const zip = await readZipEntries(await file.arrayBuffer());
@@ -129,9 +129,9 @@ export async function parseNectaWorkbook(file) {
     .find((item) => item.getAttribute("Id") === relationId);
   let target = relation?.getAttribute("Target");
   if (!target) throw new Error("Could not locate the first worksheet in this workbook.");
-  target = target.replace(/^\\//, "");
-  const sheetPath = target.startsWith("xl/") ? target : `xl/${target.replace(/^\\.\\//, "")}`;
-  const sheetXml = zip.get(sheetPath) || zip.get(`xl/${target.replace(/^\\.\\//, "")}`);
+  target = target.replace(/^\//, "");
+  const sheetPath = target.startsWith("xl/") ? target : `xl/${target.replace(/^\.\//, "")}`;
+  const sheetXml = zip.get(sheetPath) || zip.get(`xl/${target.replace(/^\.\//, "")}`);
   if (!sheetXml) throw new Error("The first worksheet could not be opened.");
 
   const sharedStrings = parseSharedStrings(zip.get("xl/sharedStrings.xml"));
@@ -180,7 +180,7 @@ export async function parseNectaWorkbook(file) {
   const metadata = {};
   for (const row of rows.slice(0, headerIndex)) {
     const text = row.filter(Boolean).join(" ").trim();
-    const match = text.match(/^(REGION|DISTRICT|SCHOOL NUMBER|SCHOOL NAME|FORM)\\s*:?\\s*(.*)$/i);
+    const match = text.match(/^(REGION|DISTRICT|SCHOOL NUMBER|SCHOOL NAME|FORM)\s*:?\s*(.*)$/i);
     if (match) metadata[match[1].toUpperCase()] = match[2].trim();
   }
 
