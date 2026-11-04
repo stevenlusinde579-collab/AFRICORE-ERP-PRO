@@ -50,11 +50,27 @@ for all
 to authenticated
 using (
     public.is_current_user_super_admin()
-    or school_id = public.get_current_user_school_id()
+    or (
+        school_id = public.get_current_user_school_id()
+        and exists (
+            select 1
+            from public.students s
+            where s.id = necta_student_records.student_id
+              and s.school_id = necta_student_records.school_id
+        )
+    )
 )
 with check (
     public.is_current_user_super_admin()
-    or school_id = public.get_current_user_school_id()
+    or (
+        school_id = public.get_current_user_school_id()
+        and exists (
+            select 1
+            from public.students s
+            where s.id = necta_student_records.student_id
+              and s.school_id = necta_student_records.school_id
+        )
+    )
 );
 
 drop policy if exists necta_student_records_authenticated_access on public.necta_student_records;
