@@ -201,35 +201,22 @@ export const createSchool = async (req, res) => {
             createdAcademicYearId = createdAcademicYear.id;
         }
 
-        const defaultClasses = [
-            { class_name: "Baby Class", short_name: "BABY", academic_level: "Nursery" },
-            { class_name: "Pre Unit", short_name: "PRE", academic_level: "Nursery" },
-            { class_name: "KG 1", short_name: "KG1", academic_level: "Nursery" },
-            { class_name: "KG 2", short_name: "KG2", academic_level: "Nursery" },
-            ...Array.from({ length: 7 }, (_, i) => ({
-                class_name: `Standard ${i + 1}`,
-                short_name: `STD${i + 1}`,
-                academic_level: "Primary"
-            })),
-            ...Array.from({ length: 4 }, (_, i) => ({
-                class_name: `Form ${i + 1}`,
-                short_name: `FORM${i + 1}`,
-                academic_level: "Secondary"
-            })),
-            { class_name: "Form 5", short_name: "FORM5", academic_level: "Advanced" },
-            { class_name: "Form 6", short_name: "FORM6", academic_level: "Advanced" }
-        ].map((item) => ({
-            ...item,
-            school_id: createdSchoolId,
-            academic_year_id: academicYear.id
-        }));
-
+        // The academic_years trigger creates the default classes automatically.
+        // Do not insert them again here: uq_classes_school_year_name prevents duplicates.
         const { data: classes, error: classesError } = await supabase
             .from("classes")
-            .insert(defaultClasses)
-            .select("id,class_name,academic_level");
+            .select("id,class_name,academic_level")
+            .eq("school_id", createdSchoolId)
+            .eq("academic_year_id", academicYear.id);
 
         if (classesError) throw classesError;
+
+        const expectedDefaultClassCount = 17;
+        if ((classes || []).length < expectedDefaultClassCount) {
+            throw new Error(
+                `Default class setup was incomplete: expected ${expectedDefaultClassCount} classes, found ${(classes || []).length}.`
+            );
+        }
         createdClassIds = (classes || []).map((item) => item.id);
 
         return res.status(201).json({
