@@ -101,6 +101,7 @@ export const getSchoolOverview = async (req, res) => {
  */
 export const createSchool = async (req, res) => {
     let createdSchoolId = null;
+    let createdAcademicYearId = null;
     let createdClassIds = [];
 
     try {
@@ -113,6 +114,14 @@ export const createSchool = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "School name is required."
+            });
+        }
+
+        const requestedYear = String(req.body?.academic_year || "").trim();
+        if (!/^20\d{2}$/.test(requestedYear)) {
+            return res.status(400).json({
+                success: false,
+                message: "Weka Academic Year sahihi (mfano 2027)."
             });
         }
 
@@ -150,25 +159,46 @@ export const createSchool = async (req, res) => {
 
         createdSchoolId = school.id;
 
-        // The existing academic-year setup creates the school's active year.
-        // Reuse it; do not create duplicate years or duplicate subjects.
-        const { data: academicYear, error: yearError } = await supabase
+        // Create the active academic year selected in the Add School form.
+        // Never leave a newly created school without an academic year.
+        const { data: existingYear, error: existingYearError } = await supabase
             .from("academic_years")
             .select("id,year_name")
             .eq("school_id", createdSchoolId)
-            .eq("is_active", true)
+            .eq("year_name", requestedYear)
+            .eq("term", "ANNUAL")
             .order("id", { ascending: false })
             .limit(1)
             .maybeSingle();
 
-        if (yearError) throw yearError;
+        if (existingYearError) throw existingYearError;
 
-        if (!academicYear) {
-            return res.status(500).json({
-                success: false,
-                message: "School was created, but no active academic year was found. Create/activate an academic year before adding classes.",
-                school
-            });
+        let academicYear;
+        if (existingYear) {
+            const { data: activatedYear, error: activateYearError } = await supabase
+                .from("academic_years")
+                .update({ is_active: true })
+                .eq("id", existingYear.id)
+                .select("id,year_name")
+                .single();
+            if (activateYearError) throw activateYearError;
+            academicYear = activatedYear;
+        } else {
+            const { data: createdAcademicYear, error: createYearError } = await supabase
+                .from("academic_years")
+                .insert({
+                    school_id: createdSchoolId,
+                    year_name: requestedYear,
+                    term: "ANNUAL",
+                    start_date: `${requestedYear}-01-01`,
+                    end_date: `${requestedYear}-12-31`,
+                    is_active: true
+                })
+                .select("id,year_name")
+                .single();
+            if (createYearError) throw createYearError;
+            academicYear = createdAcademicYear;
+            createdAcademicYearId = createdAcademicYear.id;
         }
 
         const defaultClasses = [
@@ -222,6 +252,26 @@ export const createSchool = async (req, res) => {
 
             if (cleanupError) {
                 console.error("SCHOOL MANAGEMENT - CLASS CLEANUP ERROR:", cleanupError);
+            }
+        }
+
+        if (createdAcademicYearId) {
+            const { error: yearCleanupError } = await supabase
+                .from("academic_years")
+                .delete()
+                .eq("id", createdAcademicYearId);
+            if (yearCleanupError) {
+                console.error("SCHOOL MANAGEMENT - ACADEMIC YEAR CLEANUP ERROR:", yearCleanupError);
+            }
+        }
+
+        if (createdSchoolId) {
+            const { error: schoolCleanupError } = await supabase
+                .from("schools")
+                .delete()
+                .eq("id", createdSchoolId);
+            if (schoolCleanupError) {
+                console.error("SCHOOL MANAGEMENT - SCHOOL CLEANUP ERROR:", schoolCleanupError);
             }
         }
 
