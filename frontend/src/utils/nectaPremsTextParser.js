@@ -157,3 +157,23 @@ function normalizeProfileSex(value) {
   if (sex === "m" || sex === "male") return "male";
   return sex;
 }
+
+
+export function parseNectaStudentProfiles(text) {
+  const source = String(text || "").trim();
+  if (!source) throw new Error("Paste at least one PReMS Student Profile.");
+  const starts = [...source.matchAll(/^\\s*#\\s*Student Profile\\s*$/gim)].map((match) => match.index);
+  const chunks = starts.length > 1
+    ? starts.map((start, index) => source.slice(start, starts[index + 1] ?? source.length).trim()).filter(Boolean)
+    : [source];
+  const profiles = chunks.map((chunk) => parseNectaStudentProfile(chunk));
+  const missingPrem = profiles.filter((profile) => !profile.prem_number).length;
+  if (missingPrem) throw new Error(`${missingPrem} profile(s) have no PREM Number. Each profile must include its PREM Number.`);
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const profile of profiles) {
+    if (seen.has(profile.prem_number)) duplicates.add(profile.prem_number);
+    seen.add(profile.prem_number);
+  }
+  return { profiles, duplicate_prem_numbers: [...duplicates], profile_count: profiles.length };
+}
