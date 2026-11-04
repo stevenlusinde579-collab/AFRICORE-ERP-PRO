@@ -130,7 +130,7 @@ test("splits multiple profiles when PReMS copies plain Student Profile headings"
   const plainProfile = profileBase
     .replace("# Student Profile", "Student Profile")
     .replace("### ABIGAELI LUKA SKOINE", "ABIGAELI LUKA SKOINE");
-  const result = parseNectaStudentProfiles([plainProfile, plainProfile].join("\\n"));
+  const result = parseNectaStudentProfiles([plainProfile, plainProfile].join("\n"));
   assert.equal(result.profile_count, 2);
   assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
 });
