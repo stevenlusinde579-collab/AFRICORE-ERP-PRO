@@ -50,8 +50,14 @@ Manage students in AfriCore ERP PRO
 
 
 
+<div className="flex flex-wrap gap-3">
 <button
-
+onClick={()=>navigate("/students/necta-import")}
+className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg"
+>
+Import NECTA PReMS
+</button>
+<button
 onClick={()=>navigate("/students/add")}
 
 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
