@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseNectaQualifiedList, parseNectaStudentProfile, parseNectaStudentProfiles } from "../src/utils/nectaPremsTextParser.js";
+import { mergeNectaQualifiedProfiles, parseNectaQualifiedList, parseNectaStudentProfile, parseNectaStudentProfiles } from "../src/utils/nectaPremsTextParser.js";
 
 test("parses a copied PReMS Qualified markdown table", () => {
   const source = `| Prem Number | Cert. Entry Number | Full Name | Sex | Status | Actions |
@@ -98,4 +98,19 @@ test("parses multiple pasted profiles and flags repeated PREM numbers", () => {
   const result = parseNectaStudentProfiles(source);
   assert.equal(result.profile_count, 2);
   assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
+});
+
+
+test("matches Qualified rows to profiles by PREM and reports mismatches", () => {
+  const qualified = parseNectaQualifiedList(`| Prem Number | Full Name | Sex |
+| --- | --- | --- |
+| 20190079473 | ABIGAELI LUKA SKOINE | Female
+| 20191597581 | BELINDA DANIEL SAIDI | Female`);
+  const profileOne = parseNectaStudentProfile(profileBase);
+  const profileTwo = { ...profileOne, prem_number: "20191597581", full_name: "WRONG NAME", gender: "Male" };
+  const result = mergeNectaQualifiedProfiles(qualified, [profileOne, profileTwo]);
+  assert.equal(result.matched_count, 1);
+  assert.equal(result.mismatch_count, 1);
+  assert.equal(result.students[1].profile_status, "mismatch");
+  assert.equal(result.students[1].profile_warnings.length, 2);
 });
