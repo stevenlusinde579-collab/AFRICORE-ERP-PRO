@@ -147,15 +147,25 @@ export default function NectaStudentImport() {
   }, [classId, schoolId]);
 
   const rows = parsed?.students || [];
-  const validation = useMemo(() => rows.map((row) => {
-    const errors = [];
-    if (!row.first_name) errors.push("First name missing");
-    if (!row.last_name) errors.push("Surname missing");
-    if (!row.admission_number) errors.push("Admission number missing");
-    if (!normalizeGender(row.gender)) errors.push("Sex must be Male/Female");
-    if (row.date_of_birth && !normalizeDate(row.date_of_birth)) errors.push("Invalid date of birth");
-    return { ...row, errors };
-  }), [rows]);
+  const validation = useMemo(() => {
+    const admissionCounts = new Map();
+    for (const row of rows) {
+      const key = String(row.admission_number || "").trim().toLowerCase();
+      if (key) admissionCounts.set(key, (admissionCounts.get(key) || 0) + 1);
+    }
+    return rows.map((row) => {
+      const errors = [];
+      if (!row.first_name) errors.push("First name missing");
+      if (!row.last_name) errors.push("Surname missing");
+      if (!row.admission_number) errors.push("Admission number missing");
+      if (row.admission_number && admissionCounts.get(String(row.admission_number).trim().toLowerCase()) > 1) {
+        errors.push("Admission number repeated in this workbook");
+      }
+      if (!normalizeGender(row.gender)) errors.push("Sex must be Male/Female");
+      if (row.date_of_birth && !normalizeDate(row.date_of_birth)) errors.push("Invalid date of birth");
+      return { ...row, errors };
+    });
+  }, [rows]);
   const invalidCount = validation.filter((row) => row.errors.length).length;
 
   const readFile = async (file) => {
