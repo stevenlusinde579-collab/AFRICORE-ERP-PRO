@@ -196,12 +196,20 @@ export default function NectaStudentImport() {
       return setMessage("Import stopped: the Excel workbook contains repeated admission numbers. Correct the file before importing.");
     }
     try {
-      const { data: existing, error: duplicateError } = await supabase.from("students")
-        .select("admission_number").eq("school_id", school).eq("academic_year_id", year)
-        .in("admission_number", admissionNumbers);
-      if (duplicateError) throw duplicateError;
-      const existingSet = new Set((existing || []).map((x) => String(x.admission_number).toLowerCase()));
-      const duplicates = admissionNumbers.filter((x) => existingSet.has(x.toLowerCase()));
+      const existingSet = new Set();
+      let offset = 0;
+      while (true) {
+        const { data: existing, error: duplicateError } = await supabase.from("students")
+          .select("admission_number").eq("school_id", school).eq("academic_year_id", year)
+          .range(offset, offset + 999);
+        if (duplicateError) throw duplicateError;
+        for (const item of existing || []) {
+          if (item.admission_number) existingSet.add(String(item.admission_number).trim().toLowerCase());
+        }
+        if (!existing || existing.length < 1000) break;
+        offset += 1000;
+      }
+      const duplicates = admissionNumbers.filter((x) => existingSet.has(x.trim().toLowerCase()));
       if (duplicates.length) throw new Error(`Import stopped: ${duplicates.length} admission number(s) already exist in this school and academic year. No students were imported.`);
 
       const { data: classCheck, error: classError } = await supabase.from("classes")
