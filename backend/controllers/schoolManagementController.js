@@ -531,11 +531,11 @@ export const getHeadmasters = async (req, res) => {
             return res.json({ success: true, headmasters: [] });
         }
 
+        // Keep historical Headmaster assignments selectable for future reappointment.
         const { data: roleRows, error: roleRowsError } = await supabase
             .from("profile_roles")
-            .select("profile_id,school_id")
-            .eq("role_id", role.id)
-            .eq("is_active", true);
+            .select("profile_id,school_id,is_active")
+            .eq("role_id", role.id);
 
         if (roleRowsError) throw roleRowsError;
 
@@ -590,7 +590,7 @@ export const getHeadmasters = async (req, res) => {
 
         const headmasters = (profiles || []).map((profile) => {
             const roleRow = (roleRows || []).find(
-                (row) => row.profile_id === profile.id
+                (row) => row.profile_id === profile.id && row.is_active === true
             );
 
             return {
