@@ -2,6 +2,7 @@ import express from "express";
 
 import {
     getSchools,
+    getSchoolOverview,
     createSchool,
     updateSchool,
     getHeadmasters,
@@ -19,6 +20,7 @@ router.use(authenticateUser, requireSuperAdmin);
 router.get("/headmasters", getHeadmasters);
 router.patch("/headmasters/:profileId/school", assignHeadmaster);
 
+router.get("/:id/overview", getSchoolOverview);
 router.get("/", getSchools);
 router.post("/", createSchool);
 router.patch("/:id", updateSchool);
