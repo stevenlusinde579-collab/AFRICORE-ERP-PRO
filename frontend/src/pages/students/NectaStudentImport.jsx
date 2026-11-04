@@ -205,7 +205,7 @@ export default function NectaStudentImport() {
       }
     }
     setBusy(true); setMessage("");
-    const school = Number(schoolId);
+    const currentSchoolId = Number(schoolId);
     const year = Number(activeAcademicYearId);
     const admissionNumbers = rows.map((r) => r.admission_number.trim());
     const normalizedAdmissions = admissionNumbers.map((value) => value.toLowerCase());
@@ -224,7 +224,7 @@ export default function NectaStudentImport() {
       let offset = 0;
       while (true) {
         const { data: existing, error: duplicateError } = await supabase.from("students")
-          .select("admission_number").eq("school_id", school)
+          .select("admission_number").eq("school_id", currentSchoolId)
           .order("id", { ascending: true }).range(offset, offset + 999);
         if (duplicateError) throw duplicateError;
         for (const item of existing || []) {
@@ -238,7 +238,7 @@ export default function NectaStudentImport() {
 
       const { data: classCheck, error: classError } = await supabase.from("classes")
         .select("id,school_id,academic_year_id,academic_level").eq("id", Number(classId))
-        .eq("school_id", school).eq("academic_year_id", year).eq("is_active", true).single();
+        .eq("school_id", currentSchoolId).eq("academic_year_id", year).eq("is_active", true).single();
       if (classError || !classCheck) throw new Error("Selected class is no longer valid for this school and academic year.");
 
       const { data: verifiedSubjects, error: verifiedSubjectsError } = await supabase.from("subjects")
@@ -253,7 +253,7 @@ export default function NectaStudentImport() {
       if (isAdvanced) {
         const { data: currentCombination, error: currentCombinationError } = await supabase
           .from("subject_combinations").select("id,school_id,is_active")
-          .eq("id", Number(combinationId)).eq("school_id", school).eq("is_active", true).maybeSingle();
+          .eq("id", Number(combinationId)).eq("school_id", currentSchoolId).eq("is_active", true).maybeSingle();
         if (currentCombinationError) throw currentCombinationError;
         if (!currentCombination) throw new Error("The selected Advanced combination is no longer active for this school.");
       }
@@ -262,7 +262,7 @@ export default function NectaStudentImport() {
       try {
         for (const row of rows) {
           const payload = {
-            school_id: school,
+            school_id: currentSchoolId,
             academic_year_id: year,
             current_class_id: Number(classId),
             admission_number: row.admission_number.trim(),
@@ -290,7 +290,7 @@ export default function NectaStudentImport() {
           const { error: subjectError } = await supabase.from("student_subjects").insert(assignments);
           if (subjectError) throw new Error(`Row ${row.source_row}: subject assignment failed: ${subjectError.message}`);
           const metadata = {
-            student_id: saved.id, school_id: school,
+            student_id: saved.id, school_id: currentSchoolId,
             exam_number: row.exam_number || null,
             exam_year: /^\d{4}$/.test(row.exam_year) ? Number(row.exam_year) : null,
             registration_type: row.registration_type || null,
@@ -308,7 +308,7 @@ export default function NectaStudentImport() {
       } catch (error) {
         if (imported.length) {
           const { error: rollbackError } = await supabase.from("students").delete()
-            .eq("school_id", school).in("id", imported);
+            .eq("school_id", currentSchoolId).in("id", imported);
           if (rollbackError) throw new Error(`${error.message} Rollback also failed; contact the system administrator immediately.`);
         }
         throw error;
