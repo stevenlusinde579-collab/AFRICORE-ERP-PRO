@@ -124,10 +124,10 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
   const students = rows.map((row) => {
     const profile = byPrem.get(row.prem_number) || null;
     if (profile) matched.add(row.prem_number);
-    const nameMatches = !profile?.full_name ||
+    const nameMatches = Boolean(profile?.full_name) &&
       profile.full_name.trim().toLowerCase().replace(/\s+/g, " ") ===
       row.full_name.trim().toLowerCase().replace(/\s+/g, " ");
-    const sexMatches = !profile?.gender ||
+    const sexMatches = Boolean(profile?.gender) &&
       normalizeProfileSex(profile.gender) === normalizeProfileSex(row.gender);
     return {
       ...row,
@@ -135,8 +135,10 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
       profile_status: !profile ? "missing" : duplicateProfiles.has(row.prem_number) ? "duplicate_profile" :
         !nameMatches || !sexMatches ? "mismatch" : "matched",
       profile_warnings: [
-        ...(profile && !nameMatches ? ["Profile name does not match Qualified list"] : []),
-        ...(profile && !sexMatches ? ["Profile sex does not match Qualified list"] : []),
+        ...(profile && !profile.full_name ? ["Profile full name missing"] : []),
+        ...(profile && profile.full_name && !nameMatches ? ["Profile name does not match Qualified list"] : []),
+        ...(profile && !profile.gender ? ["Profile sex missing"] : []),
+        ...(profile && profile.gender && !sexMatches ? ["Profile sex does not match Qualified list"] : []),
         ...(profile && !profile.admission_number ? ["Admission Number missing in profile"] : []),
         ...(profile && !profile.date_of_birth ? ["Date of Birth missing in profile"] : [])
       ]
