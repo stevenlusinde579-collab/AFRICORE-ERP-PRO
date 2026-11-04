@@ -25,6 +25,8 @@ import {
   MdChildCare,
   MdBusiness,
   MdSupervisorAccount,
+  MdPhone,
+  MdEmail,
 } from "react-icons/md";
 
 import { supabase } from "../../services/supabase";
