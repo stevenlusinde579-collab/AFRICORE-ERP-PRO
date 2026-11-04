@@ -81,7 +81,7 @@ const parseSheet = (xml, sharedStrings) => {
         const raw = cell.getElementsByTagName("v")[0]?.textContent || "";
         value = type === "s" ? (sharedStrings[Number(raw)] ?? "") : raw;
       }
-      values[index] = decodeXml(value);
+      values[index] = String(value ?? "").trim();
     }
     return values.map((value) => String(value ?? "").trim());
   });
