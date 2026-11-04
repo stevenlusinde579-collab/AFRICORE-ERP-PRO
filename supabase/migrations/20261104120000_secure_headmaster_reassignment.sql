@@ -113,6 +113,23 @@ begin
          where p.id = v_previous.profile_id;
     end loop;
 
+    -- Also revoke legacy-only Headmaster accounts that have no profile_roles row.
+    -- Keep any other active role and its school as the user's effective profile.
+    update public.profiles p
+       set role_id = (
+               select pr.role_id from public.profile_roles pr
+                where pr.profile_id = p.id and pr.is_active is true
+                order by pr.is_primary desc, pr.id limit 1
+           ),
+           school_id = (
+               select pr.school_id from public.profile_roles pr
+                where pr.profile_id = p.id and pr.is_active is true
+                order by pr.is_primary desc, pr.id limit 1
+           )
+     where p.role_id = v_headmaster_role_id
+       and p.school_id = p_school_id
+       and p.id <> p_profile_id;
+
     -- Move all active Headmaster role rows for the selected account.
     update public.profile_roles
        set school_id = p_school_id, is_primary = true
