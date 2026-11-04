@@ -230,6 +230,23 @@ export default function NectaStudentImport() {
         .eq("school_id", school).eq("academic_year_id", year).eq("is_active", true).single();
       if (classError || !classCheck) throw new Error("Selected class is no longer valid for this school and academic year.");
 
+      const { data: verifiedSubjects, error: verifiedSubjectsError } = await supabase.from("subjects")
+        .select("id").eq("education_level", classCheck.academic_level).eq("is_active", true)
+        .in("id", subjectIds.map(Number));
+      if (verifiedSubjectsError) throw verifiedSubjectsError;
+      const verifiedIds = new Set((verifiedSubjects || []).map((item) => Number(item.id)));
+      if (verifiedIds.size !== subjectIds.length || subjectIds.some((id) => !verifiedIds.has(Number(id)))) {
+        throw new Error("One or more selected subjects are no longer active or do not belong to this class level. No students were imported.");
+      }
+
+      if (isAdvanced) {
+        const { data: currentCombination, error: currentCombinationError } = await supabase
+          .from("subject_combinations").select("id,school_id,is_active")
+          .eq("id", Number(combinationId)).eq("school_id", school).eq("is_active", true).maybeSingle();
+        if (currentCombinationError) throw currentCombinationError;
+        if (!currentCombination) throw new Error("The selected Advanced combination is no longer active for this school.");
+      }
+
       const imported = [];
       try {
         for (const row of rows) {
