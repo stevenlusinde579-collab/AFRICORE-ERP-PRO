@@ -94,7 +94,7 @@ test("keeps recorded condition text distinct from no difficulties", () => {
 
 
 test("parses multiple pasted profiles and flags repeated PREM numbers", () => {
-  const source = [profileBase, profileBase.replace("ABIGAELI LUKA SKOINE", "BELINDA DANIEL SAIDI")].join("\\n");
+  const source = [profileBase, profileBase.replace("ABIGAELI LUKA SKOINE", "BELINDA DANIEL SAIDI")].join("\n");
   const result = parseNectaStudentProfiles(source);
   assert.equal(result.profile_count, 2);
   assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
