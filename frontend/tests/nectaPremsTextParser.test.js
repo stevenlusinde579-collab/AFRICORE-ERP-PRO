@@ -43,6 +43,7 @@ Trade : **GN01-General**
 Is Repeater : **NO**
 Parenting Status : **Both Parents Alive**
 Citizenship : **Tanzanian**
+### Qualifications
 Exam/Reference Number : **PS0701012-0046**
 Exam/Reference Year : **2025**
 ### Guardian Information
