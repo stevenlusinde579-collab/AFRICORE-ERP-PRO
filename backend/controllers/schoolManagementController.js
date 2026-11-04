@@ -354,7 +354,10 @@ export const createSchoolHeadmaster = async (req, res) => {
         const fullName = String(req.body?.full_name || "").trim().replace(/\\s+/g, " ");
         const email = String(req.body?.email || "").trim().toLowerCase();
         const rawPhone = String(req.body?.phone || "").trim();
-        const phone = rawPhone ? rawPhone.replace(/[\\s().-]/g, "") : "";
+        let phone = rawPhone ? rawPhone.replace(/[\\s().-]/g, "") : "";
+        if (/^0[678]\\d{8}$/.test(phone)) phone = `+255${phone.slice(1)}`;
+        else if (/^255[678]\\d{8}$/.test(phone)) phone = `+${phone}`;
+        else if (/^[678]\\d{8}$/.test(phone)) phone = `+255${phone}`;
 
         if (!Number.isInteger(schoolId) || schoolId <= 0) {
             return res.status(400).json({ success: false, message: "Chagua shule sahihi." });
@@ -368,7 +371,7 @@ export const createSchoolHeadmaster = async (req, res) => {
         if (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
             return res.status(400).json({ success: false, message: "Email si sahihi." });
         }
-        if (phone && !/^\\+?[0-9]{10,15}$/.test(phone)) {
+        if (phone && !/^\\+255[678]\\d{8}$/.test(phone)) {
             return res.status(400).json({ success: false, message: "Namba ya simu si sahihi. Tumia mfano 0712345678 au +255712345678." });
         }
 
@@ -403,7 +406,15 @@ export const createSchoolHeadmaster = async (req, res) => {
             .eq("is_active", true)
             .limit(1);
         if (assignmentLookupError) throw assignmentLookupError;
-        if (existingAssignments?.length) {
+        const { data: legacyHeadmaster, error: legacyHeadmasterError } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("role_id", headmasterRole.id)
+            .eq("school_id", schoolId)
+            .limit(1)
+            .maybeSingle();
+        if (legacyHeadmasterError) throw legacyHeadmasterError;
+        if (existingAssignments?.length || legacyHeadmaster) {
             return res.status(409).json({ success: false, message: "Shule hii tayari ina Headmaster aliyeunganishwa. Tumia sehemu ya kubadilisha/ku-assign Headmaster aliyepo." });
         }
 
