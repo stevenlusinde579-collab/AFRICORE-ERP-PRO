@@ -130,10 +130,34 @@ begin
         raise exception 'At least one subject must be selected.';
     end if;
 
-    -- Only school managers, Super Admins, or a Class Teacher assigned
-    -- to this exact class may run the import.
+    -- Match the application's create_students permission at the database boundary.
+    if not public.is_current_user_super_admin()
+       and not exists (
+            select 1
+            from public.profile_roles pr
+            join public.role_permissions rp on rp.role_id = pr.role_id
+            join public.permissions pm on pm.id = rp.permission_id
+            where pr.profile_id = auth.uid()
+              and pr.school_id = p_school_id
+              and pr.is_active is true
+              and lower(trim(pm.permission_name)) = 'create_students'
+              and pm.is_active is true
+       ) then
+        raise exception 'You do not have permission to create students in this school.';
+    end if;
+
+    -- A Class Teacher may import only into a class assigned to that teacher.
     if not public.is_current_user_super_admin()
        and not public.is_current_user_school_manager_for_school(p_school_id)
+       and exists (
+            select 1
+            from public.profile_roles pr
+            join public.roles r on r.id = pr.role_id
+            where pr.profile_id = auth.uid()
+              and pr.school_id = p_school_id
+              and pr.is_active is true
+              and lower(trim(r.role_name)) = 'class teacher'
+       )
        and not exists (
             select 1
             from public.profile_roles pr
@@ -148,7 +172,7 @@ begin
               and pr.is_active is true
               and lower(trim(r.role_name)) = 'class teacher'
        ) then
-        raise exception 'You are not authorized to import students into this class.';
+        raise exception 'Class Teachers may import only into their assigned classes.';
     end if;
 
     select *
