@@ -6,6 +6,7 @@ import {
     createSchool,
     updateSchool,
     getHeadmasters,
+    createSchoolHeadmaster,
     assignHeadmaster
 } from "../controllers/schoolManagementController.js";
 
@@ -18,6 +19,7 @@ const router = express.Router();
 router.use(authenticateUser, requireSuperAdmin);
 
 router.get("/headmasters", getHeadmasters);
+router.post("/:id/headmasters", createSchoolHeadmaster);
 router.patch("/headmasters/:profileId/school", assignHeadmaster);
 
 router.get("/:id/overview", getSchoolOverview);
