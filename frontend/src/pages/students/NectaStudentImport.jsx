@@ -267,6 +267,8 @@ export default function NectaStudentImport() {
             exam_year: /^\d{4}$/.test(row.exam_year) ? Number(row.exam_year) : null,
             registration_type: row.registration_type || null,
             form: parsed.metadata?.FORM || null,
+            region: parsed.metadata?.REGION || null,
+            district: parsed.metadata?.DISTRICT || null,
             stream_trade: row.stream || null,
             source_school_number: parsed.metadata?.["SCHOOL NUMBER"] || null,
             source_school_name: parsed.metadata?.["SCHOOL NAME"] || null,
