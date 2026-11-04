@@ -78,7 +78,7 @@ export default function NectaStudentImport() {
     const load = async () => {
       if (!schoolId || !activeAcademicYearId) return;
       const { data, error } = await supabase.from("classes")
-        .select("id,class_name,academic_level,academic_year_id,school_id")
+        .select("id,class_name,short_name,academic_level,academic_year_id,school_id")
         .eq("school_id", Number(schoolId))
         .eq("academic_year_id", Number(activeAcademicYearId))
         .eq("is_active", true).order("class_name");
@@ -200,7 +200,7 @@ export default function NectaStudentImport() {
       return setMessage("You can only import students into a class assigned to you.");
     }
     const premsForm = normalizePremsForm(parsed.metadata?.FORM);
-    const classForm = normalizePremsForm(selectedClass.class_name);
+    const classForm = normalizePremsForm(selectedClass.class_name) || normalizePremsForm(selectedClass.short_name);
     if (!premsForm) {
       return setMessage("The Form in the NECTA workbook could not be identified. Check that the workbook contains Form I, II, III, IV, V or VI.");
     }
