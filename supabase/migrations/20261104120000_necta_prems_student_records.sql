@@ -289,7 +289,9 @@ begin
             raise exception 'A student row has an invalid sex value.';
         end if;
 
-        if nullif(v_item->>'exam_year', '') ~ '^\d{4} (v_item->>'exam_year')::integer;
+        if length(coalesce(v_item->>'exam_year', '')) = 4
+           and translate(v_item->>'exam_year', '0123456789', '') = '' then
+            v_exam_year := (v_item->>'exam_year')::integer;
         else
             v_exam_year := null;
         end if;
