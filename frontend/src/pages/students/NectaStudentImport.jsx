@@ -14,10 +14,11 @@ const normalizeGender = (value) => {
 
 const normalizePremsForm = (value) => {
   const text = String(value || "").trim().toUpperCase()
-    .replace(/^FORM\s*/, "").replace(/^FORM\s*/, "").trim();
+    .replace(/^FORM\s*/, "").trim();
+  const token = text.match(/^([1-6]|IV|VI|III|II|I|V|ONE|TWO|THREE|FOUR|FIVE|SIX)\b/)?.[1] || text;
   const forms = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6 };
-  if (/^[1-6]$/.test(text)) return Number(text);
-  return forms[text] || null;
+  if (/^[1-6]$/.test(token)) return Number(token);
+  return forms[token] || null;
 };
 
 const normalizeDate = (value) => {
@@ -170,7 +171,13 @@ export default function NectaStudentImport() {
     }
     const premsForm = normalizePremsForm(parsed.metadata?.FORM);
     const classForm = normalizePremsForm(selectedClass.class_name);
-    if (premsForm && classForm && premsForm !== classForm) {
+    if (!premsForm) {
+      return setMessage("The Form in the NECTA workbook could not be identified. Check that the workbook contains Form I, II, III, IV, V or VI.");
+    }
+    if (!classForm) {
+      return setMessage("The selected AfriCore class name does not clearly identify Form I-VI. Select a correctly configured Form class before importing.");
+    }
+    if (premsForm !== classForm) {
       return setMessage("The Form in the NECTA workbook does not match the selected AfriCore class. Choose the matching class.");
     }
     if (invalidCount) return setMessage("Correct or remove all invalid rows before importing.");
