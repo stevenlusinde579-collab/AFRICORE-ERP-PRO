@@ -28,6 +28,8 @@ declare
   v_exam_year integer;
   v_school text;
   v_school_number text;
+  v_parent_id bigint;
+  v_guardian jsonb;
 begin
   if auth.uid() is null then
     raise exception 'Authentication is required.';
@@ -143,6 +145,36 @@ begin
     if not found then
       raise exception 'NECTA profile metadata could not be linked to the imported student.';
     end if;
+
+    -- Guardian details are optional. Create a normal AfriCore parent link
+    -- only when PReMS provides a guardian name; retain all fields in JSONB too.
+    v_guardian := v_item->'guardian';
+    if jsonb_typeof(v_guardian) = 'object'
+       and nullif(trim(v_guardian->>'full_name'), '') is not null then
+      insert into public.parents (
+        school_id, full_name, relationship, phone, email, address, occupation
+      ) values (
+        p_school_id,
+        trim(v_guardian->>'full_name'),
+        nullif(trim(v_guardian->>'relationship'), ''),
+        nullif(trim(v_guardian->>'phone'), ''),
+        nullif(trim(v_guardian->>'email'), ''),
+        coalesce(nullif(trim(v_guardian->>'physical_address'), ''),
+                 nullif(trim(v_guardian->>'address'), '')),
+        nullif(trim(v_guardian->>'occupation'), '')
+      )
+      returning id into v_parent_id;
+
+      insert into public.student_parents (
+        student_id, parent_id, relationship, is_primary_contact
+      ) values (
+        v_student_id,
+        v_parent_id,
+        nullif(trim(v_guardian->>'relationship'), ''),
+        null
+      );
+    end if;
+
     v_index := v_index + 1;
   end loop;
 
