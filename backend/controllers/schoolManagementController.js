@@ -1,5 +1,5 @@
 import { supabase } from "../config/supabase.js";
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 
 const SCHOOL_COLUMNS = [
     "id",
@@ -468,7 +468,7 @@ export const createSchoolHeadmaster = async (req, res) => {
             return res.status(409).json({ success: false, message: "Shule hii tayari ina Headmaster aliyeunganishwa. Tumia sehemu ya kubadilisha/ku-assign Headmaster aliyepo." });
         }
 
-        const temporaryPassword = `AfriCore@${randomBytes(9).toString("base64url")}9!`;
+        const temporaryPassword = `AfriCore@${randomInt(100000000, 1000000000)}!`;
         const authPayload = {
             password: temporaryPassword,
             email_confirm: Boolean(email),
