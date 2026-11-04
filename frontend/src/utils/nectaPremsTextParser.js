@@ -70,10 +70,14 @@ export function parseNectaStudentProfile(text) {
   const headings = [...source.matchAll(/^\s*#{1,6}\s+(.+)$/gm)].map((m) => m[1].trim());
   const fullName = headings.find((x) => !/student profile/i.test(x)) || "";
   const guardian = section(source, "Guardian Information", "Condition");
-  const condition = section(source, "Difficulties");
+  const conditionAt = source.search(/Student's difficulties/i);
+  const conditionText = conditionAt >= 0 ? source.slice(conditionAt) : "";
   const qualifications = section(source, "Qualifications", "Guardian");
-  const difficulties = section(condition, "Student's difficulties", "Student's disabilities").trim();
-  const disabilities = section(condition, "Student's disabilities").trim();
+  const difficultyMatch = conditionText.match(/Student's difficulties\\s*:?\\s*([\\s\\S]*?)(?=Student's disabilities|$)/i);
+  const disabilityMatch = conditionText.match(/Student's disabilities\\s*:?\\s*([\\s\\S]*?)(?=^\\s*#{1,6}\\s|$)/im);
+  const cleanCondition = (value) => String(value || "").replace(/\\*\\*/g, "").replace(/^\\s*[:：-]\\s*/, "").trim();
+  const difficulties = cleanCondition(difficultyMatch?.[1]);
+  const disabilities = cleanCondition(disabilityMatch?.[1]);
   const noDifficulties = /no difficulties/i.test(difficulties);
   const noDisabilities = /no disabilities/i.test(disabilities);
   const prems = source.match(/PREM\s*#?\s*:\s*([0-9]+)/i);
