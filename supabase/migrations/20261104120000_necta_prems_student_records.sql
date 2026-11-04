@@ -9,6 +9,8 @@ create table if not exists public.necta_student_records (
     exam_year integer,
     registration_type text,
     form text,
+    region text,
+    district text,
     stream_trade text,
     field text,
     trade text,
