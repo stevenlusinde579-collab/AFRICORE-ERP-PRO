@@ -170,7 +170,7 @@ export default function NectaStudentImport() {
     if (!selectedClass) return setMessage("Choose the AfriCore class for these students.");
     const sourceSchoolNumber = normalizeSchoolNumber(parsed.metadata?.["SCHOOL NUMBER"]);
     const currentSchoolNumber = normalizeSchoolNumber(school?.registration_number);
-    const currentRegistrationLooksLikeNectaNumber = /^S\\d+$/i.test(String(school?.registration_number || "").trim());
+    const currentRegistrationLooksLikeNectaNumber = /^S\d+$/i.test(String(school?.registration_number || "").trim());
     if (!sourceSchoolNumber) {
       return setMessage("The NECTA workbook is missing its SCHOOL NUMBER metadata. Use the original PReMS template and confirm the source school.");
     }
