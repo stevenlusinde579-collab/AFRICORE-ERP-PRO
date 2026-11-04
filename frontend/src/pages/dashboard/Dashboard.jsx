@@ -1532,7 +1532,7 @@ function SuperAdminDashboard({
                   </div>
                   <button
                     type="button"
-                    onClick={() => navigate("/school-management")}
+                    onClick={() => navigate(`/school-management/${school.id}`)}
                     className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 transition hover:bg-blue-100"
                   >
                     Simamia shule
