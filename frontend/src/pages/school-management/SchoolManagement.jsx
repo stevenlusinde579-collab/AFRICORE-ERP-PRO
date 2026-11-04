@@ -14,6 +14,7 @@ import api from "../../services/api";
 
 const EMPTY_FORM = {
     school_name: "",
+    academic_year: String(new Date().getFullYear() + 1),
     registration_number: "",
     address: "",
     phone: "",
@@ -134,7 +135,8 @@ export default function SchoolManagement() {
             registration_number: school.registration_number || "",
             address: school.address || "",
             phone: school.phone || "",
-            email: school.email || ""
+            email: school.email || "",
+            academic_year: String(new Date().getFullYear() + 1)
         });
         setError("");
         setNotice("");
@@ -166,6 +168,7 @@ export default function SchoolManagement() {
 
         const payload = {
             school_name: form.school_name.trim(),
+            academic_year: form.academic_year.trim(),
             registration_number: form.registration_number.trim(),
             address: form.address.trim(),
             phone: form.phone.trim(),
@@ -447,6 +450,13 @@ export default function SchoolManagement() {
                                     <label htmlFor="school_name" className="text-sm font-semibold text-slate-700">School Name <span className="text-red-600">*</span></label>
                                     <input id="school_name" name="school_name" value={form.school_name} onChange={updateField} required maxLength={200} autoFocus className={inputClass} placeholder="Mfano: AfriCore Secondary School" />
                                 </div>
+                                {!editingSchool && (
+                                    <div>
+                                        <label htmlFor="academic_year" className="text-sm font-semibold text-slate-700">Academic Year <span className="text-red-600">*</span></label>
+                                        <input id="academic_year" name="academic_year" type="number" inputMode="numeric" min="2000" max="2100" step="1" value={form.academic_year} onChange={updateField} required className={inputClass} placeholder="Mfano: 2027" />
+                                        <p className="mt-1 text-xs text-slate-500">Mwaka huu utaundwa na kuwekwa Active moja kwa moja kwa shule mpya.</p>
+                                    </div>
+                                )}
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div>
                                         <label htmlFor="registration_number" className="text-sm font-semibold text-slate-700">Registration Number / Code</label>
