@@ -5,6 +5,8 @@ import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 import { parseNectaWorkbook } from "../../utils/nectaPremsWorkbook";
 
+const normalizeSchoolNumber = (value) => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
 const normalizeGender = (value) => {
   const v = String(value || "").trim().toLowerCase();
   if (["m", "male", "boy"].includes(v)) return "Male";
@@ -51,7 +53,7 @@ const normalizeDate = (value) => {
 export default function NectaStudentImport() {
   const navigate = useNavigate();
   const fileRef = useRef(null);
-  const { schoolId, activeAcademicYearId, activeAcademicYear, academicYearLoading } = useSchool();
+  const { school, schoolId, activeAcademicYearId, activeAcademicYear, academicYearLoading } = useSchool();
   const { selectedRoleName } = useRole();
   const classTeacherSelected = String(selectedRoleName || "").trim().toLowerCase() === "class teacher";
   const [parsed, setParsed] = useState(null);
@@ -166,6 +168,11 @@ export default function NectaStudentImport() {
     if (!schoolId || !activeAcademicYearId) return setMessage("School or active academic year is not ready.");
     if (!parsed || !rows.length) return setMessage("Choose a valid NECTA workbook first.");
     if (!selectedClass) return setMessage("Choose the AfriCore class for these students.");
+    const sourceSchoolNumber = normalizeSchoolNumber(parsed.metadata?.["SCHOOL NUMBER"]);
+    const currentSchoolNumber = normalizeSchoolNumber(school?.registration_number);
+    if (sourceSchoolNumber && currentSchoolNumber && sourceSchoolNumber !== currentSchoolNumber) {
+      return setMessage("The NECTA workbook School Number does not match this AfriCore school's registration number. Import stopped to protect school data.");
+    }
     if (classTeacherSelected && !assignedClassIds.includes(Number(selectedClass.id))) {
       return setMessage("You can only import students into a class assigned to you.");
     }
@@ -326,6 +333,7 @@ export default function NectaStudentImport() {
       {fileName && <p className="text-sm text-gray-600">Selected: {fileName}</p>}
       {parsed && <div className="text-sm text-gray-700">
         <p><b>NECTA source:</b> {parsed.metadata?.["SCHOOL NAME"] || "Not specified"} {parsed.metadata?.["SCHOOL NUMBER"] ? `(${parsed.metadata["SCHOOL NUMBER"]})` : ""}</p>
+        <p><b>AfriCore destination:</b> {school?.school_name || "Current school"} {school?.registration_number ? `(${school.registration_number})` : ""}</p>
         <p><b>Form:</b> {parsed.metadata?.FORM || "Not specified"} · <b>Rows:</b> {rows.length} · <b>Invalid rows:</b> {invalidCount}</p>
       </div>}
       <div className="grid md:grid-cols-2 gap-4">
