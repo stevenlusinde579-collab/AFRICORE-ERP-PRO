@@ -48,7 +48,11 @@ const normalizeDate = (value) => {
     return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
   }
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 export default function NectaStudentImport() {
