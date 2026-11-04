@@ -11,9 +11,22 @@ const normalizeGender = (value) => {
   return "";
 };
 
+const normalizePremsForm = (value) => {
+  const text = String(value || "").trim().toUpperCase()
+    .replace(/^FORM\s*/, "").replace(/^FORM\s*/, "").trim();
+  const forms = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6 };
+  if (/^[1-6]$/.test(text)) return Number(text);
+  return forms[text] || null;
+};
+
 const normalizeDate = (value) => {
   if (!value) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return value;
+  }
   const localDate = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (localDate) {
     const day = Number(localDate[1]);
@@ -114,6 +127,11 @@ export default function NectaStudentImport() {
     if (!schoolId || !activeAcademicYearId) return setMessage("School or active academic year is not ready.");
     if (!parsed || !rows.length) return setMessage("Choose a valid NECTA workbook first.");
     if (!selectedClass) return setMessage("Choose the AfriCore class for these students.");
+    const premsForm = normalizePremsForm(parsed.metadata?.FORM);
+    const classForm = normalizePremsForm(selectedClass.class_name);
+    if (premsForm && classForm && premsForm !== classForm) {
+      return setMessage("The Form in the NECTA workbook does not match the selected AfriCore class. Choose the matching class.");
+    }
     if (invalidCount) return setMessage("Correct or remove all invalid rows before importing.");
     if (!subjectIds.length) return setMessage("Select at least one subject, as required by AfriCore.");
     if (isAdvanced && !combinationId) return setMessage("Choose the active Advanced combination.");
