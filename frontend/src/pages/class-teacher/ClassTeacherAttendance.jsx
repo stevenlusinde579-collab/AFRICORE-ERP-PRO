@@ -46,6 +46,22 @@ const STATUS_OPTIONS = [
 ];
 
 
+const getTanzaniaCalendarDate = () => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Dar_es_Salaam",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).formatToParts(new Date());
+
+    const values = Object.fromEntries(
+        parts.map(part => [part.type, part.value])
+    );
+
+    return `${values.year}-${values.month}-${values.day}`;
+};
+
+
 function ClassTeacherAttendance() {
 
     const navigate = useNavigate();
@@ -80,13 +96,15 @@ function ClassTeacherAttendance() {
     ] = useState({});
 
 
+    const [todayDate, setTodayDate] = useState(
+        getTanzaniaCalendarDate
+    );
+
     const [
         attendanceDate,
         setAttendanceDate
     ] = useState(
-        new Date()
-            .toISOString()
-            .slice(0, 10)
+        getTanzaniaCalendarDate
     );
 
 
@@ -130,6 +148,25 @@ function ClassTeacherAttendance() {
         teacherId,
         setTeacherId
     ] = useState(null);
+
+
+    useEffect(() => {
+        // Keep the attendance screen aligned with Tanzania's calendar day,
+        // even when a teacher leaves the page open across midnight.
+        let lastSeenDate = getTanzaniaCalendarDate();
+
+        const calendarDateTimer = setInterval(() => {
+            const currentDate = getTanzaniaCalendarDate();
+
+            if (currentDate !== lastSeenDate) {
+                lastSeenDate = currentDate;
+                setTodayDate(currentDate);
+                setAttendanceDate(currentDate);
+            }
+        }, 30000);
+
+        return () => clearInterval(calendarDateTimer);
+    }, []);
 
 
     useEffect(() => {
@@ -631,6 +668,12 @@ function ClassTeacherAttendance() {
                 );
             }
 
+            if (attendanceDate > getTanzaniaCalendarDate()) {
+                throw new Error(
+                    "Attendance cannot be recorded for a future calendar date."
+                );
+            }
+
 
             if (!students.length) {
 
@@ -987,6 +1030,7 @@ function ClassTeacherAttendance() {
                             <input
                                 type="date"
                                 value={attendanceDate}
+                                max={todayDate}
                                 onChange={event =>
                                     setAttendanceDate(
                                         event.target.value
