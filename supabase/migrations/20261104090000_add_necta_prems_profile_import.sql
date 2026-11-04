@@ -48,7 +48,7 @@ begin
   if exists (
     select 1
     from jsonb_array_elements(p_profile_students) as rows(item)
-    group by regexp_replace(trim(coalesce(item->>'prem_number', '')), '\s', '', 'g')
+    group by regexp_replace(trim(coalesce(item->>'prem_number', '')), '[[:space:]]', '', 'g')
     having count(*) > 1
   ) then
     raise exception 'The pasted profiles contain duplicate PREM Numbers.';
@@ -56,7 +56,7 @@ begin
 
   for v_item in select value from jsonb_array_elements(p_profile_students)
   loop
-    v_prem := regexp_replace(trim(coalesce(v_item->>'prem_number', '')), '\s', '', 'g');
+    v_prem := regexp_replace(trim(coalesce(v_item->>'prem_number', '')), '[[:space:]]', '', 'g');
     if v_prem !~ '^[0-9]{8,}$' then
       raise exception 'A profile has a missing or invalid PREM Number.';
     end if;
@@ -109,7 +109,7 @@ begin
   for v_item in select value from jsonb_array_elements(p_profile_students)
   loop
     v_student_id := (v_result->'student_ids'->>v_index)::bigint;
-    v_prem := regexp_replace(trim(v_item->>'prem_number'), '\s', '', 'g');
+    v_prem := regexp_replace(trim(v_item->>'prem_number'), '[[:space:]]', '', 'g');
     v_school := nullif(trim(v_item->>'school'), '');
     v_school_number := null;
     if v_school ~* '^S[0-9]+' then
