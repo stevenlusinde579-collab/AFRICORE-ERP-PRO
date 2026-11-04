@@ -14,6 +14,15 @@ const normalizeGender = (value) => {
 const normalizeDate = (value) => {
   if (!value) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const localDate = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (localDate) {
+    const day = Number(localDate[1]);
+    const month = Number(localDate[2]);
+    const year = Number(localDate[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return date.toISOString().slice(0, 10);
+  }
   if (/^\d+(\.\d+)?$/.test(value)) {
     const date = new Date(Date.UTC(1899, 11, 30) + Number(value) * 86400000);
     return date.toISOString().slice(0, 10);
