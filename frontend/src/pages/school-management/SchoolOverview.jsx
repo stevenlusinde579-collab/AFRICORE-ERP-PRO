@@ -103,13 +103,15 @@ export default function SchoolOverview() {
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            onClick={() => navigate(`/school-management/headmasters/add?school_id=${encodeURIComponent(id)}`)}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
-                        >
-                            + Add Headmaster
-                        </button>
+                        {school?.is_active === true && (
+                            <button
+                                type="button"
+                                onClick={() => navigate(`/school-management/headmasters/add?school_id=${encodeURIComponent(id)}`)}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
+                            >
+                                + Add Headmaster
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={loadOverview}
