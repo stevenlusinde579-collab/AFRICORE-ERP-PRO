@@ -38,8 +38,10 @@ const normalizeDate = (value) => {
     return date.toISOString().slice(0, 10);
   }
   if (/^\d+(\.\d+)?$/.test(value)) {
-    const date = new Date(Date.UTC(1899, 11, 30) + Number(value) * 86400000);
-    return date.toISOString().slice(0, 10);
+    const serial = Number(value);
+    if (!Number.isFinite(serial) || serial < 1 || serial > 100000) return null;
+    const date = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
   }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
