@@ -273,62 +273,46 @@ export default function NectaStudentImport() {
         if (!currentCombination) throw new Error("The selected Advanced combination is no longer active for this school.");
       }
 
-      const imported = [];
-      try {
-        for (const row of rows) {
-          const payload = {
-            school_id: currentSchoolId,
-            academic_year_id: year,
-            current_class_id: Number(classId),
-            admission_number: row.admission_number.trim(),
-            first_name: row.first_name.trim(),
-            middle_name: row.middle_name.trim() || null,
-            last_name: row.last_name.trim(),
-            gender: normalizeGender(row.gender),
-            date_of_birth: normalizeDate(row.date_of_birth),
-            admission_date: null,
-            student_status: "Active",
-            status: "Active",
-            stream: row.stream || null,
-            combination_id: isAdvanced ? Number(combinationId) : null,
-          };
-          const { data: saved, error: saveError } = await supabase.from("students").insert(payload).select("id").single();
-          if (saveError) {
-            if (saveError.code === "23505") throw new Error("An admission number is already registered in AfriCore. No imported students were retained.");
-            throw new Error(`Row ${row.source_row}: ${saveError.message}`);
-          }
-          imported.push(saved.id);
-          const assignments = subjectIds.map((subjectId) => ({
-            student_id: saved.id, subject_id: Number(subjectId),
-            class_id: Number(classId), academic_year_id: year,
-          }));
-          const { error: subjectError } = await supabase.from("student_subjects").insert(assignments);
-          if (subjectError) throw new Error(`Row ${row.source_row}: subject assignment failed: ${subjectError.message}`);
-          const metadata = {
-            student_id: saved.id, school_id: currentSchoolId,
-            exam_number: row.exam_number || null,
-            exam_year: /^\d{4}$/.test(row.exam_year) ? Number(row.exam_year) : null,
-            registration_type: row.registration_type || null,
-            form: parsed.metadata?.FORM || null,
-            region: parsed.metadata?.REGION || null,
-            district: parsed.metadata?.DISTRICT || null,
-            stream_trade: row.stream || null,
-            source_school_number: parsed.metadata?.["SCHOOL NUMBER"] || null,
-            source_school_name: parsed.metadata?.["SCHOOL NAME"] || null,
-            import_source: "NECTA_PReMS",
-          };
-          const { error: metaError } = await supabase.from("necta_student_records").insert(metadata);
-          if (metaError) throw new Error(`Row ${row.source_row}: NECTA details could not be saved: ${metaError.message}`);
+      const importRows = rows.map((row) => ({
+        admission_number: row.admission_number.trim(),
+        first_name: row.first_name.trim(),
+        middle_name: row.middle_name.trim() || null,
+        last_name: row.last_name.trim(),
+        gender: normalizeGender(row.gender),
+        date_of_birth: normalizeDate(row.date_of_birth),
+        stream: row.stream || null,
+        exam_number: row.exam_number || null,
+        exam_year: row.exam_year || null,
+        registration_type: row.registration_type || null,
+        form: parsed.metadata?.FORM || null,
+        region: parsed.metadata?.REGION || null,
+        district: parsed.metadata?.DISTRICT || null,
+        source_school_number: parsed.metadata?.["SCHOOL NUMBER"] || null,
+        source_school_name: parsed.metadata?.["SCHOOL NAME"] || null,
+      }));
+
+      const { data: importResult, error: importError } = await supabase.rpc(
+        "import_necta_prems_students",
+        {
+          p_school_id: currentSchoolId,
+          p_academic_year_id: year,
+          p_class_id: Number(classId),
+          p_combination_id: isAdvanced ? Number(combinationId) : null,
+          p_subject_ids: subjectIds.map(Number),
+          p_students: importRows,
         }
-      } catch (error) {
-        if (imported.length) {
-          const { error: rollbackError } = await supabase.from("students").delete()
-            .eq("school_id", currentSchoolId).in("id", imported);
-          if (rollbackError) throw new Error(`${error.message} Rollback also failed; contact the system administrator immediately.`);
+      );
+      if (importError) {
+        if (/function .*import_necta_prems_students.* does not exist|schema cache/i.test(importError.message || "")) {
+          throw new Error("NECTA database migration is not installed yet. No students were imported.");
         }
-        throw error;
+        throw new Error(importError.message || "The NECTA import transaction failed. No students were imported.");
       }
-      setMessage(`Success: ${imported.length} student(s) imported and assigned to the selected class and subjects.`);
+      const importedCount = Number(importResult?.imported_count || 0);
+      if (importedCount !== rows.length) {
+        throw new Error("The database did not confirm every imported student. Please ask the administrator to verify the import.");
+      }
+      setMessage(`Success: ${importedCount} student(s) imported and assigned to the selected class and subjects.`);
       setParsed(null); setFileName("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (error) { setMessage(error.message || "Import failed."); }
