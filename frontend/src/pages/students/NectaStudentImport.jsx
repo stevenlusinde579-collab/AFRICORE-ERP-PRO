@@ -40,6 +40,7 @@ const normalizeDate = (value) => {
     if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
     return date.toISOString().slice(0, 10);
   }
+  if (/^\d{4}$/.test(value)) return null;
   if (/^\d+(\.\d+)?$/.test(value)) {
     const serial = Number(value);
     if (!Number.isFinite(serial) || serial < 1 || serial > 100000) return null;
