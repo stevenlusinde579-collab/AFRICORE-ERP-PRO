@@ -68,7 +68,16 @@ export function parseNectaStudentProfile(text) {
   const source = String(text || "").replace(/\r/g, "");
   if (!source.trim()) throw new Error("Paste the NECTA Student Profile text first.");
   const headings = [...source.matchAll(/^\s*#{1,6}\s+(.+)$/gm)].map((m) => m[1].trim());
-  const fullName = headings.find((x) => !/student profile/i.test(x)) || "";
+  const sectionHeadings = /^(student profile|details|qualifications|guardian information|condition|difficulties|student's difficulties|student's disabilities)$/i;
+  let fullName = headings.find((x) => !sectionHeadings.test(x)) || "";
+  if (!fullName) {
+    const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const titleIndex = lines.findIndex((line) => /^student profile$/i.test(line.replace(/^#+\s*/, "")));
+    const candidate = titleIndex >= 0
+      ? lines.slice(titleIndex + 1).find((line) => !line.startsWith("- [") && !line.includes(":") && !sectionHeadings.test(line.replace(/^#+\s*/, "")))
+      : "";
+    fullName = candidate ? candidate.replace(/^#+\s*/, "").trim() : "";
+  }
   const guardian = section(source, "Guardian Information", "Condition");
   const conditionAt = source.search(/Student's difficulties/i);
   const conditionText = conditionAt >= 0 ? source.slice(conditionAt) : "";
@@ -80,7 +89,7 @@ export function parseNectaStudentProfile(text) {
   const disabilities = cleanCondition(disabilityMatch?.[1]);
   const noDifficulties = /no difficulties/i.test(difficulties);
   const noDisabilities = /no disabilities/i.test(disabilities);
-  const prems = source.match(/PREM\s*#?\s*:\s*([0-9]+)/i);
+  const prems = source.match(/PREM\s*#?\s*:?\s*([0-9]{8,})/i);
   return {
     prem_number: prems?.[1] || field(source, "PREM#"),
     full_name: fullName,
@@ -168,7 +177,7 @@ function normalizeProfileSex(value) {
 export function parseNectaStudentProfiles(text) {
   const source = String(text || "").trim();
   if (!source) throw new Error("Paste at least one PReMS Student Profile.");
-  const starts = [...source.matchAll(/^\s*#\s*Student Profile\s*$/gim)].map((match) => match.index);
+  const starts = [...source.matchAll(/^\s*(?:#{1,6}\s*)?Student Profile\s*$/gim)].map((match) => match.index);
   const chunks = starts.length > 1
     ? starts.map((start, index) => source.slice(start, starts[index + 1] ?? source.length).trim()).filter(Boolean)
     : [source];
