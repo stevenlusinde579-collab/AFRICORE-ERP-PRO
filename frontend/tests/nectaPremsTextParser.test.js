@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseNectaQualifiedList, parseNectaStudentProfile } from "../src/utils/nectaPremsTextParser.js";
+import { parseNectaQualifiedList, parseNectaStudentProfile, parseNectaStudentProfiles } from "../src/utils/nectaPremsTextParser.js";
 
 test("parses a copied PReMS Qualified markdown table", () => {
   const source = `| Prem Number | Cert. Entry Number | Full Name | Sex | Status | Actions |
@@ -90,4 +90,12 @@ test("keeps recorded condition text distinct from no difficulties", () => {
   assert.equal(result.condition.difficulties_status, "recorded");
   assert.equal(result.condition.disabilities_status, "recorded");
   assert.match(result.condition.difficulties, /hearing aid/i);
+});
+
+
+test("parses multiple pasted profiles and flags repeated PREM numbers", () => {
+  const source = [profileBase, profileBase.replace("ABIGAELI LUKA SKOINE", "BELINDA DANIEL SAIDI")].join("\\n");
+  const result = parseNectaStudentProfiles(source);
+  assert.equal(result.profile_count, 2);
+  assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
 });
