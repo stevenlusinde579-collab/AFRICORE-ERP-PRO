@@ -13,8 +13,8 @@ const normalizeGender = (value) => {
 
 const normalizeDate = (value) => {
   if (!value) return null;
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return value;
-  if (/^\\d+(\\.\\d+)?$/.test(value)) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (/^\d+(\.\d+)?$/.test(value)) {
     const date = new Date(Date.UTC(1899, 11, 30) + Number(value) * 86400000);
     return date.toISOString().slice(0, 10);
   }
@@ -167,7 +167,7 @@ export default function NectaStudentImport() {
           const metadata = {
             student_id: saved.id, school_id: school,
             exam_number: row.exam_number || null,
-            exam_year: /^\\d{4}$/.test(row.exam_year) ? Number(row.exam_year) : null,
+            exam_year: /^\d{4}$/.test(row.exam_year) ? Number(row.exam_year) : null,
             registration_type: row.registration_type || null,
             form: parsed.metadata?.FORM || null,
             stream_trade: row.stream || null,
