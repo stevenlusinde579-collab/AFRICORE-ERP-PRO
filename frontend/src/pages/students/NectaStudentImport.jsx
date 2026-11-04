@@ -196,6 +196,12 @@ export default function NectaStudentImport() {
       return setMessage("Import stopped: the Excel workbook contains repeated admission numbers. Correct the file before importing.");
     }
     try {
+      const { error: metadataTableError } = await supabase
+        .from("necta_student_records").select("id").limit(1);
+      if (metadataTableError) {
+        throw new Error("NECTA import storage is not ready. Ask the system administrator to apply the NECTA database migration before importing. No student records have been changed.");
+      }
+
       const existingSet = new Set();
       let offset = 0;
       while (true) {
