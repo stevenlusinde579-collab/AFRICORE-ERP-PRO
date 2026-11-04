@@ -200,7 +200,7 @@ export default function NectaStudentImport() {
       let offset = 0;
       while (true) {
         const { data: existing, error: duplicateError } = await supabase.from("students")
-          .select("admission_number").eq("school_id", school).eq("academic_year_id", year)
+          .select("admission_number").eq("school_id", school)
           .order("id", { ascending: true }).range(offset, offset + 999);
         if (duplicateError) throw duplicateError;
         for (const item of existing || []) {
@@ -210,7 +210,7 @@ export default function NectaStudentImport() {
         offset += 1000;
       }
       const duplicates = admissionNumbers.filter((x) => existingSet.has(x.trim().toLowerCase()));
-      if (duplicates.length) throw new Error(`Import stopped: ${duplicates.length} admission number(s) already exist in this school and academic year. No students were imported.`);
+      if (duplicates.length) throw new Error(`Import stopped: ${duplicates.length} admission number(s) already exist in this school. No students were imported.`);
 
       const { data: classCheck, error: classError } = await supabase.from("classes")
         .select("id,school_id,academic_year_id,academic_level").eq("id", Number(classId))
@@ -237,7 +237,10 @@ export default function NectaStudentImport() {
             combination_id: isAdvanced ? Number(combinationId) : null,
           };
           const { data: saved, error: saveError } = await supabase.from("students").insert(payload).select("id").single();
-          if (saveError) throw new Error(`Row ${row.source_row}: ${saveError.message}`);
+          if (saveError) {
+            if (saveError.code === "23505") throw new Error("An admission number is already registered in AfriCore. No imported students were retained.");
+            throw new Error(`Row ${row.source_row}: ${saveError.message}`);
+          }
           imported.push(saved.id);
           const assignments = subjectIds.map((subjectId) => ({
             student_id: saved.id, subject_id: Number(subjectId),
