@@ -201,7 +201,7 @@ export default function NectaStudentImport() {
       while (true) {
         const { data: existing, error: duplicateError } = await supabase.from("students")
           .select("admission_number").eq("school_id", school).eq("academic_year_id", year)
-          .range(offset, offset + 999);
+          .order("id", { ascending: true }).range(offset, offset + 999);
         if (duplicateError) throw duplicateError;
         for (const item of existing || []) {
           if (item.admission_number) existingSet.add(String(item.admission_number).trim().toLowerCase());
