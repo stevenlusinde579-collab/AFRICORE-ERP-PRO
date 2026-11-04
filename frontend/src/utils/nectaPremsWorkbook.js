@@ -170,6 +170,9 @@ export async function parseNectaWorkbook(file) {
     }));
 
   if (!students.length) throw new Error("No student rows were found below the template headers.");
+  if (students.length > 500) {
+    throw new Error("This importer accepts up to 500 students per workbook. Split the file into smaller batches and try again.");
+  }
 
   const metadata = {};
   for (const row of rows.slice(0, headerIndex)) {
