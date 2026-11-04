@@ -180,7 +180,7 @@ export async function parseNectaWorkbook(file) {
   const metadata = {};
   for (const row of rows.slice(0, headerIndex)) {
     const text = row.filter(Boolean).join(" ").trim();
-    const match = text.match(/^(REGION|DISTRICT|SCHOOL NUMBER|SCHOOL NAME|FORM)\s*[:=]\s*(.*)$/i);
+    const match = text.match(/^(REGION|DISTRICT|SCHOOL NUMBER|SCHOOL NAME|FORM)(?:\s*[:=]\s*|\s+)(.*)$/i);
     if (match) metadata[match[1].toUpperCase()] = match[2].trim();
   }
 
