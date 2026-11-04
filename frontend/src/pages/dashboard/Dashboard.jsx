@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -25,9 +25,12 @@ import {
   MdChildCare,
   MdBusiness,
   MdSupervisorAccount,
+  MdPhone,
+  MdEmail,
 } from "react-icons/md";
 
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 import { useRole } from "../../context/RoleContext";
 import { useSchool } from "../../context/SchoolContext";
 
@@ -269,6 +272,10 @@ function Dashboard() {
   const [recentStudents, setRecentStudents] =
     useState([]);
 
+  const [managedSchools, setManagedSchools] = useState([]);
+  const [schoolListLoading, setSchoolListLoading] = useState(false);
+  const [schoolListError, setSchoolListError] = useState("");
+
 
   /* =======================================================
      NORMALIZE ALL ACTIVE ROLES
@@ -479,6 +486,39 @@ function Dashboard() {
   }, []);
 
 
+
+  const loadSuperAdminSchools = useCallback(async () => {
+    setSchoolListLoading(true);
+    setSchoolListError("");
+
+    try {
+      const response = await api.get("/schools");
+      const rows = response?.data?.schools;
+
+      if (!Array.isArray(rows)) {
+        throw new Error("Backend haikurudisha orodha sahihi ya shule.");
+      }
+
+      setManagedSchools(rows);
+      const activeCount = rows.filter((school) => school.is_active === true).length;
+      setStats((current) => ({
+        ...current,
+        totalSchools: rows.length,
+        activeSchools: activeCount,
+        inactiveSchools: rows.length - activeCount,
+      }));
+    } catch (error) {
+      console.error("Super Admin Schools Dashboard Error:", error);
+      setSchoolListError(
+        error?.response?.data?.message ||
+        error?.message ||
+        "Imeshindikana kupakia orodha ya shule. Tafadhali jaribu tena."
+      );
+    } finally {
+      setSchoolListLoading(false);
+    }
+  }, []);
+
   /* =======================================================
      LOAD SUPER ADMIN DASHBOARD DATA
   ======================================================= */
@@ -648,7 +688,7 @@ function Dashboard() {
       );
 
     if (dashboardType === "super_admin") {
-      loadDashboardData();
+      loadSuperAdminSchools();
     } else if (
       dashboardType === "headmaster" &&
       schoolId
@@ -663,6 +703,7 @@ function Dashboard() {
     selectedRoleName,
     currentRoleName,
     schoolId,
+    loadSuperAdminSchools,
   ]);
 
 
@@ -829,11 +870,11 @@ function Dashboard() {
 
       <SuperAdminDashboard
         navigate={navigate}
-        stats={stats}
-        recentStudents={recentStudents}
+        schools={managedSchools}
+        loading={schoolListLoading}
+        error={schoolListError}
+        onRefresh={loadSuperAdminSchools}
         primaryRole={primaryRole}
-        activeRoles={activeRoles}
-        currentUser={currentUser}
       />
 
     );
@@ -1240,428 +1281,271 @@ function DashboardCard({
 
 function SuperAdminDashboard({
   navigate,
-  stats,
-  recentStudents,
+  schools = [],
+  loading,
+  error,
+  onRefresh,
   primaryRole,
-  activeRoles,
-  schoolId = null,
-  scopeToSchool = false,
-  dashboardTitle = "AfriCore ERP PRO Dashboard",
-  welcomeMessage = "{welcomeMessage}",
 }) {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const cards = [
+  const activeCount = schools.filter((school) => school.is_active === true).length;
+  const inactiveCount = schools.length - activeCount;
+  const normalizedSearch = search.trim().toLowerCase();
 
-    ...(!scopeToSchool ? [{
-      title: "Schools I Manage",
-      value: stats.totalSchools,
-      description: `${stats.activeSchools} Active • ${stats.inactiveSchools} Inactive`,
+  const visibleSchools = schools.filter((school) => {
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" && school.is_active === true) ||
+      (statusFilter === "inactive" && school.is_active !== true);
+    const matchesSearch =
+      !normalizedSearch ||
+      [
+        school.school_name,
+        school.registration_number,
+        school.address,
+        school.phone,
+        school.email,
+      ].some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
+
+    return matchesStatus && matchesSearch;
+  });
+
+  const statCards = [
+    {
+      label: "Shule zote",
+      value: schools.length,
+      filter: "all",
+      accent: "from-blue-600 to-indigo-600",
       icon: <MdBusiness />,
-      color: "bg-blue-700",
-    }] : []),
-
-    {
-      title: "Total Students",
-      value: stats.students,
-      icon: <MdPeople />,
-      color: "bg-blue-600",
+      note: "Shule zilizo chini ya usimamizi wako",
     },
-
     {
-      title: "Teaching Staff",
-      value: stats.teachingStaff,
+      label: "Shule active",
+      value: activeCount,
+      filter: "active",
+      accent: "from-emerald-500 to-teal-600",
       icon: <MdSchool />,
-      color: "bg-green-600",
+      note: "Zinazoendelea kutumia mfumo",
     },
-
     {
-      title: "Non-Staff",
-      value: stats.nonStaff,
-      icon: <MdWork />,
-      color: "bg-orange-600",
+      label: "Shule inactive",
+      value: inactiveCount,
+      filter: "inactive",
+      accent: "from-rose-500 to-orange-500",
+      icon: <MdSecurity />,
+      note: "Zisizotumika kwa sasa",
     },
-
-    {
-      title: "Total Staff & Non-Staff",
-      value: stats.totalStaff,
-      icon: <MdGroups />,
-      color: "bg-cyan-600",
-    },
-
-    {
-      title: "Total Classes",
-      value: stats.classes,
-      icon: <MdClass />,
-      color: "bg-purple-600",
-    },
-
-    {
-      title: "School Balance",
-      value: `TZS ${new Intl.NumberFormat("en-TZ", {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(stats.cashBalance || 0)}`,
-      icon: <MdAccountBalance />,
-      color: "bg-yellow-600",
-    },
-
-    {
-      title: "Pending Results",
-      value: "0",
-      icon: <MdAssignment />,
-      color: "bg-red-600",
-    },
-
-    {
-      title: "AI Analysis",
-      value: "Ready",
-      icon: <MdPsychology />,
-      color: "bg-indigo-600",
-    },
-
   ];
 
-
   return (
-
-    <div>
-
-      <div className="mb-8">
-
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-
-          <div>
-
-            <h1 className="text-3xl font-bold text-gray-800">
-              {dashboardTitle}
+    <div className="min-h-[70vh] space-y-7">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-800 p-6 text-white shadow-xl sm:p-9">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border-[32px] border-white/5" />
+        <div className="pointer-events-none absolute -bottom-28 right-1/4 h-64 w-64 rounded-full bg-blue-400/10 blur-3xl" />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-blue-100">
+              <MdSecurity className="text-base" />
+              SUPER ADMIN • SYSTEM OVERVIEW
+            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Schools Management
             </h1>
-
-            <p className="text-gray-600 mt-2">
-              {welcomeMessage}
+            <p className="mt-3 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">
+              Karibu {primaryRole?.role_name || "Super Admin"}. Simamia shule zote
+              zilizosajiliwa, fuatilia hali yake na fungua taarifa za usimamizi
+              sehemu moja.
             </p>
-
           </div>
-
-          <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-sm font-semibold">
-
-            {primaryRole?.role_name || "Super Admin"}
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      {/* STAFF SUMMARY */}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-
-        <div className="bg-gradient-to-r from-green-600 to-green-500 text-white rounded-2xl shadow-lg p-6">
-
-          <div className="flex items-center justify-between">
-
-            <div>
-
-              <p className="text-green-100 text-sm font-medium">
-                Teaching Staff
-              </p>
-
-              <h2 className="text-4xl font-bold mt-2">
-                {stats.teachingStaff}
-              </h2>
-
-              <p className="text-green-100 text-sm mt-2">
-                Teachers / Teaching Personnel
-              </p>
-
-            </div>
-
-            <div className="bg-white/20 p-4 rounded-2xl text-4xl">
-              <MdSchool />
-            </div>
-
-          </div>
-
-        </div>
-
-
-        <div className="bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-2xl shadow-lg p-6">
-
-          <div className="flex items-center justify-between">
-
-            <div>
-
-              <p className="text-orange-100 text-sm font-medium">
-                Non-Staff
-              </p>
-
-              <h2 className="text-4xl font-bold mt-2">
-                {stats.nonStaff}
-              </h2>
-
-              <p className="text-orange-100 text-sm mt-2">
-                Non-Teaching Personnel
-              </p>
-
-            </div>
-
-            <div className="bg-white/20 p-4 rounded-2xl text-4xl">
-              <MdWork />
-            </div>
-
-          </div>
-
-        </div>
-
-
-        <div className="bg-gradient-to-r from-cyan-600 to-cyan-500 text-white rounded-2xl shadow-lg p-6">
-
-          <div className="flex items-center justify-between">
-
-            <div>
-
-              <p className="text-cyan-100 text-sm font-medium">
-                Total Staff & Non-Staff
-              </p>
-
-              <h2 className="text-4xl font-bold mt-2">
-                {stats.totalStaff}
-              </h2>
-
-              <p className="text-cyan-100 text-sm mt-2">
-                All school personnel
-              </p>
-
-            </div>
-
-            <div className="bg-white/20 p-4 rounded-2xl text-4xl">
-              <MdGroups />
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      {/* GENERAL STATS */}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-        {cards.map(
-          (card, index) => (
-
-            <div
-              key={index}
-              className="bg-white rounded-xl shadow p-6 flex items-center justify-between"
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
             >
+              <MdDashboard className={loading ? "animate-pulse" : ""} />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/school-management")}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-950 shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50"
+            >
+              <MdAdd />
+              Manage Schools
+              <MdArrowForward />
+            </button>
+          </div>
+        </div>
+      </section>
 
-              <div>
-
-                <p className="text-gray-500">
-                  {card.title}
-                </p>
-
-                <h2 className="text-3xl font-bold mt-2">
-                  {card.value}
-                </h2>
-
-                {card.description && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {card.description}
-                  </p>
-                )}
-
-              </div>
-
-              <div
-                className={`${card.color} text-white text-3xl p-4 rounded-full`}
-              >
-
-                {card.icon}
-
-              </div>
-
-            </div>
-
-          )
-        )}
-
-      </div>
-
-
-      {/* QUICK ACTIONS + RECENT ACTIVITIES */}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-
-        <div className="bg-white rounded-xl shadow p-6">
-
-          <h2 className="text-xl font-semibold mb-4">
-            Quick Actions
-          </h2>
-
+      {error && (
+        <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
+          <span>{error}</span>
           <button
-            onClick={() =>
-              navigate("/students/add")
-            }
-            className="w-full flex items-center gap-2 bg-blue-600 text-white p-3 rounded-lg mb-3 hover:bg-blue-700 transition"
+            type="button"
+            onClick={onRefresh}
+            className="shrink-0 rounded-lg bg-rose-700 px-4 py-2 font-semibold text-white hover:bg-rose-800"
           >
-
-            <MdAdd />
-
-            Add Student
-
+            Jaribu tena
           </button>
-
-          <button
-            onClick={() =>
-              navigate("/examination")
-            }
-            className="w-full flex items-center gap-2 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition"
-          >
-
-            <MdUpload />
-
-            Upload Exam
-
-          </button>
-
         </div>
-
-
-        <div className="bg-white rounded-xl shadow p-6">
-
-          <h2 className="text-xl font-semibold">
-            Recent Activities
-          </h2>
-
-          <div className="mt-4 space-y-3">
-
-            {
-              recentStudents.length === 0
-
-                ?
-
-                <p className="text-gray-500">
-                  No recent activities.
-                </p>
-
-                :
-
-                recentStudents.map(
-                  (student, index) => (
-
-                    <div
-                      key={
-                        student.admission_number ||
-                        index
-                      }
-                      className="border-b pb-3"
-                    >
-
-                      <p className="font-semibold">
-                        New student registered
-                      </p>
-
-                      <p>
-                        {student.first_name}{" "}
-                        {student.last_name}
-                      </p>
-
-                      <p className="text-sm text-gray-400">
-                        Admission No:{" "}
-                        {student.admission_number}
-                      </p>
-
-                    </div>
-
-                  )
-                )
-            }
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      {/* MULTI ROLE INFORMATION */}
-
-      {activeRoles.length > 1 && (
-
-        <div className="mt-8 bg-white rounded-xl shadow p-6">
-
-          <div className="flex items-center gap-3 mb-4">
-
-            <MdAdminPanelSettings className="text-2xl text-blue-600" />
-
-            <div>
-
-              <h2 className="text-xl font-semibold text-gray-800">
-                Your System Roles
-              </h2>
-
-              <p className="text-sm text-gray-500">
-                Your selected role controls this dashboard.
-              </p>
-
-            </div>
-
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-
-            {activeRoles.map(
-              (role) => (
-
-                <span
-                  key={
-                    role.profile_role_id ??
-                    role.role_id ??
-                    role.id
-                  }
-                  className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                    role.is_primary
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-
-                  {role.role_name}
-
-                  {role.is_primary &&
-                    " • Primary"}
-
-                </span>
-
-              )
-            )}
-
-          </div>
-
-        </div>
-
       )}
 
+      <section className="grid gap-4 md:grid-cols-3">
+        {statCards.map((card) => (
+          <button
+            key={card.filter}
+            type="button"
+            onClick={() => setStatusFilter(card.filter)}
+            aria-pressed={statusFilter === card.filter}
+            className={`group rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 ${statusFilter === card.filter ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200"}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-500">{card.label}</p>
+                <p className="mt-2 text-4xl font-extrabold tracking-tight text-slate-900">
+                  {card.value.toLocaleString("en-TZ")}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">{card.note}</p>
+              </div>
+              <span className={`rounded-2xl bg-gradient-to-br ${card.accent} p-3 text-2xl text-white shadow-md`}>
+                {card.icon}
+              </span>
+            </div>
+            <p className="mt-4 text-xs font-semibold text-blue-700">
+              {statusFilter === card.filter ? "Kichujio kimechaguliwa" : "Bonyeza kuona shule"}
+            </p>
+          </button>
+        ))}
+      </section>
 
-      {/* STUDENT ANALYTICS */}
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-xl bg-blue-50 p-2 text-xl text-blue-700"><MdBusiness /></span>
+              <h2 className="text-xl font-bold text-slate-900">Shule ninazosimamia</h2>
+            </div>
+            <p className="mt-2 text-sm text-slate-500">
+              {visibleSchools.length} kati ya {schools.length} shule zinaonekana kwenye orodha.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 sm:w-72">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><MdPeople /></span>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tafuta shule, namba au eneo..."
+                aria-label="Tafuta shule"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/school-management")}
+              className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-800"
+            >
+              Fungua usimamizi
+            </button>
+          </div>
+        </div>
 
-      <div className="mt-8">
-
-        <StudentAnalytics
-          schoolId={schoolId}
-          scopeToSchool={scopeToSchool}
-        />
-
-      </div>
-
+        {loading ? (
+          <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="animate-pulse rounded-2xl border border-slate-100 p-5">
+                <div className="h-4 w-2/3 rounded bg-slate-200" />
+                <div className="mt-4 h-3 w-1/2 rounded bg-slate-100" />
+                <div className="mt-7 h-8 w-24 rounded bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        ) : visibleSchools.length === 0 ? (
+          <div className="px-6 py-14 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl text-slate-500">
+              <MdBusiness />
+            </div>
+            <h3 className="mt-4 text-lg font-bold text-slate-900">
+              {schools.length === 0 ? "Hakuna shule zilizopatikana" : "Hakuna shule zinazolingana"}
+            </h3>
+            <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+              {schools.length === 0
+                ? "Shule zitakazoonekana hapa ni zile zilizosajiliwa na unazozisimamia."
+                : "Badilisha neno la utafutaji au kichujio cha hali ya shule."}
+            </p>
+            {schools.length === 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/school-management")}
+                className="mt-5 rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800"
+              >
+                Fungua School Management
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
+            {visibleSchools.map((school) => {
+              const isActive = school.is_active === true;
+              return (
+                <article
+                  key={school.id}
+                  className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 text-2xl text-blue-800">
+                        <MdSchool />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="truncate font-bold text-slate-900" title={school.school_name}>
+                          {school.school_name || "School"}
+                        </h3>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {school.registration_number || "Registration number not set"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isActive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                      {isActive ? "ACTIVE" : "INACTIVE"}
+                    </span>
+                  </div>
+                  <div className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+                    <p className="flex items-start gap-2">
+                      <span className="mt-0.5 text-slate-400"><MdBusiness /></span>
+                      <span className="line-clamp-2">{school.address || "Anuani haijawekwa"}</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span className="text-slate-400"><MdPhone /></span>
+                      <span>{school.phone || "Simu haijawekwa"}</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span className="text-slate-400"><MdEmail /></span>
+                      <span className="min-w-0 truncate">{school.email || "Email haijawekwa"}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/school-management")}
+                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 transition hover:bg-blue-100"
+                  >
+                    Simamia shule
+                    <MdArrowForward />
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
-
   );
-
 }
 
 
