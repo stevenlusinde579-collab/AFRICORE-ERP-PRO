@@ -103,3 +103,57 @@ export function parseNectaStudentProfile(text) {
     qualifications_text: qualifications.trim()
   };
 }
+
+
+export function mergeNectaQualifiedProfiles(qualified, profiles) {
+  const rows = Array.isArray(qualified?.students) ? qualified.students : [];
+  const profileRows = Array.isArray(profiles) ? profiles : [];
+  const byPrem = new Map();
+  const duplicateProfiles = new Set();
+  for (const profile of profileRows) {
+    const prem = String(profile?.prem_number || "").replace(/\\s/g, "");
+    if (!prem) continue;
+    if (byPrem.has(prem)) duplicateProfiles.add(prem);
+    else byPrem.set(prem, profile);
+  }
+  const matched = new Set();
+  const students = rows.map((row) => {
+    const profile = byPrem.get(row.prem_number) || null;
+    if (profile) matched.add(row.prem_number);
+    const nameMatches = !profile?.full_name ||
+      profile.full_name.trim().toLowerCase().replace(/\\s+/g, " ") ===
+      row.full_name.trim().toLowerCase().replace(/\\s+/g, " ");
+    const sexMatches = !profile?.gender ||
+      normalizeProfileSex(profile.gender) === normalizeProfileSex(row.gender);
+    return {
+      ...row,
+      profile,
+      profile_status: !profile ? "missing" : duplicateProfiles.has(row.prem_number) ? "duplicate_profile" :
+        !nameMatches || !sexMatches ? "mismatch" : "matched",
+      profile_warnings: [
+        ...(profile && !nameMatches ? ["Profile name does not match Qualified list"] : []),
+        ...(profile && !sexMatches ? ["Profile sex does not match Qualified list"] : []),
+        ...(profile && !profile.admission_number ? ["Admission Number missing in profile"] : []),
+        ...(profile && !profile.date_of_birth ? ["Date of Birth missing in profile"] : [])
+      ]
+    };
+  });
+  const unmatchedProfiles = profileRows.filter((profile) =>
+    profile?.prem_number && !matched.has(String(profile.prem_number).replace(/\\s/g, ""))
+  ).map((profile) => String(profile.prem_number).replace(/\\s/g, ""));
+  return {
+    students,
+    unmatched_profile_prem_numbers: [...new Set(unmatchedProfiles)],
+    duplicate_profile_prem_numbers: [...duplicateProfiles],
+    matched_count: students.filter((row) => row.profile_status === "matched").length,
+    missing_profile_count: students.filter((row) => row.profile_status === "missing").length,
+    mismatch_count: students.filter((row) => row.profile_status === "mismatch" || row.profile_status === "duplicate_profile").length
+  };
+}
+
+function normalizeProfileSex(value) {
+  const sex = String(value || "").trim().toLowerCase();
+  if (sex === "f" || sex === "female") return "female";
+  if (sex === "m" || sex === "male") return "male";
+  return sex;
+}
