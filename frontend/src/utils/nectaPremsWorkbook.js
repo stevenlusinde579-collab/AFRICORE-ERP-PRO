@@ -1,9 +1,3 @@
-const decodeXml = (value = "") => {
-  const node = document.createElement("textarea");
-  node.innerHTML = value;
-  return node.value;
-};
-
 const columnIndex = (cellRef = "") => {
   const letters = String(cellRef).match(/[A-Z]+/i)?.[0] || "";
   let result = 0;
