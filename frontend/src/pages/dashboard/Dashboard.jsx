@@ -247,6 +247,12 @@ function Dashboard() {
 
     students: 0,
 
+    totalSchools: 0,
+
+    activeSchools: 0,
+
+    inactiveSchools: 0,
+
     teachingStaff: 0,
 
     nonStaff: 0,
@@ -486,6 +492,20 @@ function Dashboard() {
         ? Number(scopedSchoolId)
         : null;
 
+      let schoolsQuery = supabase
+        .from("schools")
+        .select("id", { count: "exact", head: true });
+
+      let activeSchoolsQuery = supabase
+        .from("schools")
+        .select("id", { count: "exact", head: true })
+        .eq("is_active", true);
+
+      let inactiveSchoolsQuery = supabase
+        .from("schools")
+        .select("id", { count: "exact", head: true })
+        .eq("is_active", false);
+
       let studentsQuery = supabase
         .from("students")
         .select("*", { count: "exact", head: true });
@@ -523,6 +543,9 @@ function Dashboard() {
       // Headmasters must only see records belonging to their own school.
       // Super Admin calls this loader without a school filter.
       if (schoolFilter) {
+        schoolsQuery = schoolsQuery.eq("id", schoolFilter);
+        activeSchoolsQuery = activeSchoolsQuery.eq("id", schoolFilter);
+        inactiveSchoolsQuery = inactiveSchoolsQuery.eq("id", schoolFilter);
         studentsQuery = studentsQuery.eq("school_id", schoolFilter);
         teachingStaffQuery = teachingStaffQuery.eq("school_id", schoolFilter);
         nonStaffQuery = nonStaffQuery.eq("school_id", schoolFilter);
@@ -533,6 +556,9 @@ function Dashboard() {
       }
 
       const [
+        schoolsResult,
+        activeSchoolsResult,
+        inactiveSchoolsResult,
         studentResult,
         teachingStaffResult,
         nonStaffResult,
@@ -541,6 +567,9 @@ function Dashboard() {
         cashAccountsResult,
         recentResult,
       ] = await Promise.all([
+        schoolsQuery,
+        activeSchoolsQuery,
+        inactiveSchoolsQuery,
         studentsQuery,
         teachingStaffQuery,
         nonStaffQuery,
@@ -551,6 +580,9 @@ function Dashboard() {
       ]);
 
       const queryErrors = [
+        schoolsResult.error,
+        activeSchoolsResult.error,
+        inactiveSchoolsResult.error,
         studentResult.error,
         teachingStaffResult.error,
         nonStaffResult.error,
@@ -569,6 +601,9 @@ function Dashboard() {
       }
 
       setStats({
+        totalSchools: schoolsResult.count || 0,
+        activeSchools: activeSchoolsResult.count || 0,
+        inactiveSchools: inactiveSchoolsResult.count || 0,
         students: studentResult.count || 0,
         teachingStaff: teachingStaffResult.count || 0,
         nonStaff: nonStaffResult.count || 0,
@@ -1217,6 +1252,14 @@ function SuperAdminDashboard({
 
   const cards = [
 
+    ...(!scopeToSchool ? [{
+      title: "Schools I Manage",
+      value: stats.totalSchools,
+      description: `${stats.activeSchools} Active • ${stats.inactiveSchools} Inactive`,
+      icon: <MdBusiness />,
+      color: "bg-blue-700",
+    }] : []),
+
     {
       title: "Total Students",
       value: stats.students,
@@ -1424,6 +1467,12 @@ function SuperAdminDashboard({
                 <h2 className="text-3xl font-bold mt-2">
                   {card.value}
                 </h2>
+
+                {card.description && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    {card.description}
+                  </p>
+                )}
 
               </div>
 
