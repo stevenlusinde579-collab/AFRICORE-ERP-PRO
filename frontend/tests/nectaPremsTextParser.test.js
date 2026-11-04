@@ -114,3 +114,23 @@ test("matches Qualified rows to profiles by PREM and reports mismatches", () => 
   assert.equal(result.students[1].profile_status, "mismatch");
   assert.equal(result.students[1].profile_warnings.length, 2);
 });
+
+
+test("parses copied plain-text profile headings and PREM without a colon", () => {
+  const source = profileBase
+    .replace("# Student Profile", "Student Profile")
+    .replace("### ABIGAELI LUKA SKOINE", "ABIGAELI LUKA SKOINE")
+    .replace("#### PREM# : 20190079473", "PREM# 20190079473");
+  const result = parseNectaStudentProfile(source);
+  assert.equal(result.full_name, "ABIGAELI LUKA SKOINE");
+  assert.equal(result.prem_number, "20190079473");
+});
+
+test("splits multiple profiles when PReMS copies plain Student Profile headings", () => {
+  const plainProfile = profileBase
+    .replace("# Student Profile", "Student Profile")
+    .replace("### ABIGAELI LUKA SKOINE", "ABIGAELI LUKA SKOINE");
+  const result = parseNectaStudentProfiles([plainProfile, plainProfile].join("\\n"));
+  assert.equal(result.profile_count, 2);
+  assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
+});
