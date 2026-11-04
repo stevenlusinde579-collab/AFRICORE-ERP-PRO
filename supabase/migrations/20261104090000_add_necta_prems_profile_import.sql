@@ -35,8 +35,12 @@ begin
     raise exception 'Authentication is required.';
   end if;
 
-  if jsonb_typeof(p_profile_students) is distinct from 'array'
-     or jsonb_array_length(p_profile_students) < 1
+  if p_profile_students is null
+     or jsonb_typeof(p_profile_students) is distinct from 'array' then
+    raise exception 'Profile import payload must be a JSON array.';
+  end if;
+
+  if jsonb_array_length(p_profile_students) < 1
      or jsonb_array_length(p_profile_students) > 500 then
     raise exception 'Profile import must contain between 1 and 500 student rows per batch.';
   end if;
@@ -55,6 +59,9 @@ begin
     v_prem := regexp_replace(trim(coalesce(v_item->>'prem_number', '')), '\s', '', 'g');
     if v_prem !~ '^[0-9]{8,}$' then
       raise exception 'A profile has a missing or invalid PREM Number.';
+    end if;
+    if jsonb_typeof(v_item) is distinct from 'object' then
+      raise exception 'Each profile row must be a JSON object.';
     end if;
     if nullif(trim(v_item->>'admission_number'), '') is null
        or nullif(trim(v_item->>'first_name'), '') is null
@@ -77,7 +84,7 @@ begin
       'middle_name', nullif(trim(v_item->>'middle_name'), ''),
       'last_name', trim(v_item->>'last_name'),
       'gender', initcap(lower(trim(v_item->>'gender'))),
-      'date_of_birth', trim(v_item->>'date_of_birth'),
+      'date_of_birth', to_char((v_item->>'date_of_birth')::date, 'YYYY-MM-DD'),
       'stream', nullif(trim(v_item->>'stream'), ''),
       'exam_number', nullif(trim(v_item->>'exam_reference_number'), ''),
       'exam_year', v_exam_year,
