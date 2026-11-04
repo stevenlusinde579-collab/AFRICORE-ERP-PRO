@@ -52,6 +52,49 @@ export const getSchools = async (req, res) => {
 };
 
 /**
+ * GET /api/schools/:id/overview
+ * Super Admin only. Returns exact counts scoped to one school.
+ */
+export const getSchoolOverview = async (req, res) => {
+    try {
+        const schoolId = Number(req.params.id);
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "A valid school ID is required." });
+        }
+
+        const { data: school, error: schoolError } = await supabase
+            .from("schools")
+            .select("id,school_name,registration_number,address,phone,email,is_active")
+            .eq("id", schoolId)
+            .maybeSingle();
+        if (schoolError) throw schoolError;
+        if (!school) {
+            return res.status(404).json({ success: false, message: "School was not found." });
+        }
+
+        const [studentsResult, staffResult, nonStaffResult] = await Promise.all([
+            supabase.from("students").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
+            supabase.from("teachers").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("staff_type", "Staff"),
+            supabase.from("teachers").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("staff_type", "Non-Staff")
+        ]);
+        const queryError = [studentsResult.error, staffResult.error, nonStaffResult.error].find(Boolean);
+        if (queryError) throw queryError;
+
+        const students = studentsResult.count || 0;
+        const staff = staffResult.count || 0;
+        const nonStaff = nonStaffResult.count || 0;
+        return res.json({
+            success: true,
+            school,
+            overview: { students, staff, nonStaff, totalUsers: students + staff + nonStaff }
+        });
+    } catch (error) {
+        console.error("SCHOOL MANAGEMENT - SCHOOL OVERVIEW ERROR:", error);
+        return res.status(500).json({ success: false, message: "Unable to load school usage overview." });
+    }
+};
+
+/**
  * POST /api/schools
  * Creates a school without deleting or changing existing school data.
  */
