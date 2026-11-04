@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import { useRole } from "../../context/RoleContext";
 import { parseNectaWorkbook } from "../../utils/nectaPremsWorkbook";
 
 const normalizeGender = (value) => {
@@ -48,8 +49,11 @@ export default function NectaStudentImport() {
   const navigate = useNavigate();
   const fileRef = useRef(null);
   const { schoolId, activeAcademicYearId, activeAcademicYear, academicYearLoading } = useSchool();
+  const { selectedRoleName } = useRole();
+  const classTeacherSelected = String(selectedRoleName || "").trim().toLowerCase() === "class teacher";
   const [parsed, setParsed] = useState(null);
   const [classes, setClasses] = useState([]);
+  const [assignedClassIds, setAssignedClassIds] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [combinations, setCombinations] = useState([]);
   const [classId, setClassId] = useState("");
@@ -70,11 +74,43 @@ export default function NectaStudentImport() {
         .eq("is_active", true).order("class_name");
       if (!alive) return;
       if (error) { setMessage(error.message); return; }
-      setClasses(data || []);
+
+      let visibleClasses = data || [];
+      if (classTeacherSelected) {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError) { setMessage(authError.message); return; }
+        if (!authData?.user) { setMessage("Your session has expired. Please login again."); return; }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles").select("id,school_id,teacher_id")
+          .eq("id", authData.user.id).single();
+        if (profileError) { setMessage(profileError.message); return; }
+        if (!profile?.teacher_id || Number(profile.school_id) !== Number(schoolId)) {
+          setMessage("Your profile is not linked to a teacher record in this school.");
+          setClasses([]); setAssignedClassIds([]); return;
+        }
+
+        const { data: assignments, error: assignmentError } = await supabase
+          .from("teacher_assignments").select("class_id")
+          .eq("school_id", Number(schoolId))
+          .eq("teacher_id", profile.teacher_id);
+        if (assignmentError) { setMessage(assignmentError.message); return; }
+
+        const allowedIds = [...new Set((assignments || [])
+          .map((item) => Number(item.class_id)).filter(Number.isFinite))];
+        setAssignedClassIds(allowedIds);
+        visibleClasses = visibleClasses.filter((item) => allowedIds.includes(Number(item.id)));
+        if (!visibleClasses.length) {
+          setMessage("You have not been assigned a class. Please contact the Academic Master or Headmaster.");
+        }
+      } else {
+        setAssignedClassIds([]);
+      }
+      setClasses(visibleClasses);
     };
     load();
     return () => { alive = false; };
-  }, [schoolId, activeAcademicYearId]);
+  }, [schoolId, activeAcademicYearId, classTeacherSelected]);
 
   const selectedClass = classes.find((item) => String(item.id) === classId);
   const isAdvanced = String(selectedClass?.academic_level || "").trim().toLowerCase() === "advanced";
@@ -127,6 +163,9 @@ export default function NectaStudentImport() {
     if (!schoolId || !activeAcademicYearId) return setMessage("School or active academic year is not ready.");
     if (!parsed || !rows.length) return setMessage("Choose a valid NECTA workbook first.");
     if (!selectedClass) return setMessage("Choose the AfriCore class for these students.");
+    if (classTeacherSelected && !assignedClassIds.includes(Number(selectedClass.id))) {
+      return setMessage("You can only import students into a class assigned to you.");
+    }
     const premsForm = normalizePremsForm(parsed.metadata?.FORM);
     const classForm = normalizePremsForm(selectedClass.class_name);
     if (premsForm && classForm && premsForm !== classForm) {
