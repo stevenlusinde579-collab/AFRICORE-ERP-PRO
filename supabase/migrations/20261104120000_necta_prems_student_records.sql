@@ -289,7 +289,136 @@ begin
             raise exception 'A student row has an invalid sex value.';
         end if;
 
-        if nullif(v_item->>'exam_year', '') ~ '^\d{4}
+        if nullif(v_item->>'exam_year', '') ~ '^\d{4} (v_item->>'exam_year')::integer;
+        else
+            v_exam_year := null;
+        end if;
+
+        insert into public.students (
+            school_id, academic_year_id, current_class_id,
+            admission_number, first_name, middle_name, last_name,
+            gender, date_of_birth, admission_date,
+            student_status, status, stream, combination_id
+        ) values (
+            p_school_id, p_academic_year_id, p_class_id,
+            trim(v_item->>'admission_number'),
+            trim(v_item->>'first_name'),
+            nullif(trim(v_item->>'middle_name'), ''),
+            trim(v_item->>'last_name'),
+            initcap(lower(trim(v_item->>'gender'))),
+            nullif(v_item->>'date_of_birth', '')::date,
+            null,
+            'Active', 'Active',
+            nullif(trim(v_item->>'stream'), ''),
+            case when lower(trim(v_class.academic_level)) = 'advanced'
+                 then p_combination_id else null end
+        )
+        returning id into v_student_id;
+
+        insert into public.student_subjects (
+            student_id, subject_id, class_id, academic_year_id
+        )
+        select v_student_id, unnest(v_subject_ids), p_class_id, p_academic_year_id;
+
+        insert into public.necta_student_records (
+            student_id, school_id, exam_number, exam_year,
+            registration_type, form, region, district, stream_trade,
+            source_school_number, source_school_name, import_source
+        ) values (
+            v_student_id, p_school_id,
+            nullif(trim(v_item->>'exam_number'), ''),
+            v_exam_year,
+            nullif(trim(v_item->>'registration_type'), ''),
+            nullif(trim(v_item->>'form'), ''),
+            nullif(trim(v_item->>'region'), ''),
+            nullif(trim(v_item->>'district'), ''),
+            nullif(trim(v_item->>'stream'), ''),
+            nullif(trim(v_item->>'source_school_number'), ''),
+            nullif(trim(v_item->>'source_school_name'), ''),
+            'NECTA_PReMS'
+        );
+
+        v_student_ids := array_append(v_student_ids, v_student_id);
+        v_count := v_count + 1;
+    end loop;
+
+    return jsonb_build_object(
+        'imported_count', v_count,
+        'student_ids', to_jsonb(v_student_ids)
+    );
+end;
+$function$;
+
+revoke all on function public.import_necta_prems_students(bigint, bigint, bigint, bigint, bigint[], jsonb) from public, anon;
+grant execute on function public.import_necta_prems_students(bigint, bigint, bigint, bigint, bigint[], jsonb) to authenticated;
+
+commit;
+ then
+            v_exam_year := (v_item->>'exam_year')::integer;
+        else
+            v_exam_year := null;
+        end if;
+
+        insert into public.students (
+            school_id, academic_year_id, current_class_id,
+            admission_number, first_name, middle_name, last_name,
+            gender, date_of_birth, admission_date,
+            student_status, status, stream, combination_id
+        ) values (
+            p_school_id, p_academic_year_id, p_class_id,
+            trim(v_item->>'admission_number'),
+            trim(v_item->>'first_name'),
+            nullif(trim(v_item->>'middle_name'), ''),
+            trim(v_item->>'last_name'),
+            initcap(lower(trim(v_item->>'gender'))),
+            nullif(v_item->>'date_of_birth', '')::date,
+            null,
+            'Active', 'Active',
+            nullif(trim(v_item->>'stream'), ''),
+            case when lower(trim(v_class.academic_level)) = 'advanced'
+                 then p_combination_id else null end
+        )
+        returning id into v_student_id;
+
+        insert into public.student_subjects (
+            student_id, subject_id, class_id, academic_year_id
+        )
+        select v_student_id, unnest(v_subject_ids), p_class_id, p_academic_year_id;
+
+        insert into public.necta_student_records (
+            student_id, school_id, exam_number, exam_year,
+            registration_type, form, region, district, stream_trade,
+            source_school_number, source_school_name, import_source
+        ) values (
+            v_student_id, p_school_id,
+            nullif(trim(v_item->>'exam_number'), ''),
+            v_exam_year,
+            nullif(trim(v_item->>'registration_type'), ''),
+            nullif(trim(v_item->>'form'), ''),
+            nullif(trim(v_item->>'region'), ''),
+            nullif(trim(v_item->>'district'), ''),
+            nullif(trim(v_item->>'stream'), ''),
+            nullif(trim(v_item->>'source_school_number'), ''),
+            nullif(trim(v_item->>'source_school_name'), ''),
+            'NECTA_PReMS'
+        );
+
+        v_student_ids := array_append(v_student_ids, v_student_id);
+        v_count := v_count + 1;
+    end loop;
+
+    return jsonb_build_object(
+        'imported_count', v_count,
+        'student_ids', to_jsonb(v_student_ids)
+    );
+end;
+$function$;
+
+revoke all on function public.import_necta_prems_students(bigint, bigint, bigint, bigint, bigint[], jsonb) from public, anon;
+grant execute on function public.import_necta_prems_students(bigint, bigint, bigint, bigint, bigint[], jsonb) to authenticated;
+
+commit;
+ then
             v_exam_year := (v_item->>'exam_year')::integer;
         else
             v_exam_year := null;
