@@ -122,6 +122,11 @@ export default function NectaStudentImport() {
     const school = Number(schoolId);
     const year = Number(activeAcademicYearId);
     const admissionNumbers = rows.map((r) => r.admission_number.trim());
+    const normalizedAdmissions = admissionNumbers.map((value) => value.toLowerCase());
+    if (new Set(normalizedAdmissions).size !== normalizedAdmissions.length) {
+      setBusy(false);
+      return setMessage("Import stopped: the Excel workbook contains repeated admission numbers. Correct the file before importing.");
+    }
     try {
       const { data: existing, error: duplicateError } = await supabase.from("students")
         .select("admission_number").eq("school_id", school).eq("academic_year_id", year)
