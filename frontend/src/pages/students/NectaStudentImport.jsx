@@ -170,8 +170,12 @@ export default function NectaStudentImport() {
     if (!selectedClass) return setMessage("Choose the AfriCore class for these students.");
     const sourceSchoolNumber = normalizeSchoolNumber(parsed.metadata?.["SCHOOL NUMBER"]);
     const currentSchoolNumber = normalizeSchoolNumber(school?.registration_number);
-    if (sourceSchoolNumber && currentSchoolNumber && sourceSchoolNumber !== currentSchoolNumber) {
-      return setMessage("The NECTA workbook School Number does not match this AfriCore school's registration number. Import stopped to protect school data.");
+    const currentRegistrationLooksLikeNectaNumber = /^S\\d+$/i.test(String(school?.registration_number || "").trim());
+    if (!sourceSchoolNumber) {
+      return setMessage("The NECTA workbook is missing its SCHOOL NUMBER metadata. Use the original PReMS template and confirm the source school.");
+    }
+    if (currentRegistrationLooksLikeNectaNumber && sourceSchoolNumber !== currentSchoolNumber) {
+      return setMessage("The NECTA workbook School Number does not match this AfriCore school's NECTA-style registration number. Import stopped to protect school data.");
     }
     if (classTeacherSelected && !assignedClassIds.includes(Number(selectedClass.id))) {
       return setMessage("You can only import students into a class assigned to you.");
