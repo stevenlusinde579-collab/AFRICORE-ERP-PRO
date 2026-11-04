@@ -380,6 +380,7 @@ export default function NectaStudentImport() {
               rows={10} className="mt-1 w-full border rounded-lg p-3 font-mono text-xs"
               placeholder="Bandika maandishi ya Student Profile hapa..." />
           </label>
+          {message && <div className="rounded-lg border p-3 text-sm" role="status">{message}</div>}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={previewCopiedPrems}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white">Tengeneza preview</button>
