@@ -203,6 +203,73 @@ export default function NectaStudentImport() {
     }
   };
 
+
+  const importCopiedProfiles = async () => {
+    if (!qualifiedPreview?.students?.length) return setMessage("Tengeneza preview kwanza.");
+    if (!schoolId || !activeAcademicYearId) return setMessage("School au academic year haijawa tayari.");
+    if (!selectedClass) return setMessage("Chagua AfriCore class.");
+    if (qualifiedPreview.qualified_duplicates.length || qualifiedPreview.profile_duplicates.length ||
+        qualifiedPreview.unmatched_profile_prem_numbers.length ||
+        qualifiedPreview.students.some((row) => row.profile_status !== "matched")) {
+      return setMessage("Import imesimamishwa: rekebisha PREM duplicates, profiles zilizokosekana au taarifa zisizolingana kwanza.");
+    }
+    const rowsToImport = qualifiedPreview.students;
+    if (rowsToImport.some((row) => !row.profile?.admission_number || !row.profile?.date_of_birth ||
+        !normalizeDate(row.profile.date_of_birth) || !row.first_name || !row.last_name ||
+        !normalizeGender(row.profile.gender))) {
+      return setMessage("Kila profile lazima iwe na Admission Number, tarehe sahihi ya kuzaliwa, majina na jinsia.");
+    }
+    if (rowsToImport.length > 500) return setMessage("Ingiza wanafunzi kwa batch zisizozidi 500.");
+    if (!subjectIds.length) return setMessage("Chagua angalau somo moja.");
+    if (isAdvanced && !combinationId) return setMessage("Chagua Advanced combination.");
+    if (isAdvanced) {
+      const { data: links, error } = await supabase.from("combination_subjects").select("subject_id")
+        .eq("combination_id", Number(combinationId));
+      if (error) return setMessage(error.message);
+      const expected = (links || []).map((item) => Number(item.subject_id)).sort((a,b)=>a-b);
+      const actual = subjectIds.map(Number).sort((a,b)=>a-b);
+      if (!expected.length || expected.length !== actual.length || expected.some((id,index)=>id!==actual[index])) {
+        return setMessage("Masomo lazima yalingane kabisa na Advanced combination.");
+      }
+    }
+    const classForm = normalizePremsForm(selectedClass.class_name) || normalizePremsForm(selectedClass.short_name);
+    if (rowsToImport.some((row) => normalizePremsForm(row.profile.form) !== classForm)) {
+      return setMessage("Form ya PReMS haifanani na class uliyochagua.");
+    }
+    const currentSchoolCode = String(school?.registration_number || "").trim().match(/^S\\d+/i)?.[0]?.toUpperCase();
+    const foreignSchool = rowsToImport.some((row) => {
+      const sourceCode = String(row.profile.school || "").trim().match(/^S\\d+/i)?.[0]?.toUpperCase();
+      return currentSchoolCode && sourceCode && currentSchoolCode !== sourceCode;
+    });
+    if (foreignSchool) return setMessage("PReMS profile inaonyesha NECTA school number tofauti na shule ya AfriCore. Import imesimamishwa.");
+    setBusy(true); setMessage("");
+    try {
+      const payload = rowsToImport.map((row) => ({
+        ...row.profile, prem_number: row.prem_number, first_name: row.first_name,
+        middle_name: row.middle_name || null, last_name: row.last_name,
+        gender: normalizeGender(row.profile.gender), date_of_birth: normalizeDate(row.profile.date_of_birth)
+      }));
+      const { data, error } = await supabase.rpc("import_necta_prems_profile_students", {
+        p_school_id: Number(schoolId), p_academic_year_id: Number(activeAcademicYearId),
+        p_class_id: Number(classId), p_combination_id: isAdvanced ? Number(combinationId) : null,
+        p_subject_ids: subjectIds.map(Number), p_profile_students: payload
+      });
+      if (error) {
+        if (/import_necta_prems_profile_students.*does not exist|schema cache/i.test(error.message || "")) {
+          throw new Error("NECTA profile migration bado haijawekwa kwenye database. Hakuna mwanafunzi aliyeingizwa.");
+        }
+        throw error;
+      }
+      if (Number(data?.imported_count || 0) !== rowsToImport.length) {
+        throw new Error("Database haijathibitisha idadi yote ya wanafunzi. Wasiliana na msimamizi kabla ya kujaribu tena.");
+      }
+      setMessage(`Imefanikiwa: wanafunzi ${data.imported_count} wameingizwa pamoja na taarifa zao za PReMS.`);
+      setQualifiedPreview(null); setQualifiedText(""); setProfileText("");
+    } catch (error) {
+      setMessage(error.message || "PReMS profile import imeshindikana.");
+    } finally { setBusy(false); }
+  };
+
   const toggleSubject = (id) => setSubjectIds((old) =>
     old.includes(id) ? old.filter((item) => item !== id) : [...old, id]
   );
@@ -388,6 +455,28 @@ export default function NectaStudentImport() {
               className="px-4 py-2 rounded-lg bg-white border">Futa maandishi</button>
           </div>
           {qualifiedPreview && <>
+          <div className="grid md:grid-cols-2 gap-4">
+            <label className="block text-sm font-medium">AfriCore class
+              <select value={classId} onChange={(e)=>setClassId(e.target.value)} className="mt-1 w-full border rounded-lg p-3">
+                <option value="">Chagua class</option>{classes.map((item)=><option key={item.id} value={item.id}>{item.class_name} ({item.academic_level})</option>)}
+              </select>
+            </label>
+            {isAdvanced && <label className="block text-sm font-medium">Advanced combination
+              <select value={combinationId} onChange={(e)=>setCombinationId(e.target.value)} className="mt-1 w-full border rounded-lg p-3">
+                <option value="">Chagua combination</option>{combinations.map((item)=><option key={item.id} value={item.id}>{item.combination_code} - {item.combination_name}</option>)}
+              </select>
+            </label>}
+          </div>
+          {selectedClass && <div className="border rounded-lg bg-white p-4">
+            <p className="font-semibold mb-2">Masomo ya wanafunzi hawa</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {subjects.map((subject)=><label key={subject.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={subjectIds.includes(subject.id)} onChange={()=>toggleSubject(subject.id)} />
+                {subject.subject_name}
+              </label>)}
+            </div>
+          </div>}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
               <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.total_qualified}</b><div>Qualified rows</div></div>
               <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.matched_count}</b><div>Profiles matched</div></div>
@@ -413,7 +502,11 @@ export default function NectaStudentImport() {
               </table>
               {qualifiedPreview.students.length > 100 && <p className="p-2 text-gray-500">Inaonyesha 100 kati ya {qualifiedPreview.students.length}.</p>}
             </div>
-            <p className="text-xs text-amber-800">Hii ni preview pekee. Bado haijahifadhi wanafunzi wala taarifa za profile kwenye AfriCore.</p>
+            <p className="text-xs text-amber-800">Import itaruhusiwa tu ikiwa kila profile imeoanisha na haina taarifa zinazokosekana au marudio.</p>
+            <button type="button" disabled={busy || !selectedClass || qualifiedPreview.students.some((row)=>row.profile_status!=="matched")}
+              onClick={importCopiedProfiles} className="px-5 py-3 rounded-lg bg-blue-700 text-white disabled:opacity-50">
+              {busy ? "Inaingiza..." : `Ingiza ${qualifiedPreview.students.length} mwanafunzi`}
+            </button>
           </>}
         </>}
       </div>
