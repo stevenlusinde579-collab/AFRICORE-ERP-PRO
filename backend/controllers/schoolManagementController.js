@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase.js";
+import { randomBytes } from "node:crypto";
 
 const SCHOOL_COLUMNS = [
     "id",
@@ -337,6 +338,130 @@ export const updateSchool = async (req, res) => {
     }
 };
 
+
+/**
+ * POST /api/schools/:id/headmasters
+ * Create a new Headmaster Auth account and assign it to the selected school.
+ * This endpoint is mounted behind authenticateUser + requireSuperAdmin.
+ */
+export const createSchoolHeadmaster = async (req, res) => {
+    let authUserId = null;
+    let profileCreated = false;
+    let profileRoleCreated = false;
+
+    try {
+        const schoolId = Number(req.params.id);
+        const fullName = String(req.body?.full_name || "").trim().replace(/\s+/g, " ");
+        const email = String(req.body?.email || "").trim().toLowerCase();
+        const rawPhone = String(req.body?.phone || "").trim();
+        let phone = rawPhone ? rawPhone.replace(/[\s().-]/g, "") : "";
+        if (/^0[678]\d{8}$/.test(phone)) phone = `+255${phone.slice(1)}`;
+        else if (/^255[678]\d{8}$/.test(phone)) phone = `+${phone}`;
+        else if (/^[678]\d{8}$/.test(phone)) phone = `+255${phone}`;
+
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "Chagua shule sahihi." });
+        }
+        if (fullName.length < 3) {
+            return res.status(400).json({ success: false, message: "Jina kamili la Headmaster linahitajika." });
+        }
+        if (!email && !phone) {
+            return res.status(400).json({ success: false, message: "Weka email au namba ya simu kwa ajili ya login." });
+        }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ success: false, message: "Email si sahihi." });
+        }
+        if (phone && !/^\+255[678]\d{8}$/.test(phone)) {
+            return res.status(400).json({ success: false, message: "Namba ya simu si sahihi. Tumia mfano 0712345678 au +255712345678." });
+        }
+
+        const { data: school, error: schoolError } = await supabase
+            .from("schools")
+            .select("id,school_name,is_active")
+            .eq("id", schoolId)
+            .maybeSingle();
+        if (schoolError) throw schoolError;
+        if (!school) {
+            return res.status(404).json({ success: false, message: "Shule haijapatikana." });
+        }
+        if (school.is_active !== true) {
+            return res.status(403).json({ success: false, message: "Shule haija-activate. I-activate kabla ya kuongeza Headmaster." });
+        }
+
+        const { data: headmasterRole, error: roleError } = await supabase
+            .from("roles")
+            .select("id,role_name")
+            .eq("role_name", "Headmaster")
+            .maybeSingle();
+        if (roleError) throw roleError;
+        if (!headmasterRole) {
+            return res.status(500).json({ success: false, message: "Role ya Headmaster haijapatikana kwenye mfumo." });
+        }
+
+        const { data: existingAssignments, error: assignmentLookupError } = await supabase
+            .from("profile_roles")
+            .select("profile_id")
+            .eq("role_id", headmasterRole.id)
+            .eq("school_id", schoolId)
+            .eq("is_active", true)
+            .limit(1);
+        if (assignmentLookupError) throw assignmentLookupError;
+        const { data: legacyHeadmaster, error: legacyHeadmasterError } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("role_id", headmasterRole.id)
+            .eq("school_id", schoolId)
+            .limit(1)
+            .maybeSingle();
+        if (legacyHeadmasterError) throw legacyHeadmasterError;
+        if (existingAssignments?.length || legacyHeadmaster) {
+            return res.status(409).json({ success: false, message: "Shule hii tayari ina Headmaster aliyeunganishwa. Tumia sehemu ya kubadilisha/ku-assign Headmaster aliyepo." });
+        }
+
+        const temporaryPassword = `AfriCore@${randomBytes(9).toString("base64url")}9!`;
+        const authPayload = {
+            password: temporaryPassword,
+            email_confirm: Boolean(email),
+            phone_confirm: Boolean(phone),
+            user_metadata: { full_name: fullName, role_id: headmasterRole.id, primary_role_id: headmasterRole.id, role_ids: [headmasterRole.id], school_id: schoolId }
+        };
+        if (email) authPayload.email = email;
+        if (phone) authPayload.phone = phone;
+
+        const { data: authResult, error: authError } = await supabase.auth.admin.createUser(authPayload);
+        if (authError || !authResult?.user?.id) {
+            return res.status(400).json({ success: false, message: `Akaunti ya Headmaster haikuundwa: ${authError?.message || "Supabase Auth haikurudisha user."}` });
+        }
+        authUserId = authResult.user.id;
+
+        const { error: profileError } = await supabase
+            .from("profiles")
+            .insert([{ id: authUserId, full_name: fullName, phone: phone || null, role_id: headmasterRole.id, school_id: schoolId }]);
+        if (profileError) throw profileError;
+        profileCreated = true;
+
+        const { error: profileRoleError } = await supabase
+            .from("profile_roles")
+            .insert([{ profile_id: authUserId, role_id: headmasterRole.id, school_id: schoolId, is_primary: true, is_active: true }]);
+        if (profileRoleError) throw profileRoleError;
+        profileRoleCreated = true;
+
+        return res.status(201).json({
+            success: true,
+            message: `Akaunti ya Headmaster wa ${school.school_name} imeundwa kikamilifu.`,
+            headmaster: { id: authUserId, full_name: fullName, email: email || null, phone: phone || null, school_id: schoolId, role_id: headmasterRole.id },
+            login_credentials: { login_email: email || null, login_phone: phone || null, temporary_password: temporaryPassword }
+        });
+    } catch (error) {
+        console.error("SCHOOL MANAGEMENT - CREATE HEADMASTER ERROR:", error);
+        if (authUserId) {
+            if (profileRoleCreated) await supabase.from("profile_roles").delete().eq("profile_id", authUserId);
+            if (profileCreated) await supabase.from("profiles").delete().eq("id", authUserId);
+            await supabase.auth.admin.deleteUser(authUserId);
+        }
+        return res.status(500).json({ success: false, message: error?.message || "Imeshindikana kuunda akaunti ya Headmaster." });
+    }
+};
 
 /**
  * GET /api/schools/headmasters

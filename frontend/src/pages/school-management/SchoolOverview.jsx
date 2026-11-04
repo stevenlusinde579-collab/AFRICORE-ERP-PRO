@@ -102,15 +102,26 @@ export default function SchoolOverview() {
                             Muhtasari wa wanafunzi, staff na non-staff wanaotumia AfriCore ERP katika shule hii.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={loadOverview}
-                        disabled={loading}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-60"
-                    >
-                        <MdRefresh className={loading ? "animate-spin" : ""} />
-                        Refresh
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                        {school?.is_active === true && (
+                            <button
+                                type="button"
+                                onClick={() => navigate(`/school-management/headmasters/add?school_id=${encodeURIComponent(id)}`)}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
+                            >
+                                + Add Headmaster
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={loadOverview}
+                            disabled={loading}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-60"
+                        >
+                            <MdRefresh className={loading ? "animate-spin" : ""} />
+                            Refresh
+                        </button>
+                    </div>
                 </div>
                 {school && (
                     <div className="mt-6 grid gap-3 border-t border-white/15 pt-5 text-sm text-blue-100 sm:grid-cols-2 lg:grid-cols-3">

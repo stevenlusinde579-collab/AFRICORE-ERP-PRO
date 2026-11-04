@@ -114,8 +114,8 @@ function Sidebar({ profile }) {
     },
 
     {
-      name: "Staff & Non-Staff",
-      path: "/teachers",
+      name: superAdmin ? "Add Headmaster" : "Staff & Non-Staff",
+      path: superAdmin ? "/school-management/headmasters/add" : "/teachers",
       icon: <FaChalkboardTeacher />,
       roles: [
         "super admin",
@@ -337,7 +337,7 @@ function Sidebar({ profile }) {
       ]
     },
 
-  ], []);
+  ], [superAdmin]);
 
 
   /* =======================================================
