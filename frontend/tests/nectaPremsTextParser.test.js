@@ -134,3 +134,15 @@ test("splits multiple profiles when PReMS copies plain Student Profile headings"
   assert.equal(result.profile_count, 2);
   assert.deepEqual(result.duplicate_prem_numbers, ["20190079473"]);
 });
+
+
+test("does not mark a PREM match complete when admission or DOB is absent", () => {
+  const qualified = parseNectaQualifiedList(`| Prem Number | Full Name | Sex |
+| --- | --- | --- |
+| 20190079473 | ABIGAELI LUKA SKOINE | Female`);
+  const incompleteProfile = parseNectaStudentProfile(profileBase
+    .replace("- **Admission Number**2612", "- **Admission Number**")
+    .replace("- **Date Of Birth**Oct 14, 2012", "- **Date Of Birth**"));
+  const result = mergeNectaQualifiedProfiles(qualified, [incompleteProfile]);
+  assert.equal(result.students[0].profile_status, "incomplete");
+});
