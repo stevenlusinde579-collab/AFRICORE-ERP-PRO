@@ -146,3 +146,13 @@ test("does not mark a PREM match complete when admission or DOB is absent", () =
   const result = mergeNectaQualifiedProfiles(qualified, [incompleteProfile]);
   assert.equal(result.students[0].profile_status, "incomplete");
 });
+
+
+test("finds student name after copied PReMS breadcrumb and image lines", () => {
+  const source = profileBase
+    .replace("# Student Profile", "Student Profile")
+    .replace("### ABIGAELI LUKA SKOINE", "ABIGAELI LUKA SKOINE");
+  const copiedPage = source.replace("Student Profile\\nABIGAELI", "Student Profile\\n- [Home](https://prems.necta.go.tz/prems/students)\\n![image](https://prems.necta.go.tz/prems/img/no_image.jpg)\\nABIGAELI");
+  const result = parseNectaStudentProfile(copiedPage);
+  assert.equal(result.full_name, "ABIGAELI LUKA SKOINE");
+});
