@@ -169,6 +169,7 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
     duplicate_profile_prem_numbers: [...duplicateProfiles],
     matched_count: students.filter((row) => row.profile_status === "matched").length,
     missing_profile_count: students.filter((row) => row.profile_status === "missing").length,
+    incomplete_count: students.filter((row) => row.profile_status === "incomplete").length,
     mismatch_count: students.filter((row) => row.profile_status === "mismatch" || row.profile_status === "duplicate_profile").length
   };
 }
