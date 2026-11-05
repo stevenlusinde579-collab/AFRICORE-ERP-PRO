@@ -75,10 +75,10 @@ export function parseNectaStudentProfile(text) {
     const titleIndex = lines.findIndex((line) => /^student profile$/i.test(line.replace(/^#+\s*/, "")));
     const candidate = titleIndex >= 0
       ? lines.slice(titleIndex + 1).find((line) => {
-        const plain = line.replace(/^#+\\s*/, "").replace(/^[-*]\\s*/, "").trim();
-        const words = plain.split(/\\s+/);
+        const plain = line.replace(/^#+\s*/, "").replace(/^[-*]\s*/, "").trim();
+        const words = plain.split(/\s+/);
         return words.length >= 2 && words.length <= 6 &&
-          !plain.includes(":") && !/^!?\\[|^https?:|^home\\b|student profile/i.test(plain) &&
+          !plain.includes(":") && !/^!?\[|^https?:|^home\b|student profile/i.test(plain) &&
           !sectionHeadings.test(plain);
       })
       : "";
