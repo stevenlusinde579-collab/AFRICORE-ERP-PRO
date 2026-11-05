@@ -129,7 +129,7 @@ begin
       raise exception 'A profile has an invalid Sex value.';
     end if;
 
-    if coalesce(v_item->>'date_of_birth', '') !~ '^\\d{4}-\\d{2}-\\d{2}$' then
+    if coalesce(v_item->>'date_of_birth', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
       raise exception 'A profile has an invalid Date of Birth format.';
     end if;
 
