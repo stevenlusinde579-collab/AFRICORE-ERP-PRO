@@ -75,8 +75,11 @@ begin
   end if;
 
   if p_profile_students is null
-     or jsonb_typeof(p_profile_students) is distinct from 'array'
-     or jsonb_array_length(p_profile_students) < 1
+     or jsonb_typeof(p_profile_students) is distinct from 'array' then
+    raise exception 'Profile import payload must be a JSON array.';
+  end if;
+
+  if jsonb_array_length(p_profile_students) < 1
      or jsonb_array_length(p_profile_students) > 500 then
     raise exception 'Profile import must contain between 1 and 500 student rows.';
   end if;
