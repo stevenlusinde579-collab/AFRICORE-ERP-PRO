@@ -486,10 +486,11 @@ export default function NectaStudentImport() {
             </div>
           </div>}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
               <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.total_qualified}</b><div>Qualified rows</div></div>
               <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.matched_count}</b><div>Profiles matched</div></div>
               <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.missing_profile_count}</b><div>Profiles missing</div></div>
+              <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.incomplete_count}</b><div>Profiles incomplete</div></div>
               <div className="rounded-lg bg-white border p-3"><b>{qualifiedPreview.mismatch_count}</b><div>Mismatch/duplicate</div></div>
             </div>
             {(qualifiedPreview.qualified_duplicates.length || qualifiedPreview.profile_duplicates.length ||
