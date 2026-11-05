@@ -70,9 +70,9 @@ export function parseNectaStudentProfile(text) {
   const headings = [...source.matchAll(/^\s*#{1,6}\s+(.+)$/gm)].map((m) => m[1].trim());
   const sectionHeadings = /^(student profile|details|qualifications|guardian information|condition|difficulties|student's difficulties|student's disabilities)$/i;
   let fullName = headings.find((x) => {
-    const words = x.trim().split(/\\s+/);
+    const words = x.trim().split(/\s+/);
     return words.length >= 2 && words.length <= 6 &&
-      !x.includes(":") && !/^PREM\\b/i.test(x) && !sectionHeadings.test(x);
+      !x.includes(":") && !/^PREM\b/i.test(x) && !sectionHeadings.test(x);
   }) || "";
   if (!fullName) {
     const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
