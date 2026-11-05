@@ -30,6 +30,7 @@ import AddHeadmaster from "../pages/school-management/AddHeadmaster";
 
 import Students from "../pages/students/Students";
 import AddStudent from "../pages/students/AddStudent";
+import NectaStudentImport from "../pages/students/NectaStudentImport";
 import EditStudent from "../pages/students/EditStudent";
 import StudentProfile from "../pages/students/StudentProfile";
 
@@ -366,6 +367,10 @@ export default function AppRoutes() {
                     <Route
                         path="students/add"
                         element={<AddStudent />}
+                    />
+                    <Route
+                        path="students/necta-import"
+                        element={<NectaStudentImport />}
                     />
                 </Route>
 
