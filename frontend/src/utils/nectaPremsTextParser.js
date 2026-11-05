@@ -74,7 +74,13 @@ export function parseNectaStudentProfile(text) {
     const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const titleIndex = lines.findIndex((line) => /^student profile$/i.test(line.replace(/^#+\s*/, "")));
     const candidate = titleIndex >= 0
-      ? lines.slice(titleIndex + 1).find((line) => !line.startsWith("- [") && !line.includes(":") && !sectionHeadings.test(line.replace(/^#+\s*/, "")))
+      ? lines.slice(titleIndex + 1).find((line) => {
+        const plain = line.replace(/^#+\\s*/, "").replace(/^[-*]\\s*/, "").trim();
+        const words = plain.split(/\\s+/);
+        return words.length >= 2 && words.length <= 6 &&
+          !plain.includes(":") && !/^!?\\[|^https?:|^home\\b|student profile/i.test(plain) &&
+          !sectionHeadings.test(plain);
+      })
       : "";
     fullName = candidate ? candidate.replace(/^#+\s*/, "").trim() : "";
   }
@@ -142,7 +148,8 @@ export function mergeNectaQualifiedProfiles(qualified, profiles) {
       ...row,
       profile,
       profile_status: !profile ? "missing" : duplicateProfiles.has(row.prem_number) ? "duplicate_profile" :
-        !nameMatches || !sexMatches ? "mismatch" : "matched",
+        !nameMatches || !sexMatches ? "mismatch" :
+          !profile.admission_number || !profile.date_of_birth ? "incomplete" : "matched",
       profile_warnings: [
         ...(profile && !profile.full_name ? ["Profile full name missing"] : []),
         ...(profile && profile.full_name && !nameMatches ? ["Profile name does not match Qualified list"] : []),
