@@ -1122,7 +1122,24 @@ function EnterMarks() {
     };
 
     useEffect(() => {
+        if (!examId || !selectedExamSubjectId) {
+            checkExamApproval(selectedExamSubjectId);
+            return undefined;
+        }
+
         checkExamApproval(selectedExamSubjectId);
+
+        const refreshApproval = () => {
+            if (!document.hidden) checkExamApproval(selectedExamSubjectId);
+        };
+
+        const timer = setInterval(refreshApproval, 10000);
+        window.addEventListener("focus", refreshApproval);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshApproval);
+        };
     }, [examId, selectedExamSubjectId]);
 
     const loadExam = async () => {
