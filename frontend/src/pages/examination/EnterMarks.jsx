@@ -1092,8 +1092,12 @@ function EnterMarks() {
                             ? "Deputy Headmaster Approval bado haijakamilika."
                             : "Headmaster Final Approval bado haijakamilika."
                 );
-            } else {
+            } else if (!options.silent) {
                 setError("");
+            } else {
+                setError(previous =>
+                    String(previous || "").includes("Approval") ? "" : previous
+                );
             }
 
             return approved;
