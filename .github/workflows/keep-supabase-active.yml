@@ -1,0 +1,56 @@
+name: Keep AfriCore Supabase Active
+
+on:
+  schedule:
+    # Three small read-only requests each day (UTC).
+    - cron: "20 3,11,19 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: africore-supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Read-only Supabase database check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Query the single public keepalive row
+        shell: bash
+        env:
+          SUPABASE_URL: https://ejsywbmmiwzesuqnjvuo.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_rNzklwg0R2cW-GsSP2rIEw_2rVWBjqX
+        run: |
+          set -euo pipefail
+
+          response_file="$(mktemp)"
+          http_status="$(curl \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --retry-delay 10 \
+            --max-time 20 \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            --header "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+            --header "Accept: application/json" \
+            "${SUPABASE_URL}/rest/v1/project_keepalive?select=id")
+
+          if [[ "$http_status" != "200" ]]; then
+            echo "Supabase keepalive request failed with HTTP $http_status."
+            cat "$response_file"
+            exit 1
+          fi
+
+          if ! jq -e 'length == 1 and .[0].id == 1' "$response_file" >/dev/null; then
+            echo "Supabase responded, but the expected keepalive row was not returned."
+            cat "$response_file"
+            exit 1
+          fi
+
+          echo "AfriCore Supabase database responded successfully."
