@@ -424,7 +424,7 @@ const ExamApproval = () => {
             return data || null;
         } catch (error) {
             console.error("LOAD SUBJECT APPROVAL STATUS ERROR:", error);
-            setApprovalStatus(null);
+            if (!options.silent) setApprovalStatus(null);
             return null;
         } finally {
             if (!options.silent) setApprovalLoading(false);
@@ -471,7 +471,7 @@ const ExamApproval = () => {
 
         const refreshSharedExamState = () => {
             if (document.hidden) return;
-            loadExamPapers(selectedExamSubjectId);
+            loadExamPapers(selectedExamSubjectId, { silent: true });
             loadAIAnalysis(selectedExamSubjectId, { silent: true });
             loadApprovalStatus(selectedExamSubjectId, { silent: true });
         };
@@ -563,7 +563,8 @@ const ExamApproval = () => {
     // =========================================================
 
     const loadExamPapers = async (
-        subjectId = selectedExamSubjectId
+        subjectId = selectedExamSubjectId,
+        options = {}
     ) => {
 
         if (
@@ -579,7 +580,7 @@ const ExamApproval = () => {
 
         try {
 
-            setPapersLoading(true);
+            if (!options.silent) setPapersLoading(true);
 
             const {
                 data,
@@ -637,13 +638,13 @@ const ExamApproval = () => {
                 err
             );
 
-            setPapers([]);
+            if (!options.silent) setPapers([]);
 
             return [];
 
         } finally {
 
-            setPapersLoading(false);
+            if (!options.silent) setPapersLoading(false);
 
         }
 
@@ -813,7 +814,7 @@ const ExamApproval = () => {
                 err
             );
 
-            setAnalysis(null);
+            if (!options.silent) setAnalysis(null);
 
         } finally {
 
