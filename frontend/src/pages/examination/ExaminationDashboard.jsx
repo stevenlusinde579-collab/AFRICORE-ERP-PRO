@@ -104,11 +104,17 @@ function ExaminationDashboard() {
 
         loadExams();
 
-        const timer = setInterval(() => {
+        const refreshExams = () => {
             if (!document.hidden) loadExams(true);
-        }, 10000);
+        };
 
-        return () => clearInterval(timer);
+        const timer = setInterval(refreshExams, 10000);
+        window.addEventListener("focus", refreshExams);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshExams);
+        };
 
     }, [
         school?.id,
@@ -186,7 +192,7 @@ function ExaminationDashboard() {
                         : []
                 );
 
-            } else {
+            } else if (!silent) {
 
                 setExams([]);
 
