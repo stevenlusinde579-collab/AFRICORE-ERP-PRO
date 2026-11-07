@@ -272,7 +272,7 @@ const ExamApproval = () => {
     // LOAD SUBJECTS
     // =========================================================
 
-    const loadExamSubjects = async () => {
+    const loadExamSubjects = async (options = {}) => {
 
         try {
 
@@ -332,38 +332,19 @@ const ExamApproval = () => {
 
             let initialSubject = "";
 
+            const preferredSubject = [
+                selectedExamSubjectId,
+                stateSubject,
+                savedSubject
+            ].find(candidate =>
+                candidate &&
+                rows.some(row => String(row.id) === String(candidate))
+            );
 
-            if (
-                stateSubject &&
-                rows.some(
-                    row =>
-                        String(row.id) ===
-                        String(stateSubject)
-                )
-            ) {
-
-                initialSubject =
-                    String(stateSubject);
-
-            } else if (
-                savedSubject &&
-                rows.some(
-                    row =>
-                        String(row.id) ===
-                        String(savedSubject)
-                )
-            ) {
-
-                initialSubject =
-                    String(savedSubject);
-
-            } else if (
-                rows.length > 0
-            ) {
-
-                initialSubject =
-                    String(rows[0].id);
-
+            if (preferredSubject) {
+                initialSubject = String(preferredSubject);
+            } else if (rows.length > 0) {
+                initialSubject = String(rows[0].id);
             }
 
             setSelectedExamSubjectId(
@@ -377,11 +358,27 @@ const ExamApproval = () => {
                 err
             );
 
-            setExamSubjects([]);
+            if (!options.silent) setExamSubjects([]);
 
         }
 
     };
+
+    useEffect(() => {
+        if (!examId) return undefined;
+
+        const refreshExamSubjects = () => {
+            if (!document.hidden) loadExamSubjects({ silent: true });
+        };
+
+        const timer = setInterval(refreshExamSubjects, 15000);
+        window.addEventListener("focus", refreshExamSubjects);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshExamSubjects);
+        };
+    }, [examId, selectedExamSubjectId]);
 
 
     // =========================================================
