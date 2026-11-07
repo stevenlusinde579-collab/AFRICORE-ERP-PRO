@@ -2349,55 +2349,29 @@ function EnterMarks() {
         }
 
 
-        setSelectedQuestions(
-            previous => {
+        setSelectedQuestions(previous => {
+            const next = {};
 
-                const next = {
-                    ...previous
-                };
-
-
-                Object.values(
-                    existingMarks
-                ).forEach(
-                    record => {
-
-                        const question =
-                            questions.find(
-                                item =>
-                                    Number(
-                                        item.id
-                                    ) ===
-                                    Number(
-                                        record.question_id
-                                    )
-                            );
-
-
-                        if (
-                            question &&
-                            isSelectiveQuestion(
-                                question
-                            )
-                        ) {
-
-                            const key =
-                                getStudentKey(
-                                    record.student_id,
-                                    record.question_id
-                                );
-
-
-                            next[key] =
-                                true;
-                        }
-                    }
+            Object.values(existingMarks).forEach(record => {
+                const question = questions.find(
+                    item => Number(item.id) === Number(record.question_id)
                 );
 
+                if (question && isSelectiveQuestion(question)) {
+                    const key = getStudentKey(record.student_id, record.question_id);
+                    next[key] = true;
+                }
+            });
 
-                return next;
-            }
-        );
+            Object.entries(previous).forEach(([key, value]) => {
+                const studentId = key.split("_")[0];
+                if (dirtyStudentsRef.current.has(studentId)) {
+                    next[key] = value;
+                }
+            });
+
+            return next;
+        });
 
     }, [
         questions,
@@ -2411,17 +2385,7 @@ function EnterMarks() {
 
     useEffect(() => {
 
-        if (
-            Object.keys(
-                existingMarks
-            ).length === 0
-        ) {
-            return;
-        }
-
-
-        const restoredMarks =
-            {};
+        const restoredMarks = {};
 
 
         Object.values(
@@ -2449,12 +2413,18 @@ function EnterMarks() {
         );
 
 
-        setMarks(
-            previous => ({
-                ...restoredMarks,
-                ...previous
-            })
-        );
+        setMarks(previous => {
+            const next = { ...restoredMarks };
+
+            Object.entries(previous).forEach(([key, value]) => {
+                const studentId = key.split("_")[0];
+                if (dirtyStudentsRef.current.has(studentId)) {
+                    next[key] = value;
+                }
+            });
+
+            return next;
+        });
 
     }, [
         existingMarks
