@@ -1004,7 +1004,7 @@ function EnterMarks() {
         );
     };
 
-    const checkExamApproval = async (examSubjectId = selectedExamSubjectId) => {
+    const checkExamApproval = async (examSubjectId = selectedExamSubjectId, options = {}) => {
 
         if (!examId || !examSubjectId) {
             setCheckingApproval(false);
@@ -1019,7 +1019,7 @@ function EnterMarks() {
         }
 
         try {
-            setCheckingApproval(true);
+            if (!options.silent) setCheckingApproval(true);
 
             // IMPORTANT: Approval belongs to the selected exam_subject
             // (Subject + Class), not the whole examination.
@@ -1101,23 +1101,24 @@ function EnterMarks() {
         } catch (err) {
             console.error("EXAM SUBJECT APPROVAL CHECK ERROR:", err);
 
-            setFullApproval(false);
-            setApprovalDetails({
-                academic: false,
-                deputy: false,
-                headmaster: false,
-                statusApproved: false
-            });
-
-            setError(
-                err?.message ||
-                "Imeshindikana kuthibitisha approval ya Exam Subject."
-            );
+            if (!options.silent) {
+                setFullApproval(false);
+                setApprovalDetails({
+                    academic: false,
+                    deputy: false,
+                    headmaster: false,
+                    statusApproved: false
+                });
+                setError(
+                    err?.message ||
+                    "Imeshindikana kuthibitisha approval ya Exam Subject."
+                );
+            }
 
             return false;
 
         } finally {
-            setCheckingApproval(false);
+            if (!options.silent) setCheckingApproval(false);
         }
     };
 
@@ -1130,7 +1131,7 @@ function EnterMarks() {
         checkExamApproval(selectedExamSubjectId);
 
         const refreshApproval = () => {
-            if (!document.hidden) checkExamApproval(selectedExamSubjectId);
+            if (!document.hidden) checkExamApproval(selectedExamSubjectId, { silent: true });
         };
 
         const timer = setInterval(refreshApproval, 10000);
