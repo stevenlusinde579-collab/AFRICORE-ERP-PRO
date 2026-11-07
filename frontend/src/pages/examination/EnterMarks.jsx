@@ -158,6 +158,13 @@ function EnterMarks() {
     const markInputRefs = useRef({});
 
     const saveMaxMarksButtonRef = useRef(null);
+    const dirtyStudentsRef = useRef(new Set());
+
+    useEffect(() => {
+        dirtyStudentsRef.current = new Set(
+            Object.keys(savedStudents).filter(id => savedStudents[id] === false)
+        );
+    }, [savedStudents]);
 
 
     // =========================================================
@@ -2166,7 +2173,7 @@ function EnterMarks() {
             const silent = options.silent === true;
             const preserveUnsaved = options.preserveUnsaved === true;
             const dirtyStudentIds = preserveUnsaved
-                ? Object.keys(savedStudents).filter(id => savedStudents[id] === false)
+                ? Array.from(dirtyStudentsRef.current)
                 : [];
 
             try {
@@ -6524,9 +6531,12 @@ function EnterMarks() {
                                             {item.field === "practical_max" ? (
                                                 <select
                                                     value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
-                                                    onChange={event => setStudentAssessmentDrafts(previous => ({
-                                                        ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
-                                                    }))}
+                                                    onChange={event => {
+                                                        setStudentAssessmentDrafts(previous => ({
+                                                            ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                        }));
+                                                        setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
+                                                    }}
                                                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3"
                                                 >
                                                     <option value="">Usitumie Practical</option>
@@ -6535,9 +6545,12 @@ function EnterMarks() {
                                             ) : (
                                                 <input type="number" min="0" step="0.01"
                                                     value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
-                                                    onChange={event => setStudentAssessmentDrafts(previous => ({
-                                                        ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
-                                                    }))}
+                                                    onChange={event => {
+                                                        setStudentAssessmentDrafts(previous => ({
+                                                            ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                        }));
+                                                        setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
+                                                    }}
                                                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3" placeholder="Leave blank if not used" />
                                             )}
                                         </label>
