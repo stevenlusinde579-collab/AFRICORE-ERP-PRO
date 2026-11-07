@@ -389,14 +389,14 @@ const ExamApproval = () => {
     // =========================================================
     // Approval belongs to the exact exam_subject (Subject + Class).
     // Never read approval from exams.
-    const loadApprovalStatus = async (examSubjectId = selectedExamSubjectId) => {
+    const loadApprovalStatus = async (examSubjectId = selectedExamSubjectId, options = {}) => {
         if (!examSubjectId) {
             setApprovalStatus(null);
             return null;
         }
 
         try {
-            setApprovalLoading(true);
+            if (!options.silent) setApprovalLoading(true);
 
             const { data, error: approvalError } = await supabase
                 .from("exam_subjects")
@@ -427,7 +427,7 @@ const ExamApproval = () => {
             setApprovalStatus(null);
             return null;
         } finally {
-            setApprovalLoading(false);
+            if (!options.silent) setApprovalLoading(false);
         }
     };
 
@@ -468,6 +468,21 @@ const ExamApproval = () => {
         loadApprovalStatus(
             selectedExamSubjectId
         );
+
+        const refreshSharedExamState = () => {
+            if (document.hidden) return;
+            loadExamPapers(selectedExamSubjectId);
+            loadAIAnalysis(selectedExamSubjectId, { silent: true });
+            loadApprovalStatus(selectedExamSubjectId, { silent: true });
+        };
+
+        const timer = setInterval(refreshSharedExamState, 12000);
+        window.addEventListener("focus", refreshSharedExamState);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSharedExamState);
+        };
 
     }, [
         selectedExamSubjectId,
@@ -640,7 +655,8 @@ const ExamApproval = () => {
     // =========================================================
 
     const loadAIAnalysis = async (
-        subjectId = selectedExamSubjectId
+        subjectId = selectedExamSubjectId,
+        options = {}
     ) => {
 
         if (
@@ -656,8 +672,10 @@ const ExamApproval = () => {
 
         try {
 
-            setAnalysisLoading(true);
-            setAnalysis(null);
+            if (!options.silent) {
+                setAnalysisLoading(true);
+                setAnalysis(null);
+            }
 
             const response =
                 await axios.get(
@@ -799,7 +817,7 @@ const ExamApproval = () => {
 
         } finally {
 
-            setAnalysisLoading(false);
+            if (!options.silent) setAnalysisLoading(false);
 
         }
 
