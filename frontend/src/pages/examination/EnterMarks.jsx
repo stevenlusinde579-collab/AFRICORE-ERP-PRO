@@ -159,12 +159,18 @@ function EnterMarks() {
 
     const saveMaxMarksButtonRef = useRef(null);
     const dirtyStudentsRef = useRef(new Set());
+    const marksSyncBusyRef = useRef(false);
 
     useEffect(() => {
         dirtyStudentsRef.current = new Set(
             Object.keys(savedStudents).filter(id => savedStudents[id] === false)
         );
     }, [savedStudents]);
+
+    useEffect(() => {
+        marksSyncBusyRef.current =
+            savingStudentId !== null || savingAssessmentSetup || savingMaxMarks;
+    }, [savingStudentId, savingAssessmentSetup, savingMaxMarks]);
 
 
     // =========================================================
@@ -2145,7 +2151,7 @@ function EnterMarks() {
         loadExistingMarks();
 
         const refreshSharedMarks = () => {
-            if (document.hidden || savingStudentId !== null || savingAssessmentSetup || savingMaxMarks) return;
+            if (document.hidden || marksSyncBusyRef.current) return;
             loadExistingMarks({ silent: true, preserveUnsaved: true });
         };
 
@@ -2160,10 +2166,7 @@ function EnterMarks() {
     }, [
         examId,
         selectedExamSubjectId,
-        canEnterMarks,
-        savingStudentId,
-        savingAssessmentSetup,
-        savingMaxMarks
+        canEnterMarks
     ]);
 
 
