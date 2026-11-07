@@ -322,9 +322,11 @@ function ExaminationRoleDashboard() {
             }
         } catch (err) {
             console.error("EXAMINATION ROLE DASHBOARD ERROR:", err);
-            setError(
-                err?.message || "Failed to load examination access."
-            );
+            if (!silent) {
+                setError(
+                    err?.message || "Failed to load examination access."
+                );
+            }
         } finally {
             if (!silent) setLoading(false);
         }
