@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -28,6 +28,65 @@ import {
 function LandingPage() {
     const navigate = useNavigate();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [activeShowcaseIndex, setActiveShowcaseIndex] = useState(0);
+    const [showcasePaused, setShowcasePaused] = useState(false);
+
+    // Real-world education photos illustrate the different AfriCore modules.
+    // These are illustrative photos, not screenshots of live school records.
+    const showcaseSlides = [
+        {
+            module: "Student Management",
+            headline: "Every learner, organised.",
+            description: "Student profiles, enrolment and class records in one place.",
+            image: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1400&q=85",
+            alt: "Teacher supporting learners in a classroom",
+        },
+        {
+            module: "Academic Management",
+            headline: "Teaching made connected.",
+            description: "Bring teachers, subjects, classes and academic planning together.",
+            image: "https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=85",
+            alt: "Teacher working with students in a classroom",
+        },
+        {
+            module: "Examination & Results",
+            headline: "From assessment to insight.",
+            description: "Manage examinations, marks, approval and performance analysis.",
+            image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1400&q=85",
+            alt: "Student writing during an assessment",
+        },
+        {
+            module: "Finance Management",
+            headline: "A clearer view of school finance.",
+            description: "Keep financial activity and reporting organised.",
+            image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1400&q=85",
+            alt: "Person reviewing financial information at a desk",
+        },
+        {
+            module: "Communication",
+            headline: "Keep your school connected.",
+            description: "Support communication between authorised school users.",
+            image: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1400&q=85",
+            alt: "Colleagues collaborating around a table",
+        },
+        {
+            module: "Analytics & Reports",
+            headline: "Make informed decisions.",
+            description: "Turn school information into useful management insights.",
+            image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1400&q=85",
+            alt: "Analytics dashboard displayed on a computer",
+        },
+    ];
+
+    useEffect(() => {
+        if (showcasePaused) return undefined;
+
+        const timer = window.setInterval(() => {
+            setActiveShowcaseIndex((current) => (current + 1) % showcaseSlides.length);
+        }, 5200);
+
+        return () => window.clearInterval(timer);
+    }, [showcasePaused, showcaseSlides.length]);
 
     const scrollToSection = (id) => {
         const element = document.getElementById(id);
@@ -299,93 +358,163 @@ function LandingPage() {
             {/* HERO */}
             <section
                 id="home"
-                className="relative min-h-screen flex items-center pt-28 overflow-hidden"
+                className="relative min-h-screen flex items-center pt-28 pb-16 overflow-hidden"
             >
                 <div className="absolute inset-0">
                     <img
                         src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=2000&q=85"
-                        alt="Modern education"
+                        alt=""
+                        aria-hidden="true"
                         className="w-full h-full object-cover"
                     />
-
-                    <div className="absolute inset-0 bg-slate-950/80" />
-
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-blue-950/60" />
+                    <div className="absolute inset-0 bg-slate-950/85" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-blue-950/70" />
                 </div>
 
                 <div className="absolute top-40 right-10 w-72 h-72 bg-blue-500/20 rounded-full blur-3xl" />
-
                 <div className="absolute bottom-20 left-10 w-72 h-72 bg-cyan-400/10 rounded-full blur-3xl" />
 
                 <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 w-full">
-                    <div className="max-w-4xl">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 text-sm font-semibold mb-7">
-                            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                            Intelligent Education Management Platform
+                    <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-12 xl:gap-16 items-center">
+                        <div className="max-w-3xl">
+                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 text-sm font-semibold mb-7">
+                                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                                Intelligent Education Management Platform
+                            </div>
+
+                            <h1 className="text-5xl md:text-6xl xl:text-7xl font-black leading-[1.05] tracking-tight">
+                                Smart School Management.
+                                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-sky-300">
+                                    One Powerful Platform.
+                                </span>
+                            </h1>
+
+                            <p className="mt-7 max-w-2xl text-lg md:text-xl text-slate-300 leading-relaxed">
+                                AfriCore ERP is a modern, secure and intelligent
+                                education management platform designed to bring
+                                academic, administrative, financial,
+                                communication and analytical operations together
+                                in one integrated system.
+                            </p>
+
+                            <div className="mt-9 flex flex-col sm:flex-row flex-wrap gap-4">
+                                <button
+                                    type="button"
+                                    onClick={handleLogin}
+                                    className="inline-flex items-center justify-center gap-3 px-7 py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold shadow-xl shadow-blue-600/20 transition"
+                                >
+                                    Login to AfriCore ERP
+                                    <FaArrowRight />
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => scrollToSection("features")}
+                                    className="inline-flex items-center justify-center gap-3 px-7 py-4 rounded-2xl border border-white/15 bg-white/5 hover:bg-white/10 font-bold transition"
+                                >
+                                    Explore Features
+                                    <FaChevronRight className="text-sm" />
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleSystemManual}
+                                    className="inline-flex items-center justify-center gap-3 px-7 py-4 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20 font-bold transition"
+                                >
+                                    <FaBookOpen />
+                                    System Manual
+                                    <FaArrowRight className="text-sm" />
+                                </button>
+                            </div>
+
+                            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-slate-400">
+                                <div className="flex items-center gap-2">
+                                    <FaCheckCircle className="text-cyan-400" />
+                                    Integrated Platform
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <FaCheckCircle className="text-cyan-400" />
+                                    Role-Based Security
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <FaCheckCircle className="text-cyan-400" />
+                                    Intelligent Analytics
+                                </div>
+                            </div>
                         </div>
 
-                        <h1 className="text-5xl md:text-6xl lg:text-7xl font-black leading-[1.05] tracking-tight">
-                            Smart School Management.
-                            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-sky-300">
-                                One Powerful Platform.
-                            </span>
-                        </h1>
+                        {/* AUTOMATIC MODULE SHOWCASE */}
+                        <div
+                            className="relative mx-auto w-full max-w-xl"
+                            onMouseEnter={() => setShowcasePaused(true)}
+                            onMouseLeave={() => setShowcasePaused(false)}
+                            onFocus={() => setShowcasePaused(true)}
+                            onBlur={(event) => {
+                                if (!event.currentTarget.contains(event.relatedTarget)) {
+                                    setShowcasePaused(false);
+                                }
+                            }}
+                        >
+                            <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-cyan-400/25 via-blue-500/20 to-indigo-500/20 blur-2xl" />
+                            <div className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900 shadow-2xl shadow-black/40">
+                                <div className="relative aspect-[4/3] overflow-hidden bg-slate-800">
+                                    {showcaseSlides.map((slide, index) => (
+                                        <img
+                                            key={slide.image}
+                                            src={slide.image}
+                                            alt={slide.alt}
+                                            loading={index === 0 ? "eager" : "lazy"}
+                                            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${index === activeShowcaseIndex ? "opacity-100" : "opacity-0"}`}
+                                            aria-hidden={index !== activeShowcaseIndex}
+                                        />
+                                    ))}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/15 to-slate-950/5" />
+                                    <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-slate-950/60 px-3 py-2 text-xs font-bold text-white backdrop-blur-md">
+                                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                                        AFRICORE IN ACTION
+                                    </div>
+                                    <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8">
+                                        <div className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
+                                            {showcaseSlides[activeShowcaseIndex].module}
+                                        </div>
+                                        <h2 className="mt-2 text-2xl sm:text-3xl font-black text-white">
+                                            {showcaseSlides[activeShowcaseIndex].headline}
+                                        </h2>
+                                        <p className="mt-2 max-w-md text-sm sm:text-base leading-relaxed text-slate-200">
+                                            {showcaseSlides[activeShowcaseIndex].description}
+                                        </p>
+                                    </div>
+                                </div>
 
-                        <p className="mt-7 max-w-2xl text-lg md:text-xl text-slate-300 leading-relaxed">
-                            AfriCore ERP is a modern, secure and intelligent
-                            education management platform designed to bring
-                            academic, administrative, financial,
-                            communication and analytical operations together
-                            in one integrated system.
-                        </p>
-
-                        {/* HERO BUTTONS */}
-                        <div className="mt-9 flex flex-col sm:flex-row flex-wrap gap-4">
-                            <button
-                                type="button"
-                                onClick={handleLogin}
-                                className="inline-flex items-center justify-center gap-3 px-7 py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold shadow-xl shadow-blue-600/20 transition"
-                            >
-                                Login to AfriCore ERP
-                                <FaArrowRight />
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => scrollToSection("features")}
-                                className="inline-flex items-center justify-center gap-3 px-7 py-4 rounded-2xl border border-white/15 bg-white/5 hover:bg-white/10 font-bold transition"
-                            >
-                                Explore Features
-                                <FaChevronRight className="text-sm" />
-                            </button>
-
-                            {/* NEW SYSTEM MANUAL BUTTON */}
-                            <button
-                                type="button"
-                                onClick={handleSystemManual}
-                                className="inline-flex items-center justify-center gap-3 px-7 py-4 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20 font-bold transition"
-                            >
-                                <FaBookOpen />
-                                System Manual
-                                <FaArrowRight className="text-sm" />
-                            </button>
-                        </div>
-
-                        <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-slate-400">
-                            <div className="flex items-center gap-2">
-                                <FaCheckCircle className="text-cyan-400" />
-                                Integrated Platform
+                                <div className="flex items-center justify-between gap-4 bg-slate-950/95 px-5 py-4">
+                                    <div className="text-xs text-slate-400">
+                                        Module {activeShowcaseIndex + 1} of {showcaseSlides.length}
+                                    </div>
+                                    <div className="flex items-center gap-2" aria-label="Choose showcase slide">
+                                        {showcaseSlides.map((slide, index) => (
+                                            <button
+                                                key={slide.module}
+                                                type="button"
+                                                onClick={() => setActiveShowcaseIndex(index)}
+                                                aria-label={`Show ${slide.module}`}
+                                                aria-current={index === activeShowcaseIndex ? "true" : undefined}
+                                                className={`h-2.5 rounded-full transition-all duration-300 ${index === activeShowcaseIndex ? "w-8 bg-cyan-400" : "w-2.5 bg-white/35 hover:bg-white/70"}`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowcasePaused((paused) => !paused)}
+                                        className="rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 transition"
+                                        aria-label={showcasePaused ? "Play slideshow" : "Pause slideshow"}
+                                    >
+                                        {showcasePaused ? "Play" : "Pause"}
+                                    </button>
+                                </div>
                             </div>
-
-                            <div className="flex items-center gap-2">
-                                <FaCheckCircle className="text-cyan-400" />
-                                Role-Based Security
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <FaCheckCircle className="text-cyan-400" />
-                                Intelligent Analytics
-                            </div>
+                            <p className="relative mt-4 text-center text-xs text-slate-400">
+                                A look at the people and everyday work behind modern school management.
+                            </p>
                         </div>
                     </div>
                 </div>
