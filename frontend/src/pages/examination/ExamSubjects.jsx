@@ -29,15 +29,27 @@ function ExamSubjects() {
 
     useEffect(() => {
         loadData();
-    }, [examId]);
+
+        const refreshSubjects = () => {
+            if (!document.hidden && !saving && !loadingClasses) loadData(true);
+        };
+
+        const timer = setInterval(refreshSubjects, 10000);
+        window.addEventListener("focus", refreshSubjects);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSubjects);
+        };
+    }, [examId, saving, loadingClasses]);
 
     // ============================================================
     // LOAD EVERYTHING
     // ============================================================
 
-    const loadData = async () => {
+    const loadData = async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
 
             // ----------------------------------------------------
             // GET EXAM
@@ -84,7 +96,7 @@ function ExamSubjects() {
             // They will be loaded according to selected subject.
             // ----------------------------------------------------
 
-            setClasses([]);
+            if (!silent) setClasses([]);
 
             // ----------------------------------------------------
             // GET EXISTING EXAM SUBJECTS
@@ -123,7 +135,7 @@ function ExamSubjects() {
         } catch (error) {
             console.log("LOAD EXAM SUBJECTS ERROR:", error);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 

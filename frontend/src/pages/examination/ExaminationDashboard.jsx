@@ -104,6 +104,18 @@ function ExaminationDashboard() {
 
         loadExams();
 
+        const refreshExams = () => {
+            if (!document.hidden) loadExams(true);
+        };
+
+        const timer = setInterval(refreshExams, 10000);
+        window.addEventListener("focus", refreshExams);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshExams);
+        };
+
     }, [
         school?.id,
         activeAcademicYearId,
@@ -111,13 +123,14 @@ function ExaminationDashboard() {
     ]);
 
 
-    const loadExams = async () => {
+    const loadExams = async (silent = false) => {
 
         try {
 
-            setLoading(true);
-
-            setError("");
+            if (!silent) {
+                setLoading(true);
+                setError("");
+            }
 
 
             // -------------------------------------------------
@@ -179,7 +192,7 @@ function ExaminationDashboard() {
                         : []
                 );
 
-            } else {
+            } else if (!silent) {
 
                 setExams([]);
 
@@ -198,18 +211,18 @@ function ExaminationDashboard() {
             );
 
 
-            setExams([]);
-
-
-            setError(
-                err?.response?.data?.message ||
-                err?.message ||
-                "Unable to connect to Examination server."
-            );
+            if (!silent) {
+                setExams([]);
+                setError(
+                    err?.response?.data?.message ||
+                    err?.message ||
+                    "Unable to connect to Examination server."
+                );
+            }
 
         } finally {
 
-            setLoading(false);
+            if (!silent) setLoading(false);
 
         }
 

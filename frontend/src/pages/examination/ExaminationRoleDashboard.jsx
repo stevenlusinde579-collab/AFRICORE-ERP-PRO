@@ -277,10 +277,12 @@ function ExaminationRoleDashboard() {
         []
     );
 
-    const loadRole = useCallback(async () => {
+    const loadRole = useCallback(async (silent = false) => {
         try {
-            setLoading(true);
-            setError("");
+            if (!silent) {
+                setLoading(true);
+                setError("");
+            }
 
             const {
                 data: { user },
@@ -320,16 +322,30 @@ function ExaminationRoleDashboard() {
             }
         } catch (err) {
             console.error("EXAMINATION ROLE DASHBOARD ERROR:", err);
-            setError(
-                err?.message || "Failed to load examination access."
-            );
+            if (!silent) {
+                setError(
+                    err?.message || "Failed to load examination access."
+                );
+            }
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, [getSelectedRoleId, loadApprovalQueue]);
 
     useEffect(() => {
         loadRole();
+
+        const refreshRoleQueue = () => {
+            if (!document.hidden) loadRole(true);
+        };
+
+        const timer = setInterval(refreshRoleQueue, 12000);
+        window.addEventListener("focus", refreshRoleQueue);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshRoleQueue);
+        };
     }, [loadRole]);
 
     if (loading) {
@@ -816,11 +832,17 @@ function SubjectTeacherDashboard({ profile }) {
     useEffect(() => {
         loadTeacherWork();
 
-        const timer = setInterval(() => {
-            loadTeacherWork(true);
-        }, 30000);
+        const refreshTeacherWork = () => {
+            if (!document.hidden) loadTeacherWork(true);
+        };
 
-        return () => clearInterval(timer);
+        const timer = setInterval(refreshTeacherWork, 15000);
+        window.addEventListener("focus", refreshTeacherWork);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshTeacherWork);
+        };
     }, [loadTeacherWork]);
 
     const counts = useMemo(

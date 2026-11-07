@@ -86,6 +86,18 @@ function ExamList() {
 
         loadExams();
 
+        const refreshExams = () => {
+            if (!document.hidden) loadExams(true);
+        };
+
+        const timer = setInterval(refreshExams, 10000);
+        window.addEventListener("focus", refreshExams);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshExams);
+        };
+
     }, [
         school?.id,
         activeAcademicYearId,
@@ -97,12 +109,14 @@ function ExamList() {
     // LOAD EXAMS
     // =====================================================
 
-    const loadExams = async () => {
+    const loadExams = async (silent = false) => {
 
         try {
 
-            setLoading(true);
-            setError("");
+            if (!silent) {
+                setLoading(true);
+                setError("");
+            }
 
 
             // -------------------------------------------------
@@ -182,17 +196,18 @@ function ExamList() {
                 error
             );
 
-            setExams([]);
-
-            setError(
-                error?.response?.data?.message ||
+            if (!silent) {
+                setExams([]);
+                setError(
+                    error?.response?.data?.message ||
                 error?.message ||
                 "Failed to load examinations."
-            );
+                );
+            }
 
         } finally {
 
-            setLoading(false);
+            if (!silent) setLoading(false);
 
         }
 

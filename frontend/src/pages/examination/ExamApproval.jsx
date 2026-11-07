@@ -272,7 +272,7 @@ const ExamApproval = () => {
     // LOAD SUBJECTS
     // =========================================================
 
-    const loadExamSubjects = async () => {
+    const loadExamSubjects = async (options = {}) => {
 
         try {
 
@@ -332,38 +332,19 @@ const ExamApproval = () => {
 
             let initialSubject = "";
 
+            const preferredSubject = [
+                selectedExamSubjectId,
+                stateSubject,
+                savedSubject
+            ].find(candidate =>
+                candidate &&
+                rows.some(row => String(row.id) === String(candidate))
+            );
 
-            if (
-                stateSubject &&
-                rows.some(
-                    row =>
-                        String(row.id) ===
-                        String(stateSubject)
-                )
-            ) {
-
-                initialSubject =
-                    String(stateSubject);
-
-            } else if (
-                savedSubject &&
-                rows.some(
-                    row =>
-                        String(row.id) ===
-                        String(savedSubject)
-                )
-            ) {
-
-                initialSubject =
-                    String(savedSubject);
-
-            } else if (
-                rows.length > 0
-            ) {
-
-                initialSubject =
-                    String(rows[0].id);
-
+            if (preferredSubject) {
+                initialSubject = String(preferredSubject);
+            } else if (rows.length > 0) {
+                initialSubject = String(rows[0].id);
             }
 
             setSelectedExamSubjectId(
@@ -377,11 +358,27 @@ const ExamApproval = () => {
                 err
             );
 
-            setExamSubjects([]);
+            if (!options.silent) setExamSubjects([]);
 
         }
 
     };
+
+    useEffect(() => {
+        if (!examId) return undefined;
+
+        const refreshExamSubjects = () => {
+            if (!document.hidden) loadExamSubjects({ silent: true });
+        };
+
+        const timer = setInterval(refreshExamSubjects, 15000);
+        window.addEventListener("focus", refreshExamSubjects);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshExamSubjects);
+        };
+    }, [examId, selectedExamSubjectId]);
 
 
     // =========================================================
@@ -389,14 +386,14 @@ const ExamApproval = () => {
     // =========================================================
     // Approval belongs to the exact exam_subject (Subject + Class).
     // Never read approval from exams.
-    const loadApprovalStatus = async (examSubjectId = selectedExamSubjectId) => {
+    const loadApprovalStatus = async (examSubjectId = selectedExamSubjectId, options = {}) => {
         if (!examSubjectId) {
             setApprovalStatus(null);
             return null;
         }
 
         try {
-            setApprovalLoading(true);
+            if (!options.silent) setApprovalLoading(true);
 
             const { data, error: approvalError } = await supabase
                 .from("exam_subjects")
@@ -424,10 +421,10 @@ const ExamApproval = () => {
             return data || null;
         } catch (error) {
             console.error("LOAD SUBJECT APPROVAL STATUS ERROR:", error);
-            setApprovalStatus(null);
+            if (!options.silent) setApprovalStatus(null);
             return null;
         } finally {
-            setApprovalLoading(false);
+            if (!options.silent) setApprovalLoading(false);
         }
     };
 
@@ -468,6 +465,21 @@ const ExamApproval = () => {
         loadApprovalStatus(
             selectedExamSubjectId
         );
+
+        const refreshSharedExamState = () => {
+            if (document.hidden) return;
+            loadExamPapers(selectedExamSubjectId, { silent: true });
+            loadAIAnalysis(selectedExamSubjectId, { silent: true });
+            loadApprovalStatus(selectedExamSubjectId, { silent: true });
+        };
+
+        const timer = setInterval(refreshSharedExamState, 12000);
+        window.addEventListener("focus", refreshSharedExamState);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSharedExamState);
+        };
 
     }, [
         selectedExamSubjectId,
@@ -548,7 +560,8 @@ const ExamApproval = () => {
     // =========================================================
 
     const loadExamPapers = async (
-        subjectId = selectedExamSubjectId
+        subjectId = selectedExamSubjectId,
+        options = {}
     ) => {
 
         if (
@@ -564,7 +577,7 @@ const ExamApproval = () => {
 
         try {
 
-            setPapersLoading(true);
+            if (!options.silent) setPapersLoading(true);
 
             const {
                 data,
@@ -622,13 +635,13 @@ const ExamApproval = () => {
                 err
             );
 
-            setPapers([]);
+            if (!options.silent) setPapers([]);
 
             return [];
 
         } finally {
 
-            setPapersLoading(false);
+            if (!options.silent) setPapersLoading(false);
 
         }
 
@@ -640,7 +653,8 @@ const ExamApproval = () => {
     // =========================================================
 
     const loadAIAnalysis = async (
-        subjectId = selectedExamSubjectId
+        subjectId = selectedExamSubjectId,
+        options = {}
     ) => {
 
         if (
@@ -656,8 +670,10 @@ const ExamApproval = () => {
 
         try {
 
-            setAnalysisLoading(true);
-            setAnalysis(null);
+            if (!options.silent) {
+                setAnalysisLoading(true);
+                setAnalysis(null);
+            }
 
             const response =
                 await axios.get(
@@ -795,11 +811,11 @@ const ExamApproval = () => {
                 err
             );
 
-            setAnalysis(null);
+            if (!options.silent) setAnalysis(null);
 
         } finally {
 
-            setAnalysisLoading(false);
+            if (!options.silent) setAnalysisLoading(false);
 
         }
 

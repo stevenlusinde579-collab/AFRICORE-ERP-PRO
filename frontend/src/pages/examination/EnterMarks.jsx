@@ -158,6 +158,19 @@ function EnterMarks() {
     const markInputRefs = useRef({});
 
     const saveMaxMarksButtonRef = useRef(null);
+    const dirtyStudentsRef = useRef(new Set());
+    const marksSyncBusyRef = useRef(false);
+
+    useEffect(() => {
+        dirtyStudentsRef.current = new Set(
+            Object.keys(savedStudents).filter(id => savedStudents[id] === false)
+        );
+    }, [savedStudents]);
+
+    useEffect(() => {
+        marksSyncBusyRef.current =
+            savingStudentId !== null || savingAssessmentSetup || savingMaxMarks;
+    }, [savingStudentId, savingAssessmentSetup, savingMaxMarks]);
 
 
     // =========================================================
@@ -991,7 +1004,7 @@ function EnterMarks() {
         );
     };
 
-    const checkExamApproval = async (examSubjectId = selectedExamSubjectId) => {
+    const checkExamApproval = async (examSubjectId = selectedExamSubjectId, options = {}) => {
 
         if (!examId || !examSubjectId) {
             setCheckingApproval(false);
@@ -1006,7 +1019,7 @@ function EnterMarks() {
         }
 
         try {
-            setCheckingApproval(true);
+            if (!options.silent) setCheckingApproval(true);
 
             // IMPORTANT: Approval belongs to the selected exam_subject
             // (Subject + Class), not the whole examination.
@@ -1079,8 +1092,12 @@ function EnterMarks() {
                             ? "Deputy Headmaster Approval bado haijakamilika."
                             : "Headmaster Final Approval bado haijakamilika."
                 );
-            } else {
+            } else if (!options.silent) {
                 setError("");
+            } else {
+                setError(previous =>
+                    String(previous || "").includes("Approval") ? "" : previous
+                );
             }
 
             return approved;
@@ -1088,28 +1105,46 @@ function EnterMarks() {
         } catch (err) {
             console.error("EXAM SUBJECT APPROVAL CHECK ERROR:", err);
 
-            setFullApproval(false);
-            setApprovalDetails({
-                academic: false,
-                deputy: false,
-                headmaster: false,
-                statusApproved: false
-            });
-
-            setError(
-                err?.message ||
-                "Imeshindikana kuthibitisha approval ya Exam Subject."
-            );
+            if (!options.silent) {
+                setFullApproval(false);
+                setApprovalDetails({
+                    academic: false,
+                    deputy: false,
+                    headmaster: false,
+                    statusApproved: false
+                });
+                setError(
+                    err?.message ||
+                    "Imeshindikana kuthibitisha approval ya Exam Subject."
+                );
+            }
 
             return false;
 
         } finally {
-            setCheckingApproval(false);
+            if (!options.silent) setCheckingApproval(false);
         }
     };
 
     useEffect(() => {
+        if (!examId || !selectedExamSubjectId) {
+            checkExamApproval(selectedExamSubjectId);
+            return undefined;
+        }
+
         checkExamApproval(selectedExamSubjectId);
+
+        const refreshApproval = () => {
+            if (!document.hidden) checkExamApproval(selectedExamSubjectId, { silent: true });
+        };
+
+        const timer = setInterval(refreshApproval, 10000);
+        window.addEventListener("focus", refreshApproval);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshApproval);
+        };
     }, [examId, selectedExamSubjectId]);
 
     const loadExam = async () => {
@@ -2137,6 +2172,19 @@ function EnterMarks() {
 
         loadExistingMarks();
 
+        const refreshSharedMarks = () => {
+            if (document.hidden || marksSyncBusyRef.current) return;
+            loadExistingMarks({ silent: true, preserveUnsaved: true });
+        };
+
+        const timer = setInterval(refreshSharedMarks, 10000);
+        window.addEventListener("focus", refreshSharedMarks);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSharedMarks);
+        };
+
     }, [
         examId,
         selectedExamSubjectId,
@@ -2145,11 +2193,17 @@ function EnterMarks() {
 
 
     const loadExistingMarks =
-        async () => {
+        async (options = {}) => {
+
+            const silent = options.silent === true;
+            const preserveUnsaved = options.preserveUnsaved === true;
+            const dirtyStudentIds = preserveUnsaved
+                ? Array.from(dirtyStudentsRef.current)
+                : [];
 
             try {
 
-                setLoadingExistingMarks(true);
+                if (!silent) setLoadingExistingMarks(true);
 
 
                 const {
@@ -2217,9 +2271,27 @@ function EnterMarks() {
                         practical_max: components.find(item => item.key === "practical")?.max_marks ?? ""
                     };
                 });
-                setAssessmentMarks(loadedAssessmentMarks);
-                setStudentAssessmentSetups(loadedSetups);
-                setStudentAssessmentDrafts(loadedDrafts);
+                if (preserveUnsaved && dirtyStudentIds.length > 0) {
+                    const dirtySet = new Set(dirtyStudentIds);
+                    setAssessmentMarks(previous => ({
+                        ...loadedAssessmentMarks,
+                        ...Object.fromEntries(
+                            Object.entries(previous).filter(([key]) => dirtySet.has(String(key).split("::")[0]))
+                        )
+                    }));
+                    setStudentAssessmentSetups(previous => ({
+                        ...loadedSetups,
+                        ...Object.fromEntries(Object.entries(previous).filter(([key]) => dirtySet.has(String(key))))
+                    }));
+                    setStudentAssessmentDrafts(previous => ({
+                        ...loadedDrafts,
+                        ...Object.fromEntries(Object.entries(previous).filter(([key]) => dirtySet.has(String(key))))
+                    }));
+                } else {
+                    setAssessmentMarks(loadedAssessmentMarks);
+                    setStudentAssessmentSetups(loadedSetups);
+                    setStudentAssessmentDrafts(loadedDrafts);
+                }
 
                 (
                     data || []
@@ -2252,9 +2324,14 @@ function EnterMarks() {
                 );
 
 
-                setSavedStudents(
-                    studentSavedMap
-                );
+                if (preserveUnsaved && dirtyStudentIds.length > 0) {
+                    setSavedStudents(previous => ({
+                        ...studentSavedMap,
+                        ...Object.fromEntries(dirtyStudentIds.map(id => [id, false]))
+                    }));
+                } else {
+                    setSavedStudents(studentSavedMap);
+                }
 
             } catch (err) {
 
@@ -2263,18 +2340,18 @@ function EnterMarks() {
                     err
                 );
 
-                setExistingMarks({});
-
-                setSelectedQuestions({});
-
-                setError(
-                    err.message ||
-                    "Failed to load saved marks."
-                );
+                if (!silent) {
+                    setExistingMarks({});
+                    setSelectedQuestions({});
+                    setError(
+                        err.message ||
+                        "Failed to load saved marks."
+                    );
+                }
 
             } finally {
 
-                setLoadingExistingMarks(false);
+                if (!silent) setLoadingExistingMarks(false);
             }
         };
 
@@ -2297,55 +2374,29 @@ function EnterMarks() {
         }
 
 
-        setSelectedQuestions(
-            previous => {
+        setSelectedQuestions(previous => {
+            const next = {};
 
-                const next = {
-                    ...previous
-                };
-
-
-                Object.values(
-                    existingMarks
-                ).forEach(
-                    record => {
-
-                        const question =
-                            questions.find(
-                                item =>
-                                    Number(
-                                        item.id
-                                    ) ===
-                                    Number(
-                                        record.question_id
-                                    )
-                            );
-
-
-                        if (
-                            question &&
-                            isSelectiveQuestion(
-                                question
-                            )
-                        ) {
-
-                            const key =
-                                getStudentKey(
-                                    record.student_id,
-                                    record.question_id
-                                );
-
-
-                            next[key] =
-                                true;
-                        }
-                    }
+            Object.values(existingMarks).forEach(record => {
+                const question = questions.find(
+                    item => Number(item.id) === Number(record.question_id)
                 );
 
+                if (question && isSelectiveQuestion(question)) {
+                    const key = getStudentKey(record.student_id, record.question_id);
+                    next[key] = true;
+                }
+            });
 
-                return next;
-            }
-        );
+            Object.entries(previous).forEach(([key, value]) => {
+                const studentId = key.split("_")[0];
+                if (dirtyStudentsRef.current.has(studentId)) {
+                    next[key] = value;
+                }
+            });
+
+            return next;
+        });
 
     }, [
         questions,
@@ -2359,17 +2410,7 @@ function EnterMarks() {
 
     useEffect(() => {
 
-        if (
-            Object.keys(
-                existingMarks
-            ).length === 0
-        ) {
-            return;
-        }
-
-
-        const restoredMarks =
-            {};
+        const restoredMarks = {};
 
 
         Object.values(
@@ -2397,12 +2438,18 @@ function EnterMarks() {
         );
 
 
-        setMarks(
-            previous => ({
-                ...restoredMarks,
-                ...previous
-            })
-        );
+        setMarks(previous => {
+            const next = { ...restoredMarks };
+
+            Object.entries(previous).forEach(([key, value]) => {
+                const studentId = key.split("_")[0];
+                if (dirtyStudentsRef.current.has(studentId)) {
+                    next[key] = value;
+                }
+            });
+
+            return next;
+        });
 
     }, [
         existingMarks
@@ -6479,9 +6526,12 @@ function EnterMarks() {
                                             {item.field === "practical_max" ? (
                                                 <select
                                                     value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
-                                                    onChange={event => setStudentAssessmentDrafts(previous => ({
-                                                        ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
-                                                    }))}
+                                                    onChange={event => {
+                                                        setStudentAssessmentDrafts(previous => ({
+                                                            ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                        }));
+                                                        setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
+                                                    }}
                                                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3"
                                                 >
                                                     <option value="">Usitumie Practical</option>
@@ -6490,9 +6540,12 @@ function EnterMarks() {
                                             ) : (
                                                 <input type="number" min="0" step="0.01"
                                                     value={(studentAssessmentDrafts[String(student.id)] || {})[item.field] ?? ""}
-                                                    onChange={event => setStudentAssessmentDrafts(previous => ({
-                                                        ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
-                                                    }))}
+                                                    onChange={event => {
+                                                        setStudentAssessmentDrafts(previous => ({
+                                                            ...previous, [String(student.id)]: { ...(previous[String(student.id)] || {}), [item.field]: event.target.value }
+                                                        }));
+                                                        setSavedStudents(previous => ({ ...previous, [String(student.id)]: false }));
+                                                    }}
                                                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3" placeholder="Leave blank if not used" />
                                             )}
                                         </label>
