@@ -30,13 +30,17 @@ function ExamSubjects() {
     useEffect(() => {
         loadData();
 
-        const timer = setInterval(() => {
-            if (!document.hidden && !saving && !loadingClasses) {
-                loadData(true);
-            }
-        }, 10000);
+        const refreshSubjects = () => {
+            if (!document.hidden && !saving && !loadingClasses) loadData(true);
+        };
 
-        return () => clearInterval(timer);
+        const timer = setInterval(refreshSubjects, 10000);
+        window.addEventListener("focus", refreshSubjects);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSubjects);
+        };
     }, [examId, saving, loadingClasses]);
 
     // ============================================================
