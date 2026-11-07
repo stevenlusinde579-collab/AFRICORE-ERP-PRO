@@ -2137,19 +2137,41 @@ function EnterMarks() {
 
         loadExistingMarks();
 
+        const refreshSharedMarks = () => {
+            if (document.hidden || savingStudentId !== null || savingAssessmentSetup || savingMaxMarks) return;
+            loadExistingMarks({ silent: true, preserveUnsaved: true });
+        };
+
+        const timer = setInterval(refreshSharedMarks, 10000);
+        window.addEventListener("focus", refreshSharedMarks);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSharedMarks);
+        };
+
     }, [
         examId,
         selectedExamSubjectId,
-        canEnterMarks
+        canEnterMarks,
+        savingStudentId,
+        savingAssessmentSetup,
+        savingMaxMarks
     ]);
 
 
     const loadExistingMarks =
-        async () => {
+        async (options = {}) => {
+
+            const silent = options.silent === true;
+            const preserveUnsaved = options.preserveUnsaved === true;
+            const dirtyStudentIds = preserveUnsaved
+                ? Object.keys(savedStudents).filter(id => savedStudents[id] === false)
+                : [];
 
             try {
 
-                setLoadingExistingMarks(true);
+                if (!silent) setLoadingExistingMarks(true);
 
 
                 const {
@@ -2217,9 +2239,27 @@ function EnterMarks() {
                         practical_max: components.find(item => item.key === "practical")?.max_marks ?? ""
                     };
                 });
-                setAssessmentMarks(loadedAssessmentMarks);
-                setStudentAssessmentSetups(loadedSetups);
-                setStudentAssessmentDrafts(loadedDrafts);
+                if (preserveUnsaved && dirtyStudentIds.length > 0) {
+                    const dirtySet = new Set(dirtyStudentIds);
+                    setAssessmentMarks(previous => ({
+                        ...loadedAssessmentMarks,
+                        ...Object.fromEntries(
+                            Object.entries(previous).filter(([key]) => dirtySet.has(String(key).split("::")[0]))
+                        )
+                    }));
+                    setStudentAssessmentSetups(previous => ({
+                        ...loadedSetups,
+                        ...Object.fromEntries(Object.entries(previous).filter(([key]) => dirtySet.has(String(key))))
+                    }));
+                    setStudentAssessmentDrafts(previous => ({
+                        ...loadedDrafts,
+                        ...Object.fromEntries(Object.entries(previous).filter(([key]) => dirtySet.has(String(key))))
+                    }));
+                } else {
+                    setAssessmentMarks(loadedAssessmentMarks);
+                    setStudentAssessmentSetups(loadedSetups);
+                    setStudentAssessmentDrafts(loadedDrafts);
+                }
 
                 (
                     data || []
@@ -2252,9 +2292,14 @@ function EnterMarks() {
                 );
 
 
-                setSavedStudents(
-                    studentSavedMap
-                );
+                if (preserveUnsaved && dirtyStudentIds.length > 0) {
+                    setSavedStudents(previous => ({
+                        ...studentSavedMap,
+                        ...Object.fromEntries(dirtyStudentIds.map(id => [id, false]))
+                    }));
+                } else {
+                    setSavedStudents(studentSavedMap);
+                }
 
             } catch (err) {
 
@@ -2263,18 +2308,18 @@ function EnterMarks() {
                     err
                 );
 
-                setExistingMarks({});
-
-                setSelectedQuestions({});
-
-                setError(
-                    err.message ||
-                    "Failed to load saved marks."
-                );
+                if (!silent) {
+                    setExistingMarks({});
+                    setSelectedQuestions({});
+                    setError(
+                        err.message ||
+                        "Failed to load saved marks."
+                    );
+                }
 
             } finally {
 
-                setLoadingExistingMarks(false);
+                if (!silent) setLoadingExistingMarks(false);
             }
         };
 
