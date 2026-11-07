@@ -1022,9 +1022,11 @@ export default function AIAnalysisDashboard() {
 
                 try {
                     if (mountedRef.current) {
-                        if (options.refresh) setRefreshing(true);
-                        else setLoading(true);
-                        setError("");
+                        if (!options.silent) {
+                            if (options.refresh) setRefreshing(true);
+                            else setLoading(true);
+                            setError("");
+                        }
                     }
 
                     const response = await axios.get(
@@ -1948,6 +1950,23 @@ export default function AIAnalysisDashboard() {
             ]
         );
 
+
+    useEffect(() => {
+        if (!selectedExamSubjectId || selectedFile) return undefined;
+
+        const refreshSharedAnalysis = () => {
+            if (document.hidden || runningAI) return;
+            loadAnalysis(selectedExamSubjectId, { refresh: true, silent: true });
+        };
+
+        const timer = setInterval(refreshSharedAnalysis, 15000);
+        window.addEventListener("focus", refreshSharedAnalysis);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("focus", refreshSharedAnalysis);
+        };
+    }, [selectedExamSubjectId, selectedFile, runningAI, loadAnalysis]);
 
     // ========================================================
     // UPLOAD ANOTHER
