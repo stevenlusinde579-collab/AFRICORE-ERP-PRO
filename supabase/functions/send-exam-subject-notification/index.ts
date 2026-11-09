@@ -210,45 +210,48 @@ const sendSMS = async (
   to: string,
   message: string
 ) => {
-  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const from = Deno.env.get("TWILIO_SMS_FROM");
+  const apiKey = Deno.env.get("NEWHOPE_API_KEY");
+  const secretKey = Deno.env.get("NEWHOPE_SECRET_KEY");
 
-  if (!accountSid || !authToken || !from) {
+  if (!apiKey || !secretKey) {
     return {
       status: "failed",
       skipped: true,
-      error: "SMS provider is not configured. Set TWILIO_SMS_FROM with an active SMS-capable Twilio number.",
+      provider: "NewHope SMS",
+      error: "NewHope SMS is not configured. Add NEWHOPE_API_KEY and NEWHOPE_SECRET_KEY to Supabase Edge Function secrets.",
     };
   }
 
-  const params = new URLSearchParams();
-  params.set("To", normalizePhone(to));
-  params.set("From", from);
-  params.set("Body", message);
-
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    }
-  );
+  const recipient = normalizePhone(to);
+  const response = await fetch("https://sms.newhope.co.tz/v1/sms/send/", {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${apiKey}:${secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      recipient,
+      message,
+    }),
+  });
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.message || `Twilio SMS HTTP ${response.status}`);
+    const detail = typeof data?.message === "string"
+      ? data.message
+      : typeof data?.detail === "string"
+        ? data.detail
+        : JSON.stringify(data);
+    throw new Error(detail || `NewHope SMS HTTP ${response.status}`);
   }
 
   return {
     skipped: false,
-    provider: "Twilio SMS",
-    provider_message_id: data?.sid || null,
-    status: data?.status || "queued",
+    provider: "NewHope SMS",
+    provider_message_id: data?.id || null,
+    status: data?.status || "sent",
+    segments: data?.segments ?? null,
+    cost: data?.cost ?? null,
   };
 };
 
