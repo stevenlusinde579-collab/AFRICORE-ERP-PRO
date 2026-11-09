@@ -763,7 +763,6 @@ const {
           }
           }
         }
-      }
 
         if (channels.includes("sms")) {
           if (!teacherPhone) {
@@ -790,6 +789,8 @@ const {
             }
           }
         }
+
+      }
 
       const failedCount = results.filter(
         item => item.status === "failed" || item.skipped === true
