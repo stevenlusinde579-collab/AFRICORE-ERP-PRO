@@ -212,6 +212,7 @@ const sendSMS = async (
 ) => {
   const apiKey = Deno.env.get("NEWHOPE_API_KEY");
   const secretKey = Deno.env.get("NEWHOPE_SECRET_KEY");
+  const senderId = Deno.env.get("NEWHOPE_SENDER_ID");
 
   if (!apiKey || !secretKey) {
     return {
@@ -232,6 +233,7 @@ const sendSMS = async (
     body: JSON.stringify({
       recipient,
       message,
+      ...(senderId ? { sender_id: senderId } : {}),
     }),
   });
 
