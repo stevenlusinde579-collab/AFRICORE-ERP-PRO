@@ -732,8 +732,11 @@ export const saveSchoolSmsSettings = async (req, res) => {
         if (!/^[A-Za-z0-9]{1,11}$/.test(senderId)) {
             return res.status(400).json({ success: false, message: "Sender ID lazima iwe herufi/namba 1 hadi 11 bila nafasi." });
         }
-        if (!apiKey || !secretKey) {
-            return res.status(400).json({ success: false, message: "Weka API Key na Secret Key zote mbili. Kwa usalama, funguo hazionyeshwi tena baada ya kuhifadhi." });
+        if (Boolean(apiKey) !== Boolean(secretKey)) {
+            return res.status(400).json({ success: false, message: "Weka API Key na Secret Key zote mbili, au acha zote wazi ili kubakiza zilizohifadhiwa." });
+        }
+        if ((apiKey && apiKey.length < 8) || (secretKey && secretKey.length < 8)) {
+            return res.status(400).json({ success: false, message: "Kila key lazima iwe na angalau herufi 8." });
         }
         if (!["pending", "approved", "rejected"].includes(approvalStatus)) {
             return res.status(400).json({ success: false, message: "Hali ya idhini si sahihi." });
@@ -746,6 +749,16 @@ export const saveSchoolSmsSettings = async (req, res) => {
             .maybeSingle();
         if (schoolError) throw schoolError;
         if (!school) return res.status(404).json({ success: false, message: "School was not found." });
+
+        const { data: existingSettings, error: existingSettingsError } = await supabase
+            .from("school_sms_settings")
+            .select("school_id")
+            .eq("school_id", schoolId)
+            .maybeSingle();
+        if (existingSettingsError) throw existingSettingsError;
+        if (!existingSettings && (!apiKey || !secretKey)) {
+            return res.status(400).json({ success: false, message: "Weka API Key na Secret Key kwa usanidi wa kwanza." });
+        }
 
         const { data, error } = await supabase.rpc("set_school_sms_settings", {
             p_school_id: schoolId,
@@ -766,6 +779,6 @@ export const saveSchoolSmsSettings = async (req, res) => {
         });
     } catch (error) {
         console.error("SCHOOL SMS SETTINGS - SAVE ERROR:", error);
-        return res.status(500).json({ success: false, message: error?.message || "Unable to save school SMS settings." });
+        return res.status(500).json({ success: false, message: "Imeshindikana kuhifadhi mipangilio ya SMS. Tafadhali kagua taarifa na ujaribu tena." });
     }
 };
