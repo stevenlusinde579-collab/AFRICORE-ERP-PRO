@@ -556,6 +556,8 @@ const Communication = () => {
 const SmsCenter = ({ schoolId }) => {
     const [audience, setAudience] = useState("staff");
     const [recipients, setRecipients] = useState([]);
+    const [classes, setClasses] = useState([]);
+    const [classFilter, setClassFilter] = useState("all");
     const [selected, setSelected] = useState([]);
     const [search, setSearch] = useState("");
     const [message, setMessage] = useState("");
@@ -567,63 +569,68 @@ const SmsCenter = ({ schoolId }) => {
     useEffect(() => {
         let active = true;
         const load = async () => {
-            setLoadingRecipients(true);
-            setError("");
-            setSelected([]);
-            setSendResult(null);
+            setLoadingRecipients(true); setError(""); setSelected([]); setSendResult(null);
             try {
                 if (!schoolId) throw new Error("Akaunti yako haijaunganishwa na shule.");
                 if (audience === "staff") {
-                    const { data, error: queryError } = await supabase
-                        .from("profiles")
+                    const { data, error: queryError } = await supabase.from("profiles")
                         .select("id, full_name, phone, role_id, school_id, roles (role_name)")
-                        .eq("school_id", schoolId)
-                        .order("full_name", { ascending: true });
+                        .eq("school_id", schoolId).order("full_name", { ascending: true });
                     if (queryError) throw queryError;
-                    const rows = (data || [])
-                        .filter((row) => Number(row.role_id) !== 10)
-                        .map((row) => ({
-                            id: String(row.id),
-                            name: row.full_name || "Staff member",
-                            detail: row.roles?.role_name || "Staff",
-                            phone: row.phone || "",
-                        }));
-                    if (active) setRecipients(rows);
-                } else {
-                    const { data, error: queryError } = await supabase
-                        .from("students")
-                        .select("id, first_name, middle_name, last_name, admission_number, parent_name, parent_phone, school_id")
-                        .eq("school_id", schoolId)
-                        .order("first_name", { ascending: true });
-                    if (queryError) throw queryError;
-                    const rows = (data || []).map((row) => ({
-                        id: String(row.id),
-                        name: row.parent_name || "Parent / Guardian",
-                        detail: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" ") + (row.admission_number ? " • " + row.admission_number : ""),
-                        phone: row.parent_phone || "",
+                    const rows = (data || []).filter((row) => Number(row.role_id) !== 10).map((row) => ({
+                        id: String(row.id), name: row.full_name || "Staff member",
+                        detail: row.roles?.role_name || "Staff", phone: row.phone || "",
                     }));
                     if (active) setRecipients(rows);
+                } else {
+                    const [{ data: classRows, error: classError }, { data, error: queryError }] = await Promise.all([
+                        supabase.from("classes").select("id, class_name, academic_level, academic_year_id, is_active")
+                            .eq("school_id", schoolId).eq("is_active", true).order("class_name"),
+                        supabase.from("students")
+                            .select("id, first_name, middle_name, last_name, admission_number, current_class_id, class_name, parent_name, parent_phone, guardian_name, guardian_phone, school_id")
+                            .eq("school_id", schoolId).order("first_name", { ascending: true }),
+                    ]);
+                    if (classError) throw classError;
+                    if (queryError) throw queryError;
+                    const classMap = new Map((classRows || []).map((item) => [String(item.id), item]));
+                    const rows = (data || []).map((row) => {
+                        const cls = classMap.get(String(row.current_class_id));
+                        return {
+                            id: String(row.id),
+                            name: row.guardian_name || row.parent_name || "Parent / Guardian",
+                            detail: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" ") +
+                                (row.admission_number ? " • " + row.admission_number : "") +
+                                (cls?.class_name || row.class_name ? " • " + (cls?.class_name || row.class_name) : ""),
+                            studentName: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
+                            classId: String(row.current_class_id || ""),
+                            className: cls?.class_name || row.class_name || "",
+                            phone: row.guardian_phone || row.parent_phone || "",
+                            contactSource: row.guardian_phone ? "Guardian" : row.parent_phone ? "Parent fallback" : "No phone",
+                        };
+                    });
+                    if (active) { setClasses(classRows || []); setRecipients(rows); }
                 }
             } catch (loadError) {
                 if (active) setError(loadError?.message || "Imeshindikana kupakia wapokeaji.");
-            } finally {
-                if (active) setLoadingRecipients(false);
-            }
+            } finally { if (active) setLoadingRecipients(false); }
         };
         load();
         return () => { active = false; };
     }, [audience, schoolId]);
 
-    const visibleRecipients = recipients.filter((row) => {
+    const classRecipients = audience === "parents" && classFilter !== "all"
+        ? recipients.filter((row) => row.classId === String(classFilter))
+        : recipients;
+    const visibleRecipients = classRecipients.filter((row) => {
         const term = search.trim().toLowerCase();
         return !term || row.name.toLowerCase().includes(term) || row.detail.toLowerCase().includes(term) || row.phone.toLowerCase().includes(term);
     });
+    const selectedRows = recipients.filter((row) => selected.includes(row.id));
     const selectedCount = selected.length;
-    const validSelectedCount = recipients.filter((row) => selected.includes(row.id) && row.phone.trim()).length;
+    const validSelectedCount = selectedRows.filter((row) => row.phone.trim()).length;
+    const missingPhoneCount = selectedRows.length - validSelectedCount;
     const toggleRecipient = (id) => {
-        setSelected((previous) => previous.includes(id)
-            ? previous.filter((value) => value !== id)
-            : previous.length >= 100 ? previous : [...previous, id]);
+        setSelected((previous) => previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id]);
         setSendResult(null);
     };
     const toggleVisible = () => {
@@ -631,74 +638,86 @@ const SmsCenter = ({ schoolId }) => {
         const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
         setSelected((previous) => allVisibleSelected
             ? previous.filter((id) => !visibleIds.includes(id))
-            : [...new Set([...previous, ...visibleIds])].slice(0, 100));
+            : [...new Set([...previous, ...visibleIds])]);
         setSendResult(null);
     };
     const sendBulkSms = async (event) => {
-        event.preventDefault();
-        setError("");
-        setSendResult(null);
-        if (!selected.length) return setError("Chagua angalau mpokeaji mmoja.");
-        if (selected.length > 100) return setError("Chagua wapokeaji wasiozidi 100 kwa kila kundi.");
+        event.preventDefault(); setError(""); setSendResult(null);
+        if (!selected.length) return setError("Chagua angalau mwanafunzi/mpokeaji mmoja.");
         if (!message.trim()) return setError("Andika ujumbe wa SMS.");
-        const missing = recipients.filter((row) => selected.includes(row.id) && !row.phone.trim()).length;
-        const confirmation = `Unakaribia kutuma SMS kupitia NewHope kwa wapokeaji ${selected.length}. ${missing} hawana namba ya simu. SMS zinaweza kuwa na gharama. Uendelee?`;
+        const estimated = selectedRows.filter((row) => row.phone.trim()).length;
+        const confirmation = `Unakaribia kutuma SMS ${audience === "parents" ? "kwa kila mwanafunzi aliyechaguliwa" : "kwa staff"}: ${estimated} ujumbe unaowezekana, ${missingPhoneCount} hawana namba. Namba ya mlezi itapewa kipaumbele; namba ya mzazi itatumika ikiwa ya mlezi haipo. Ujumbe unaweza kuwa na gharama. Uendelee?`;
         if (!window.confirm(confirmation)) return;
         try {
             setSending(true);
-            const response = await api.post("/communication/bulk-sms", {
-                audience,
-                recipient_ids: selected,
-                message: message.trim(),
-            });
-            const data = response?.data || {};
-            setSendResult(data);
-            if (data.success) {
-                setSelected([]);
-                setMessage("");
+            const aggregate = { success: true, sent_count: 0, failed_count: 0, skipped_count: 0, results: [], message: "" };
+            for (let index = 0; index < selected.length; index += 100) {
+                const batch = selected.slice(index, index + 100);
+                const response = await api.post("/communication/bulk-sms", {
+                    audience, recipient_ids: batch, class_id: audience === "parents" && classFilter !== "all" ? Number(classFilter) : null,
+                    message: message.trim(),
+                });
+                const data = response?.data || {};
+                aggregate.sent_count += Number(data.sent_count || 0);
+                aggregate.failed_count += Number(data.failed_count || 0);
+                aggregate.skipped_count += Number(data.skipped_count || 0);
+                aggregate.results.push(...(Array.isArray(data.results) ? data.results : []));
+                if (!data.success && !data.results) throw new Error(data.message || "SMS batch failed.");
             }
+            aggregate.success = aggregate.sent_count > 0 && aggregate.failed_count === 0;
+            aggregate.message = `NewHope: ${aggregate.sent_count} zimekubaliwa, ${aggregate.failed_count} zimeshindwa, ${aggregate.skipped_count} zimerukwa.`;
+            setSendResult(aggregate);
+            if (aggregate.failed_count === 0) { setSelected([]); setMessage(""); }
         } catch (sendError) {
             const data = sendError?.response?.data || {};
-            if (data.results) setSendResult(data);
             setError(data.error || data.message || sendError?.message || "Imeshindikana kutuma SMS.");
-        } finally {
-            setSending(false);
-        }
+            if (data.results) setSendResult(data);
+        } finally { setSending(false); }
     };
 
     return (
         <form onSubmit={sendBulkSms} className="space-y-5 p-5">
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
                 <p className="font-bold text-indigo-900">NewHope SMS Broadcast</p>
-                <p className="mt-1 text-sm text-indigo-800">Chagua kundi la staff au wazazi, weka alama kwa wapokeaji wengi, kisha tuma ujumbe mmoja kwa wote. Namba zinachukuliwa kwenye taarifa za shule; huwezi kuingiza namba za shule nyingine.</p>
+                <p className="mt-1 text-sm text-indigo-800">Chagua staff, wazazi wote au darasa maalumu. Kwa wazazi, kila SMS ina taarifa za mwanafunzi husika. Namba ya mlezi ina kipaumbele; namba ya mzazi ni mbadala.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setAudience("staff")} className={audience === "staff" ? "rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white" : "rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"}>SMS to Staff</button>
-                <button type="button" onClick={() => setAudience("parents")} className={audience === "parents" ? "rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white" : "rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"}>SMS to Parents</button>
+                <button type="button" onClick={() => { setAudience("staff"); setClassFilter("all"); }} className={audience === "staff" ? "rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white" : "rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"}>SMS to Staff</button>
+                <button type="button" onClick={() => { setAudience("parents"); setClassFilter("all"); }} className={audience === "parents" ? "rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white" : "rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"}>SMS to Parents</button>
             </div>
+            {audience === "parents" && <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Parent group</span>
+                    <select value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setSelected([]); setSendResult(null); }} className="form-input">
+                        <option value="all">Wazazi wa shule nzima / All classes</option>
+                        {classes.map((item) => <option key={item.id} value={String(item.id)}>{item.class_name}{item.academic_level ? " • " + item.academic_level : ""}</option>)}
+                    </select>
+                </label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 self-end">Unaweza kuchagua darasa moja au kutuma kwa shule nzima. Chagua madarasa mengine kwa kubadili darasa na kuongeza wapokeaji kwenye uchaguzi.</div>
+            </div>}
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Search recipient</span><input value={search} onChange={(event) => setSearch(event.target.value)} className="form-input" placeholder={audience === "staff" ? "Search staff name or phone..." : "Search student or parent name..."} /></label>
-                <div className="text-sm font-semibold text-slate-700">Selected: {selectedCount}/100</div>
+                <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Search recipient</span><input value={search} onChange={(event) => setSearch(event.target.value)} className="form-input" placeholder={audience === "staff" ? "Search staff name or phone..." : "Search student or guardian name..."} /></label>
+                <div className="text-sm font-semibold text-slate-700">Selected: {selectedCount} • With phone: {validSelectedCount}</div>
             </div>
             <div className="overflow-hidden rounded-2xl border border-slate-200">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                    <div><p className="text-sm font-bold text-slate-800">{audience === "staff" ? "Staff members" : "Parents / Guardians"}</p><p className="text-xs text-slate-500">{visibleRecipients.length} records shown • {validSelectedCount} selected with phone numbers</p></div>
+                    <div><p className="text-sm font-bold text-slate-800">{audience === "staff" ? "Staff members" : "Students / Parents / Guardians"}</p><p className="text-xs text-slate-500">{visibleRecipients.length} records shown • {missingPhoneCount} selected without a phone</p></div>
                     <button type="button" onClick={toggleVisible} disabled={!visibleRecipients.length || loadingRecipients} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">Select / Clear visible</button>
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                    {loadingRecipients ? <p className="p-8 text-center text-sm text-slate-500">Loading recipients...</p> : visibleRecipients.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No recipients found in this school.</p> : visibleRecipients.map((row) => (
+                    {loadingRecipients ? <p className="p-8 text-center text-sm text-slate-500">Loading recipients...</p> : visibleRecipients.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No recipients found in this group.</p> : visibleRecipients.map((row) => (
                         <label key={row.id} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                            <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleRecipient(row.id)} disabled={!selected.includes(row.id) && selected.length >= 100} className="h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                            <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleRecipient(row.id)} className="h-4 w-4 rounded border-slate-300 text-indigo-600" />
                             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{row.name}</span><span className="block truncate text-xs text-slate-500">{row.detail}</span></span>
-                            <span className={row.phone ? "text-xs font-medium text-slate-600" : "text-xs font-semibold text-red-600"}>{row.phone || "No phone"}</span>
+                            <span className="text-right"><span className={row.phone ? "block text-xs font-medium text-slate-600" : "block text-xs font-semibold text-red-600"}>{row.phone || "No phone"}</span><span className="block text-[10px] text-slate-400">{row.contactSource || ""}</span></span>
                         </label>
                     ))}
                 </div>
             </div>
-            <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">SMS Message</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} maxLength={1200} required className="form-input min-h-[120px] resize-y" placeholder="Andika ujumbe utakaotumwa kwa wapokeaji wote..." /><span className="mt-1 block text-right text-xs text-slate-500">{message.length}/1200 characters</span></label>
+            <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">SMS Message</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} maxLength={1200} required className="form-input min-h-[120px] resize-y" placeholder="Andika ujumbe. Tumia {{student_name}}, {{class_name}}, {{admission_number}} kupata taarifa za kila mtoto..." /><span className="mt-1 block text-right text-xs text-slate-500">{message.length}/1200 characters</span></label>
+            {audience === "parents" && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">Viambishi vinavyoweza kutumika: <strong>{"{{student_name}}"}</strong>, <strong>{"{{class_name}}"}</strong>, <strong>{"{{admission_number}}"}</strong>. SMS moja itatumwa kwa kila mtoto; namba moja ya mlezi inaweza kupokea SMS nyingi ikiwa ana watoto wengi.</p>}
             {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-            {sendResult && <div className="space-y-3 rounded-2xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-slate-900">NewHope SMS results</p><p className="text-xs text-slate-600">Accepted: {sendResult.sent_count || 0} • Failed: {sendResult.failed_count || 0} • Duplicate: {sendResult.skipped_count || 0}</p></div><p className="text-sm text-slate-700">{sendResult.message}</p>{Array.isArray(sendResult.results) && <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">{sendResult.results.map((row, index) => <div key={index} className="flex items-start justify-between gap-3 py-2 text-xs"><div className="min-w-0"><p className="font-semibold text-slate-800">{row.recipient_name || "Recipient"} {row.student_name ? "• " + row.student_name : ""}</p><p className="break-all text-slate-500">{row.phone || row.error || ""}</p></div><span className={row.status === "failed" ? "font-bold text-red-600" : row.status === "skipped" ? "font-bold text-amber-600" : "font-bold text-emerald-600"}>{row.status}</span></div>)}</div>}</div>}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-xs text-slate-500">Maximum 100 recipients per batch. Duplicate phone numbers are sent once only.</p><button type="submit" disabled={sending || loadingRecipients || !selected.length || !message.trim()} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{sending ? <><RefreshCw className="h-4 w-4 animate-spin" />Sending SMS...</> : <><Smartphone className="h-4 w-4" />Send SMS to {selectedCount}</>}</button></div>
+            {sendResult && <div className="space-y-3 rounded-2xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-slate-900">NewHope SMS results</p><p className="text-xs text-slate-600">Accepted: {sendResult.sent_count || 0} • Failed: {sendResult.failed_count || 0} • Duplicate skipped: {sendResult.skipped_count || 0}</p></div><p className="text-sm text-slate-700">{sendResult.message}</p>{Array.isArray(sendResult.results) && <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">{sendResult.results.map((row, index) => <div key={index} className="flex items-start justify-between gap-3 py-2 text-xs"><div className="min-w-0"><p className="font-semibold text-slate-800">{row.recipient_name || "Recipient"} {row.student_name ? "• " + row.student_name : ""}</p><p className="break-all text-slate-500">{row.phone || row.error || ""}</p></div><span className={row.status === "failed" ? "font-bold text-red-600" : row.status === "skipped" ? "font-bold text-amber-600" : "font-bold text-emerald-600"}>{row.status}</span></div>)}</div>}</div>}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-xs text-slate-500">Ujumbe hutumwa kwa batches za hadi 100. Kwa wazazi, namba inayojirudia kwa watoto tofauti haizuiwi.</p><button type="submit" disabled={sending || loadingRecipients || !selected.length || !message.trim()} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{sending ? <><RefreshCw className="h-4 w-4 animate-spin" />Sending SMS...</> : <><Smartphone className="h-4 w-4" />Send SMS to {selectedCount} student(s)</>}</button></div>
         </form>
     );
 };
