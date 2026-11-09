@@ -583,32 +583,59 @@ const SmsCenter = ({ schoolId }) => {
                     }));
                     if (active) setRecipients(rows);
                 } else {
-                    const [{ data: classRows, error: classError }, { data, error: queryError }] = await Promise.all([
-                        supabase.from("classes").select("id, class_name, academic_level, academic_year_id, is_active")
-                            .eq("school_id", schoolId).eq("is_active", true).order("class_name"),
-                        supabase.from("students")
-                            .select("id, first_name, middle_name, last_name, admission_number, current_class_id, class_name, parent_name, parent_phone, guardian_name, guardian_phone, school_id")
-                            .eq("school_id", schoolId).order("first_name", { ascending: true }),
-                    ]);
-                    if (classError) throw classError;
+                    // Load this school's enrolled students first. Historical class rows from
+                    // other academic years must not create duplicate/empty class options.
+                    const { data, error: queryError } = await supabase.from("students")
+                        .select("id, first_name, middle_name, last_name, admission_number, current_class_id, class_name, parent_name, parent_phone, guardian_name, guardian_phone, school_id")
+                        .eq("school_id", schoolId).order("first_name", { ascending: true });
                     if (queryError) throw queryError;
-                    const classMap = new Map((classRows || []).map((item) => [String(item.id), item]));
+
+                    const currentClassIds = [...new Set((data || [])
+                        .map((row) => row.current_class_id)
+                        .filter((id) => id !== null && id !== undefined && String(id).trim() !== "")
+                        .map(String))];
+
+                    let classRows = [];
+                    if (currentClassIds.length) {
+                        const { data: matchingClasses, error: classError } = await supabase.from("classes")
+                            .select("id, class_name, academic_level, academic_year_id, is_active")
+                            .eq("school_id", schoolId)
+                            .in("id", currentClassIds);
+                        if (classError) throw classError;
+                        classRows = matchingClasses || [];
+                    }
+
+                    const classMap = new Map(classRows.map((item) => [String(item.id), item]));
+                    // Keep one option per class actually assigned to at least one student.
+                    const usedClassMap = new Map();
                     const rows = (data || []).map((row) => {
-                        const cls = classMap.get(String(row.current_class_id));
+                        const classId = String(row.current_class_id || "");
+                        const cls = classMap.get(classId);
+                        const className = cls?.class_name || row.class_name || "";
+                        if (classId && className && !usedClassMap.has(classId)) {
+                            usedClassMap.set(classId, {
+                                id: classId,
+                                class_name: className,
+                                academic_level: cls?.academic_level || null,
+                            });
+                        }
                         return {
                             id: String(row.id),
                             name: row.guardian_name || row.parent_name || "Parent / Guardian",
                             detail: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" ") +
                                 (row.admission_number ? " • " + row.admission_number : "") +
-                                (cls?.class_name || row.class_name ? " • " + (cls?.class_name || row.class_name) : ""),
+                                (className ? " • " + className : ""),
                             studentName: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
-                            classId: String(row.current_class_id || ""),
-                            className: cls?.class_name || row.class_name || "",
+                            classId,
+                            className,
                             phone: row.guardian_phone || row.parent_phone || "",
                             contactSource: row.guardian_phone ? "Guardian" : row.parent_phone ? "Parent fallback" : "No phone",
                         };
                     });
-                    if (active) { setClasses(classRows || []); setRecipients(rows); }
+                    const currentClasses = [...usedClassMap.values()].sort((a, b) =>
+                        a.class_name.localeCompare(b.class_name, undefined, { numeric: true, sensitivity: "base" })
+                    );
+                    if (active) { setClasses(currentClasses); setRecipients(rows); }
                 }
             } catch (loadError) {
                 if (active) setError(loadError?.message || "Imeshindikana kupakia wapokeaji.");
