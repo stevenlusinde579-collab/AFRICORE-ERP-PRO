@@ -6,6 +6,7 @@
 
 import {
     useLocation,
+    useNavigate,
     useParams
 } from "react-router-dom";
 
@@ -26,6 +27,7 @@ const BUCKET =
 const ExamApproval = () => {
 
     const { examId } = useParams();
+    const navigate = useNavigate();
 
     const location =
         useLocation();
@@ -698,7 +700,6 @@ const ExamApproval = () => {
             // =================================================
             // MERGE BACKEND PAPER
             // =================================================
-
             if (
                 responseData?.paper?.id
             ) {
@@ -1396,7 +1397,6 @@ const ExamApproval = () => {
             );
 
         }
-
 
         // -----------------------------------------------------
         // SEARCH FOLDERS
@@ -2099,7 +2099,6 @@ const ExamApproval = () => {
 
     };
 
-
     // =========================================================
     // PREVIEW PDF
     // =========================================================
@@ -2798,7 +2797,6 @@ const ExamApproval = () => {
                 alert("Headmaster Final Approval imekamilika.");
                 openNotificationPanel("approved");
             }
-
         } catch (err) {
             console.error("APPROVE SUBJECT ERROR:", err);
             alert(err?.message || "Approval imeshindikana.");
@@ -2960,6 +2958,15 @@ const ExamApproval = () => {
 
             <div className="max-w-7xl mx-auto space-y-6">
 
+                <button
+                    type="button"
+                    onClick={() => navigate("/examination")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Back to Examination"
+                >
+                    <span aria-hidden="true" className="text-lg leading-none">←</span>
+                    Back to Examination
+                </button>
 
                 {/* HEADER */}
 
@@ -3497,7 +3504,6 @@ const ExamApproval = () => {
                                                     ? "Retrying..."
                                                     : "Retry"}
                                             </button>
-
 
                                             <button
                                                 type="button"
