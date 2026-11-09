@@ -697,8 +697,7 @@ const ExamApproval = () => {
                 response.data || {};
 
 
-            // =================================================
-            // MERGE BACKEND PAPER
+            // =================================================            // MERGE BACKEND PAPER
             // =================================================
             if (
                 responseData?.paper?.id
@@ -1397,7 +1396,6 @@ const ExamApproval = () => {
             );
 
         }
-
         // -----------------------------------------------------
         // SEARCH FOLDERS
         // -----------------------------------------------------
@@ -2098,7 +2096,6 @@ const ExamApproval = () => {
         }
 
     };
-
     // =========================================================
     // PREVIEW PDF
     // =========================================================
@@ -2522,7 +2519,7 @@ const ExamApproval = () => {
         setNotificationType(type);
         setNotificationReason(reason || "");
         setNotificationResult(null);
-        setNotificationChannels(["whatsapp", "email"]);
+        setNotificationChannels(["whatsapp", "email", "sms"]);
         setShowNotificationPanel(true);
     };
 
@@ -2532,15 +2529,17 @@ const ExamApproval = () => {
         setNotificationResult(null);
         setNotificationType("");
         setNotificationReason("");
-        setNotificationChannels(["whatsapp", "email"]);
+        setNotificationChannels(["whatsapp", "email", "sms"]);
     };
 
-    const sendExamSubjectNotification = async () => {
+    const sendExamSubjectNotification = async (options = {}) => {
+        const requestType = options.type || notificationType;
+        const requestChannels = options.channels || notificationChannels;
         if (!selectedExamSubjectId) {
             setNotificationResult({ success: false, message: "Examination subject haijachaguliwa." });
             return;
         }
-        if (!notificationChannels.length) {
+        if (!requestChannels.length) {
             setNotificationResult({ success: false, message: "Chagua angalau channel moja." });
             return;
         }
@@ -2551,9 +2550,9 @@ const ExamApproval = () => {
                 "send-exam-subject-notification",
                 {
                     body: {
-                        type: notificationType,
+                        type: requestType,
                         exam_subject_id: selectedExamSubjectId,
-                        channels: notificationChannels,
+                        channels: requestChannels,
                         reason: notificationReason || undefined
                     }
                 }
@@ -2794,11 +2793,18 @@ const ExamApproval = () => {
             } else if (type === "deputy") {
                 alert("Deputy Headmaster Approval imekamilika.");
             } else {
-                alert("Headmaster Final Approval imekamilika.");
-                openNotificationPanel("approved");
+                alert("Headmaster Final Approval imekamilika. Mfumo unatuma taarifa moja kwa moja kwa mwalimu husika.");
+                setNotificationType("approved");
+                setNotificationReason("");
+                setNotificationChannels(["email", "whatsapp", "sms"]);
+                setNotificationResult(null);
+                setShowNotificationPanel(true);
+                await sendExamSubjectNotification({
+                    type: "approved",
+                    channels: ["email", "whatsapp", "sms"]
+                });
             }
-        } catch (err) {
-            console.error("APPROVE SUBJECT ERROR:", err);
+        } catch (err) {            console.error("APPROVE SUBJECT ERROR:", err);
             alert(err?.message || "Approval imeshindikana.");
         } finally {
             setActionLoading(false);
@@ -3497,8 +3503,7 @@ const ExamApproval = () => {
                                             <button
                                                 type="button"
                                                 onClick={retryPdf}
-                                                disabled={pdfLoading}
-                                                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold disabled:bg-gray-600"
+                                                disabled={pdfLoading}                                                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold disabled:bg-gray-600"
                                             >
                                                 {pdfLoading
                                                     ? "Retrying..."
@@ -4074,10 +4079,14 @@ const ExamApproval = () => {
                                 </div>
                                 <div>
                                     <p className="text-sm font-bold text-gray-700 mb-3">Notification Channels</p>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {[["whatsapp","💬","WhatsApp"],["email","✉️","Email"]].map(([value, icon, label]) => (
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[[ "whatsapp","💬","WhatsApp"],[ "email","✉️","Email"],[ "sms","📱","Normal Text (SMS)"]].map(([value, icon, label]) => (
                                             <button key={value} type="button" onClick={() => toggleNotificationChannel(value)} disabled={notificationSending} className={notificationChannels.includes(value) ? "border-2 border-blue-600 bg-blue-50 text-blue-700 rounded-xl p-4 font-bold" : "border-2 border-gray-200 bg-white text-gray-700 rounded-xl p-4 font-semibold"}>
                                                 <div className="text-2xl">{icon}</div>
+                                                <div className="mt-1 text-sm">{label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
                                                 <div className="mt-1 text-sm">{label}</div>
                                             </button>
                                         ))}
