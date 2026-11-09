@@ -690,20 +690,20 @@ export const getSchoolSmsSettings = async (req, res) => {
         }
         const { data, error } = await supabase
             .from("school_sms_settings")
-            .select("school_id,sender_id,approval_status,approval_note,updated_at,api_key_secret_id,secret_key_secret_id")
+            .select("school_id,sender_id,approval_status,approval_note,updated_at")
             .eq("school_id", schoolId)
             .maybeSingle();
         if (error) throw error;
         return res.json({
             success: true,
-            configured: Boolean(data?.api_key_secret_id && data?.secret_key_secret_id),
+            configured: Boolean(data),
             settings: data ? {
                 school_id: data.school_id,
                 sender_id: data.sender_id,
                 approval_status: data.approval_status,
                 approval_note: data.approval_note,
                 updated_at: data.updated_at,
-                credentials_configured: Boolean(data.api_key_secret_id && data.secret_key_secret_id)
+                credentials_configured: true
             } : null
         });
     } catch (error) {
