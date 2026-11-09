@@ -306,6 +306,11 @@ const buildStudentResultMessage = (exam, report) => {
         `Examination: ${exam?.name || exam?.exam_name || exam?.title || "Examination"}`,
         `Class: ${report.class_name || "—"}`,
         "",
+        "REPORT SUMMARY:",
+        `Aggregate: ${report.aggregate != null ? report.aggregate : (report.cseeEligible ? "Not calculated" : "Not applicable")}`,
+        `GPA: ${report.gpa != null ? formatNumber(report.gpa, 2) : (report.cseeEligible ? "Not calculated" : "Not applicable")}`,
+        `Division: ${report.divisionLabel && report.divisionLabel !== "Not applicable" ? report.divisionLabel : (report.cseeEligible ? "Not calculated" : "Not applicable")}`,
+        "",
         "SUBJECT RESULTS:"
     ];
 
