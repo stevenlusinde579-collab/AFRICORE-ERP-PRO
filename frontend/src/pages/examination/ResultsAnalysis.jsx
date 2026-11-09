@@ -1999,7 +1999,7 @@ export default function ResultsAnalysis() {
 
                 const parts = [
                     "SMS haikutumwa.",
-                    "eSMS Africa LIVE account haina salio la kutosha."
+                    "Akaunti ya NewHope haina salio la kutosha."
                 ];
 
                 if (required !== undefined && required !== null) {
