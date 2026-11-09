@@ -900,190 +900,117 @@ router.post("/send", async (req, res) => {
 router.post("/bulk-sms", authenticateUser, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const audience = String(req.body?.audience || "").trim().toLowerCase();
-  const message = cleanMessage(req.body?.message);
+  const messageTemplate = cleanMessage(req.body?.message);
   const rawIds = Array.isArray(req.body?.recipient_ids) ? req.body.recipient_ids : [];
   const recipientIds = [...new Set(rawIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  const classId = req.body?.class_id ? Number(req.body.class_id) : null;
 
-  if (!Number.isInteger(schoolId) || schoolId <= 0) {
-    return res.status(403).json({ success: false, message: "Your account is not assigned to an active school." });
-  }
-  if (!["staff", "parents"].includes(audience)) {
-    return res.status(400).json({ success: false, message: "Choose Staff or Parents as the SMS audience." });
-  }
-  if (!recipientIds.length) {
-    return res.status(400).json({ success: false, message: "Select at least one recipient." });
-  }
-  if (recipientIds.length > 100) {
-    return res.status(400).json({ success: false, message: "Send to a maximum of 100 selected recipients per batch." });
-  }
-  if (!message) {
-    return res.status(400).json({ success: false, message: "Message is required." });
-  }
+  if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(403).json({ success: false, message: "Your account is not assigned to an active school." });
+  if (!["staff", "parents"].includes(audience)) return res.status(400).json({ success: false, message: "Choose Staff or Parents as the SMS audience." });
+  if (!recipientIds.length) return res.status(400).json({ success: false, message: "Select at least one recipient." });
+  if (recipientIds.length > 100) return res.status(400).json({ success: false, message: "Send a maximum of 100 student/staff records per batch." });
+  if (!messageTemplate) return res.status(400).json({ success: false, message: "Message is required." });
+  if (classId && (!Number.isInteger(classId) || classId <= 0 || audience !== "parents")) return res.status(400).json({ success: false, message: "Invalid class selection." });
 
   try {
     const credentials = await getSchoolNewHopeCredentials(schoolId);
     let recipients = [];
 
     if (audience === "staff") {
-      const { data, error } = await supabase
-        .from("profiles")
+      const { data, error } = await supabase.from("profiles")
         .select("id, full_name, phone, role_id, school_id")
-        .eq("school_id", schoolId)
-        .in("id", recipientIds);
+        .eq("school_id", schoolId).in("id", recipientIds);
       if (error) throw error;
-      if ((data || []).length !== recipientIds.length) {
-        return res.status(403).json({ success: false, message: "One or more selected staff members do not belong to your school." });
-      }
-      if ((data || []).some((row) => Number(row.role_id) === 10)) {
-        return res.status(400).json({ success: false, message: "Student accounts cannot be selected as staff SMS recipients." });
-      }
-      recipients = (data || []).map((row) => ({
-        profileId: row.id,
-        studentId: null,
-        name: row.full_name || "Staff member",
-        phone: row.phone || "",
-      }));
+      if ((data || []).length !== recipientIds.length) return res.status(403).json({ success: false, message: "One or more selected staff members do not belong to your school." });
+      if ((data || []).some((row) => Number(row.role_id) === 10)) return res.status(400).json({ success: false, message: "Student accounts cannot be selected as staff SMS recipients." });
+      recipients = (data || []).map((row) => ({ profileId: row.id, studentId: null, name: row.full_name || "Staff member", phone: row.phone || "" }));
     } else {
-      const { data, error } = await supabase
-        .from("students")
-        .select("id, school_id, first_name, middle_name, last_name, admission_number, parent_name, parent_phone")
-        .eq("school_id", schoolId)
-        .in("id", recipientIds);
+      let query = supabase.from("students")
+        .select("id, school_id, current_class_id, class_name, first_name, middle_name, last_name, admission_number, parent_name, parent_phone, guardian_name, guardian_phone")
+        .eq("school_id", schoolId).in("id", recipientIds);
+      if (classId) query = query.eq("current_class_id", classId);
+      const { data, error } = await query;
       if (error) throw error;
-      if ((data || []).length !== recipientIds.length) {
-        return res.status(403).json({ success: false, message: "One or more selected students do not belong to your school." });
-      }
+      if ((data || []).length !== recipientIds.length) return res.status(403).json({ success: false, message: "One or more selected students are outside this school or selected class." });
       recipients = (data || []).map((row) => ({
         profileId: null,
         studentId: row.id,
-        name: row.parent_name || "Parent/Guardian",
+        name: row.guardian_name || row.parent_name || "Parent/Guardian",
         studentName: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
-        phone: row.parent_phone || "",
+        className: row.class_name || "",
+        admissionNumber: row.admission_number || "",
+        phone: row.guardian_phone || row.parent_phone || "",
       }));
     }
 
-    // Do not send duplicate messages to a shared guardian/staff number.
+    // Parents are intentionally NOT deduplicated by phone: one SMS per selected child.
+    // Staff duplicate numbers remain deduplicated to avoid accidental repeat sends.
     const uniqueRecipients = [];
     const seenPhones = new Set();
     const results = [];
-
     for (const recipient of recipients) {
       const normalizedPhone = normalizeTanzaniaPhone(recipient.phone);
       if (!normalizedPhone || normalizedPhone.length < 10) {
-        results.push({
-          recipient_name: recipient.name,
-          student_name: recipient.studentName || null,
-          status: "failed",
-          error: "Namba ya simu haipo au si sahihi kwenye taarifa za usajili.",
-        });
+        results.push({ recipient_name: recipient.name, student_name: recipient.studentName || null, status: "failed", error: "Namba ya mlezi/mzazi haipo au si sahihi kwenye taarifa za usajili." });
         continue;
       }
-      if (seenPhones.has(normalizedPhone)) {
-        results.push({
-          recipient_name: recipient.name,
-          student_name: recipient.studentName || null,
-          status: "skipped",
-          error: "Namba hii tayari imechaguliwa kwa mpokeaji mwingine; SMS imetumwa mara moja tu.",
-        });
+      if (audience === "staff" && seenPhones.has(normalizedPhone)) {
+        results.push({ recipient_name: recipient.name, status: "skipped", error: "Duplicate staff phone number; sent once." });
         continue;
       }
-      seenPhones.add(normalizedPhone);
-      uniqueRecipients.push({ ...recipient, normalizedPhone });
+      if (audience === "staff") seenPhones.add(normalizedPhone);
+      const personalizedMessage = audience === "parents"
+        ? messageTemplate
+            .replace(/\{\{\s*student_name\s*\}\}/gi, recipient.studentName || "mwanafunzi")
+            .replace(/\{\{\s*class_name\s*\}\}/gi, recipient.className || "darasa")
+            .replace(/\{\{\s*admission_number\s*\}\}/gi, recipient.admissionNumber || "-")
+        : messageTemplate;
+      uniqueRecipients.push({ ...recipient, normalizedPhone, personalizedMessage });
     }
 
     for (const recipient of uniqueRecipients) {
       let history;
       try {
-        const { data: inserted, error: insertError } = await supabase
-          .from("school_sms_broadcast_history")
+        const { data: inserted, error: insertError } = await supabase.from("school_sms_broadcast_history")
           .insert({
-            school_id: schoolId,
-            sender_user_id: req.user.id,
-            audience,
-            recipient_profile_id: recipient.profileId,
-            student_id: recipient.studentId,
-            recipient_name: recipient.name,
-            recipient_phone: recipient.normalizedPhone,
-            message,
-            provider: "NewHope SMS",
-            status: "pending",
-          })
-          .select("id")
-          .single();
+            school_id: schoolId, sender_user_id: req.user.id, audience,
+            recipient_profile_id: recipient.profileId, student_id: recipient.studentId,
+            recipient_name: recipient.name, recipient_phone: recipient.normalizedPhone,
+            message: recipient.personalizedMessage, provider: "NewHope SMS", status: "pending",
+          }).select("id").single();
         if (insertError) throw insertError;
         history = inserted;
-
-        const delivery = await sendNewHopeSmsWithCredentials(
-          credentials,
-          recipient.normalizedPhone,
-          message
-        );
-
-        await supabase
-          .from("school_sms_broadcast_history")
-          .update({
-            status: delivery.status,
-            provider_message_id: delivery.provider_message_id,
-            segments: delivery.segments,
-            cost: delivery.cost,
-            error_message: delivery.status === "failed" ? "NewHope reported a failed delivery." : null,
-            sent_at: delivery.status === "failed" ? null : new Date().toISOString(),
-          })
-          .eq("id", history.id)
-          .eq("school_id", schoolId);
-
+        const delivery = await sendNewHopeSmsWithCredentials(credentials, recipient.normalizedPhone, recipient.personalizedMessage);
+        await supabase.from("school_sms_broadcast_history").update({
+          status: delivery.status, provider_message_id: delivery.provider_message_id,
+          segments: delivery.segments, cost: delivery.cost,
+          error_message: delivery.status === "failed" ? "NewHope reported a failed delivery." : null,
+          sent_at: delivery.status === "failed" ? null : new Date().toISOString(),
+        }).eq("id", history.id).eq("school_id", schoolId);
         results.push({
-          recipient_name: recipient.name,
-          student_name: recipient.studentName || null,
-          phone: recipient.normalizedPhone,
-          status: delivery.status,
-          provider: delivery.provider,
-          provider_message_id: delivery.provider_message_id,
-          segments: delivery.segments,
-          cost: delivery.cost,
+          recipient_name: recipient.name, student_name: recipient.studentName || null,
+          phone: recipient.normalizedPhone, status: delivery.status, provider: delivery.provider,
+          provider_message_id: delivery.provider_message_id, segments: delivery.segments, cost: delivery.cost,
         });
       } catch (sendError) {
         const errorMessage = getProviderError(sendError);
-        if (history?.id) {
-          await supabase
-            .from("school_sms_broadcast_history")
-            .update({ status: "failed", error_message: errorMessage })
-            .eq("id", history.id)
-            .eq("school_id", schoolId);
-        }
-        results.push({
-          recipient_name: recipient.name,
-          student_name: recipient.studentName || null,
-          phone: recipient.normalizedPhone,
-          status: "failed",
-          error: errorMessage,
-        });
+        if (history?.id) await supabase.from("school_sms_broadcast_history").update({ status: "failed", error_message: errorMessage }).eq("id", history.id).eq("school_id", schoolId);
+        results.push({ recipient_name: recipient.name, student_name: recipient.studentName || null, phone: recipient.normalizedPhone, status: "failed", error: errorMessage });
       }
     }
 
     const sentCount = results.filter((row) => ["sent", "queued", "delivered"].includes(String(row.status).toLowerCase())).length;
     const failedCount = results.filter((row) => row.status === "failed").length;
     const skippedCount = results.filter((row) => row.status === "skipped").length;
-
     return res.json({
       success: sentCount > 0 && failedCount === 0,
-      message: `NewHope SMS: ${sentCount} accepted, ${failedCount} failed, ${skippedCount} duplicate numbers skipped.`,
-      provider: "NewHope SMS",
-      audience,
-      selected_count: recipientIds.length,
-      sent_count: sentCount,
-      failed_count: failedCount,
-      skipped_count: skippedCount,
-      results,
+      message: `NewHope SMS: ${sentCount} accepted, ${failedCount} failed, ${skippedCount} duplicate staff numbers skipped.`,
+      provider: "NewHope SMS", audience, selected_count: recipientIds.length,
+      sent_count: sentCount, failed_count: failedCount, skipped_count: skippedCount, results,
     });
   } catch (error) {
     console.error("BULK NEWHOPE SMS ERROR:", error);
-    return res.status(502).json({
-      success: false,
-      message: "Bulk SMS request failed.",
-      provider: "NewHope SMS",
-      error: getProviderError(error),
-    });
+    return res.status(502).json({ success: false, message: "Bulk SMS request failed.", provider: "NewHope SMS", error: getProviderError(error) });
   }
 });
 

@@ -114,6 +114,10 @@ function AddStudent() {
 
     email: "",
 
+    guardian_name: "",
+
+    guardian_phone: "",
+
     parent_name: "",
 
     parent_phone: "",
@@ -1517,6 +1521,14 @@ function AddStudent() {
           student.email ||
           null,
 
+        guardian_name:
+          student.guardian_name ||
+          null,
+
+        guardian_phone:
+          student.guardian_phone ||
+          null,
+
         parent_name:
           student.parent_name ||
           null,
@@ -2464,7 +2476,17 @@ function AddStudent() {
           <div className="grid md:grid-cols-2 gap-5">
 
 
-            {/* PARENT NAME */}
+            {/* PRIMARY GUARDIAN CONTACT */}
+            <div>
+              <label className="block mb-2 font-medium">Guardian Name (Primary SMS Contact)</label>
+              <input name="guardian_name" placeholder="Guardian Name" value={student.guardian_name} onChange={handleChange} className="w-full border p-3 rounded-lg" />
+            </div>
+            <div>
+              <label className="block mb-2 font-medium">Guardian Phone (Priority SMS Number)</label>
+              <input name="guardian_phone" placeholder="Guardian Phone" value={student.guardian_phone} onChange={handleChange} className="w-full border p-3 rounded-lg" />
+            </div>
+
+                        {/* PARENT NAME */}
 
             <div>
 

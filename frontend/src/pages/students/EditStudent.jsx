@@ -1118,6 +1118,12 @@ function EditStudent() {
         email:
           student.email || null,
 
+        guardian_name:
+          student.guardian_name || null,
+
+        guardian_phone:
+          student.guardian_phone || null,
+
         parent_name:
           student.parent_name || null,
 
@@ -1179,6 +1185,8 @@ function EditStudent() {
           id,
           school_id,
           academic_year_id,
+          guardian_name,
+          guardian_phone,
           parent_name,
           parent_phone,
           parent_email
@@ -1214,6 +1222,8 @@ function EditStudent() {
       // Confirm the parent details returned by the database
       // match the values submitted by the form.
       const parentFields = [
+        "guardian_name",
+        "guardian_phone",
         "parent_name",
         "parent_phone",
         "parent_email"
@@ -2231,7 +2241,17 @@ function EditStudent() {
           <div className="grid md:grid-cols-2 gap-5">
 
 
-            {/* PARENT NAME */}
+            {/* PRIMARY GUARDIAN CONTACT */}
+            <div>
+              <label className="block mb-2 font-medium">Guardian Name (Primary SMS Contact)</label>
+              <input name="guardian_name" value={student.guardian_name || ""} onChange={handleChange} className="w-full border p-3 rounded-lg" />
+            </div>
+            <div>
+              <label className="block mb-2 font-medium">Guardian Phone (Priority SMS Number)</label>
+              <input name="guardian_phone" value={student.guardian_phone || ""} onChange={handleChange} className="w-full border p-3 rounded-lg" />
+            </div>
+
+                        {/* PARENT NAME */}
 
             <div>
 
