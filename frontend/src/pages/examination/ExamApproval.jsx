@@ -2536,8 +2536,26 @@ const ExamApproval = () => {
     };
 
     const sendExamSubjectNotification = async (options = {}) => {
-        const requestType = options.type || notificationType;
+        // Resolve the notification type explicitly. The panel state can be empty
+        // during a UI transition, so use the saved final approval/rejection status
+        // as a safe fallback rather than sending an invalid payload to the Edge Function.
+        const rawType = options.type ?? notificationType;
+        const normalizedType = String(
+            rawType || approvalStatus?.approval_status || ""
+        ).trim().toLowerCase();
+        const requestType = normalizedType.includes("reject")
+            ? "rejected"
+            : normalizedType.includes("approv")
+                ? "approved"
+                : "";
         const requestChannels = options.channels || notificationChannels;
+        if (!["approved", "rejected"].includes(requestType)) {
+            setNotificationResult({
+                success: false,
+                message: "Aina ya taarifa haijathibitishwa. Fungua tena dirisha la taarifa baada ya approval au rejection."
+            });
+            return;
+        }
         if (!selectedExamSubjectId) {
             setNotificationResult({ success: false, message: "Examination subject haijachaguliwa." });
             return;
@@ -4101,7 +4119,7 @@ const ExamApproval = () => {
                             </div>
                             <div className="p-6 border-t flex justify-end gap-3">
                                 <button type="button" onClick={closeNotificationPanel} disabled={notificationSending} className="px-5 py-2.5 rounded-xl bg-gray-200 font-semibold">Skip</button>
-                                <button type="button" onClick={sendExamSubjectNotification} disabled={notificationSending || !notificationChannels.length} className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold disabled:bg-gray-300">{notificationSending ? "Sending..." : "Send Notification"}</button>
+                                <button type="button" onClick={() => sendExamSubjectNotification({ type: notificationType })} disabled={notificationSending || !notificationChannels.length || !["approved", "rejected"].includes(String(notificationType || "").trim().toLowerCase())} className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold disabled:bg-gray-300">{notificationSending ? "Sending..." : "Send Notification"}</button>
                             </div>
                         </div>
                     </div>
