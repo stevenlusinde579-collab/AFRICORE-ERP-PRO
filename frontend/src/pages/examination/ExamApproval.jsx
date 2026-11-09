@@ -4087,10 +4087,6 @@ const ExamApproval = () => {
                                             </button>
                                         ))}
                                     </div>
-                                                <div className="mt-1 text-sm">{label}</div>
-                                            </button>
-                                        ))}
-                                    </div>
                                 </div>
                                 {notificationResult && (
                                     <div className={notificationResult.success ? "bg-green-50 border border-green-200 rounded-xl p-4" : "bg-red-50 border border-red-200 rounded-xl p-4"}>
