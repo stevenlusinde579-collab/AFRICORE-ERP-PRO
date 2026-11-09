@@ -2599,9 +2599,9 @@ const ExamApproval = () => {
                     : "";
 
                 throw new Error(
-                    data?.message ||
-                    failedChannels ||
-                    "Notification imeshindikana kutumwa."
+                    failedChannels
+                        ? `${data?.message || "Baadhi ya notifications hazikutumwa."} ${failedChannels}`
+                        : data?.message || "Notification imeshindikana kutumwa."
                 );
             }
 
