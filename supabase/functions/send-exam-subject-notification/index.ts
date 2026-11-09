@@ -388,7 +388,7 @@ Deno.serve(
 
       if (!channels.length) {
         throw new Error(
-          "Chagua WhatsApp au Email. SMS is temporarily disabled until its provider is funded."
+          "Chagua angalau njia moja ya kutuma taarifa: SMS, WhatsApp au Email."
         );
       }
 
