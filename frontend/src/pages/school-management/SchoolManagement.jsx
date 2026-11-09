@@ -512,12 +512,12 @@ export default function SchoolManagement() {
                                     </div>
                                     <div>
                                         <label className="text-sm font-semibold text-slate-700" htmlFor="sms_api_key">NewHope API Key *</label>
-                                        <input id="sms_api_key" type="password" autoComplete="new-password" value={smsForm.api_key} onChange={(event) => setSmsForm((current) => ({ ...current, api_key: event.target.value }))} required className={inputClass} placeholder="Ingiza API Key ya Sender ID hii" />
+                                        <input id="sms_api_key" type="password" autoComplete="new-password" value={smsForm.api_key} onChange={(event) => setSmsForm((current) => ({ ...current, api_key: event.target.value }))} required={!smsConfigured} className={inputClass} placeholder={smsConfigured ? "Acha wazi kubakiza API Key iliyopo" : "Ingiza API Key ya Sender ID hii"} />
                                     </div>
                                     <div>
                                         <label className="text-sm font-semibold text-slate-700" htmlFor="sms_secret_key">NewHope Secret Key *</label>
-                                        <input id="sms_secret_key" type="password" autoComplete="new-password" value={smsForm.secret_key} onChange={(event) => setSmsForm((current) => ({ ...current, secret_key: event.target.value }))} required className={inputClass} placeholder="Ingiza Secret Key ya Sender ID hii" />
-                                        {smsConfigured && <p className="mt-1 text-xs text-slate-500">Kwa usalama, funguo zilizopo hazionyeshwi. Weka tena zote mbili ili kuzibadilisha.</p>}
+                                        <input id="sms_secret_key" type="password" autoComplete="new-password" value={smsForm.secret_key} onChange={(event) => setSmsForm((current) => ({ ...current, secret_key: event.target.value }))} required={!smsConfigured} className={inputClass} placeholder={smsConfigured ? "Acha wazi kubakiza Secret Key iliyopo" : "Ingiza Secret Key ya Sender ID hii"} />
+                                        {smsConfigured && <p className="mt-1 text-xs text-slate-500">Kwa usalama, funguo zilizopo hazionyeshwi. Acha zote mbili wazi ili kuzibakiza, au jaza zote mbili ili kuzibadilisha.</p>}
                                     </div>
                                     <div>
                                         <label className="text-sm font-semibold text-slate-700" htmlFor="sms_approval_status">Sender ID Approval Status *</label>
