@@ -525,7 +525,7 @@ const Communication = () => {
 
                 <div className="mb-6"><div className="mb-4"><h2 className="text-lg font-bold text-slate-900">Communication</h2><p className="mt-1 text-sm text-slate-500">Communication, live meetings and official school permission tools.</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{modules.map((module) => { const Icon = module.icon; return <button key={module.title} type="button" onClick={module.action} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md"><div className="mb-5 flex items-start justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div>{module.badge && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">{module.badge}</span>}</div><h3 className="font-semibold text-slate-900">{module.title}</h3><p className="mt-2 min-h-[40px] text-sm leading-5 text-slate-500">{module.description}</p><div className="mt-5 flex items-center gap-2 text-sm font-semibold text-indigo-600">Open <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" /></div></button>; })}</div></div>
 
-                <div className="mb-6"><div className="mb-4"><h2 className="text-lg font-bold text-slate-900">External Communication</h2><p className="mt-1 text-sm text-slate-500">Send parent/guardian result communications through the configured gateway.</p></div><div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4"><p className="text-sm font-semibold text-sky-900">WhatsApp and Email are the active external communication channels.</p><p className="mt-1 text-sm text-sky-800">SMS is temporarily paused until its provider is funded. WhatsApp and Email still require valid provider configuration to send successfully.</p></div><div className="grid gap-4 lg:grid-cols-2"><ChannelCard icon={Mail} title="Email" description="Compose and send result communication by email using the configured email provider." onClick={() => openComposer("email")} buttonText="Open Email Form" /><ChannelCard icon={MessageCircle} title="WhatsApp" description="Compose and send result communication through the configured WhatsApp provider." onClick={() => openComposer("whatsapp")} buttonText="Open WhatsApp Form" /></div></div>
+                <div className="mb-6"><div className="mb-4"><h2 className="text-lg font-bold text-slate-900">External Communication</h2><p className="mt-1 text-sm text-slate-500">Send parent/guardian result communications through the configured gateway.</p></div><div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4"><p className="text-sm font-semibold text-sky-900">NewHope SMS, WhatsApp and Email are available as external communication channels.</p><p className="mt-1 text-sm text-sky-800">SMS uses the active school's NewHope API credentials and approved Sender ID. WhatsApp and Email still require valid provider configuration to send successfully.</p></div><div className="grid gap-4 lg:grid-cols-3"><ChannelCard icon={Mail} title="Email" description="Compose and send result communication by email using the configured email provider." onClick={() => openComposer("email")} buttonText="Open Email Form" /><ChannelCard icon={MessageCircle} title="WhatsApp" description="Compose and send result communication through the configured WhatsApp provider." onClick={() => openComposer("whatsapp")} buttonText="Open WhatsApp Form" /><ChannelCard icon={Smartphone} title="SMS Center" description="Send NewHope SMS to selected staff members or parents/guardians, individually or as a group." onClick={() => setActivePanel("sms-center")} buttonText="Open SMS Center" /></div></div>
 
                 <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5"><QuickAction icon={Video} title="Create / Join Meeting" description="Open the meeting workspace." onClick={() => navigate("/communication/meetings")} /><QuickAction icon={MessageSquare} title="Open Chat" description="Start an internal conversation." onClick={() => navigate("/communication/chat")} /><QuickAction icon={Megaphone} title="School Announcement" description="Create or manage announcements." onClick={() => navigate("/communication/announcements")} /><QuickAction icon={Bell} title="Notification Center" description="Review system notifications." onClick={() => navigate("/communication/notifications")} /><QuickAction icon={Lightbulb} title="Suggestion Box" description="Share ideas and recommendations to improve the school." onClick={() => navigate("/communication/suggestions")} /><QuickAction icon={FileCheck2} title="Office Permission" description="Request or track official permission." onClick={isApprover ? openApprovalDesk : openPermissionRequest} /></div>
 
@@ -542,6 +542,7 @@ const Communication = () => {
                 {activePanel === "office-approval" && <ApprovalDesk requests={officeRequests} requesterProfiles={requesterProfiles} onApprove={(request) => updateOfficePermission(request, "approved")} onReject={(request) => { setApprovalRequest(request); setApprovalReason(""); }} onPrint={printPermissionDocument} saving={officeSaving} result={officeResult} />}
 
                 {activePanel === "composer" && <Composer composer={composer} setComposer={setComposer} sendResult={sendResult} sending={sending} onSubmit={sendExternalCommunication} onClose={closePanel} />}
+                {activePanel === "sms-center" && <SmsCenter schoolId={profile?.school_id} />}
                 {activePanel === "analytics" && <AnalyticsPanel users={users} messages={messages} meetings={meetings} notifications={notifications} stats={stats} />}
                 {activePanel === "permissions" && <SystemAccessPanel profile={profile} roleName={roleName} />}
                 {activePanel === "users" && <UsersPanel users={users} />}
@@ -549,6 +550,156 @@ const Communication = () => {
 
             {approvalRequest && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><h3 className="text-lg font-bold text-slate-900">Reject Permission Request</h3><p className="mt-1 text-sm text-slate-500">Reference: {approvalRequest.reference_number}</p></div><button type="button" onClick={() => setApprovalRequest(null)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><label className="mt-5 block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Reason</span><textarea value={approvalReason} onChange={(e) => setApprovalReason(e.target.value)} rows={5} className="form-input min-h-[120px] resize-y" placeholder="Enter rejection reason..." /></label><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setApprovalRequest(null)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700">Cancel</button><button type="button" disabled={officeSaving} onClick={() => updateOfficePermission(approvalRequest, "rejected", approvalReason)} className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"><Ban className="h-4 w-4" />Reject</button></div></div></div>}
         </div>
+    );
+};
+
+const SmsCenter = ({ schoolId }) => {
+    const [audience, setAudience] = useState("staff");
+    const [recipients, setRecipients] = useState([]);
+    const [selected, setSelected] = useState([]);
+    const [search, setSearch] = useState("");
+    const [message, setMessage] = useState("");
+    const [loadingRecipients, setLoadingRecipients] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [error, setError] = useState("");
+    const [sendResult, setSendResult] = useState(null);
+
+    useEffect(() => {
+        let active = true;
+        const load = async () => {
+            setLoadingRecipients(true);
+            setError("");
+            setSelected([]);
+            setSendResult(null);
+            try {
+                if (!schoolId) throw new Error("Akaunti yako haijaunganishwa na shule.");
+                if (audience === "staff") {
+                    const { data, error: queryError } = await supabase
+                        .from("profiles")
+                        .select("id, full_name, phone, role_id, school_id, roles (role_name)")
+                        .eq("school_id", schoolId)
+                        .order("full_name", { ascending: true });
+                    if (queryError) throw queryError;
+                    const rows = (data || [])
+                        .filter((row) => Number(row.role_id) !== 10)
+                        .map((row) => ({
+                            id: String(row.id),
+                            name: row.full_name || "Staff member",
+                            detail: row.roles?.role_name || "Staff",
+                            phone: row.phone || "",
+                        }));
+                    if (active) setRecipients(rows);
+                } else {
+                    const { data, error: queryError } = await supabase
+                        .from("students")
+                        .select("id, first_name, middle_name, last_name, admission_number, parent_name, parent_phone, school_id")
+                        .eq("school_id", schoolId)
+                        .order("first_name", { ascending: true });
+                    if (queryError) throw queryError;
+                    const rows = (data || []).map((row) => ({
+                        id: String(row.id),
+                        name: row.parent_name || "Parent / Guardian",
+                        detail: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" ") + (row.admission_number ? " • " + row.admission_number : ""),
+                        phone: row.parent_phone || "",
+                    }));
+                    if (active) setRecipients(rows);
+                }
+            } catch (loadError) {
+                if (active) setError(loadError?.message || "Imeshindikana kupakia wapokeaji.");
+            } finally {
+                if (active) setLoadingRecipients(false);
+            }
+        };
+        load();
+        return () => { active = false; };
+    }, [audience, schoolId]);
+
+    const visibleRecipients = recipients.filter((row) => {
+        const term = search.trim().toLowerCase();
+        return !term || row.name.toLowerCase().includes(term) || row.detail.toLowerCase().includes(term) || row.phone.toLowerCase().includes(term);
+    });
+    const selectedCount = selected.length;
+    const validSelectedCount = recipients.filter((row) => selected.includes(row.id) && row.phone.trim()).length;
+    const toggleRecipient = (id) => {
+        setSelected((previous) => previous.includes(id)
+            ? previous.filter((value) => value !== id)
+            : previous.length >= 100 ? previous : [...previous, id]);
+        setSendResult(null);
+    };
+    const toggleVisible = () => {
+        const visibleIds = visibleRecipients.map((row) => row.id);
+        const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
+        setSelected((previous) => allVisibleSelected
+            ? previous.filter((id) => !visibleIds.includes(id))
+            : [...new Set([...previous, ...visibleIds])].slice(0, 100));
+        setSendResult(null);
+    };
+    const sendBulkSms = async (event) => {
+        event.preventDefault();
+        setError("");
+        setSendResult(null);
+        if (!selected.length) return setError("Chagua angalau mpokeaji mmoja.");
+        if (selected.length > 100) return setError("Chagua wapokeaji wasiozidi 100 kwa kila kundi.");
+        if (!message.trim()) return setError("Andika ujumbe wa SMS.");
+        const missing = recipients.filter((row) => selected.includes(row.id) && !row.phone.trim()).length;
+        const confirmation = `Unakaribia kutuma SMS kupitia NewHope kwa wapokeaji ${selected.length}. ${missing} hawana namba ya simu. SMS zinaweza kuwa na gharama. Uendelee?`;
+        if (!window.confirm(confirmation)) return;
+        try {
+            setSending(true);
+            const response = await api.post("/communication/bulk-sms", {
+                audience,
+                recipient_ids: selected,
+                message: message.trim(),
+            });
+            const data = response?.data || {};
+            setSendResult(data);
+            if (data.success) {
+                setSelected([]);
+                setMessage("");
+            }
+        } catch (sendError) {
+            const data = sendError?.response?.data || {};
+            if (data.results) setSendResult(data);
+            setError(data.error || data.message || sendError?.message || "Imeshindikana kutuma SMS.");
+        } finally {
+            setSending(false);
+        }
+    };
+
+    return (
+        <form onSubmit={sendBulkSms} className="space-y-5 p-5">
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                <p className="font-bold text-indigo-900">NewHope SMS Broadcast</p>
+                <p className="mt-1 text-sm text-indigo-800">Chagua kundi la staff au wazazi, weka alama kwa wapokeaji wengi, kisha tuma ujumbe mmoja kwa wote. Namba zinachukuliwa kwenye taarifa za shule; huwezi kuingiza namba za shule nyingine.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setAudience("staff")} className={audience === "staff" ? "rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white" : "rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"}>SMS to Staff</button>
+                <button type="button" onClick={() => setAudience("parents")} className={audience === "parents" ? "rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white" : "rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"}>SMS to Parents</button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Search recipient</span><input value={search} onChange={(event) => setSearch(event.target.value)} className="form-input" placeholder={audience === "staff" ? "Search staff name or phone..." : "Search student or parent name..."} /></label>
+                <div className="text-sm font-semibold text-slate-700">Selected: {selectedCount}/100</div>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <div><p className="text-sm font-bold text-slate-800">{audience === "staff" ? "Staff members" : "Parents / Guardians"}</p><p className="text-xs text-slate-500">{visibleRecipients.length} records shown • {validSelectedCount} selected with phone numbers</p></div>
+                    <button type="button" onClick={toggleVisible} disabled={!visibleRecipients.length || loadingRecipients} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">Select / Clear visible</button>
+                </div>
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {loadingRecipients ? <p className="p-8 text-center text-sm text-slate-500">Loading recipients...</p> : visibleRecipients.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No recipients found in this school.</p> : visibleRecipients.map((row) => (
+                        <label key={row.id} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                            <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleRecipient(row.id)} disabled={!selected.includes(row.id) && selected.length >= 100} className="h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{row.name}</span><span className="block truncate text-xs text-slate-500">{row.detail}</span></span>
+                            <span className={row.phone ? "text-xs font-medium text-slate-600" : "text-xs font-semibold text-red-600"}>{row.phone || "No phone"}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+            <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">SMS Message</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} maxLength={1200} required className="form-input min-h-[120px] resize-y" placeholder="Andika ujumbe utakaotumwa kwa wapokeaji wote..." /><span className="mt-1 block text-right text-xs text-slate-500">{message.length}/1200 characters</span></label>
+            {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+            {sendResult && <div className="space-y-3 rounded-2xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-slate-900">NewHope SMS results</p><p className="text-xs text-slate-600">Accepted: {sendResult.sent_count || 0} • Failed: {sendResult.failed_count || 0} • Duplicate: {sendResult.skipped_count || 0}</p></div><p className="text-sm text-slate-700">{sendResult.message}</p>{Array.isArray(sendResult.results) && <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">{sendResult.results.map((row, index) => <div key={index} className="flex items-start justify-between gap-3 py-2 text-xs"><div className="min-w-0"><p className="font-semibold text-slate-800">{row.recipient_name || "Recipient"} {row.student_name ? "• " + row.student_name : ""}</p><p className="break-all text-slate-500">{row.phone || row.error || ""}</p></div><span className={row.status === "failed" ? "font-bold text-red-600" : row.status === "skipped" ? "font-bold text-amber-600" : "font-bold text-emerald-600"}>{row.status}</span></div>)}</div>}</div>}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-xs text-slate-500">Maximum 100 recipients per batch. Duplicate phone numbers are sent once only.</p><button type="submit" disabled={sending || loadingRecipients || !selected.length || !message.trim()} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{sending ? <><RefreshCw className="h-4 w-4 animate-spin" />Sending SMS...</> : <><Smartphone className="h-4 w-4" />Send SMS to {selectedCount}</>}</button></div>
+        </form>
     );
 };
 
@@ -612,8 +763,8 @@ const ActivityRow = ({ label, value }) => <div className="flex items-center just
 const PermissionInfo = ({ icon: Icon, title, description, status }) => <div className="rounded-2xl border border-slate-200 p-5"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900">{title}</h3><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">{status}</span></div><p className="mt-2 text-sm leading-5 text-slate-500">{description}</p></div></div></div>;
 const ResultBox = ({ result }) => <div className={result.type === "success" ? "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" : "rounded-2xl border border-red-200 bg-red-50 p-4"}><p className={result.type === "success" ? "text-sm font-bold text-emerald-800" : "text-sm font-bold text-red-800"}>{result.type === "success" ? "Success" : "Action failed"}</p><p className={result.type === "success" ? "mt-1 text-xs text-emerald-700" : "mt-1 text-xs text-red-700"}>{result.message}</p>{result.provider && <p className="mt-2 text-xs text-slate-600">Provider: <span className="font-semibold">{result.provider}</span>{result.status ? ` • Status: ${result.status}` : ""}</p>}</div>;
 const EmptyState = ({ icon: Icon, title, text }) => <div className="rounded-2xl border border-dashed border-slate-200 py-12 text-center"><Icon className="mx-auto h-9 w-9 text-slate-300" /><p className="mt-3 text-sm font-semibold text-slate-600">{title}</p><p className="mt-1 text-xs text-slate-400">{text}</p></div>;
-const panelTitle = (panel, composer, approver) => ({ composer: `${capitalize(composer.channel)} Communication`, analytics: "Communication Analytics", permissions: "System Access", users: "System Users", "office-request": "Request Office Permission", "office-requests": "My Office Permissions", "office-approval": approver ? "Permission Approval Desk" : "Office Permissions" }[panel] || "Communication");
-const panelDescription = (panel, approver) => ({ composer: "Communication form connected to the AfriCore gateway.", analytics: "Current activity summary from the Communication Center.", permissions: "Current AfriCore feature-access context.", users: "Users available in your school communication scope.", "office-request": "Submit an official office or school permission request.", "office-requests": "Track your requests and print approved permission documents.", "office-approval": approver ? "Review and process pending office permission requests." : "Office permission records." }[panel] || "");
+const panelTitle = (panel, composer, approver) => ({ composer: `${capitalize(composer.channel)} Communication`, "sms-center": "SMS Center", analytics: "Communication Analytics", permissions: "System Access", users: "System Users", "office-request": "Request Office Permission", "office-requests": "My Office Permissions", "office-approval": approver ? "Permission Approval Desk" : "Office Permissions" }[panel] || "Communication");
+const panelDescription = (panel, approver) => ({ composer: "Communication form connected to the AfriCore gateway.", "sms-center": "Send NewHope SMS to staff or parents/guardians in your school.", analytics: "Current activity summary from the Communication Center.", permissions: "Current AfriCore feature-access context.", users: "Users available in your school communication scope.", "office-request": "Submit an official office or school permission request.", "office-requests": "Track your requests and print approved permission documents.", "office-approval": approver ? "Review and process pending office permission requests." : "Office permission records." }[panel] || "");
 const formatDate = (value) => { if (!value) return "Date not set"; try { return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`)); } catch { return value; } };
 const formatTime = (value) => value ? String(value).slice(0, 5) : "Time not set";
 const capitalize = (value) => { const text = String(value || ""); return text ? text.charAt(0).toUpperCase() + text.slice(1) : ""; };

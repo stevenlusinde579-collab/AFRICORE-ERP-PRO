@@ -1999,7 +1999,7 @@ export default function ResultsAnalysis() {
 
                 const parts = [
                     "SMS haikutumwa.",
-                    "eSMS Africa LIVE account haina salio la kutosha."
+                    "Akaunti ya NewHope haina salio la kutosha."
                 ];
 
                 if (required !== undefined && required !== null) {
@@ -2083,7 +2083,7 @@ export default function ResultsAnalysis() {
                     setCommunicationStatus(previous => ({
                         ...previous,
                         [idValue(report.id)]: {
-                            provider: responseData?.provider || "eSMS Africa",
+                            provider: responseData?.provider || "NewHope SMS",
                             status: responseData?.provider_status || "failed",
                             provider_message_id: responseData?.provider_message_id || null,
                             environment:
@@ -2114,7 +2114,7 @@ export default function ResultsAnalysis() {
                 setCommunicationStatus(previous => ({
                     ...previous,
                     [idValue(report.id)]: {
-                        provider: response?.data?.provider || "eSMS Africa",
+                        provider: response?.data?.provider || "NewHope SMS",
                         status: response?.data?.provider_status || "accepted",
                         provider_message_id: response?.data?.provider_message_id || null,
                         environment:
@@ -2160,7 +2160,7 @@ export default function ResultsAnalysis() {
                 setCommunicationStatus(previous => ({
                     ...previous,
                     [idValue(report.id)]: {
-                        provider: data?.provider || "eSMS Africa",
+                        provider: data?.provider || "NewHope SMS",
                         status: "failed",
                         provider_message_id:
                             data?.provider_message_id ||
@@ -4327,6 +4327,9 @@ function TraceModal({
                                 <button disabled={sendingChannel !== ""} onClick={() => shareStudentResult(data, "whatsapp")} className="px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-bold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={data.parent_phone ? `WhatsApp: ${data.parent_phone}` : "Parent phone haijawekwa"}>
                                     <FaWhatsapp /> {sendingChannel === "whatsapp" ? "Sending..." : "WhatsApp"}
                                 </button>
+                                <button disabled={sendingChannel !== ""} onClick={() => shareStudentResult(data, "sms")} className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={data.parent_phone ? `SMS: ${data.parent_phone}` : "Parent phone haijawekwa"}>
+                                    <FaSms /> {sendingChannel === "sms" ? "Sending..." : "SMS"}
+                                </button>
                                 <button onClick={() => printStudentReport(data)} className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-2">
                                     <FaPrint /> Print Report
                                 </button>
@@ -4453,7 +4456,7 @@ function StudentTrace({
                                 </span>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 text-xs">
-                                <div><div className="text-slate-500">Provider</div><div className="font-bold text-slate-800">{communicationStatus.provider || "eSMS Africa"}</div></div>
+                                <div><div className="text-slate-500">Provider</div><div className="font-bold text-slate-800">{communicationStatus.provider || "NewHope SMS"}</div></div>
                                 <div><div className="text-slate-500">Status</div><div className="font-bold text-slate-800">{communicationStatus.status || "accepted"}</div></div>
                                 <div><div className="text-slate-500">Provider ID</div><div className="font-bold text-slate-800 break-all">{communicationStatus.provider_message_id || "—"}</div></div>
                             </div>

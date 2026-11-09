@@ -3,6 +3,7 @@ import express from "express";
 import twilio from "twilio";
 import nodemailer from "nodemailer";
 import { supabase } from "../config/supabase.js";
+import { authenticateUser } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -13,7 +14,6 @@ const {
   GMAIL_USER,
   GMAIL_APP_PASSWORD,
   GMAIL_FROM_EMAIL,
-  ESMS_API_KEY,
 } = process.env;
 
 const twilioClient =
@@ -32,8 +32,8 @@ const emailTransporter =
       })
     : null;
 
-// WhatsApp and Email remain enabled. SMS stays disabled until its provider is paid.
-const SMS_ENABLED = false;
+// SMS credentials are managed per school in Supabase Vault and sent through NewHope.
+const SMS_ENABLED = true;
 const WHATSAPP_ENABLED = true;
 const EMAIL_ENABLED = true;
 
@@ -240,6 +240,73 @@ function normalizeProviderStatus(status) {
 }
 
 /* =========================================================
+   NEWHOPE SMS
+========================================================= */
+
+async function getSchoolNewHopeCredentials(schoolId) {
+  const { data, error } = await supabase
+    .rpc("get_school_sms_credentials", { p_school_id: Number(schoolId) })
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Unable to retrieve this school's NewHope SMS configuration.");
+  }
+  if (!data?.api_key || !data?.secret_key || !data?.sender_id) {
+    throw new Error("SMS haijatumwa: shule hii haijaweka NewHope Sender ID na API credentials zake.");
+  }
+  if (String(data.approval_status || "").toLowerCase() !== "approved") {
+    throw new Error("SMS haijatumwa: Sender ID ya shule hii bado haijaidhinishwa.");
+  }
+  return data;
+}
+
+async function sendNewHopeSmsWithCredentials(credentials, recipient, message) {
+  const normalized = normalizeTanzaniaPhone(recipient);
+  if (!normalized || normalized.length < 10) {
+    throw new Error("Namba ya simu si sahihi.");
+  }
+
+  const response = await fetch("https://sms.newhope.co.tz/v1/sms/send/", {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${credentials.api_key}:${credentials.secret_key}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      recipient: `+${normalized}`,
+      message,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof data?.message === "string"
+      ? data.message
+      : typeof data?.detail === "string"
+        ? data.detail
+        : typeof data?.error === "string"
+          ? data.error
+          : JSON.stringify(data);
+    throw new Error(detail || `NewHope SMS HTTP ${response.status}`);
+  }
+
+  const providerStatus = normalizeProviderStatus(data?.status || "sent");
+  return {
+    provider: "NewHope SMS",
+    provider_message_id: data?.id || data?.message_id || data?.messageId || null,
+    status: providerStatus,
+    segments: data?.segments ?? null,
+    cost: data?.cost ?? null,
+  };
+}
+
+async function sendNewHopeSms(schoolId, recipient, message) {
+  const credentials = await getSchoolNewHopeCredentials(schoolId);
+  return sendNewHopeSmsWithCredentials(credentials, recipient, message);
+}
+
+/* =========================================================
    DATABASE HISTORY
 ========================================================= */
 
@@ -309,10 +376,10 @@ router.get("/", async (req, res) => {
     module: "Communication",
     providers: {
       sms: {
-        provider: "eSMS Africa",
-        configured: Boolean(ESMS_API_KEY),
+        provider: "NewHope",
+        configured: null,
         enabled: SMS_ENABLED,
-        message: "SMS is paused until its provider is funded.",
+        message: "NewHope credentials and approved Sender ID are configured separately for each school.",
       },
 
       whatsapp: {
@@ -338,7 +405,7 @@ router.get("/", async (req, res) => {
    SEND PARENT RESULT COMMUNICATION
 ========================================================= */
 
-router.post("/parent-result", async (req, res) => {
+router.post("/parent-result", authenticateUser, async (req, res) => {
   const {
     school_id,
     student_id,
@@ -357,6 +424,20 @@ router.post("/parent-result", async (req, res) => {
   const cleanRecipient = String(recipient || "").trim();
   const cleanMsg = cleanMessage(message);
   const cleanSub = cleanSubject(subject);
+  const authenticatedSchoolId = Number(req.profile?.school_id);
+
+  if (!Number.isInteger(authenticatedSchoolId) || authenticatedSchoolId <= 0) {
+    return res.status(403).json({
+      success: false,
+      message: "Your account is not assigned to an active school.",
+    });
+  }
+  if (school_id && String(school_id) !== String(authenticatedSchoolId)) {
+    return res.status(403).json({
+      success: false,
+      message: "You cannot send a result communication outside your assigned school.",
+    });
+  }
 
   /* =======================================================
      BASIC VALIDATION
@@ -402,16 +483,6 @@ router.post("/parent-result", async (req, res) => {
     });
   }
 
-  // Enforce the temporary SMS pause on the server, not just in the UI.
-  if (normalizedChannel === "sms" && !SMS_ENABLED) {
-    return res.status(503).json({
-      success: false,
-      channel: normalizedChannel,
-      message: "SMS is temporarily paused until the SMS provider is funded.",
-      code: "CHANNEL_TEMPORARILY_DISABLED",
-    });
-  }
-
   /* =======================================================
      USE THE PARENT/GUARDIAN CONTACT SAVED IN STUDENT REGISTRATION
      Never send to a recipient typed or supplied by the client.
@@ -442,8 +513,7 @@ router.post("/parent-result", async (req, res) => {
     }
 
     if (
-      school_id &&
-      String(student.school_id) !== String(school_id)
+      String(student.school_id) !== String(authenticatedSchoolId)
     ) {
       return res.status(403).json({
         success: false,
@@ -484,6 +554,25 @@ router.post("/parent-result", async (req, res) => {
     "Parent/Guardian";
   const verifiedSchoolId = registeredStudent.school_id;
 
+  const { data: verifiedExam, error: verifiedExamError } = await supabase
+    .from("exams")
+    .select("id, school_id")
+    .eq("id", exam_id)
+    .maybeSingle();
+
+  if (verifiedExamError || !verifiedExam) {
+    return res.status(404).json({
+      success: false,
+      message: "Examination was not found.",
+    });
+  }
+  if (String(verifiedExam.school_id) !== String(authenticatedSchoolId)) {
+    return res.status(403).json({
+      success: false,
+      message: "Examination does not belong to your assigned school.",
+    });
+  }
+
   /* =======================================================
      CREATE HISTORY RECORD FIRST
   ======================================================= */
@@ -516,148 +605,63 @@ router.post("/parent-result", async (req, res) => {
   }
 
   /* =======================================================
-     SMS - eSMS AFRICA
+     SMS - NEWHOPE (SCHOOL-SPECIFIC CREDENTIALS)
   ======================================================= */
 
   if (normalizedChannel === "sms") {
     try {
-      if (!ESMS_API_KEY) {
-        throw new Error(
-          "ESMS_API_KEY is not configured."
-        );
-      }
-
-      const phone = normalizeTanzaniaPhone(
-        cleanRecipient
+      const delivery = await sendNewHopeSms(
+        verifiedSchoolId,
+        verifiedRecipient,
+        cleanMsg
       );
 
-      if (!phone) {
-        throw new Error(
-          "Invalid Tanzania phone number."
-        );
-      }
+      await updateCommunicationHistory(history.id, {
+        status: delivery.status,
+        provider_message_id: delivery.provider_message_id
+          ? String(delivery.provider_message_id)
+          : null,
+        error_message: delivery.status === "failed" ? "NewHope reported a failed delivery." : null,
+        sent_at: delivery.status === "failed" ? null : new Date().toISOString(),
+      });
 
-      const response = await fetch(
-        "https://sms.esmsafrica.io/api/messages/send",
-        {
-          method: "POST",
-
-          headers: {
-            Authorization: `Bearer ${ESMS_API_KEY}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-
-          body: JSON.stringify({
-            to: phone,
-            text: cleanMsg,
-          }),
-        }
-      );
-
-      let result = null;
-
-      try {
-        result = await response.json();
-      } catch {
-        result = null;
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          result?.message ||
-            result?.error ||
-            `eSMS request failed with HTTP ${response.status}.`
-        );
-      }
-
-      const providerMessageId =
-        result?.message_id ||
-        result?.messageId ||
-        result?.id ||
-        result?.data?.message_id ||
-        result?.data?.messageId ||
-        null;
-
-      const providerStatus =
-        result?.status ||
-        result?.data?.status ||
-        "queued";
-
-      const normalizedStatus =
-        normalizeProviderStatus(providerStatus);
-
-      const finalStatus =
-        normalizedStatus === "failed"
-          ? "failed"
-          : normalizedStatus;
-
-      await updateCommunicationHistory(
-        history.id,
-        {
-          status: finalStatus,
-
-          provider_message_id:
-            providerMessageId
-              ? String(providerMessageId)
-              : null,
-
-          error_message:
-            finalStatus === "failed"
-              ? String(
-                  result?.message ||
-                    result?.error ||
-                    ""
-                )
-              : null,
-
-          sent_at:
-            finalStatus === "sent" ||
-            finalStatus === "delivered"
-              ? new Date().toISOString()
-              : null,
-        }
-      );
-
-      if (finalStatus === "failed") {
+      if (delivery.status === "failed") {
         return res.status(502).json({
           success: false,
-          message:
-            "SMS provider rejected the message.",
+          message: "NewHope imekataa kutuma SMS.",
           history_id: history.id,
-          provider_message_id:
-            providerMessageId,
-          provider_response: result,
+          provider: delivery.provider,
+          provider_status: delivery.status,
+          provider_message_id: delivery.provider_message_id,
+          segments: delivery.segments,
+          cost: delivery.cost,
         });
       }
 
       return res.json({
         success: true,
-        message: "SMS accepted by eSMS Africa.",
+        message: "SMS imepokelewa na NewHope kwa ajili ya kutumwa.",
         history_id: history.id,
         channel: "sms",
-        status: finalStatus,
-        provider: "eSMS Africa",
-        provider_message_id:
-          providerMessageId,
-        provider_response: result,
+        provider: delivery.provider,
+        provider_status: delivery.status,
+        provider_message_id: delivery.provider_message_id,
+        segments: delivery.segments,
+        cost: delivery.cost,
       });
     } catch (error) {
-      const errorMessage =
-        getProviderError(error);
-
-      await updateCommunicationHistory(
-        history.id,
-        {
-          status: "failed",
-          error_message: errorMessage,
-        }
-      );
+      const errorMessage = getProviderError(error);
+      await updateCommunicationHistory(history.id, {
+        status: "failed",
+        error_message: errorMessage,
+      });
 
       return res.status(502).json({
         success: false,
-        message: "Failed to send SMS.",
+        message: "Imeshindikana kutuma SMS kupitia NewHope.",
         history_id: history.id,
+        provider: "NewHope SMS",
+        provider_status: "failed",
         error: errorMessage,
       });
     }
@@ -882,6 +886,202 @@ router.post("/send", async (req, res) => {
     return res.status(502).json({
       success: false,
       message: channel === "whatsapp" ? "Failed to send WhatsApp message." : "Failed to send email.",
+      error: getProviderError(error),
+    });
+  }
+});
+
+/* =========================================================
+   BULK SMS CENTER - STAFF AND PARENTS
+   Recipient contacts are always resolved server-side within
+   the authenticated user's school. Never accept client phones.
+========================================================= */
+
+router.post("/bulk-sms", authenticateUser, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const audience = String(req.body?.audience || "").trim().toLowerCase();
+  const message = cleanMessage(req.body?.message);
+  const rawIds = Array.isArray(req.body?.recipient_ids) ? req.body.recipient_ids : [];
+  const recipientIds = [...new Set(rawIds.map((id) => String(id || "").trim()).filter(Boolean))];
+
+  if (!Number.isInteger(schoolId) || schoolId <= 0) {
+    return res.status(403).json({ success: false, message: "Your account is not assigned to an active school." });
+  }
+  if (!["staff", "parents"].includes(audience)) {
+    return res.status(400).json({ success: false, message: "Choose Staff or Parents as the SMS audience." });
+  }
+  if (!recipientIds.length) {
+    return res.status(400).json({ success: false, message: "Select at least one recipient." });
+  }
+  if (recipientIds.length > 100) {
+    return res.status(400).json({ success: false, message: "Send to a maximum of 100 selected recipients per batch." });
+  }
+  if (!message) {
+    return res.status(400).json({ success: false, message: "Message is required." });
+  }
+
+  try {
+    const credentials = await getSchoolNewHopeCredentials(schoolId);
+    let recipients = [];
+
+    if (audience === "staff") {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, phone, role_id, school_id")
+        .eq("school_id", schoolId)
+        .in("id", recipientIds);
+      if (error) throw error;
+      if ((data || []).length !== recipientIds.length) {
+        return res.status(403).json({ success: false, message: "One or more selected staff members do not belong to your school." });
+      }
+      if ((data || []).some((row) => Number(row.role_id) === 10)) {
+        return res.status(400).json({ success: false, message: "Student accounts cannot be selected as staff SMS recipients." });
+      }
+      recipients = (data || []).map((row) => ({
+        profileId: row.id,
+        studentId: null,
+        name: row.full_name || "Staff member",
+        phone: row.phone || "",
+      }));
+    } else {
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, school_id, first_name, middle_name, last_name, admission_number, parent_name, parent_phone")
+        .eq("school_id", schoolId)
+        .in("id", recipientIds);
+      if (error) throw error;
+      if ((data || []).length !== recipientIds.length) {
+        return res.status(403).json({ success: false, message: "One or more selected students do not belong to your school." });
+      }
+      recipients = (data || []).map((row) => ({
+        profileId: null,
+        studentId: row.id,
+        name: row.parent_name || "Parent/Guardian",
+        studentName: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
+        phone: row.parent_phone || "",
+      }));
+    }
+
+    // Do not send duplicate messages to a shared guardian/staff number.
+    const uniqueRecipients = [];
+    const seenPhones = new Set();
+    const results = [];
+
+    for (const recipient of recipients) {
+      const normalizedPhone = normalizeTanzaniaPhone(recipient.phone);
+      if (!normalizedPhone || normalizedPhone.length < 10) {
+        results.push({
+          recipient_name: recipient.name,
+          student_name: recipient.studentName || null,
+          status: "failed",
+          error: "Namba ya simu haipo au si sahihi kwenye taarifa za usajili.",
+        });
+        continue;
+      }
+      if (seenPhones.has(normalizedPhone)) {
+        results.push({
+          recipient_name: recipient.name,
+          student_name: recipient.studentName || null,
+          status: "skipped",
+          error: "Namba hii tayari imechaguliwa kwa mpokeaji mwingine; SMS imetumwa mara moja tu.",
+        });
+        continue;
+      }
+      seenPhones.add(normalizedPhone);
+      uniqueRecipients.push({ ...recipient, normalizedPhone });
+    }
+
+    for (const recipient of uniqueRecipients) {
+      let history;
+      try {
+        const { data: inserted, error: insertError } = await supabase
+          .from("school_sms_broadcast_history")
+          .insert({
+            school_id: schoolId,
+            sender_user_id: req.user.id,
+            audience,
+            recipient_profile_id: recipient.profileId,
+            student_id: recipient.studentId,
+            recipient_name: recipient.name,
+            recipient_phone: recipient.normalizedPhone,
+            message,
+            provider: "NewHope SMS",
+            status: "pending",
+          })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+        history = inserted;
+
+        const delivery = await sendNewHopeSmsWithCredentials(
+          credentials,
+          recipient.normalizedPhone,
+          message
+        );
+
+        await supabase
+          .from("school_sms_broadcast_history")
+          .update({
+            status: delivery.status,
+            provider_message_id: delivery.provider_message_id,
+            segments: delivery.segments,
+            cost: delivery.cost,
+            error_message: delivery.status === "failed" ? "NewHope reported a failed delivery." : null,
+            sent_at: delivery.status === "failed" ? null : new Date().toISOString(),
+          })
+          .eq("id", history.id)
+          .eq("school_id", schoolId);
+
+        results.push({
+          recipient_name: recipient.name,
+          student_name: recipient.studentName || null,
+          phone: recipient.normalizedPhone,
+          status: delivery.status,
+          provider: delivery.provider,
+          provider_message_id: delivery.provider_message_id,
+          segments: delivery.segments,
+          cost: delivery.cost,
+        });
+      } catch (sendError) {
+        const errorMessage = getProviderError(sendError);
+        if (history?.id) {
+          await supabase
+            .from("school_sms_broadcast_history")
+            .update({ status: "failed", error_message: errorMessage })
+            .eq("id", history.id)
+            .eq("school_id", schoolId);
+        }
+        results.push({
+          recipient_name: recipient.name,
+          student_name: recipient.studentName || null,
+          phone: recipient.normalizedPhone,
+          status: "failed",
+          error: errorMessage,
+        });
+      }
+    }
+
+    const sentCount = results.filter((row) => ["sent", "queued", "delivered"].includes(String(row.status).toLowerCase())).length;
+    const failedCount = results.filter((row) => row.status === "failed").length;
+    const skippedCount = results.filter((row) => row.status === "skipped").length;
+
+    return res.json({
+      success: sentCount > 0 && failedCount === 0,
+      message: `NewHope SMS: ${sentCount} accepted, ${failedCount} failed, ${skippedCount} duplicate numbers skipped.`,
+      provider: "NewHope SMS",
+      audience,
+      selected_count: recipientIds.length,
+      sent_count: sentCount,
+      failed_count: failedCount,
+      skipped_count: skippedCount,
+      results,
+    });
+  } catch (error) {
+    console.error("BULK NEWHOPE SMS ERROR:", error);
+    return res.status(502).json({
+      success: false,
+      message: "Bulk SMS request failed.",
+      provider: "NewHope SMS",
       error: getProviderError(error),
     });
   }
