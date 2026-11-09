@@ -48,6 +48,13 @@ export default function SchoolManagement() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingSchool, setEditingSchool] = useState(null);
     const [form, setForm] = useState(EMPTY_FORM);
+    const [smsSchool, setSmsSchool] = useState(null);
+    const [smsForm, setSmsForm] = useState({ sender_id: "", api_key: "", secret_key: "", approval_status: "pending", approval_note: "" });
+    const [smsConfigured, setSmsConfigured] = useState(false);
+    const [smsLoading, setSmsLoading] = useState(false);
+    const [smsSaving, setSmsSaving] = useState(false);
+    const [smsError, setSmsError] = useState("");
+    const [smsNotice, setSmsNotice] = useState("");
 
     const loadSchools = useCallback(async () => {
         setLoading(true);
@@ -255,6 +262,50 @@ export default function SchoolManagement() {
         }
     };
 
+    const openSmsSettings = async (school) => {
+        setSmsSchool(school);
+        setSmsForm({ sender_id: "", api_key: "", secret_key: "", approval_status: "pending", approval_note: "" });
+        setSmsConfigured(false);
+        setSmsError("");
+        setSmsNotice("");
+        setSmsLoading(true);
+        try {
+            const response = await api.get(`/schools/${school.id}/sms-settings`);
+            const settings = response?.data?.settings;
+            setSmsConfigured(Boolean(response?.data?.configured));
+            if (settings) {
+                setSmsForm((current) => ({
+                    ...current,
+                    sender_id: settings.sender_id || "",
+                    approval_status: settings.approval_status || "pending",
+                    approval_note: settings.approval_note || ""
+                }));
+            }
+        } catch (loadError) {
+            setSmsError(displayError(loadError));
+        } finally {
+            setSmsLoading(false);
+        }
+    };
+
+    const saveSmsSettings = async (event) => {
+        event.preventDefault();
+        if (!smsSchool) return;
+        setSmsSaving(true);
+        setSmsError("");
+        setSmsNotice("");
+        try {
+            await api.put(`/schools/${smsSchool.id}/sms-settings`, smsForm);
+            setSmsConfigured(true);
+            setSmsNotice("Mipangilio ya SMS imehifadhiwa. API Key na Secret Key hazitaonyeshwa tena.");
+            setSmsForm((current) => ({ ...current, api_key: "", secret_key: "" }));
+        } catch (saveError) {
+            setSmsError(displayError(saveError));
+        } finally {
+            setSmsSaving(false);
+        }
+    };
+
     const StatCard = ({ title, count, tone, filter, icon }) => (
         <button
             type="button"
@@ -417,6 +468,9 @@ export default function SchoolManagement() {
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="flex justify-end gap-2">
+                                                    <button type="button" onClick={() => openSmsSettings(school)} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">
+                                                        SMS Setup
+                                                    </button>
                                                     <button type="button" onClick={() => openEditModal(school)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800">
                                                         <FaEdit /> Edit
                                                     </button>
@@ -434,6 +488,59 @@ export default function SchoolManagement() {
                     )}
                 </section>
 
+                {smsSchool && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="presentation">
+                        <section role="dialog" aria-modal="true" aria-labelledby="school-sms-title" className="my-6 w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+                            <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
+                                <div>
+                                    <h2 id="school-sms-title" className="text-xl font-bold text-slate-900">NewHope SMS Setup</h2>
+                                    <p className="mt-1 text-sm text-slate-500">{smsSchool.school_name}</p>
+                                </div>
+                                <button type="button" onClick={() => setSmsSchool(null)} disabled={smsSaving} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Funga"><FaTimes /></button>
+                            </div>
+                            <form onSubmit={saveSmsSettings} className="space-y-4 p-5">
+                                {smsLoading ? <p className="text-sm text-slate-500">Inapakia mipangilio...</p> : <>
+                                    <div className={smsConfigured ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800" : "rounded-lg bg-amber-50 p-3 text-sm text-amber-800"}>
+                                        {smsConfigured ? "Credentials zimehifadhiwa kwa usalama kwenye Supabase Vault." : "Bado hakuna credentials za SMS zilizohifadhiwa kwa shule hii."}
+                                    </div>
+                                    {smsError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{smsError}</div>}
+                                    {smsNotice && <div role="status" className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{smsNotice}</div>}
+                                    <div>
+                                        <label className="text-sm font-semibold text-slate-700" htmlFor="sms_sender_id">Approved Sender ID *</label>
+                                        <input id="sms_sender_id" value={smsForm.sender_id} onChange={(event) => setSmsForm((current) => ({ ...current, sender_id: event.target.value }))} required maxLength={11} pattern="[A-Za-z0-9]{1,11}" className={inputClass} placeholder="Mfano: BISHOPALPHA" />
+                                        <p className="mt-1 text-xs text-slate-500">Herufi/namba zisizozidi 11, bila nafasi. Lazima iwe imeidhinishwa NewHope.</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-semibold text-slate-700" htmlFor="sms_api_key">NewHope API Key *</label>
+                                        <input id="sms_api_key" type="password" autoComplete="new-password" value={smsForm.api_key} onChange={(event) => setSmsForm((current) => ({ ...current, api_key: event.target.value }))} required className={inputClass} placeholder="Ingiza API Key ya Sender ID hii" />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-semibold text-slate-700" htmlFor="sms_secret_key">NewHope Secret Key *</label>
+                                        <input id="sms_secret_key" type="password" autoComplete="new-password" value={smsForm.secret_key} onChange={(event) => setSmsForm((current) => ({ ...current, secret_key: event.target.value }))} required className={inputClass} placeholder="Ingiza Secret Key ya Sender ID hii" />
+                                        {smsConfigured && <p className="mt-1 text-xs text-slate-500">Kwa usalama, funguo zilizopo hazionyeshwi. Weka tena zote mbili ili kuzibadilisha.</p>}
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-semibold text-slate-700" htmlFor="sms_approval_status">Sender ID Approval Status *</label>
+                                        <select id="sms_approval_status" value={smsForm.approval_status} onChange={(event) => setSmsForm((current) => ({ ...current, approval_status: event.target.value }))} className={inputClass}>
+                                            <option value="pending">Pending</option>
+                                            <option value="approved">Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                        </select>
+                                        <p className="mt-1 text-xs text-slate-500">Chagua Approved tu baada ya kuthibitisha idhini kwenye akaunti ya NewHope.</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-semibold text-slate-700" htmlFor="sms_approval_note">Approval Note (optional)</label>
+                                        <textarea id="sms_approval_note" rows={2} value={smsForm.approval_note} onChange={(event) => setSmsForm((current) => ({ ...current, approval_note: event.target.value }))} className={inputClass} placeholder="Maelezo ya ziada..." />
+                                    </div>
+                                </>}
+                                <div className="flex flex-col-reverse justify-end gap-3 border-t border-slate-100 pt-4 sm:flex-row">
+                                    <button type="button" onClick={() => setSmsSchool(null)} disabled={smsSaving} className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700">Close</button>
+                                    <button type="submit" disabled={smsLoading || smsSaving} className="rounded-lg bg-indigo-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60">{smsSaving ? "Inahifadhi..." : "Save SMS Settings"}</button>
+                                </div>
+                            </form>
+                        </section>
+                    </div>
+                )}
                 {modalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeModal(); }}>
                         <section role="dialog" aria-modal="true" aria-labelledby="school-form-title" className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
