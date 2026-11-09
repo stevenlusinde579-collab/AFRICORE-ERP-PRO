@@ -2318,10 +2318,23 @@ export const updateTeacher = async (
          * ========================================================
          */
 
-        authUpdatePayload.ban_duration =
-            normalizedStatus === "Active"
-                ? "none"
-                : "876000h";
+        // Only change the Auth ban state when it actually needs to change.
+        // Sending "none" on every ordinary profile edit can make an otherwise
+        // valid phone/email credential update fail on already-active accounts.
+        const bannedUntil =
+            existingAuthResult.user.banned_until
+                ? new Date(existingAuthResult.user.banned_until).getTime()
+                : 0;
+
+        const isCurrentlyBanned =
+            Number.isFinite(bannedUntil) &&
+            bannedUntil > Date.now();
+
+        if (normalizedStatus === "Inactive") {
+            authUpdatePayload.ban_duration = "876000h";
+        } else if (isCurrentlyBanned) {
+            authUpdatePayload.ban_duration = "none";
+        }
 
 
         console.log(
@@ -2388,12 +2401,25 @@ export const updateTeacher = async (
                 authUpdateError
             );
 
+            const authErrorMessage =
+                authUpdateError?.message ||
+                authUpdateError?.msg ||
+                authUpdateError?.code ||
+                (typeof authUpdateError === "string"
+                    ? authUpdateError
+                    : JSON.stringify(authUpdateError));
+
+            const safeAuthErrorMessage =
+                authErrorMessage && authErrorMessage !== "{}"
+                    ? authErrorMessage
+                    : "Supabase Auth rejected the credential update. Check whether the phone number or email is already linked to another login account.";
+
             return res.status(500).json({
 
                 success: false,
 
                 message:
-                    `Unable to ${normalizedStatus === "Active" ? "restore" : "disable"} the teacher login account: ${authUpdateError.message}`
+                    `Unable to update the teacher login credentials: ${safeAuthErrorMessage}`
 
             });
         }
