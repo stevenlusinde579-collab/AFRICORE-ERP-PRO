@@ -206,13 +206,59 @@ const sendWhatsApp = async (
   };
 };
 
+const sendSMS = async (
+  to: string,
+  message: string
+) => {
+  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const from = Deno.env.get("TWILIO_SMS_FROM");
+
+  if (!accountSid || !authToken || !from) {
+    return {
+      status: "failed",
+      skipped: true,
+      error: "SMS provider is not configured. Set TWILIO_SMS_FROM with an active SMS-capable Twilio number.",
+    };
+  }
+
+  const params = new URLSearchParams();
+  params.set("To", normalizePhone(to));
+  params.set("From", from);
+  params.set("Body", message);
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || `Twilio SMS HTTP ${response.status}`);
+  }
+
+  return {
+    skipped: false,
+    provider: "Twilio SMS",
+    provider_message_id: data?.sid || null,
+    status: data?.status || "queued",
+  };
+};
+
 const cleanChannels = (
   value: unknown
 ) => {
-  // SMS remains disabled until AfriCore funds its SMS provider.
   const allowed = new Set([
     "whatsapp",
     "email",
+    "sms",
   ]);
 
   const raw = Array.isArray(value)
@@ -506,6 +552,25 @@ const {
         throw teacherError;
       }
 
+      // Use the phone number captured on the teacher registration profile
+      // when the teachers record itself does not contain one.
+      const profileIds = [
+        ...new Set(
+          (teachers || []).map(teacher => teacher.user_id).filter(Boolean)
+        ),
+      ];
+      const profilePhones = new Map<string, string>();
+      if (profileIds.length) {
+        const { data: profiles, error: profileError } = await adminClient
+          .from("profiles")
+          .select("id, phone")
+          .in("id", profileIds);
+        if (profileError) throw profileError;
+        for (const profile of profiles || []) {
+          if (profile.phone) profilePhones.set(String(profile.id), profile.phone);
+        }
+      }
+
       const subjectName =
         subject?.subject_name ||
         `Subject ${examSubject.subject_id}`;
@@ -560,9 +625,8 @@ const {
             ? [
                 `Dear ${teacherName},`,
                 "",
-                `Examination "${exam.exam_name || "Examination"}" - ${subjectName} (${className}) has been FULLY APPROVED by the Headmaster.`,
-                "",
-                "You may proceed with the next examination process in AfriCore ERP.",
+                `Your ${exam.exam_name || "Examination"} for ${subjectName} (${className}) has completed all approval stages and is now FULLY APPROVED.`,
+                "You may now log in to AfriCore ERP and enter marks for your students in this subject.",
                 "",
                 "AfriCore School Management System",
               ].join("\n")
@@ -662,8 +726,10 @@ const {
           }
         }
 
+        const teacherPhone = teacher.phone || profilePhones.get(String(teacher.user_id || "")) || "";
+
         if (channels.includes("whatsapp")) {
-          if (!teacher.phone) {
+          if (!teacherPhone) {
             results.push({
               teacher_id: teacher.id,
               channel: "whatsapp",
@@ -678,7 +744,7 @@ const {
               channel:
                 "whatsapp",
               ...(await sendWhatsApp(
-                teacher.phone,
+                teacherPhone,
                 message
               )),
             });
@@ -698,6 +764,32 @@ const {
           }
         }
       }
+
+        if (channels.includes("sms")) {
+          if (!teacherPhone) {
+            results.push({
+              teacher_id: teacher.id,
+              channel: "sms",
+              status: "failed",
+              error: "Teacher phone number is missing from teacher registration and profile.",
+            });
+          } else {
+            try {
+              results.push({
+                teacher_id: teacher.id,
+                channel: "sms",
+                ...(await sendSMS(teacherPhone, message)),
+              });
+            } catch (error) {
+              results.push({
+                teacher_id: teacher.id,
+                channel: "sms",
+                status: "failed",
+                error: error?.message || String(error),
+              });
+            }
+          }
+        }
 
       const failedCount = results.filter(
         item => item.status === "failed" || item.skipped === true
