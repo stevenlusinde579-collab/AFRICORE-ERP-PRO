@@ -330,8 +330,11 @@ function RoleSwitcher() {
 
                     <div className="py-2">
                         {roles.map((role) => {
+                            const roleIdValue =
+                                role.role_id ?? role.id;
+
                             const roleId =
-                                Number(role.role_id ?? role.id);
+                                Number(roleIdValue);
 
                             const active =
                                 Number(selectedRoleId) ===
@@ -348,7 +351,7 @@ function RoleSwitcher() {
                                 role.roleName ||
                                 role.role?.role_name ||
                                 role.role?.name ||
-                                (Number.isFinite(roleId) ? `Role ${roleId}` : "Unknown Role");
+                                (roleIdValue != null && Number.isFinite(roleId) ? `Role ${roleId}` : "Unknown Role");
 
                             return (
                                 <button
