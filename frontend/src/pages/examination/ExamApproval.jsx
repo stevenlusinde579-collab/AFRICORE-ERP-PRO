@@ -6,6 +6,7 @@
 
 import {
     useLocation,
+    useNavigate,
     useParams
 } from "react-router-dom";
 
@@ -24,6 +25,8 @@ const BUCKET =
 
 
 const ExamApproval = () => {
+
+    const navigate = useNavigate();
 
     const { examId } = useParams();
 
@@ -2970,6 +2973,16 @@ const ExamApproval = () => {
                         <div>
 
                             <div className="flex flex-wrap items-center gap-3">
+
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(-1)}
+                                    aria-label="Go back"
+                                    title="Go back"
+                                    className="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                                >
+                                    <span aria-hidden="true" className="text-2xl leading-none">←</span>
+                                </button>
 
                                 <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                                     Examination Approval
