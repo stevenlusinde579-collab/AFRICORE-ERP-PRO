@@ -654,7 +654,7 @@ const SmsCenter = ({ schoolId }) => {
             for (let index = 0; index < selected.length; index += 100) {
                 const batch = selected.slice(index, index + 100);
                 const response = await api.post("/communication/bulk-sms", {
-                    audience, recipient_ids: batch, class_id: audience === "parents" && classFilter !== "all" ? Number(classFilter) : null,
+                    audience, recipient_ids: batch,
                     message: message.trim(),
                 });
                 const data = response?.data || {};
@@ -687,12 +687,12 @@ const SmsCenter = ({ schoolId }) => {
             </div>
             {audience === "parents" && <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Parent group</span>
-                    <select value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setSelected([]); setSendResult(null); }} className="form-input">
+                    <select value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setSendResult(null); }} className="form-input">
                         <option value="all">Wazazi wa shule nzima / All classes</option>
                         {classes.map((item) => <option key={item.id} value={String(item.id)}>{item.class_name}{item.academic_level ? " • " + item.academic_level : ""}</option>)}
                     </select>
                 </label>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 self-end">Unaweza kuchagua darasa moja au kutuma kwa shule nzima. Chagua madarasa mengine kwa kubadili darasa na kuongeza wapokeaji kwenye uchaguzi.</div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 self-end">Unaweza kuchagua wanafunzi wa madarasa tofauti kwa kubadili kichujio cha darasa bila kupoteza chaguo ulizofanya.</div>
             </div>}
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Search recipient</span><input value={search} onChange={(event) => setSearch(event.target.value)} className="form-input" placeholder={audience === "staff" ? "Search staff name or phone..." : "Search student or guardian name..."} /></label>
