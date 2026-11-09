@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // src/pages/examination/ResultsAnalysis.jsx
 // Professional, traceable and data-first examination analysis
 // ============================================================
@@ -296,6 +296,48 @@ const getParentPhone = student =>
 
 const getParentEmail = student =>
     String(student?.parent_email || "").trim();
+
+const toGsm7SmsText = value => [...String(value ?? "").normalize("NFD")]
+    .filter(char => {
+        const code = char.charCodeAt(0);
+        return code >= 32 && code <= 126 && !"^{}[]~|\\".includes(char);
+    })
+    .join("")
+    .split(" ")
+    .filter(Boolean)
+    .join(" ");
+
+const buildStudentResultSmsMessage = (exam, report) => {
+    const studentName = toGsm7SmsText(report.full_name || "Student").slice(0, 40);
+    const examName = toGsm7SmsText(exam?.name || exam?.exam_name || exam?.title || "Examination").slice(0, 36);
+    const className = toGsm7SmsText(report.class_name || "Class").slice(0, 18);
+    const position = toGsm7SmsText(`${report.position ?? "-"}${report.rankTotal ? `/${report.rankTotal}` : ""}`);
+    const aggregate = report.aggregate != null
+        ? toGsm7SmsText(report.aggregate)
+        : (report.cseeEligible ? "Not calculated" : "N/A");
+    const gpa = report.gpa != null
+        ? toGsm7SmsText(formatNumber(report.gpa, 2))
+        : (report.cseeEligible ? "Not calculated" : "N/A");
+    const division = toGsm7SmsText(
+        report.divisionLabel && report.divisionLabel !== "Not applicable"
+            ? report.divisionLabel
+            : (report.cseeEligible ? "Not calculated" : "N/A")
+    );
+    const average = toGsm7SmsText(formatNumber(report.percentage, 1));
+    const grade = toGsm7SmsText(report.grade || "-");
+    const status = toGsm7SmsText(report.reportStatus || (report.percentage >= 40 ? "Passed" : "Failed"));
+
+    // SMS carries the essential overall result only. Full subject-by-subject
+    // marks remain available in the Result Analysis report and PDF.
+    let message = `AfriCore Results: ${studentName}; ${examName} (${className}). Pos ${position}; Agg ${aggregate}; GPA ${gpa}; Div ${division}; Avg ${average}%; Grade ${grade}; ${status}.`;
+
+    // Keep the payload within two GSM-7 SMS segments (300 basic characters).
+    if (message.length > 300) {
+        message = `AfriCore Results: ${studentName.slice(0, 24)}; ${examName.slice(0, 24)} (${className.slice(0, 12)}). Pos ${position}; Agg ${aggregate}; GPA ${gpa}; Div ${division}; Avg ${average}%; Grade ${grade}; ${status}.`;
+    }
+
+    return message.slice(0, 300);
+};
 
 const buildStudentResultMessage = (exam, report) => {
     const lines = [
@@ -1932,7 +1974,11 @@ export default function ResultsAnalysis() {
 
     const shareStudentResult = useCallback(async (student, channel) => {
         const report = getStudentReport(student);
-        const message = buildStudentResultMessage(exam, report);
+        // SMS is a compact GSM-7 summary to reduce NewHope segment charges.
+        // Email and WhatsApp retain the complete report with subject details.
+        const message = channel === "sms"
+            ? buildStudentResultSmsMessage(exam, report)
+            : buildStudentResultMessage(exam, report);
         const phone = getParentPhone(report);
         const email = getParentEmail(report);
         const recipient = channel === "email" ? email : phone;
