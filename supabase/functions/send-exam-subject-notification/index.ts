@@ -206,13 +206,64 @@ const sendWhatsApp = async (
   };
 };
 
+const sendSMS = async (
+  to: string,
+  message: string
+) => {
+  const apiKey = Deno.env.get("NEWHOPE_API_KEY");
+  const secretKey = Deno.env.get("NEWHOPE_SECRET_KEY");
+  const senderId = Deno.env.get("NEWHOPE_SENDER_ID");
+
+  if (!apiKey || !secretKey) {
+    return {
+      status: "failed",
+      skipped: true,
+      provider: "NewHope SMS",
+      error: "NewHope SMS is not configured. Add NEWHOPE_API_KEY and NEWHOPE_SECRET_KEY to Supabase Edge Function secrets.",
+    };
+  }
+
+  const recipient = normalizePhone(to);
+  const response = await fetch("https://sms.newhope.co.tz/v1/sms/send/", {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${apiKey}:${secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      recipient,
+      message,
+      ...(senderId ? { sender_id: senderId } : {}),
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof data?.message === "string"
+      ? data.message
+      : typeof data?.detail === "string"
+        ? data.detail
+        : JSON.stringify(data);
+    throw new Error(detail || `NewHope SMS HTTP ${response.status}`);
+  }
+
+  return {
+    skipped: false,
+    provider: "NewHope SMS",
+    provider_message_id: data?.id || null,
+    status: data?.status || "sent",
+    segments: data?.segments ?? null,
+    cost: data?.cost ?? null,
+  };
+};
+
 const cleanChannels = (
   value: unknown
 ) => {
-  // SMS remains disabled until AfriCore funds its SMS provider.
   const allowed = new Set([
     "whatsapp",
     "email",
+    "sms",
   ]);
 
   const raw = Array.isArray(value)
@@ -506,6 +557,25 @@ const {
         throw teacherError;
       }
 
+      // Use the phone number captured on the teacher registration profile
+      // when the teachers record itself does not contain one.
+      const profileIds = [
+        ...new Set(
+          (teachers || []).map(teacher => teacher.user_id).filter(Boolean)
+        ),
+      ];
+      const profilePhones = new Map<string, string>();
+      if (profileIds.length) {
+        const { data: profiles, error: profileError } = await adminClient
+          .from("profiles")
+          .select("id, phone")
+          .in("id", profileIds);
+        if (profileError) throw profileError;
+        for (const profile of profiles || []) {
+          if (profile.phone) profilePhones.set(String(profile.id), profile.phone);
+        }
+      }
+
       const subjectName =
         subject?.subject_name ||
         `Subject ${examSubject.subject_id}`;
@@ -560,9 +630,8 @@ const {
             ? [
                 `Dear ${teacherName},`,
                 "",
-                `Examination "${exam.exam_name || "Examination"}" - ${subjectName} (${className}) has been FULLY APPROVED by the Headmaster.`,
-                "",
-                "You may proceed with the next examination process in AfriCore ERP.",
+                `Your ${exam.exam_name || "Examination"} for ${subjectName} (${className}) has completed all approval stages and is now FULLY APPROVED.`,
+                "You may now log in to AfriCore ERP and enter marks for your students in this subject.",
                 "",
                 "AfriCore School Management System",
               ].join("\n")
@@ -662,8 +731,10 @@ const {
           }
         }
 
+        const teacherPhone = teacher.phone || profilePhones.get(String(teacher.user_id || "")) || "";
+
         if (channels.includes("whatsapp")) {
-          if (!teacher.phone) {
+          if (!teacherPhone) {
             results.push({
               teacher_id: teacher.id,
               channel: "whatsapp",
@@ -678,7 +749,7 @@ const {
               channel:
                 "whatsapp",
               ...(await sendWhatsApp(
-                teacher.phone,
+                teacherPhone,
                 message
               )),
             });
@@ -697,6 +768,33 @@ const {
           }
           }
         }
+
+        if (channels.includes("sms")) {
+          if (!teacherPhone) {
+            results.push({
+              teacher_id: teacher.id,
+              channel: "sms",
+              status: "failed",
+              error: "Teacher phone number is missing from teacher registration and profile.",
+            });
+          } else {
+            try {
+              results.push({
+                teacher_id: teacher.id,
+                channel: "sms",
+                ...(await sendSMS(teacherPhone, message)),
+              });
+            } catch (error) {
+              results.push({
+                teacher_id: teacher.id,
+                channel: "sms",
+                status: "failed",
+                error: error?.message || String(error),
+              });
+            }
+          }
+        }
+
       }
 
       const failedCount = results.filter(
