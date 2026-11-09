@@ -655,6 +655,26 @@ const {
                 "AfriCore School Management System",
               ].join("\n");
 
+        // Full content remains in the in-app notification, email and WhatsApp.
+        // SMS uses a short GSM-7 message to avoid unnecessary NewHope segments.
+        const toGsm7SmsText = (value: string) => [...String(value ?? "").normalize("NFD")]
+          .filter(char => {
+            const code = char.charCodeAt(0);
+            return code >= 32 && code <= 126 && !"^{}[]~|\\".includes(char);
+          })
+          .join("")
+          .split(" ")
+          .filter(Boolean)
+          .join(" ");
+
+        const smsTeacherName = toGsm7SmsText(teacherName).slice(0, 26);
+        const smsExamName = toGsm7SmsText(exam.exam_name || "Examination").slice(0, 26);
+        const smsSubjectName = toGsm7SmsText(subjectName).slice(0, 20);
+        const smsClassName = toGsm7SmsText(className).slice(0, 12);
+        const smsMessage = type === "approved"
+          ? `Dear ${smsTeacherName}, ${smsExamName}: ${smsSubjectName} (${smsClassName}) FULLY APPROVED. Enter marks in AfriCore ERP.`
+          : `Dear ${smsTeacherName}, ${smsExamName}: ${smsSubjectName} (${smsClassName}) REJECTED. Check reason and correct paper in AfriCore ERP.`;
+
         if (teacher.user_id) {
           const {
             error:
@@ -795,7 +815,7 @@ const {
               results.push({
                 teacher_id: teacher.id,
                 channel: "sms",
-                ...(await sendSMS(teacherPhone, message, Number(exam.school_id))),
+                ...(await sendSMS(teacherPhone, smsMessage, Number(exam.school_id))),
               });
             } catch (error) {
               results.push({
