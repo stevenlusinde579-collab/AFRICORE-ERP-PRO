@@ -2208,14 +2208,20 @@ export const updateTeacher = async (
          * --------------------------------------------------------
          */
 
+        // Compare against the actual Supabase Auth credentials, not only
+        // the teachers table. Legacy rows can store a local-format phone
+        // (07...) while Auth already stores the normalized +255 number.
+        // Comparing those formats falsely marks an unchanged number as changed.
         const existingEmail =
-            typeof existingTeacher.email === "string"
-                ? existingTeacher.email.trim().toLowerCase()
+            typeof existingAuthResult.user.email === "string"
+                ? existingAuthResult.user.email.trim().toLowerCase()
                 : null;
 
 
         const existingPhone =
-            existingTeacher.phone || null;
+            typeof existingAuthResult.user.phone === "string"
+                ? normalizeTanzaniaPhone(existingAuthResult.user.phone)
+                : null;
 
 
         /**
