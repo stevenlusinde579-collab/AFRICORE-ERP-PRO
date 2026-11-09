@@ -7,7 +7,9 @@ import {
     updateSchool,
     getHeadmasters,
     createSchoolHeadmaster,
-    assignHeadmaster
+    assignHeadmaster,
+    getSchoolSmsSettings,
+    saveSchoolSmsSettings
 } from "../controllers/schoolManagementController.js";
 
 import { authenticateUser } from "../middleware/authMiddleware.js";
@@ -23,6 +25,8 @@ router.post("/:id/headmasters", createSchoolHeadmaster);
 router.patch("/headmasters/:profileId/school", assignHeadmaster);
 
 router.get("/:id/overview", getSchoolOverview);
+router.get("/:id/sms-settings", getSchoolSmsSettings);
+router.put("/:id/sms-settings", saveSchoolSmsSettings);
 router.get("/", getSchools);
 router.post("/", createSchool);
 router.patch("/:id", updateSchool);
