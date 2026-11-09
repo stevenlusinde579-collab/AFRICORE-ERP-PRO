@@ -208,32 +208,40 @@ const sendWhatsApp = async (
 
 const sendSMS = async (
   to: string,
-  message: string
+  message: string,
+  schoolId: number
 ) => {
-  const apiKey = Deno.env.get("NEWHOPE_API_KEY");
-  const secretKey = Deno.env.get("NEWHOPE_SECRET_KEY");
-  const senderId = Deno.env.get("NEWHOPE_SENDER_ID");
+  if (!Number.isInteger(schoolId) || schoolId <= 0) {
+    throw new Error("A valid school ID is required to send school-branded SMS.");
+  }
 
-  if (!apiKey || !secretKey) {
-    return {
-      status: "failed",
-      skipped: true,
-      provider: "NewHope SMS",
-      error: "NewHope SMS is not configured. Add NEWHOPE_API_KEY and NEWHOPE_SECRET_KEY to Supabase Edge Function secrets.",
-    };
+  // Credentials are retrieved from Vault through a service-role-only RPC.
+  // Never fall back to global NewHope credentials: that could send under
+  // another school's sender name.
+  const { data: credentials, error: credentialsError } = await adminClient
+    .rpc("get_school_sms_credentials", { p_school_id: schoolId })
+    .maybeSingle();
+
+  if (credentialsError) {
+    throw new Error("Unable to retrieve this school's NewHope SMS configuration.");
+  }
+  if (!credentials?.api_key || !credentials?.secret_key || !credentials?.sender_id) {
+    throw new Error("SMS haijatumwa: shule hii haijaweka NewHope Sender ID na API credentials zake.");
+  }
+  if (String(credentials.approval_status || "").toLowerCase() !== "approved") {
+    throw new Error("SMS haijatumwa: Sender ID ya shule hii bado haijaidhinishwa.");
   }
 
   const recipient = normalizePhone(to);
   const response = await fetch("https://sms.newhope.co.tz/v1/sms/send/", {
     method: "POST",
     headers: {
-      Authorization: `ApiKey ${apiKey}:${secretKey}`,
+      Authorization: `ApiKey ${credentials.api_key}:${credentials.secret_key}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       recipient,
       message,
-      ...(senderId ? { sender_id: senderId } : {}),
     }),
   });
 
@@ -250,6 +258,7 @@ const sendSMS = async (
   return {
     skipped: false,
     provider: "NewHope SMS",
+    sender_id: credentials.sender_id,
     provider_message_id: data?.id || null,
     status: data?.status || "sent",
     segments: data?.segments ?? null,
@@ -379,7 +388,7 @@ Deno.serve(
 
       if (!channels.length) {
         throw new Error(
-          "Chagua WhatsApp au Email. SMS is temporarily disabled until its provider is funded."
+          "Chagua angalau njia moja ya kutuma taarifa: SMS, WhatsApp au Email."
         );
       }
 
@@ -782,7 +791,7 @@ const {
               results.push({
                 teacher_id: teacher.id,
                 channel: "sms",
-                ...(await sendSMS(teacherPhone, message)),
+                ...(await sendSMS(teacherPhone, message, Number(exam.school_id))),
               });
             } catch (error) {
               results.push({

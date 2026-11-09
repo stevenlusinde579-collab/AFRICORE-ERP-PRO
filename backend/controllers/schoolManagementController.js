@@ -676,3 +676,109 @@ export const assignHeadmaster = async (req, res) => {
         });
     }
 };
+
+
+/**
+ * GET /api/schools/:id/sms-settings
+ * Returns configuration metadata only. Secret values are never returned.
+ */
+export const getSchoolSmsSettings = async (req, res) => {
+    try {
+        const schoolId = Number(req.params.id);
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "A valid school ID is required." });
+        }
+        const { data, error } = await supabase
+            .from("school_sms_settings")
+            .select("school_id,sender_id,approval_status,approval_note,updated_at")
+            .eq("school_id", schoolId)
+            .maybeSingle();
+        if (error) throw error;
+        return res.json({
+            success: true,
+            configured: Boolean(data),
+            settings: data ? {
+                school_id: data.school_id,
+                sender_id: data.sender_id,
+                approval_status: data.approval_status,
+                approval_note: data.approval_note,
+                updated_at: data.updated_at,
+                credentials_configured: true
+            } : null
+        });
+    } catch (error) {
+        console.error("SCHOOL SMS SETTINGS - READ ERROR:", error);
+        return res.status(500).json({ success: false, message: "Unable to load school SMS settings." });
+    }
+};
+
+/**
+ * PUT /api/schools/:id/sms-settings
+ * Super Admin only. Credentials are written to Supabase Vault through a
+ * service-role-only RPC and are never returned to the browser.
+ */
+export const saveSchoolSmsSettings = async (req, res) => {
+    try {
+        const schoolId = Number(req.params.id);
+        const senderId = String(req.body?.sender_id || "").trim();
+        const apiKey = String(req.body?.api_key || "").trim();
+        const secretKey = String(req.body?.secret_key || "").trim();
+        const approvalStatus = String(req.body?.approval_status || "pending").trim().toLowerCase();
+        const approvalNote = typeof req.body?.approval_note === "string" ? req.body.approval_note.trim() : null;
+
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "A valid school ID is required." });
+        }
+        if (!/^[A-Za-z0-9]{1,11}$/.test(senderId)) {
+            return res.status(400).json({ success: false, message: "Sender ID lazima iwe herufi/namba 1 hadi 11 bila nafasi." });
+        }
+        if (Boolean(apiKey) !== Boolean(secretKey)) {
+            return res.status(400).json({ success: false, message: "Weka API Key na Secret Key zote mbili, au acha zote wazi ili kubakiza zilizohifadhiwa." });
+        }
+        if ((apiKey && apiKey.length < 8) || (secretKey && secretKey.length < 8)) {
+            return res.status(400).json({ success: false, message: "Kila key lazima iwe na angalau herufi 8." });
+        }
+        if (!["pending", "approved", "rejected"].includes(approvalStatus)) {
+            return res.status(400).json({ success: false, message: "Hali ya idhini si sahihi." });
+        }
+
+        const { data: school, error: schoolError } = await supabase
+            .from("schools")
+            .select("id")
+            .eq("id", schoolId)
+            .maybeSingle();
+        if (schoolError) throw schoolError;
+        if (!school) return res.status(404).json({ success: false, message: "School was not found." });
+
+        const { data: existingSettings, error: existingSettingsError } = await supabase
+            .from("school_sms_settings")
+            .select("school_id")
+            .eq("school_id", schoolId)
+            .maybeSingle();
+        if (existingSettingsError) throw existingSettingsError;
+        if (!existingSettings && (!apiKey || !secretKey)) {
+            return res.status(400).json({ success: false, message: "Weka API Key na Secret Key kwa usanidi wa kwanza." });
+        }
+
+        const { data, error } = await supabase.rpc("set_school_sms_settings", {
+            p_school_id: schoolId,
+            p_sender_id: senderId,
+            p_api_key: apiKey,
+            p_secret_key: secretKey,
+            p_approval_status: approvalStatus,
+            p_approval_note: approvalNote
+        });
+        if (error) throw error;
+
+        return res.json({
+            success: true,
+            message: "Mipangilio ya SMS imehifadhiwa kwa usalama.",
+            school_id: schoolId,
+            configured: true,
+            approval_status: approvalStatus
+        });
+    } catch (error) {
+        console.error("SCHOOL SMS SETTINGS - SAVE ERROR:", error);
+        return res.status(500).json({ success: false, message: "Imeshindikana kuhifadhi mipangilio ya SMS. Tafadhali kagua taarifa na ujaribu tena." });
+    }
+};
