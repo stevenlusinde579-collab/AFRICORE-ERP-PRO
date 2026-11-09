@@ -740,7 +740,11 @@ const {
           }
         }
 
-        const teacherPhone = teacher.phone || profilePhones.get(String(teacher.user_id || "")) || "";
+        // profiles.phone is the current account contact and is updated by
+        // the staff-edit flow. Prefer it over a potentially stale legacy
+        // teachers.phone value; retain teachers.phone as a fallback.
+        const profilePhone = profilePhones.get(String(teacher.user_id || ""));
+        const teacherPhone = profilePhone?.trim() || teacher.phone?.trim() || "";
 
         if (channels.includes("whatsapp")) {
           if (!teacherPhone) {
