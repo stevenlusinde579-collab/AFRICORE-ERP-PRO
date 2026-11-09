@@ -42,9 +42,13 @@ begin
     if p_sender_id is null or p_sender_id !~ '^[A-Za-z0-9]{1,11}$' then
         raise exception 'Sender ID must contain 1 to 11 letters or digits, without spaces.';
     end if;
-    if coalesce(length(trim(p_api_key)), 0) < 8
-       or coalesce(length(trim(p_secret_key)), 0) < 8 then
-        raise exception 'Both NewHope API Key and Secret Key are required.';
+    if (nullif(trim(coalesce(p_api_key, '')), '') is null)
+       <> (nullif(trim(coalesce(p_secret_key, '')), '') is null) then
+        raise exception 'Provide both NewHope keys, or leave both blank to keep the saved keys.';
+    end if;
+    if nullif(trim(coalesce(p_api_key, '')), '') is not null
+       and (length(trim(p_api_key)) < 8 or length(trim(p_secret_key)) < 8) then
+        raise exception 'Both NewHope keys must contain at least 8 characters.';
     end if;
     if coalesce(p_approval_status, 'pending') not in ('pending', 'approved', 'rejected') then
         raise exception 'Invalid Sender ID approval status.';
@@ -58,34 +62,42 @@ begin
       from public.school_sms_settings
      where school_id = p_school_id;
 
-    if v_api_secret_id is null then
-        v_api_secret_id := vault.create_secret(
-            trim(p_api_key),
-            'school_sms_' || p_school_id || '_api_key',
-            'NewHope SMS API key for school ' || p_school_id
-        );
+    -- Existing credentials are retained when both key fields are blank.
+    -- New credentials must always be supplied as a pair.
+    if nullif(trim(coalesce(p_api_key, '')), '') is null then
+        if v_api_secret_id is null or v_secret_secret_id is null then
+            raise exception 'Both NewHope API Key and Secret Key are required for initial setup.';
+        end if;
     else
-        perform vault.update_secret(
-            v_api_secret_id,
-            trim(p_api_key),
-            'school_sms_' || p_school_id || '_api_key',
-            'NewHope SMS API key for school ' || p_school_id
-        );
-    end if;
+        if v_api_secret_id is null then
+            v_api_secret_id := vault.create_secret(
+                trim(p_api_key),
+                'school_sms_' || p_school_id || '_api_key',
+                'NewHope SMS API key for school ' || p_school_id
+            );
+        else
+            perform vault.update_secret(
+                v_api_secret_id,
+                trim(p_api_key),
+                'school_sms_' || p_school_id || '_api_key',
+                'NewHope SMS API key for school ' || p_school_id
+            );
+        end if;
 
-    if v_secret_secret_id is null then
-        v_secret_secret_id := vault.create_secret(
-            trim(p_secret_key),
-            'school_sms_' || p_school_id || '_secret_key',
-            'NewHope SMS secret key for school ' || p_school_id
-        );
-    else
-        perform vault.update_secret(
-            v_secret_secret_id,
-            trim(p_secret_key),
-            'school_sms_' || p_school_id || '_secret_key',
-            'NewHope SMS secret key for school ' || p_school_id
-        );
+        if v_secret_secret_id is null then
+            v_secret_secret_id := vault.create_secret(
+                trim(p_secret_key),
+                'school_sms_' || p_school_id || '_secret_key',
+                'NewHope SMS secret key for school ' || p_school_id
+            );
+        else
+            perform vault.update_secret(
+                v_secret_secret_id,
+                trim(p_secret_key),
+                'school_sms_' || p_school_id || '_secret_key',
+                'NewHope SMS secret key for school ' || p_school_id
+            );
+        end if;
     end if;
 
     insert into public.school_sms_settings (
