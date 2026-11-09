@@ -330,8 +330,11 @@ function RoleSwitcher() {
 
                     <div className="py-2">
                         {roles.map((role) => {
+                            const roleIdValue =
+                                role.role_id ?? role.id;
+
                             const roleId =
-                                Number(role.roleId);
+                                Number(roleIdValue);
 
                             const active =
                                 Number(selectedRoleId) ===
@@ -339,25 +342,31 @@ function RoleSwitcher() {
 
                             const profileRoleActive =
                                 selectedProfileRoleId &&
-                                role.profileRoleId ===
-                                    selectedProfileRoleId;
+                                String(role.profileRoleId ?? role.profile_role_id) ===
+                                    String(selectedProfileRoleId);
 
                             const roleName =
+                                role.role_name ||
+                                role.name ||
                                 role.roleName ||
+                                role.role?.role_name ||
                                 role.role?.name ||
-                                `Role ${roleId}`;
+                                (roleIdValue != null && Number.isFinite(roleId) ? `Role ${roleId}` : "Unknown Role");
 
                             return (
                                 <button
                                     key={
                                         role.profileRoleId ||
-                                        `${role.roleId}-${roleId}`
+                                        role.profile_role_id ||
+                                        `${role.role_id ?? role.id ?? "unknown"}-${roleId}`
                                     }
                                     type="button"
                                     onClick={() => {
                                         selectRole(
                                             role.profileRoleId ||
-                                                role.roleId
+                                                role.profile_role_id ||
+                                                role.role_id ||
+                                                role.id
                                         );
 
                                         setOpen(false);
@@ -423,7 +432,7 @@ function RoleSwitcher() {
                                             {roleName}
                                         </div>
 
-                                        {role.isPrimary && (
+                                        {(role.is_primary ?? role.isPrimary) && (
                                             <div className="text-[10px] text-gray-500 mt-0.5">
                                                 Primary Role
                                             </div>
