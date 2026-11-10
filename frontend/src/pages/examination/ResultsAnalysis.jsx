@@ -1713,6 +1713,11 @@ export default function ResultsAnalysis() {
         const cseeDivisionDistribution = ["I", "II", "III", "IV", "0"].map(division => ({
             division, count: cseeEligibleStudents.filter(row => row.cseeDivision === division).length
         }));
+        const acseeEligibleStudents = rankedStudents.filter(row => row.acseeEligible);
+        const acseeGpa = acseeEligibleStudents.length ? acseeEligibleStudents.reduce((sum, row) => sum + numberValue(row.acseeGpa), 0) / acseeEligibleStudents.length : null;
+        const acseeDivisionDistribution = ["I", "II", "III", "IV", "0"].map(division => ({
+            division, count: acseeEligibleStudents.filter(row => row.acseeDivision === division).length
+        }));
 
         const subjectRows = examSubjects.map(es => {
             const subjectResults = students
@@ -1755,9 +1760,14 @@ export default function ResultsAnalysis() {
             const className = getClassName(classMap.get(classId)) || `Class ${classId}`;
             const classStudents = overallStudentAnalysis.filter(row => idValue(row.class_id) === classId);
             const eligible = classStudents.filter(row => row.cseeEligible && row.cseeGpa != null);
+            const acseeEligible = classStudents.filter(row => row.acseeEligible && row.acseeGpa != null);
             const divisionDistribution = ["I", "II", "III", "IV", "0"].map(division => ({
                 division,
                 count: classStudents.filter(row => row.cseeDivision === division).length
+            }));
+            const acseeDivisionDistribution = ["I", "II", "III", "IV", "0"].map(division => ({
+                division,
+                count: classStudents.filter(row => row.acseeDivision === division).length
             }));
             const average = classStudents.length
                 ? classStudents.reduce((sum, row) => sum + numberValue(row.percentage), 0) / classStudents.length
@@ -1773,6 +1783,10 @@ export default function ResultsAnalysis() {
                 gpa,
                 divisionDistribution,
                 divisions: divisionDistribution.reduce((acc, row) => ({ ...acc, [row.division]: row.count }), {}),
+                acseeEligibleStudents: acseeEligible.length,
+                acseeGpa: acseeEligible.length ? acseeEligible.reduce((sum, row) => sum + numberValue(row.acseeGpa), 0) / acseeEligible.length : null,
+                acseeDivisionDistribution,
+                acseeDivisions: acseeDivisionDistribution.reduce((acc, row) => ({ ...acc, [row.division]: row.count }), {}),
                 passRate: classStudents.length
                     ? (classStudents.filter(row => row.pass).length / classStudents.length) * 100
                     : 0
@@ -1795,6 +1809,9 @@ export default function ResultsAnalysis() {
             cseeEligibleStudents: cseeEligibleStudents.length,
             cseeGpa,
             cseeDivisionDistribution,
+            acseeEligibleStudents: acseeEligibleStudents.length,
+            acseeGpa,
+            acseeDivisionDistribution,
             studentGradeDistribution,
             topStudents: rankedStudents.slice(0, 10),
             allStudents: rankedStudents,
@@ -1936,9 +1953,15 @@ export default function ResultsAnalysis() {
         const passedStudents = rows.filter(row => row.pass).length;
         const eligibleStudents = rows.filter(row => row.cseeEligible && row.cseeGpa != null);
         const classGpa = eligibleStudents.length ? eligibleStudents.reduce((sum, row) => sum + numberValue(row.cseeGpa), 0) / eligibleStudents.length : null;
+        const acseeEligibleStudents = rows.filter(row => row.acseeEligible && row.acseeGpa != null);
+        const acseeGpa = acseeEligibleStudents.length ? acseeEligibleStudents.reduce((sum, row) => sum + numberValue(row.acseeGpa), 0) / acseeEligibleStudents.length : null;
         const divisionDistribution = ["I","II","III","IV","0"].map(division => ({
             division,
             count: rows.filter(row => row.cseeDivision === division).length
+        }));
+        const acseeDivisionDistribution = ["I","II","III","IV","0"].map(division => ({
+            division,
+            count: rows.filter(row => row.acseeDivision === division).length
         }));
 
         return {
@@ -1957,6 +1980,9 @@ export default function ResultsAnalysis() {
             cseeEligibleStudents: eligibleStudents.length,
             cseeGpa: classGpa,
             cseeDivisionDistribution: divisionDistribution,
+            acseeEligibleStudents: acseeEligibleStudents.length,
+            acseeGpa,
+            acseeDivisionDistribution,
             gradeDistribution: (examGradingScales.length && (isCseeClass(selectedClassId) || !isLegacyOLevelScale(examGradingScales))
                 ? examGradingScales.map(scale => scale.grade)
                 : gradeLabelsForEducationLevel([exam?.education_level, exam?.level, exam?.exam_type, classMap.get(idValue(selectedClassId))?.academic_level, classMap.get(idValue(selectedClassId))?.class_name].filter(Boolean).join(" "), examGradingScales)
