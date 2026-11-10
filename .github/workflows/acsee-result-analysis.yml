@@ -1,0 +1,37 @@
+name: ACSEE Result Analysis Checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/pages/examination/ResultsAnalysis.jsx'
+      - 'frontend/src/utils/acseeResultCalculator.js'
+      - 'frontend/tests/acseeResultCalculator.test.js'
+      - 'frontend/src/utils/resultGrading.js'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - '.github/workflows/acsee-result-analysis.yml'
+
+jobs:
+  acsee-result-analysis:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ACSEE calculation tests
+        run: npm run test:acsee
+      - name: Run existing education-level grading tests
+        run: npm run test:result-grading
+      - name: Build frontend
+        run: npm run build
