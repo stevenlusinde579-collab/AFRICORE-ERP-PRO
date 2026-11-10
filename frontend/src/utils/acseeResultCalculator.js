@@ -75,6 +75,21 @@ export const calculateAcseeResult = (subjectResults = [], principalSubjectIds = 
 
   const total = graded.reduce((sum, row) => sum + row.percentage, 0);
   const average = total / 3;
+  const principalPassCount = graded.filter(row => ["A", "B", "C", "D", "E"].includes(row.grade)).length;
+  const principalSubsidiaryPassCount = graded.filter(row => row.grade === "S").length;
+  const hasHighPrincipalPass = graded.some(row => ["A", "B", "C"].includes(row.grade));
+
+  // ACSEE award rules distinguish principal passes from subsidiary passes.
+  // Division III requires either two principal passes or one principal pass
+  // at grade C or better. Division IV also covers a candidate with at least
+  // one principal pass or two subsidiary passes, even when aggregate points
+  // alone would otherwise fall in the Division 0 band.
+  let awardDivision = null;
+  if (aggregate >= 3 && aggregate <= 9) awardDivision = "I";
+  else if (aggregate >= 10 && aggregate <= 12 && principalPassCount >= 2) awardDivision = "II";
+  else if (aggregate >= 13 && aggregate <= 17 && (principalPassCount >= 2 || hasHighPrincipalPass)) awardDivision = "III";
+  else if ((aggregate >= 18 && aggregate <= 19) || principalPassCount >= 1 || principalSubsidiaryPassCount >= 2) awardDivision = "IV";
+
   const subsidiarySubjects = (Array.isArray(subjectResults) ? subjectResults : [])
     .filter(row => !ids.includes(String(row.subject_id)))
     .map(row => ({ ...row, isPrincipal: false }));
@@ -91,7 +106,7 @@ export const calculateAcseeResult = (subjectResults = [], principalSubjectIds = 
     total: Number(total.toFixed(2)),
     possible: 300,
     grade: getAcseeGrade(average),
-    passed: ["I", "II", "III", "IV"].includes(division)
+    passed: Boolean(awardDivision)
   };
 };
 
