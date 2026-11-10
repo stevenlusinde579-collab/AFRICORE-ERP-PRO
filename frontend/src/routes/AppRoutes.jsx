@@ -16,6 +16,7 @@ import PermissionRoute from "../auth/PermissionRoute";
 import { useRole } from "../context/RoleContext";
 
 import LandingPage from "../pages/landing/LandingPage";
+import ParentPortal from "../pages/ParentPortal";
 
 import Layout from "../components/layout/Layout";
 
@@ -255,6 +256,12 @@ export default function AppRoutes() {
             <Route
                 path="/login"
                 element={<Login />}
+            />
+
+            {/* PARENT PORTAL - SEPARATE PARENT AUTHENTICATION */}
+            <Route
+                path="/parent-portal"
+                element={<ParentPortal />}
             />
 
             {/* ACCESS DENIED */}
