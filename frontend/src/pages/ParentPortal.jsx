@@ -81,7 +81,14 @@ export default function ParentPortal() {
     if (!token || mustChangePassword || !["finance", "overview"].includes(activeTab)) return undefined;
     // Finance figures are read from the finance schema (accounting source of truth).
     // Refresh this small portal view every second so posted receipts/charges appear promptly.
-    const refresh = window.setInterval(() => loadDashboard(token), 1000);
+    const refresh = window.setInterval(async () => {
+      try {
+        const response = await api.get("/parent-portal/finance", { headers: { Authorization: "Bearer " + token } });
+        setData((current) => current ? { ...current, finance: response.data.finance } : current);
+      } catch (refreshError) {
+        console.warn("Parent finance refresh failed:", refreshError?.response?.data?.message || refreshError?.message);
+      }
+    }, 1000);
     return () => window.clearInterval(refresh);
   }, [token, activeTab, mustChangePassword]);
 
