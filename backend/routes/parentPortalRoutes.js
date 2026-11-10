@@ -566,7 +566,9 @@ router.get("/dashboard", async (req, res) => {
     const totalBalance = chargeRows.reduce((sum, row) => sum + Number(row.balance || 0), 0);
     const chat = classId ? await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", school.id).eq("class_id", classId).order("created_at", { ascending: true }).limit(200) : { data: [] };
     if (chat.error) throw chat.error;
-    const allGroupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];\n    // Parent accounts may see their own identity and school staff only; never disclose other parents.\n    const groupMembers = allGroupMembers.filter((member) => member.member_type === "staff" || String(member.student_id) === String(student.id));
+    const allGroupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];
+    // Parent accounts may see their own identity and school staff only; never disclose other parents.
+    const groupMembers = allGroupMembers.filter((member) => member.member_type === "staff" || String(member.student_id) === String(student.id));
     return res.json({
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
