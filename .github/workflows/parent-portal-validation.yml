@@ -33,6 +33,11 @@ jobs:
       - name: Run backend regression tests
         working-directory: backend
         run: npm run test:ai-safe
+      - name: Check Parent Portal migration guardrails
+        run: |
+          grep -q "alter table public.parent_portal_accounts enable row level security" supabase/migrations/20261109140000_parent_portal_foundation.sql
+          grep -q "revoke all on public.parent_portal_accounts from anon, authenticated" supabase/migrations/20261109140000_parent_portal_foundation.sql
+          grep -q "parent_portal_chat_messages" supabase/migrations/20261109140000_parent_portal_foundation.sql
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
