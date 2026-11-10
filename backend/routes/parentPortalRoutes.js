@@ -112,11 +112,12 @@ async function sendCredentialSms(student, account, sentBy = null) {
     const response = await fetch("https://sms.newhope.co.tz/v1/sms/send/", {
       method: "POST",
       headers: { Authorization: "ApiKey " + credentials.api_key + ":" + credentials.secret_key, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ recipient: "+" + phone, message }),
+      body: JSON.stringify({ recipient: "+" + phone, message, sender_id: credentials.sender_id }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result?.message || result?.detail || result?.error || "NewHope SMS HTTP " + response.status);
-    const providerStatus = String(result?.status || "sent").toLowerCase().includes("fail") ? "failed" : (String(result?.status || "sent").toLowerCase().includes("queue") ? "queued" : "sent");
+    const rawStatus = String(result?.status || "sent").toLowerCase();
+    const providerStatus = rawStatus.includes("fail") ? "failed" : (rawStatus.includes("queue") || rawStatus.includes("pending") ? "queued" : (rawStatus.includes("deliver") ? "delivered" : "sent"));
     await finish({ status: providerStatus, provider: "NewHope SMS", provider_message_id: result?.id || result?.message_id || result?.messageId || null });
     return { success: providerStatus !== "failed", status: providerStatus, history_id: history.id };
   } catch (error) {
