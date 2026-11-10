@@ -1560,21 +1560,29 @@ export default function ResultsAnalysis() {
                 })
             ].filter(Boolean).join(" ");
             const ordinaryLevel = isOrdinaryLevel(levelContext);
+            const advancedLevel = isAlevelClass(examClassId);
             const csee = ordinaryLevel
                 ? calculateResult(subjectResults, examGradingScales)
                 : { eligible: false, analysedSubjects: subjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
+            const acsee = advancedLevel
+                ? getAlevelResult(student, subjectResults)
+                : { eligible: false, complete: false, principalSubjects: [], subsidiarySubjects: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", average: null, total: null, reason: null };
 
             const bestSeven = csee.bestSeven || [];
-            const total = ordinaryLevel
-                ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
-                : allSubjectsTotal;
-            const possible = ordinaryLevel ? bestSeven.length * 100 : allSubjectsPossible;
-            const average = possible > 0
-                ? (total / possible) * 100
-                : 0;
+            const total = advancedLevel
+                ? numberValue(acsee.total)
+                : ordinaryLevel
+                    ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
+                    : allSubjectsTotal;
+            const possible = advancedLevel ? 300 : ordinaryLevel ? bestSeven.length * 100 : allSubjectsPossible;
+            const average = advancedLevel
+                ? numberValue(acsee.average)
+                : possible > 0 ? (total / possible) * 100 : 0;
             const percentage = average;
-            const configuredOverall = applicableGradeScale(average, examGradingScales, ordinaryLevel);
-            const grade = gradeForEducationLevel(average, levelContext, examGradingScales);
+            const configuredOverall = advancedLevel ? null : applicableGradeScale(average, examGradingScales, ordinaryLevel);
+            const grade = advancedLevel && !acsee.eligible
+                ? "—"
+                : advancedLevel ? acsee.grade : gradeForEducationLevel(average, levelContext, examGradingScales);
 
             return {
                 id: student.id,
@@ -1589,9 +1597,11 @@ export default function ResultsAnalysis() {
                 percentage,
                 grade,
                 remark: remarkForEducationLevel(grade, levelContext, examGradingScales) || configuredOverall?.remark || (ordinaryLevel ? getRemark(grade) : grade),
-                pass: configuredOverall
-                    ? String(configuredOverall.result || "").toUpperCase() === "PASS"
-                    : average >= 40,
+                pass: advancedLevel
+                    ? acsee.eligible && acsee.passed
+                    : configuredOverall
+                        ? String(configuredOverall.result || "").toUpperCase() === "PASS"
+                        : average >= 40,
                 subjects: subjectResults,
                 subjectCount: subjectResults.length,
                 allSubjectsTotal,
@@ -1606,10 +1616,20 @@ export default function ResultsAnalysis() {
                 cseeDivision: csee.division,
                 cseeDivisionLabel: csee.divisionLabel,
                 cseeBestSeven: csee.bestSeven,
-                aggregate: csee.aggregate,
-                gpa: csee.gpa,
-                division: csee.division,
-                divisionLabel: csee.divisionLabel,
+                acseeEligible: acsee.eligible,
+                acseeComplete: acsee.complete,
+                acseeReason: acsee.reason,
+                acseeCombination: acsee.combination,
+                acseeAggregate: acsee.aggregate,
+                acseeGpa: acsee.gpa,
+                acseeDivision: acsee.division,
+                acseeDivisionLabel: acsee.divisionLabel,
+                acseePrincipalSubjects: acsee.principalSubjects,
+                acseeSubsidiarySubjects: acsee.subsidiarySubjects,
+                aggregate: advancedLevel ? acsee.aggregate : csee.aggregate,
+                gpa: advancedLevel ? acsee.gpa : csee.gpa,
+                division: advancedLevel ? acsee.division : csee.division,
+                divisionLabel: advancedLevel ? acsee.divisionLabel : csee.divisionLabel,
                 bestSeven: csee.bestSeven,
                 completeSubjects: subjectResults.filter(result => result.status === "Complete").length,
                 partialSubjects: subjectResults.filter(result => result.status === "Partial").length,
