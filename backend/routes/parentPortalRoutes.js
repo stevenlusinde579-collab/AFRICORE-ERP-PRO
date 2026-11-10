@@ -487,6 +487,37 @@ router.patch("/staff/suggestions/:id", authenticateUser, parentPortalStaffAccess
 
 router.use(parentAuth);
 
+router.get("/finance", async (req, res) => {
+  const { student, school } = req.parent;
+  try {
+    const [charges, payments] = await Promise.all([
+      supabase.schema("finance").from("student_charges")
+        .select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at")
+        .eq("school_id", school.id).eq("student_id", student.id)
+        .order("created_at", { ascending: false }).limit(100),
+      supabase.schema("finance").from("student_payments")
+        .select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status")
+        .eq("school_id", school.id).eq("student_id", student.id)
+        .order("payment_date", { ascending: false }).limit(100),
+    ]);
+    if (charges.error || payments.error) throw charges.error || payments.error;
+    const chargeRows = charges.data || [];
+    return res.json({
+      success: true,
+      finance: {
+        total_charged: chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        total_paid: chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0),
+        balance: chargeRows.reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        charges: chargeRows,
+        payments: payments.data || [],
+      },
+    });
+  } catch (error) {
+    console.error("PARENT FINANCE REFRESH ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to refresh student finance information." });
+  }
+});
+
 router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
@@ -509,7 +540,7 @@ router.get("/dashboard", async (req, res) => {
     const totalBalance = chargeRows.reduce((sum, row) => sum + Number(row.balance || 0), 0);
     const chat = classId ? await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", school.id).eq("class_id", classId).order("created_at", { ascending: true }).limit(200) : { data: [] };
     if (chat.error) throw chat.error;
-    const groupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];
+    const allGroupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];\n    // Parent accounts may see their own identity and school staff only; never disclose other parents.\n    const groupMembers = allGroupMembers.filter((member) => member.member_type === "staff" || String(member.student_id) === String(student.id));
     return res.json({
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
