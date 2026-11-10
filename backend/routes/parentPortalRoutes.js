@@ -156,16 +156,19 @@ router.post("/provision", authenticateUser, requirePermission("create_students")
       if (insertError) throw insertError;
       account = data;
     } else {
-      const initialPassword = await hashPassword(admission);
-      const { error: updateError } = await supabase.from("parent_portal_accounts").update({
-        username, password_hash: initialPassword.hash, password_salt: initialPassword.salt,
-        must_change_password: true, updated_at: new Date().toISOString(),
-      }).eq("id", account.id);
+      // Provisioning is idempotent: never overwrite a password that the parent
+      // has already changed. A staff-initiated resend is the explicit reset flow.
+      const { error: updateError } = await supabase.from("parent_portal_accounts")
+        .update({ username, updated_at: new Date().toISOString() }).eq("id", account.id);
       if (updateError) throw updateError;
-      account = { ...account, username, password_hash: initialPassword.hash, password_salt: initialPassword.salt, must_change_password: true };
+      account = { ...account, username };
     }
-    const delivery = await sendCredentialSms({ ...student, school_name: (await supabase.from("schools").select("school_name").eq("id", schoolId).single()).data?.school_name }, account, req.user.id);
-    return res.json({ success: true, account_created: true, sms: delivery });
+    const schoolInfo = await supabase.from("schools").select("school_name").eq("id", schoolId).single();
+    if (!account.must_change_password) {
+      return res.json({ success: true, account_created: false, sms: { success: false, status: "skipped", error: "Parent has already changed the initial password. Use the staff resend action to reset access securely." } });
+    }
+    const delivery = await sendCredentialSms({ ...student, school_name: schoolInfo.data?.school_name }, account, req.user.id);
+    return res.json({ success: true, account_created: !Boolean(account.created_at), sms: delivery });
   } catch (error) {
     console.error("PARENT PORTAL PROVISION ERROR:", error);
     return res.status(500).json({ success: false, account_created: false, message: error?.message || "Unable to create Parent Portal account." });
