@@ -51,7 +51,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { getEducationLevelType, gradeForEducationLevel, getApplicableGradeScale, remarkForEducationLevel, gradeLabelsForEducationLevel } from "../../utils/resultGrading";
 import { normalizeExamMarksToPercentage } from "../../utils/examMarkNormalization";
-import { calculateAcseeResult } from "../../utils/acseeResultCalculator";
+import { calculateAcseeResult, getAcseeGrade } from "../../utils/acseeResultCalculator";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 
@@ -1128,8 +1128,9 @@ export default function ResultsAnalysis() {
         const advancedLevel = getEducationLevelType(levelContext) === "A_LEVEL";
         const scaleForPercentage = percentage =>
             applicableGradeScale(percentage, examGradingScales, ordinaryLevel);
-        const gradeForPercentage = percentage => gradeForEducationLevel(percentage, levelContext, examGradingScales);
+        const gradeForPercentage = percentage => advancedLevel ? getAcseeGrade(percentage) : gradeForEducationLevel(percentage, levelContext, examGradingScales);
         const passedForPercentage = percentage => {
+            if (advancedLevel) return numberValue(percentage) >= 35;
             const configured = scaleForPercentage(percentage);
             if (configured) {
                 return String(configured.result || "").trim().toUpperCase() === "PASS";
@@ -1739,7 +1740,7 @@ export default function ResultsAnalysis() {
                 const classInfo = classMap.get(idValue(es.class_id));
                 const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(es.subject_id))?.education_level].filter(Boolean).join(" ");
                 const classIsCsee = isCseeClass(es.class_id);
-                const grade = gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
+                const grade = isAlevelClass(es.class_id) ? getAcseeGrade(row.percentage) : gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
                 return { ...row, grade, point: classIsCsee ? getGradePoint(grade) : null };
             });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
@@ -1938,7 +1939,7 @@ export default function ResultsAnalysis() {
             const graded = results.map(row => {
                 const classInfo = classMap.get(idValue(selectedClassId));
                 const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(row.subject_id))?.education_level].filter(Boolean).join(" ");
-                const grade = gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
+                const grade = isAlevelClass(selectedClassId) ? getAcseeGrade(row.percentage) : gradeForEducationLevel(row.percentage, levelContext, examGradingScales);
                 return { ...row, grade, point: isCseeClass(selectedClassId) ? getGradePoint(grade) : null };
             });
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
@@ -2024,10 +2025,11 @@ export default function ResultsAnalysis() {
         const full = overallRankedStudents.find(row => idValue(row.id) === idValue(student.id)) || student;
         const subjectsForReport = (full.subjects || []).map(result => {
             const reportIsCsee = isCseeClass(full.class_id);
+            const reportIsAlevel = isAlevelClass(full.class_id);
             const classInfo = classMap.get(idValue(full.class_id));
             const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name, subjectMap.get(idValue(result.subject_id))?.education_level].filter(Boolean).join(" ");
             const configured = applicableGradeScale(result.percentage, examGradingScales, reportIsCsee);
-            const grade = gradeForEducationLevel(result.percentage, levelContext, examGradingScales);
+            const grade = reportIsAlevel ? getAcseeGrade(result.percentage) : gradeForEducationLevel(result.percentage, levelContext, examGradingScales);
             return {
                 ...result,
                 subject_name: getSubjectName(subjectMap.get(idValue(result.subject_id))),
@@ -4184,7 +4186,7 @@ function SubjectReportPrint({ exam, report, examGradingScales = [] }) {
                             <td className="border border-slate-400 p-2">{getAdmission(row.student)}</td>
                             <td className="border border-slate-400 p-2">{formatNumber(row.result.total)} / {formatNumber(row.result.possible)}</td>
                             <td className="border border-slate-400 p-2">{formatNumber(row.result.percentage, 1)}%</td>
-                            <td className="border border-slate-400 p-2">{gradeForEducationLevel(row.result.percentage, [exam?.education_level, exam?.level, exam?.exam_type, report?.class_name].filter(Boolean).join(" "), examGradingScales)}</td>
+                            <td className="border border-slate-400 p-2">{levelType === "A_LEVEL" ? getAcseeGrade(row.result.percentage) : gradeForEducationLevel(row.result.percentage, [exam?.education_level, exam?.level, exam?.exam_type, report?.class_name].filter(Boolean).join(" "), examGradingScales)}</td>
                             <td className="border border-slate-400 p-2">{row.result.status}</td>
                         </tr>
                     ))}
