@@ -2747,20 +2747,23 @@ export default function ResultsAnalysis() {
     );
 
     const overview = useMemo(() => {
-        const percentages = analysedStudents.map(student => student.percentage);
-        const totalPossible = analysedStudents.reduce((sum, student) => sum + student.possible, 0);
-        const totalMarks = analysedStudents.reduce((sum, student) => sum + student.total, 0);
-        const passed = analysedStudents.filter(student => student.pass).length;
-        const failed = analysedStudents.length - passed;
+        const classifiedStudents = isAlevelExam
+            ? analysedStudents.filter(student => student.acseeEligible)
+            : analysedStudents;
+        const percentages = classifiedStudents.map(student => student.percentage);
+        const totalPossible = classifiedStudents.reduce((sum, student) => sum + student.possible, 0);
+        const totalMarks = classifiedStudents.reduce((sum, student) => sum + student.total, 0);
+        const passed = classifiedStudents.filter(student => student.pass).length;
+        const failed = classifiedStudents.length - passed;
 
         return {
             candidates: studentAnalysis.length,
-            analysed: analysedStudents.length,
+            analysed: classifiedStudents.length,
             subjects: subjectAnalysis.length,
-            average: analysedStudents.length
-                ? analysedStudents.reduce((sum, student) => sum + student.percentage, 0) / analysedStudents.length
+            average: classifiedStudents.length
+                ? classifiedStudents.reduce((sum, student) => sum + student.percentage, 0) / classifiedStudents.length
                 : 0,
-            pass_rate: analysedStudents.length ? (passed / analysedStudents.length) * 100 : 0,
+            pass_rate: classifiedStudents.length ? (passed / classifiedStudents.length) * 100 : 0,
             highest: percentages.length ? Math.max(...percentages) : 0,
             lowest: percentages.length ? Math.min(...percentages) : 0,
             total_possible: totalPossible,
@@ -2769,18 +2772,21 @@ export default function ResultsAnalysis() {
             failed,
             missing_students: studentAnalysis.length - analysedStudents.length
         };
-    }, [studentAnalysis, analysedStudents, subjectAnalysis]);
+    }, [studentAnalysis, analysedStudents, subjectAnalysis, isAlevelExam]);
 
     const gradeDistribution = useMemo(() => {
         const labels = isAlevelExam
             ? ["A", "B", "C", "D", "E", "S", "F"]
             : ["A", "B", "C", "D", "F"];
+        const resultStudents = isAlevelExam
+            ? analysedStudents.filter(student => student.acseeEligible)
+            : analysedStudents;
         return labels.map(grade => {
-            const count = analysedStudents.filter(student => student.grade === grade).length;
+            const count = resultStudents.filter(student => student.grade === grade).length;
             return {
                 grade,
                 count,
-                percentage: analysedStudents.length ? (count / analysedStudents.length) * 100 : 0
+                percentage: resultStudents.length ? (count / resultStudents.length) * 100 : 0
             };
         });
     }, [analysedStudents, isAlevelExam]);
