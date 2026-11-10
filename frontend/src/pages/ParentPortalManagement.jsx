@@ -56,8 +56,16 @@ export default function ParentPortalManagement() {
   }, [schoolId]);
   useEffect(() => {
     if (!classId) return undefined;
+    const heartbeat = () => api.post("/parent-portal/staff/presence/heartbeat", { class_id: classId }).catch(() => {});
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 15000);
+    return () => window.clearInterval(timer);
+  }, [classId]);
+
+  useEffect(() => {
+    if (!classId) return undefined;
     loadChat(classId);
-    const refreshTimer = window.setInterval(() => loadChat(classId), 5000);
+    const refreshTimer = window.setInterval(() => loadChat(classId), 2500);
     return () => window.clearInterval(refreshTimer);
   }, [classId]);
 
@@ -117,7 +125,7 @@ export default function ParentPortalManagement() {
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <div className="rounded-xl bg-slate-900 p-4 text-white"><h2 className="text-xl font-bold">Class Group Chat</h2><p className="mt-1 text-sm text-slate-300">Muonekano wa mazungumzo wa WhatsApp; wazazi wa darasa na watumishi wanaoruhusiwa wanaona ujumbe wa kundi moja.</p></div>
           <select value={classId} onChange={(e)=>setClassId(e.target.value)} className="mt-4 w-full rounded-xl border p-3"><option value="">Chagua darasa</option>{classes.map((x)=><option key={x.id} value={x.id}>{x.class_name}</option>)}</select>
-          <div className="mt-4 grid gap-3 md:grid-cols-[190px_1fr]"><aside className="rounded-xl bg-slate-50 p-3"><h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Wanachama · {groupMembers.length}</h3><div className="space-y-2">{groupMembers.map((member)=><div key={member.student_id} className="flex items-center gap-2 rounded-lg bg-white p-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">{member.parent_name?.slice(0,1)||"M"}</span><div className="min-w-0"><p className="truncate text-xs font-semibold">{member.parent_name}</p><p className="truncate text-[10px] text-slate-400">{member.student_name}</p></div></div>)}{classId&&!groupMembers.length&&<p className="text-xs text-slate-400">Hakuna wazazi wenye akaunti hai.</p>}</div></aside><div className="h-96 space-y-3 overflow-y-auto rounded-xl bg-[#f0f2ed] p-4">{messages.map((m)=><div key={m.id} className={"flex "+(m.sender_type==="staff"?"justify-end":"justify-start")}><article className={"max-w-[85%] rounded-2xl px-4 py-3 shadow-sm "+(m.sender_type==="staff"?"bg-[#d9fdd3]":"bg-white")}><b className="text-xs text-slate-700">{m.sender_name}</b><p className="mt-1 whitespace-pre-wrap break-words text-sm">{m.message}</p><small className="mt-1 block text-right text-[10px] text-slate-400">{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small></article></div>)}{classId&&!messages.length&&<p className="py-16 text-center text-sm text-slate-500">Hakuna ujumbe bado.</p>}</div></div>
+          <div className="mt-4 grid gap-3 md:grid-cols-[190px_1fr]"><aside className="rounded-xl bg-slate-50 p-3"><h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Wanachama · {groupMembers.length}</h3><div className="space-y-2">{groupMembers.map((member)=><div key={(member.member_type || "parent")+"-"+(member.teacher_id || member.student_id)} className="flex items-center gap-2 rounded-lg bg-white p-2"><span className={"flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold "+(member.member_type==="staff"?"bg-violet-100 text-violet-700":"bg-blue-100 text-blue-700")}>{(member.member_name || member.parent_name || "M").slice(0,1)}</span><div className="min-w-0"><p className="truncate text-xs font-semibold">{member.member_name || member.parent_name}</p><p className="truncate text-[10px] text-slate-400">{member.member_type==="staff" ? (member.role_label || "Staff") : member.student_name}</p><span className={"text-[10px] "+(member.online?"text-emerald-600":"text-slate-400")}>{member.online?"● Online":"○ Offline"}</span></div></div>)}{classId&&!groupMembers.length&&<p className="text-xs text-slate-400">Hakuna wazazi wenye akaunti hai.</p>}</div></aside><div className="h-96 space-y-3 overflow-y-auto rounded-xl bg-[#f0f2ed] p-4">{messages.map((m)=><div key={m.id} className={"flex "+(m.sender_type==="staff"?"justify-end":"justify-start")}><article className={"max-w-[85%] rounded-2xl px-4 py-3 shadow-sm "+(m.sender_type==="staff"?"bg-[#d9fdd3]":"bg-white")}><b className="text-xs text-slate-700">{m.sender_name}</b><p className="mt-1 whitespace-pre-wrap break-words text-sm">{m.message}</p><small className="mt-1 block text-right text-[10px] text-slate-400">{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small></article></div>)}{classId&&!messages.length&&<p className="py-16 text-center text-sm text-slate-500">Hakuna ujumbe bado.</p>}</div></div>
           <form onSubmit={sendChat} className="mt-3 flex gap-2"><input disabled={!classId} required value={chatText} onChange={(e)=>setChatText(e.target.value)} placeholder="Andika ujumbe kwa wazazi..." className="min-w-0 flex-1 rounded-xl border p-3"/><button disabled={busy||!classId} className="rounded-xl bg-blue-700 px-5 font-bold text-white disabled:opacity-50">Tuma</button></form>
         </section>
       </div>
