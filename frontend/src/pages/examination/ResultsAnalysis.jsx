@@ -1517,7 +1517,9 @@ export default function ResultsAnalysis() {
         calculateStudentSubject,
         classMap,
         marksByStudent,
-        examSubjects
+        examSubjects,
+        isAlevelClass,
+        getAlevelResult
     ]);
 
 
@@ -1593,6 +1595,7 @@ export default function ResultsAnalysis() {
 
             return {
                 id: student.id,
+                combination_id: student.combination_id,
                 full_name: safeName(student),
                 admission: getAdmission(student),
                 gender: student.gender,
@@ -1776,9 +1779,15 @@ export default function ResultsAnalysis() {
                 division,
                 count: classStudents.filter(row => row.acseeDivision === division).length
             }));
-            const average = classStudents.length
-                ? classStudents.reduce((sum, row) => sum + numberValue(row.percentage), 0) / classStudents.length
-                : 0;
+            const classIsAlevel = isAlevelClass(classId);
+            const classifiedClassStudents = classStudents.filter(row => row.acseeEligible);
+            const average = classIsAlevel
+                ? (classifiedClassStudents.length
+                    ? classifiedClassStudents.reduce((sum, row) => sum + numberValue(row.percentage), 0) / classifiedClassStudents.length
+                    : 0)
+                : classStudents.length
+                    ? classStudents.reduce((sum, row) => sum + numberValue(row.percentage), 0) / classStudents.length
+                    : 0;
             const gpa = eligible.length
                 ? eligible.reduce((sum, row) => sum + numberValue(row.cseeGpa), 0) / eligible.length
                 : null;
