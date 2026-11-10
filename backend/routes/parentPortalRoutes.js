@@ -215,7 +215,33 @@ router.get("/credential-history/:studentId", authenticateUser, requirePermission
     .select("id,recipient_phone,status,provider,provider_message_id,error_message,created_at")
     .eq("school_id", schoolId).eq("student_id", studentId).order("created_at", { ascending: false }).limit(20);
   if (error) return res.status(500).json({ success: false, message: "Unable to load SMS history." });
-  return res.json({ success: true, history: data || [] });
+  let history = data || [];
+  // Refresh recent NewHope delivery receipts so the staff history distinguishes
+  // accepted/sent messages from messages actually delivered to the handset.
+  const pendingReceipts = history.filter(item => item.provider_message_id && ["sent","queued","pending"].includes(String(item.status).toLowerCase()));
+  if (pendingReceipts.length) {
+    try {
+      const { data: credentials } = await supabase.rpc("get_school_sms_credentials", { p_school_id: schoolId }).maybeSingle();
+      if (credentials?.api_key && credentials?.secret_key) {
+        await Promise.all(pendingReceipts.map(async item => {
+          try {
+            const receiptResponse = await fetch("https://sms.newhope.co.tz/v1/sms/" + encodeURIComponent(item.provider_message_id) + "/status/", {
+              headers: { Authorization: "ApiKey " + credentials.api_key + ":" + credentials.secret_key, Accept: "application/json" },
+            });
+            if (!receiptResponse.ok) return;
+            const receipt = await receiptResponse.json().catch(() => ({}));
+            const providerStatus = String(receipt?.status || "").toLowerCase();
+            const status = providerStatus.includes("deliver") ? "delivered" : (providerStatus.includes("fail") ? "failed" : (providerStatus.includes("pending") ? "queued" : item.status));
+            if (status !== item.status) {
+              await supabase.from("parent_portal_credential_history").update({ status, error_message: status === "failed" ? (receipt?.error || receipt?.message || "NewHope delivery failed") : null }).eq("id", item.id).eq("school_id", schoolId);
+              item.status = status;
+            }
+          } catch (receiptError) { console.warn("PARENT PORTAL SMS RECEIPT CHECK FAILED:", receiptError?.message || receiptError); }
+        }));
+      }
+    } catch (receiptError) { console.warn("PARENT PORTAL SMS RECEIPT CREDENTIALS UNAVAILABLE:", receiptError?.message || receiptError); }
+  }
+  return res.json({ success: true, history });
 });
 
 router.post("/login", async (req, res) => {
