@@ -30,6 +30,11 @@ test("does not calculate a division for missing or incomplete principal marks", 
   ], [10,11,12]);
   assert.equal(partial.eligible, false);
   assert.equal(partial.division, null);
+  const nullMark = calculateAcseeResult([
+    subject(10,80), {...subject(11,70), percentage:null}, subject(12,60)
+  ], [10,11,12]);
+  assert.equal(nullMark.eligible, false);
+  assert.equal(nullMark.division, null);
 });
 
 test("requires exactly three distinct principal subjects", () => {
