@@ -1068,10 +1068,55 @@ export default function ResultsAnalysis() {
         const principalSubjectIds = mappedPrincipalIds.length === 3
             ? mappedPrincipalIds
             : (!savedCombinationId && registeredPrincipalIds.length === 3 ? registeredPrincipalIds : mappedPrincipalIds);
-        const result = calculateAcseeResult(subjectResults, principalSubjectIds);
+        const registeredSubjectIds = [...new Set(registeredRows.map(link => idValue(link.subject_id)).filter(Boolean))];
+        const resultBySubject = new Map((subjectResults || []).map(row => [idValue(row.subject_id), row]));
+
+        // Build one row for every registered subject, even when the exam has
+        // no mark row yet. This keeps the full combination visible and makes
+        // missing marks distinct from a recorded zero.
+        const completeSubjectRows = registeredSubjectIds.map(subjectId => {
+            const existing = resultBySubject.get(subjectId);
+            if (existing) {
+                const subject = subjectMap.get(subjectId);
+                return { ...existing, subject, subject_name: getSubjectName(subject), isMissing: existing.status === "No Marks" };
+            }
+            const subject = subjectMap.get(subjectId);
+            return {
+                subject_id: subjectId,
+                exam_subject_id: null,
+                subject,
+                subject_name: getSubjectName(subject),
+                total: null,
+                rawTotal: null,
+                rawPossible: null,
+                possible: 100,
+                percentage: null,
+                grade: "—",
+                point: null,
+                pass: false,
+                questions: 0,
+                marked_questions: 0,
+                missing_questions: 0,
+                status: "No Marks",
+                source: "not_recorded",
+                isMissing: true
+            };
+        });
+        const calculationRows = completeSubjectRows.length ? completeSubjectRows : subjectResults;
+        const result = calculateAcseeResult(calculationRows, principalSubjectIds);
+        const principalIdSet = new Set(principalSubjectIds.map(idValue));
+        const registeredSubsidiaries = calculationRows
+            .filter(row => !principalIdSet.has(idValue(row.subject_id)))
+            .map(row => ({ ...row, isPrincipal: false }));
+        const registeredPrincipalRows = (result.principalSubjects || []).map(row => {
+            const subject = subjectMap.get(idValue(row.subject_id));
+            return { ...row, subject, subject_name: getSubjectName(subject) };
+        });
         const registeredSubjectFallback = !savedCombinationId && registeredPrincipalIds.length === 3;
         return {
             ...result,
+            principalSubjects: registeredPrincipalRows,
+            subsidiarySubjects: registeredSubsidiaries,
             combination: combinationById.get(savedCombinationId) || null,
             combinationLabel: combinationById.get(savedCombinationId)?.combination_code ||
                 (registeredSubjectFallback ? "Based on registered subjects" : null),
@@ -4879,10 +4924,10 @@ function StudentTrace({
                     idValue(row.subject_id), idValue(row.exam_subject_id)
                 ]).filter(Boolean));
                 const principalResults = isAlevel
-                    ? results.filter(row => principalKeys.has(idValue(row.subject_id)) || principalKeys.has(idValue(row.exam_subject_id)))
+                    ? (student.acseePrincipalSubjects || results.filter(row => principalKeys.has(idValue(row.subject_id)) || principalKeys.has(idValue(row.exam_subject_id))))
                     : [];
                 const subsidiaryResults = isAlevel
-                    ? results.filter(row => subsidiaryKeys.has(idValue(row.subject_id)) || subsidiaryKeys.has(idValue(row.exam_subject_id)))
+                    ? (student.acseeSubsidiarySubjects || results.filter(row => subsidiaryKeys.has(idValue(row.subject_id)) || subsidiaryKeys.has(idValue(row.exam_subject_id))))
                     : [];
                 const classifiedIds = new Set([...principalResults, ...subsidiaryResults].map(row => idValue(row.exam_subject_id)));
                 const otherResults = isAlevel ? results.filter(row => !classifiedIds.has(idValue(row.exam_subject_id))) : [];
@@ -4916,8 +4961,8 @@ function StudentTrace({
                                         return (
                                             <tr key={row.exam_subject_id} className="border-t border-slate-100 hover:bg-slate-50/70">
                                                 <td className="px-4 py-3 font-bold text-slate-800">{subjectName}</td>
-                                                <td className="px-3 py-3 text-right font-extrabold tabular-nums">{formatNumber(row.total)}</td>
-                                                <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.percentage, 1)}%</td>
+                                                <td className="px-3 py-3 text-right font-extrabold tabular-nums">{hasRecordedMarks ? formatNumber(row.total) : "—"}</td>
+                                                <td className="px-3 py-3 text-right tabular-nums">{hasRecordedMarks ? `${formatNumber(row.percentage, 1)}%` : "—"}</td>
                                                 <td className="px-3 py-3 text-center"><span className={`inline-flex min-w-8 justify-center rounded-lg border px-2 py-1 text-xs font-extrabold ${hasRecordedMarks ? gradeClass(getGrade(row.percentage)) : "border-slate-200 bg-slate-50 text-slate-400"}`}>{hasRecordedMarks ? getGrade(row.percentage) : "—"}</span></td>
                                                 <td className="px-3 py-3 text-center text-xs tabular-nums text-slate-600">{row.marked_questions}/{row.questions}</td>
                                                 <td className="px-4 py-3 text-right"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${!hasRecordedMarks ? "bg-slate-100 text-slate-600" : row.status === "Partial" ? "bg-amber-50 text-amber-700" : row.pass ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{statusLabel}</span></td>
