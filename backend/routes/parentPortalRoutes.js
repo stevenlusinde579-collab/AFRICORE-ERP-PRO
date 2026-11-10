@@ -102,9 +102,11 @@ async function sendCredentialSms(student, account, sentBy = null) {
     if (credentialsError || !credentials?.api_key || !credentials?.secret_key || !credentials?.sender_id) throw new Error("NewHope SMS haijawekwa kikamilifu kwa shule hii.");
     if (String(credentials.approval_status || "").toLowerCase() !== "approved") throw new Error("Sender ID ya shule bado haijaidhinishwa.");
     const admission = String(student.admission_number || student.admission_no || "");
+    const schoolInfo = await supabase.from("schools").select("school_name").eq("id", student.school_id).maybeSingle();
+    const schoolName = schoolInfo.data?.school_name || "AfriCore School";
     const url = FRONTEND_URL + "/parent-portal?school=" + encodeURIComponent(student.school_id);
     const message = "AFRICORE PARENT PORTAL\nMwanafunzi: " + fullName(student) +
-      "\nShule: " + (student.school_name || "") +
+      "\nShule: " + schoolName +
       "\nUsername: " + account.username +
       "\nPassword ya awali: " + admission +
       "\nIngia: " + url +
