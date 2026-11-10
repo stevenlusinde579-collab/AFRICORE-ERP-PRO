@@ -2686,7 +2686,10 @@ export default function ResultsAnalysis() {
     }, [studentAnalysis, analysedStudents, subjectAnalysis]);
 
     const gradeDistribution = useMemo(() => {
-        return ["A", "B", "C", "D", "F"].map(grade => {
+        const labels = isAlevelExam
+            ? ["A", "B", "C", "D", "E", "S", "F"]
+            : ["A", "B", "C", "D", "F"];
+        return labels.map(grade => {
             const count = analysedStudents.filter(student => student.grade === grade).length;
             return {
                 grade,
@@ -2694,7 +2697,7 @@ export default function ResultsAnalysis() {
                 percentage: analysedStudents.length ? (count / analysedStudents.length) * 100 : 0
             };
         });
-    }, [analysedStudents]);
+    }, [analysedStudents, isAlevelExam]);
 
     const bestSubject = useMemo(() => {
         if (!subjectAnalysis.length) return null;
@@ -3479,13 +3482,14 @@ export default function ResultsAnalysis() {
                                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                                     <MetricCard icon={FaUserGraduate} label="Students" value={classOverall.studentCount} sub={`${classOverall.subjectCount} subjects`} />
                                     <MetricCard icon={FaChartBar} label="Class Average" value={`${formatNumber(classOverall.average,1)}%`} sub={performanceLabel(classOverall.average)} tone={classOverall.average < 40 ? "danger" : classOverall.average < 60 ? "warning" : "success"} />
+                                    {isAlevelClass(selectedClassId) && <MetricCard icon={FaGraduationCap} label="ACSEE GPA" value={classOverall.acseeGpa != null ? formatNumber(classOverall.acseeGpa,2) : "—"} sub={`${classOverall.acseeEligibleStudents} classified candidates`} tone="info" />}
                                     <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(classOverall.passRate,1)}%`} sub={`${classOverall.passedStudents} passed · ${classOverall.failedStudents} failed`} tone={classOverall.passRate < 50 ? "danger" : classOverall.passRate < 70 ? "warning" : "success"} />
                                     <MetricCard icon={FaTrophy} label="Best Student" value={classOverall.topStudents[0]?.full_name || "—"} sub={classOverall.topStudents[0] ? `${formatNumber(classOverall.topStudents[0].percentage,1)}%` : "No result"} tone="info" />
                                     <MetricCard icon={FaListOl} label="Class Subjects" value={classOverall.subjectCount} sub={classOverall.className} />
                                 </div>
 
                                 <Panel title={`Student Ranking — ${classOverall.className}`} icon={FaTrophy}>
-                                    <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Missing</th></tr></thead><tbody>{classOverall.students.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td><td className="px-3 py-3">{row.pass ? <span className="text-emerald-700 font-bold">Passed</span> : <span className="text-red-700 font-bold">Failed</span>}</td><td className="px-3 py-3">{row.missingSubjects}</td></tr>)}</tbody></table></div>
+                                    <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th>{isAlevelClass(selectedClassId) && <><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th><th className="px-3 py-3">Combination</th></>}<th className="px-3 py-3">Status</th><th className="px-3 py-3">Missing</th></tr></thead><tbody>{classOverall.students.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td>{isAlevelClass(selectedClassId) && <><td className="px-3 py-3 font-bold">{row.acseeGpa != null ? formatNumber(row.acseeGpa,2) : "—"}</td><td className="px-3 py-3 font-bold">{row.acseeDivision ? `Div ${row.acseeDivision}` : "—"}</td><td className="px-3 py-3">{row.acseeCombination?.combination_code || "—"}</td></>}<td className="px-3 py-3">{isAlevelClass(selectedClassId) && !row.acseeEligible ? <span className="text-amber-700 font-bold">Awaiting principal marks</span> : row.pass ? <span className="text-emerald-700 font-bold">Passed</span> : <span className="text-red-700 font-bold">Division 0 / Failed</span>}</td><td className="px-3 py-3">{row.missingSubjects}</td></tr>)}</tbody></table></div>
                                 </Panel>
 
                                 <Panel title="Class Subject Performance" icon={FaChartBar}>
