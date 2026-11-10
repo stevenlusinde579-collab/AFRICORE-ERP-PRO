@@ -1799,7 +1799,11 @@ export default function ResultsAnalysis() {
             assignments: assignmentCount,
             totalMarks,
             possible,
-            average,
+            average: isAlevelExam
+                ? (rankedStudents.filter(row => row.acseeEligible).length
+                    ? rankedStudents.filter(row => row.acseeEligible).reduce((sum, row) => sum + numberValue(row.percentage), 0) / rankedStudents.filter(row => row.acseeEligible).length
+                    : 0)
+                : average,
             analysedAssignments: analysedAssignments.length,
             passedAssignments,
             failedAssignments: analysedAssignments.length - passedAssignments,
@@ -3399,9 +3403,9 @@ export default function ResultsAnalysis() {
                         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                             <MetricCard icon={FaUserGraduate} label="Students" value={schoolOverall.candidates} sub={`${schoolOverall.studentsAnalysed} analysed`} />
                             <MetricCard icon={FaChartBar} label="School Average" value={`${formatNumber(schoolOverall.average, 1)}%`} sub={performanceLabel(schoolOverall.average)} tone={schoolOverall.average < 40 ? "danger" : schoolOverall.average < 60 ? "warning" : "success"} />
-                            {isCseeExam && <>
-                                <MetricCard icon={FaGraduationCap} label="GPA" value={schoolOverall.cseeGpa != null ? formatNumber(schoolOverall.cseeGpa, 2) : "—"} sub={`${schoolOverall.cseeEligibleStudents} eligible · Best 7`} tone="info" />
-                                <MetricCard icon={FaTrophy} label="Candidates" value={schoolOverall.cseeEligibleStudents} sub="Best 7 eligible" tone="info" />
+                            {(isCseeExam || isAlevelExam) && <>
+                                <MetricCard icon={FaGraduationCap} label="GPA" value={(isAlevelExam ? schoolOverall.acseeGpa : schoolOverall.cseeGpa) != null ? formatNumber(isAlevelExam ? schoolOverall.acseeGpa : schoolOverall.cseeGpa, 2) : "—"} sub={isAlevelExam ? `${schoolOverall.acseeEligibleStudents} eligible · Principal 3` : `${schoolOverall.cseeEligibleStudents} eligible · Best 7`} tone="info" />
+                                <MetricCard icon={FaTrophy} label="Candidates" value={isAlevelExam ? schoolOverall.acseeEligibleStudents : schoolOverall.cseeEligibleStudents} sub={isAlevelExam ? "ACSEE classified" : "Best 7 eligible"} tone="info" />
                             </>}
                             <MetricCard icon={FaCheckCircle} label="Pass Rate" value={`${formatNumber(schoolOverall.passRate, 1)}%`} sub={`${schoolOverall.studentsPassed} passed · ${schoolOverall.studentsFailed} failed`} tone={schoolOverall.passRate < 50 ? "danger" : schoolOverall.passRate < 70 ? "warning" : "success"} />
                             <MetricCard icon={FaTrophy} label="Highest Student" value={schoolOverall.topStudents[0]?.full_name || "—"} sub={schoolOverall.topStudents[0] ? `${formatNumber(schoolOverall.topStudents[0].percentage, 1)}%` : "No result"} tone="info" />
@@ -3438,10 +3442,10 @@ export default function ResultsAnalysis() {
                             </Panel>
                         </div>
 
-                        {isCseeExam && <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                        {(isCseeExam || isAlevelExam) && <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                             <Panel title="Division Distribution" icon={FaGraduationCap}>
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                    {schoolOverall.cseeDivisionDistribution.map(row => (
+                                    {(isAlevelExam ? schoolOverall.acseeDivisionDistribution : schoolOverall.cseeDivisionDistribution).map(row => (
                                         <div key={row.division} className="border border-slate-200 rounded-xl p-4 text-center">
                                             <div className="text-xs uppercase tracking-wide text-slate-500 font-bold">Division {row.division}</div>
                                             <div className="text-2xl font-extrabold text-slate-900 mt-1">{row.count}</div>
@@ -3455,7 +3459,7 @@ export default function ResultsAnalysis() {
                         </div>}
 
                         <Panel title="Top Students — School" icon={FaTrophy}>
-                            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Class</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th>{isCseeExam && <><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th></>}</tr></thead><tbody>{schoolOverall.topStudents.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3">{row.class_name}</td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td>{isCseeExam && <><td className="px-3 py-3 font-bold">{row.cseeGpa != null ? formatNumber(row.cseeGpa,2) : "—"}</td><td className="px-3 py-3 font-bold">{row.cseeDivision ? `Div ${row.cseeDivision}` : "—"}</td></>}</tr>)}</tbody></table></div>
+                            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Class</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th>{(isCseeExam || isAlevelExam) && <><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th></>}</tr></thead><tbody>{schoolOverall.topStudents.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3">{row.class_name}</td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td>{(isCseeExam || isAlevelExam) && <><td className="px-3 py-3 font-bold">{(isAlevelExam ? row.acseeGpa : row.cseeGpa) != null ? formatNumber(isAlevelExam ? row.acseeGpa : row.cseeGpa,2) : "—"}</td><td className="px-3 py-3 font-bold">{(isAlevelExam ? row.acseeDivision : row.cseeDivision) ? `Div ${isAlevelExam ? row.acseeDivision : row.cseeDivision}` : "—"}</td></>}</tr>)}</tbody></table></div>
                         </Panel>
                     </div>
                 )}
@@ -3725,7 +3729,7 @@ export default function ResultsAnalysis() {
                                         <th className="px-3 py-3">Total</th>
                                         <th className="px-3 py-3">%</th>
                                         <th className="px-3 py-3">Grade</th>
-                                        {isCseeExam && <>
+                                        {(isCseeExam || isAlevelExam) && <>
                                             <th className="px-3 py-3">GPA</th>
                                             <th className="px-3 py-3">Division</th>
                                         </>}
@@ -3757,9 +3761,9 @@ export default function ResultsAnalysis() {
                                                     {student.grade}
                                                 </span>
                                             </td>
-                                            {isCseeExam && <>
-                                                <td className="px-3 py-3 font-bold">{student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"}</td>
-                                                <td className="px-3 py-3 font-bold">{student.cseeDivision ? `Div ${student.cseeDivision}` : "—"}</td>
+                                            {(isCseeExam || isAlevelExam) && <>
+                                                <td className="px-3 py-3 font-bold">{(isAlevelExam ? student.acseeGpa : student.cseeGpa) != null ? formatNumber(isAlevelExam ? student.acseeGpa : student.cseeGpa, 2) : "—"}</td>
+                                                <td className="px-3 py-3 font-bold">{(isAlevelExam ? student.acseeDivision : student.cseeDivision) ? `Div ${isAlevelExam ? student.acseeDivision : student.cseeDivision}` : "—"}</td>
                                             </>}
                                             <td className="px-3 py-3">
                                                 {student.status === "Complete" ? (
