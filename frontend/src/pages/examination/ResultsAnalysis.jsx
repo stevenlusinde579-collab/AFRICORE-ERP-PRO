@@ -1124,6 +1124,7 @@ export default function ResultsAnalysis() {
             classInfo?.class_name, classInfo?.name, classInfo?.short_name
         ].filter(Boolean).join(" ");
         const ordinaryLevel = isOrdinaryLevel(levelContext);
+        const advancedLevel = getEducationLevelType(levelContext) === "A_LEVEL";
         const scaleForPercentage = percentage =>
             applicableGradeScale(percentage, examGradingScales, ordinaryLevel);
         const gradeForPercentage = percentage => gradeForEducationLevel(percentage, levelContext, examGradingScales);
@@ -1132,6 +1133,8 @@ export default function ResultsAnalysis() {
             if (configured) {
                 return String(configured.result || "").trim().toUpperCase() === "PASS";
             }
+            // ACSEE subject grades A-E and S are passes (S is subsidiary).
+            if (advancedLevel) return numberValue(percentage) >= 35;
 
             // Use this subject's own pass mark when no grading band applies.
             // exam_subject marks are stored in raw marks, while this analysis
