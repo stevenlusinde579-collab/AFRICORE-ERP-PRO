@@ -1987,14 +1987,21 @@ export default function ResultsAnalysis() {
         });
         const analysed = subjectsForReport.filter(row => row.possible > 0);
         const reportIsCsee = isCseeClass(full.class_id);
+        const reportIsAlevel = isAlevelClass(full.class_id);
         const csee = reportIsCsee
             ? calculateResult(subjectsForReport, examGradingScales)
             : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
+        const acsee = reportIsAlevel
+            ? getAlevelResult(full, subjectsForReport)
+            : { eligible: false, complete: false, principalSubjects: [], subsidiarySubjects: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", average: null, total: null, reason: null };
         const cseeGpa = csee.gpa;
         const cseeDivision = csee.division;
         const weak = [...analysed].sort((a, b) => a.percentage - b.percentage).slice(0, 3);
         const recommendations = [];
-        if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
+        if (reportIsAlevel && !acsee.eligible) recommendations.push(acsee.reason || "Hakuna combination sahihi ya masomo matatu ya principal iliyopatikana; Division haijahesabiwa.");
+        else if (reportIsAlevel && acsee.division === "0") recommendations.push("Matokeo ya principal subjects hayajafikia kiwango cha Division I–IV. Fuatilia masomo ya combination na mahitaji ya ACSEE.");
+        else if (reportIsAlevel && acsee.eligible) recommendations.push(`Combination ${acsee.combination?.combination_code || ""}: Division ${acsee.division}, Aggregate ${acsee.aggregate}, GPA ${formatNumber(acsee.gpa, 2)}. Masomo ya subsidiary hayajajumuishwa kwenye aggregate.`);
+        else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 75) recommendations.push("Endelea na nidhamu nzuri ya kujisomea na uimarishe zaidi masomo yenye ufaulu wa juu.");
         else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 60) recommendations.push("Ongeza muda wa marudio katika masomo yenye ufaulu wa chini ili kuboresha wastani wa jumla.");
         else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 50) recommendations.push("Tumia mpango maalum wa marudio na mazoezi ya ziada katika masomo yenye changamoto.");
         else if (reportIsCsee && csee.bestSeven?.length === 7 && csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700 * 100 >= 40) recommendations.push("Mwanafunzi anahitaji mpango maalum wa kuboresha ufaulu pamoja na ufuatiliaji wa karibu wa maendeleo yake.");
@@ -2008,9 +2015,29 @@ export default function ResultsAnalysis() {
             ...full,
             subjects: subjectsForReport,
             recommendations,
-            reportStatus: reportIsCsee
-                ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
-                : (full.pass ? "Passed" : "Failed"),
+            total: reportIsAlevel ? numberValue(acsee.total) : full.total,
+            possible: reportIsAlevel ? 300 : full.possible,
+            percentage: reportIsAlevel ? numberValue(acsee.average) : full.percentage,
+            grade: reportIsAlevel && !acsee.eligible ? "—" : reportIsAlevel ? acsee.grade : full.grade,
+            reportStatus: reportIsAlevel
+                ? (acsee.eligible && acsee.passed ? "Passed" : acsee.eligible ? "Division 0" : "Awaiting principal marks")
+                : reportIsCsee
+                    ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
+                    : (full.pass ? "Passed" : "Failed"),
+            acseeEligible: acsee.eligible,
+            acseeComplete: acsee.complete,
+            acseeReason: acsee.reason,
+            acseeCombination: acsee.combination,
+            acseeAggregate: acsee.aggregate,
+            acseeGpa: acsee.gpa,
+            acseeDivision: acsee.division,
+            acseeDivisionLabel: acsee.divisionLabel,
+            acseePrincipalSubjects: acsee.principalSubjects,
+            acseeSubsidiarySubjects: acsee.subsidiarySubjects,
+            aggregate: reportIsAlevel ? acsee.aggregate : csee.aggregate,
+            gpa: reportIsAlevel ? acsee.gpa : csee.gpa,
+            division: reportIsAlevel ? acsee.division : csee.division,
+            divisionLabel: reportIsAlevel ? acsee.divisionLabel : csee.divisionLabel,
             cseeEligible: csee.eligible,
             cseeAggregate: csee.aggregate,
             cseeGpa,
@@ -2029,7 +2056,7 @@ export default function ResultsAnalysis() {
             parent_phone: full.parent_phone || "",
             parent_email: full.parent_email || ""
         };
-    }, [overallRankedStudents, subjectMap, studentReportFields, examGradingScales, isCseeClass]);
+    }, [overallRankedStudents, subjectMap, studentReportFields, examGradingScales, isCseeClass, isAlevelClass, getAlevelResult]);
 
 
     const printStudentReport = useCallback(student => {
