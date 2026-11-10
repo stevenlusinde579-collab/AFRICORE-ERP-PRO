@@ -343,6 +343,14 @@ function StudentProfile() {
 
 
                 <button
+                    type="button"
+                    onClick={() => navigate("/parent-portal-management")}
+                    className="mr-2 rounded bg-blue-700 px-5 py-2 text-white"
+                >
+                    Parent Portal Management
+                </button>
+
+                <button
 
                     onClick={() => navigate("/students")}
 
