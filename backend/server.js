@@ -11,6 +11,7 @@ import teacherRoutes from "./routes/teacherRoutes.js";
 import communicationRoutes from "./routes/communicationRoutes.js";
 import financeRoutes from "./routes/financeRoutes.js";
 import schoolManagementRoutes from "./routes/schoolManagementRoutes.js";
+import parentPortalRoutes from "./routes/parentPortalRoutes.js";
 
 /* =========================================================
    APP
@@ -103,6 +104,11 @@ app.use(
 app.use(
     "/api/schools",
     schoolManagementRoutes
+);
+
+app.use(
+    "/api/parent-portal",
+    parentPortalRoutes
 );
 
 

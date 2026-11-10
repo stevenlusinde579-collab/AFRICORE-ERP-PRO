@@ -19,6 +19,8 @@ import {
   useRole,
 } from "../../context/RoleContext";
 
+import api from "../../services/api";
+
 
 function AddStudent() {
 
@@ -1772,11 +1774,27 @@ function AddStudent() {
 
 
       // =================================================
+      // PARENT PORTAL ACCOUNT + CREDENTIAL SMS
+      // This is deliberately non-blocking: student registration must remain
+      // successful even when the SMS provider is unavailable.
+      let parentPortalNotice = "Parent Portal SMS imetumwa.";
+      try {
+        const portalResponse = await api.post("/parent-portal/provision", {
+          student_id: studentData.id,
+        });
+        if (!portalResponse?.data?.sms?.success) {
+          parentPortalNotice = " Mwanafunzi amesajiliwa, lakini Parent Portal SMS haijatumwa: " + (portalResponse?.data?.sms?.error || "Jaribu Resend Parent Portal SMS kwenye Student Profile.");
+        }
+      } catch (portalError) {
+        console.error("PARENT PORTAL PROVISION FAILED:", portalError);
+        parentPortalNotice = " Mwanafunzi amesajiliwa, lakini Parent Portal account/SMS haijakamilika. Tumia Resend Parent Portal SMS kwenye Student Profile.";
+      }
+
       // SUCCESS
       // =================================================
 
       setMessage(
-        `Student added successfully with ${selectedSubjects.length} subject(s) for Academic Year ${activeAcademicYear?.year_name || currentAcademicYearId} ✅`
+        `Student added successfully with ${selectedSubjects.length} subject(s) for Academic Year ${activeAcademicYear?.year_name || currentAcademicYearId} ✅${parentPortalNotice}`
       );
 
 

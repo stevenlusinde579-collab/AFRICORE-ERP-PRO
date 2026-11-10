@@ -106,6 +106,11 @@ function LandingPage() {
         navigate("/login");
     };
 
+    const handleParentPortal = () => {
+        setMobileMenuOpen(false);
+        navigate("/parent-portal");
+    };
+
     // Open the System Manual page
     const handleSystemManual = () => {
         setMobileMenuOpen(false);
@@ -256,6 +261,15 @@ function LandingPage() {
                                 </button>
                             </nav>
 
+                            {/* PARENT PORTAL */}
+                            <button
+                                type="button"
+                                onClick={handleParentPortal}
+                                className="hidden lg:inline-flex items-center gap-2 rounded-xl border border-cyan-300/40 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-200 hover:bg-cyan-400/20 transition"
+                            >
+                                <FaUsers /> Parent Portal
+                            </button>
+
                             {/* DESKTOP LOGIN */}
                             <div className="hidden lg:flex items-center">
                                 <button
@@ -329,6 +343,16 @@ function LandingPage() {
                                     className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5"
                                 >
                                     Contact
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleParentPortal}
+                                    className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/15 transition"
+                                >
+                                    <FaUsers />
+                                    Parent Portal
+                                    <FaArrowRight className="ml-auto text-xs" />
                                 </button>
 
                                 {/* MOBILE SYSTEM MANUAL */}
@@ -817,6 +841,15 @@ function LandingPage() {
                             className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-white text-blue-700 font-black hover:bg-blue-50 transition shadow-xl"
                         >
                             Login to AfriCore ERP
+                            <FaArrowRight />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleParentPortal}
+                            className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl border border-white/30 bg-white/10 text-white font-black hover:bg-white/20 transition"
+                        >
+                            <FaUsers /> Parent Portal
                             <FaArrowRight />
                         </button>
 
