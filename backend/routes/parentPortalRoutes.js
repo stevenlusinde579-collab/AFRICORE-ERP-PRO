@@ -226,7 +226,11 @@ router.post("/login", async (req, res) => {
       .select("id,student_id,school_id,username,password_hash,password_salt,must_change_password,is_active")
       .eq("school_id", schoolId).eq("username", username).eq("is_active", true).limit(100);
     if (error) throw error;
-    if (!matches?.length) return res.status(401).json({ success: false, message: "Username or password is incorrect." });
+    if (!matches?.length) {
+      const failed = (prior?.count || 0) + 1;
+      loginAttempts.set(attemptKey, { count: failed, blockedUntil: failed >= 10 ? now + 15 * 60 * 1000 : 0 });
+      return res.status(401).json({ success: false, message: "Username or password is incorrect." });
+    }
     let account = null;
     for (const candidate of matches) if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) { account = candidate; break; }
     if (!account) {
@@ -294,6 +298,8 @@ router.post("/staff/meetings", authenticateUser, requirePermission("view_student
   const startsAt = new Date(req.body?.starts_at);
   const endsAt = req.body?.ends_at ? new Date(req.body.ends_at) : null;
   const meetingUrl = String(req.body?.meeting_url || "").trim();
+  if (meetingUrl && !/^https?:\/\//i.test(meetingUrl)) return res.status(400).json({ success: false, message: "Video meeting link must start with https:// or http://." });
+  if (classId !== null && (!Number.isInteger(classId) || classId <= 0)) return res.status(400).json({ success: false, message: "Invalid class selection." });
   if (!Number.isInteger(schoolId) || !title || Number.isNaN(startsAt.getTime()) || (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt <= startsAt))) return res.status(400).json({ success: false, message: "Enter a title and valid meeting start/end times." });
   if (classId) {
     const classRow = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
