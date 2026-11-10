@@ -138,10 +138,15 @@ async function parentPortalStaffAccess(req, res, next) {
     if (!roleNames.includes("class teacher") || !req.profile?.teacher_id || !req.profile?.school_id) {
       return res.status(403).json({ success: false, message: "Huna ruhusa ya kusimamia Parent Portal." });
     }
-    const { data: assignments, error: assignmentError } = await supabase.from("teacher_assignments")
-      .select("class_id").eq("school_id", Number(req.profile.school_id)).eq("teacher_id", Number(req.profile.teacher_id));
-    if (assignmentError) throw assignmentError;
-    const classIds = [...new Set((assignments || []).map((row) => Number(row.class_id)).filter(Number.isInteger))];
+    const [assignments, classTeacherAssignments] = await Promise.all([
+      supabase.from("teacher_assignments").select("class_id")
+        .eq("school_id", Number(req.profile.school_id)).eq("teacher_id", Number(req.profile.teacher_id)),
+      supabase.from("teacher_classes").select("class_id")
+        .eq("teacher_id", Number(req.profile.teacher_id)),
+    ]);
+    if (assignments.error || classTeacherAssignments.error) throw assignments.error || classTeacherAssignments.error;
+    const classIds = [...new Set([...(assignments.data || []), ...(classTeacherAssignments.data || [])]
+      .map((row) => Number(row.class_id)).filter(Number.isInteger))];
     if (!classIds.length) {
       req.parentPortalScope = { fullAccess: false, classIds: [], studentIds: [] };
       return next();
