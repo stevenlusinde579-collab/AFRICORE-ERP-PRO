@@ -40,7 +40,8 @@ test("requires exactly three distinct principal subjects", () => {
 test("maps aggregate points to all ACSEE divisions including Division 0", () => {
   const make = (marks) => calculateAcseeResult(marks.map((mark,i)=>subject(i+1,mark)), [1,2,3]);
   assert.equal(make([80,80,80]).division, "I");
-  assert.equal(make([70,70,70]).division, "II");
+  assert.equal(make([70,70,70]).division, "I");
+  assert.equal(make([60,50,50]).division, "II");
   assert.equal(make([60,60,60]).division, "III");
   assert.equal(make([50,50,40]).division, "III");
   assert.equal(make([35,35,35]).division, "IV");
