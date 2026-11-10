@@ -46,6 +46,26 @@ create table if not exists public.parent_portal_chat_messages (
 create index if not exists parent_portal_chat_class_idx
   on public.parent_portal_chat_messages(school_id, class_id, created_at desc);
 
+
+create table if not exists public.parent_portal_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  school_id bigint not null references public.schools(id) on delete cascade,
+  student_id bigint not null references public.students(id) on delete cascade,
+  parent_account_id uuid not null references public.parent_portal_accounts(id) on delete cascade,
+  category text not null default 'General',
+  message text not null check (char_length(message) between 5 and 4000),
+  status text not null default 'pending' check (status in ('pending','under_review','responded','closed')),
+  staff_reply text,
+  replied_by uuid references auth.users(id) on delete set null,
+  replied_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists parent_portal_suggestions_student_idx
+  on public.parent_portal_suggestions(school_id, student_id, created_at desc);
+create index if not exists parent_portal_suggestions_school_idx
+  on public.parent_portal_suggestions(school_id, status, created_at desc);
+
 create table if not exists public.parent_portal_meetings (
   id uuid primary key default gen_random_uuid(),
   school_id bigint not null references public.schools(id) on delete cascade,
@@ -68,13 +88,16 @@ alter table public.parent_portal_accounts enable row level security;
 alter table public.parent_portal_credential_history enable row level security;
 alter table public.parent_portal_chat_messages enable row level security;
 alter table public.parent_portal_meetings enable row level security;
+alter table public.parent_portal_suggestions enable row level security;
 
 -- No direct browser access, even for authenticated staff/parents.
 revoke all on public.parent_portal_accounts from anon, authenticated;
 revoke all on public.parent_portal_credential_history from anon, authenticated;
 revoke all on public.parent_portal_chat_messages from anon, authenticated;
 revoke all on public.parent_portal_meetings from anon, authenticated;
+revoke all on public.parent_portal_suggestions from anon, authenticated;
 grant all on public.parent_portal_accounts to service_role;
 grant all on public.parent_portal_credential_history to service_role;
 grant all on public.parent_portal_chat_messages to service_role;
 grant all on public.parent_portal_meetings to service_role;
+grant all on public.parent_portal_suggestions to service_role;
