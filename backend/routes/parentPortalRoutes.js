@@ -725,6 +725,7 @@ router.post("/staff/announcements", authenticateUser, parentPortalStaffAccess, a
   const message = String(req.body?.message || "").trim();
   const category = String(req.body?.category || "Taarifa").trim().slice(0, 80) || "Taarifa";
   if (title.length < 3 || title.length > 180 || message.length < 5 || message.length > 5000) return res.status(400).json({ success: false, message: "Weka kichwa na ujumbe wenye urefu unaokubalika." });
+  if (!req.parentPortalScope.fullAccess && !classId) return res.status(403).json({ success: false, message: "Mwalimu wa darasa anaweza kutuma taarifa kwa darasa lake pekee." });
   if (classId !== null && (!Number.isInteger(classId) || (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)))) return res.status(403).json({ success: false, message: "Huruhusiwi kutuma taarifa kwa darasa hili." });
   const { data, error } = await supabase.from("parent_portal_announcements").insert({
     school_id: schoolId, class_id: classId, title, message, category, created_by: req.user.id,
@@ -737,7 +738,7 @@ router.patch("/staff/announcements/:id/archive", authenticateUser, parentPortalS
   const schoolId = Number(req.profile?.school_id);
   const id = String(req.params.id);
   let query = supabase.from("parent_portal_announcements").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", schoolId);
-  if (!req.parentPortalScope.fullAccess) query = query.or("class_id.is.null,class_id.in.(" + (req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds.join(",") : "-1") + ")");
+  if (!req.parentPortalScope.fullAccess) query = query.in("class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
   const { data, error } = await query.select("id").maybeSingle();
   if (error) return res.status(500).json({ success: false, message: "Imeshindikana kuficha taarifa." });
   if (!data) return res.status(404).json({ success: false, message: "Taarifa haijapatikana." });
