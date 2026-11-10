@@ -1904,7 +1904,7 @@ export default function ResultsAnalysis() {
             subjectRows,
             classRows
         };
-    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam, isCseeClass, isAlevelClass, getAlevelResult]);
+    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam, isCseeClass, isAlevelExam, isAlevelClass, getAlevelResult]);
 
     // ========================================================
     // CLASS OVERALL RESULT
