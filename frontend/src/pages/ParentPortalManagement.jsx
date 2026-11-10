@@ -16,10 +16,22 @@ export default function ParentPortalManagement() {
   const [endsAt, setEndsAt] = useState("");
   const [meetingUrl, setMeetingUrl] = useState("");
   const [meetingClassId, setMeetingClassId] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [replies, setReplies] = useState({});
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const loadSuggestions = async () => {
+    try { const response = await api.get("/parent-portal/staff/suggestions"); setSuggestions(response.data?.suggestions || []); }
+    catch (e) { setError(e.response?.data?.message || "Imeshindikana kupakia maoni ya wazazi."); }
+  };
+  const saveSuggestionReply = async (item) => {
+    setBusy(true); setError(""); setNotice("");
+    try { await api.patch("/parent-portal/staff/suggestions/" + item.id, { staff_reply: replies[item.id] || "", status: (replies[item.id] || "").trim() ? "responded" : "under_review" }); setNotice("Jibu limehifadhiwa."); await loadSuggestions(); }
+    catch (e) { setError(e.response?.data?.message || "Imeshindikana kuhifadhi jibu."); }
+    finally { setBusy(false); }
+  };
   const loadMeetings = async () => {
     try {
       const response = await api.get("/parent-portal/staff/meetings");
@@ -38,6 +50,7 @@ export default function ParentPortalManagement() {
     supabase.from("classes").select("id,class_name").eq("school_id", schoolId).order("class_name")
       .then(({ data, error: e }) => { if (e) setError(e.message); else setClasses(data || []); });
     loadMeetings();
+    loadSuggestions();
   }, [schoolId]);
   useEffect(() => { if (classId) loadChat(classId); }, [classId]);
 
@@ -72,6 +85,10 @@ export default function ParentPortalManagement() {
       <div><h1 className="text-3xl font-black text-slate-900">Parent Portal Management</h1><p className="mt-2 text-slate-600">Ratibu mikutano ya wazazi na wasiliana na kundi la wazazi la darasa.</p></div>
       {notice && <div className="rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
       {error && <div className="rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
+      <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Maoni na malalamiko ya wazazi</h2><p className="mt-1 text-sm text-slate-500">Jibu maoni ya wazazi; majibu yataonekana kwenye Parent Portal ya mwanafunzi husika.</p></div><button type="button" onClick={loadSuggestions} className="rounded-lg border px-4 py-2 text-sm font-semibold">Refresh</button></div>
+        <div className="mt-4 space-y-4">{suggestions.map((item)=><article key={item.id} className="rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><b>{item.student?.name || "Mwanafunzi"} · {item.student?.admission_number || ""}</b><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{item.status}</span></div><p className="mt-2 text-xs text-slate-500">{item.category} · {new Date(item.created_at).toLocaleString()}</p><p className="mt-2 whitespace-pre-wrap text-sm">{item.message}</p>{item.staff_reply&&<div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm"><b>Jibu la sasa</b><p className="mt-1">{item.staff_reply}</p></div>}<textarea value={replies[item.id] ?? item.staff_reply ?? ""} onChange={(e)=>setReplies(prev=>({...prev,[item.id]:e.target.value}))} rows={3} placeholder="Andika jibu la shule..." className="mt-3 w-full rounded-xl border p-3"/><button type="button" disabled={busy} onClick={()=>saveSuggestionReply(item)} className="mt-2 rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Hifadhi jibu</button></article>)}{!suggestions.length&&<p className="text-sm text-slate-500">Hakuna maoni mapya kutoka kwa wazazi.</p>}</div>
+      </section>
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">Ratibu Parent Meeting / Video Conference</h2>
