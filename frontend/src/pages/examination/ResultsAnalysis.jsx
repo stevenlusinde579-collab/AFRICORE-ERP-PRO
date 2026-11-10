@@ -2242,6 +2242,7 @@ export default function ResultsAnalysis() {
             acseeComplete: acsee.complete,
             acseeReason: acsee.reason,
             acseeCombination: acsee.combination,
+            acseeCombinationLabel: acsee.combinationLabel || acsee.combination?.combination_code || null,
             acseeAggregate: acsee.aggregate,
             acseeGpa: acsee.gpa,
             acseeDivision: acsee.division,
@@ -4263,7 +4264,7 @@ function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGr
                     <DetailBox label="Division" value={divisionLabel} />
                 </>}
                 {isAlevel && <>
-                    <DetailBox label="Combination" value={report.acseeCombination?.combination_code || "Not assigned"} />
+                    <DetailBox label="Combination" value={report.acseeCombination?.combination_code || report.acseeCombinationLabel || "Based on registered subjects"} />
                     <DetailBox label="Principal Subjects" value={`${acseePrincipalSubjects.length}/3`} />
                     <DetailBox label="Principal Average" value={report.acseeEligible ? `${formatNumber(report.percentage, 1)}%` : "—"} />
                     <DetailBox label="Aggregate" value={report.acseeAggregate ?? "—"} />
@@ -4989,7 +4990,7 @@ function StudentTrace({
                                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-blue-100">
                                         <span>Admission: <strong className="text-white">{student.admission || "—"}</strong></span>
                                         <span>Class: <strong className="text-white">{student.class_name || "—"}</strong></span>
-                                        <span>Combination: <strong className="text-white">{student.acseeCombination?.combination_code || "Not assigned"}</strong></span>
+                                        <span>Combination: <strong className="text-white">{student.acseeCombination?.combination_code || student.acseeCombinationLabel || "Based on registered subjects"}</strong></span>
                                     </div>
                                 </div>
                                 <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 backdrop-blur">
