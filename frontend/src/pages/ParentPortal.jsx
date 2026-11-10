@@ -13,6 +13,8 @@ export default function ParentPortal() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(sessionStorage.getItem(TOKEN_KEY) || "");
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [loginStudent, setLoginStudent] = useState(null);
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedExam, setSelectedExam] = useState("");
@@ -42,20 +44,22 @@ export default function ParentPortal() {
   useEffect(() => {
     api.get("/parent-portal/schools").then((r) => setSchools(r.data?.schools || [])).catch(() => setError("Imeshindikana kupata orodha ya shule."));
   }, []);
-  useEffect(() => { if (token) loadDashboard(token); }, [token]);
+  useEffect(() => { if (token && !mustChangePassword) loadDashboard(token); }, [token, mustChangePassword]);
 
   const signIn = async (event) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       const response = await api.post("/parent-portal/login", { school_id: schoolId, username, password });
       sessionStorage.setItem(TOKEN_KEY, response.data.token);
+      setLoginStudent(response.data.student || null);
+      setMustChangePassword(Boolean(response.data.must_change_password));
       setToken(response.data.token);
       setPassword("");
-      setNotice("Umeingia kwenye Parent Portal.");
+      setNotice(response.data.must_change_password ? "Umeingia. Badilisha password ya awali ili kuendelea." : "Umeingia kwenye Parent Portal.");
     } catch (e) { setError(e.response?.data?.message || "Username au password si sahihi."); }
     finally { setBusy(false); }
   };
-  const signOut = () => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); setData(null); setActiveTab("overview"); };
+  const signOut = () => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); setData(null); setLoginStudent(null); setMustChangePassword(false); setActiveTab("overview"); };
 
   const loadResults = async (examId) => {
     setSelectedExam(examId); setResultData(null);
@@ -69,8 +73,8 @@ export default function ParentPortal() {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       await api.post("/parent-portal/change-password", { current_password: currentPassword, new_password: newPassword }, authConfig);
-      setCurrentPassword(""); setNewPassword(""); setNotice("Password imebadilishwa kikamilifu. Tafadhali hifadhi password yako mpya.");
-      await loadDashboard();
+      setCurrentPassword(""); setNewPassword(""); setMustChangePassword(false); setNotice("Password imebadilishwa kikamilifu. Tafadhali hifadhi password yako mpya.");
+      await loadDashboard(token);
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kubadilisha password."); }
     finally { setBusy(false); }
   };
@@ -101,6 +105,22 @@ export default function ParentPortal() {
         </form>
         <p className="mt-5 text-xs leading-relaxed text-slate-500">Kila mwanafunzi ana akaunti yake. Ikiwa hujapokea SMS ya kuingia, wasiliana na ofisi ya shule ili watume tena taarifa zako.</p>
       </div>
+    </div>
+  );
+
+  if (mustChangePassword) return (
+    <div className="min-h-screen bg-slate-950 px-4 py-12 flex items-center justify-center">
+      <form onSubmit={changePassword} className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
+        <a href="/" className="text-sm font-bold text-blue-700">← AfriCore PRO</a>
+        <h1 className="mt-6 text-2xl font-black text-slate-900">Karibu Parent Portal</h1>
+        <p className="mt-2 text-sm text-slate-600">{loginStudent?.name || "Mwanafunzi"} · {loginStudent?.school_name || "Shule"}</p>
+        <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Kwa usalama, badilisha password ya awali (Admission Number) kabla ya kuona taarifa za mwanafunzi.</p>
+        {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        <label className="mt-5 block text-sm font-semibold">Password ya awali<input required type="password" value={currentPassword} onChange={(e)=>setCurrentPassword(e.target.value)} className="mt-1 w-full rounded-xl border p-3"/></label>
+        <label className="mt-4 block text-sm font-semibold">Password mpya (angalau herufi 8)<input required minLength={8} type="password" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} className="mt-1 w-full rounded-xl border p-3"/></label>
+        <button disabled={busy} className="mt-5 w-full rounded-xl bg-blue-700 p-3 font-bold text-white">{busy ? "Inahifadhi..." : "Badilisha password na uendelee"}</button>
+        <button type="button" onClick={signOut} className="mt-3 w-full rounded-xl border p-3 font-semibold">Toka</button>
+      </form>
     </div>
   );
 
