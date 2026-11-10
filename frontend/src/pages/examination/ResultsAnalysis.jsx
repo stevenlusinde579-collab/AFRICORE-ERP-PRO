@@ -3836,8 +3836,8 @@ export default function ResultsAnalysis() {
                     {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} isAlevel={isAlevelClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} examGradingScales={examGradingScales} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
-                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
+                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} isAlevelExam={isAlevelExam} examGradingScales={examGradingScales} />}
+                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeClass(printReport.data.classId)} isAlevelExam={isAlevelClass(printReport.data.classId)} examGradingScales={examGradingScales} />}
                 </div>,
                 document.body
             )}
@@ -4259,7 +4259,7 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
     );
 }
 
-function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
+function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam = false, examGradingScales = [] }) {
     const levelType = getReportLevelType(exam, data);
     const levelLabel = getReportLevelLabel(levelType);
     const students = data.allStudents || data.topStudents || [];
@@ -4290,11 +4290,14 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
                 <DetailBox label="Candidates" value={data.candidates || 0} />
                 <DetailBox label="School Average" value={`${formatNumber(data.average,1)}%`} />
                 {isCseeExam && <DetailBox label="School GPA" value={schoolGpa != null ? formatNumber(schoolGpa,2) : "—"} />}
+                {isAlevelExam && <DetailBox label="ACSEE GPA" value={data.acseeGpa != null ? formatNumber(data.acseeGpa,2) : "—"} />}
+                {isAlevelExam && <DetailBox label="Classified Candidates" value={data.acseeEligibleStudents || 0} />}
                 <DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} />
                 <DetailBox label="Subjects" value={(data.subjectRows || []).length} />
             </div>
 
             {isCseeExam && <DivisionSummary distribution={schoolDivisions} title="School Division Distribution" />}
+            {isAlevelExam && <DivisionSummary distribution={data.acseeDivisionDistribution || []} title="ACSEE School Division Distribution" />}
 
             {isCseeExam && <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">School Grade Distribution</h3>
@@ -4320,6 +4323,13 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
                 </table>
             </div>
 
+            {isAlevelExam && <div className="mb-5">
+                <h3 className="font-extrabold text-sm mb-2">ACSEE Candidate Classification — Principal Combination Subjects</h3>
+                <table className="w-full border-collapse text-[8px] report-table"><thead><tr>{["Pos.","Student","Admission","Combination","Principal Average","Aggregate","GPA","Division"].map(h=><th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead><tbody>
+                    {finalRows.map(student=><tr key={student.id}><td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.acseeCombination?.combination_code || "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeEligible ? `${formatNumber(student.percentage,1)}%` : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeAggregate ?? "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeGpa != null ? formatNumber(student.acseeGpa,2) : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeDivisionLabel || "Awaiting marks"}</td></tr>)}
+                </tbody></table>
+                <p className="text-[8px] text-slate-600 mt-2">Only the three principal subjects registered under each student's combination contribute to ACSEE aggregate and division. Subsidiary subjects are excluded.</p>
+            </div>}
             <SubjectSummaryTable subjects={data.subjectRows || []} />
 
             <div className="mb-4">
@@ -4353,7 +4363,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, examGradingS
     );
 }
 
-function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingScales = [] }) {
+function ClassOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam = false, examGradingScales = [] }) {
     const levelType = getReportLevelType(exam, data);
     const levelLabel = getReportLevelLabel(levelType);
     const students = data.students || data.topStudents || [];
@@ -4378,12 +4388,19 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, examGradingSc
         <div className="p-6 text-slate-900 report-page">
             <ReportHeader exam={exam} title={`${levelLabel} — Class Results Report`} subtitle={isCseeExam ? `${data.className || "Class"} · Best Seven Classification` : `${data.className || "Class"} · Configured Grading`} />
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
-                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} />{isCseeExam && <DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "—"} />}<DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
+                <DetailBox label="Students" value={data.studentCount || 0} /><DetailBox label="Class Average" value={`${formatNumber(data.average,1)}%`} />{isCseeExam && <DetailBox label="Class GPA" value={classGpa != null ? formatNumber(classGpa,2) : "—"} />}{isAlevelExam && <DetailBox label="ACSEE GPA" value={data.acseeGpa != null ? formatNumber(data.acseeGpa,2) : "—"} />}{isAlevelExam && <DetailBox label="Classified" value={data.acseeEligibleStudents || 0} />}<DetailBox label="Pass Rate" value={`${formatNumber(data.passRate,1)}%`} /><DetailBox label="Subjects" value={data.subjectCount || 0} />
             </div>
             {isCseeExam && <DivisionSummary distribution={classDivisions} title="Class Division Distribution" />}
+            {isAlevelExam && <DivisionSummary distribution={data.acseeDivisionDistribution || []} title="ACSEE Class Division Distribution" />}
             {isCseeExam && <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">Class Grade Distribution</h3>
                 <div className="grid grid-cols-5 gap-2">{classGrades.map(row => <div key={row.grade} className={`border rounded-lg p-2 text-center ${gradeClass(row.grade)}`}><div className="text-[9px] font-bold">Grade {row.grade}</div><div className="text-lg font-black">{row.count || 0}</div><div className="text-[8px]">students</div></div>)}</div>
+            </div>}
+            {isAlevelExam && <div className="mb-5">
+                <h3 className="font-extrabold text-sm mb-2">ACSEE Candidate Classification</h3>
+                <table className="w-full border-collapse text-[8px] report-table"><thead><tr>{["Pos.","Student","Admission","Combination","Principal Average","Aggregate","GPA","Division"].map(h=><th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead><tbody>
+                    {(data.students || []).map(student=><tr key={student.id}><td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.acseeCombination?.combination_code || "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeEligible ? `${formatNumber(student.percentage,1)}%` : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeAggregate ?? "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeGpa != null ? formatNumber(student.acseeGpa,2) : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeDivisionLabel || "Awaiting marks"}</td></tr>)}
+                </tbody></table>
             </div>}
             <SubjectSummaryTable subjects={data.subjects || []} />
             <div className="mb-4">
