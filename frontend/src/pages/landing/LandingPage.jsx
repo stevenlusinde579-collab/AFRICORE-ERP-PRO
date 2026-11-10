@@ -345,6 +345,16 @@ function LandingPage() {
                                     Contact
                                 </button>
 
+                                <button
+                                    type="button"
+                                    onClick={handleParentPortal}
+                                    className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/15 transition"
+                                >
+                                    <FaUsers />
+                                    Parent Portal
+                                    <FaArrowRight className="ml-auto text-xs" />
+                                </button>
+
                                 {/* MOBILE SYSTEM MANUAL */}
                                 <button
                                     type="button"
