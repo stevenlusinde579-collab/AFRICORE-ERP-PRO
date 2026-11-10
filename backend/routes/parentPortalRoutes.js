@@ -73,16 +73,42 @@ async function loadClassParentMembers(schoolId, classId) {
     .select("student_id,username,is_active").eq("school_id", schoolId).eq("is_active", true).in("student_id", ids);
   if (accountsError) throw accountsError;
   const accountMap = new Map((accounts || []).map((row) => [String(row.student_id), row]));
-  return studentRows.filter((row) => accountMap.has(String(row.id))).map((row) => {
+  const parentMembers = studentRows.filter((row) => accountMap.has(String(row.id))).map((row) => {
     const account = accountMap.get(String(row.id));
     const studentName = fullName(row);
     return {
+      member_type: "parent",
       student_id: row.id,
       student_name: studentName,
       parent_name: row.parent_name || row.guardian_name || ("Mzazi wa " + studentName),
+      member_name: row.parent_name || row.guardian_name || ("Mzazi wa " + studentName),
       username: account.username,
+      online: false,
     };
   });
+
+  // Include only staff explicitly assigned to this class, never every staff
+  // member in the school. Parent-facing membership is subsequently scoped to
+  // the current parent plus these assigned staff members.
+  const { data: assignments, error: assignmentError } = await supabase.from("teacher_assignments")
+    .select("teacher_id").eq("school_id", schoolId).eq("class_id", classId);
+  if (assignmentError) throw assignmentError;
+  const teacherIds = [...new Set((assignments || []).map((row) => Number(row.teacher_id)).filter(Number.isInteger))];
+  if (!teacherIds.length) return parentMembers;
+  const { data: teachers, error: teachersError } = await supabase.from("teachers")
+    .select("id,user_id,first_name,middle_name,last_name,photo_url,staff_type")
+    .eq("school_id", schoolId).in("id", teacherIds).eq("status", "Active");
+  if (teachersError) throw teachersError;
+  const staffMembers = (teachers || []).map((teacher) => ({
+    member_type: "staff",
+    user_id: teacher.user_id,
+    teacher_id: teacher.id,
+    member_name: [teacher.first_name, teacher.middle_name, teacher.last_name].filter(Boolean).join(" ") || "School Staff",
+    role_label: teacher.staff_type === "Non-Staff" ? "School staff" : "Teacher",
+    photo_url: teacher.photo_url || null,
+    online: false,
+  }));
+  return [...parentMembers, ...staffMembers];
 }
 
 const FULL_PARENT_PORTAL_ROLES = new Set([
