@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { supabase } from "../config/supabase.js";
 import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 const router = express.Router();
 const scrypt = promisify(crypto.scrypt);
@@ -74,6 +75,9 @@ async function parentAuth(req, res, next) {
     const { data: school, error: schoolError } = await supabase.from("schools").select("id,school_name,is_active").eq("id", account.school_id).maybeSingle();
     if (schoolError || !school || school.is_active !== true) return res.status(403).json({ success: false, message: "This school is inactive. Please contact the school administrator." });
     req.parent = { account, student, school };
+    if (account.must_change_password && !["/change-password", "/logout"].includes(req.path)) {
+      return res.status(403).json({ success: false, code: "PARENT_PASSWORD_CHANGE_REQUIRED", message: "Badilisha password yako ya awali kwanza." });
+    }
     next();
   } catch (error) {
     console.error("PARENT PORTAL AUTH ERROR:", error);
@@ -128,7 +132,7 @@ router.get("/schools", async (_req, res) => {
 });
 
 // Staff-only: create a per-student portal account after registration has committed.
-router.post("/provision", authenticateUser, async (req, res) => {
+router.post("/provision", authenticateUser, requirePermission("create_students"), async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const studentId = Number(req.body?.student_id);
   if (!Number.isInteger(schoolId) || !Number.isInteger(studentId)) return res.status(400).json({ success: false, message: "Valid student_id is required." });
@@ -160,7 +164,7 @@ router.post("/provision", authenticateUser, async (req, res) => {
 });
 
 // Staff-only resend. Reissues the initial admission-number password and forces a change at next login.
-router.post("/resend/:studentId", authenticateUser, async (req, res) => {
+router.post("/resend/:studentId", authenticateUser, requirePermission("view_students"), async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const studentId = Number(req.params.studentId);
   try {
@@ -190,7 +194,7 @@ router.post("/resend/:studentId", authenticateUser, async (req, res) => {
   }
 });
 
-router.get("/credential-history/:studentId", authenticateUser, async (req, res) => {
+router.get("/credential-history/:studentId", authenticateUser, requirePermission("view_students"), async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const studentId = Number(req.params.studentId);
   const { data, error } = await supabase.from("parent_portal_credential_history")
@@ -220,11 +224,40 @@ router.post("/login", async (req, res) => {
     if (!student || String(student.status || student.student_status || "Active").toLowerCase() === "inactive") return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
     await supabase.from("parent_portal_accounts").update({ last_login_at: new Date().toISOString() }).eq("id", account.id);
     const token = tokenFor({ account_id: account.id, student_id: student.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
-    return res.json({ success: true, token, must_change_password: account.must_change_password, student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no } });
+    const schoolName = await supabase.from("schools").select("school_name").eq("id", schoolId).single();
+    const classRow = student.current_class_id ? await supabase.from("classes").select("class_name").eq("id", student.current_class_id).eq("school_id", schoolId).maybeSingle() : { data: null };
+    return res.json({ success: true, token, must_change_password: account.must_change_password, student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, school_name: schoolName.data?.school_name || "", class_name: classRow.data?.class_name || student.class_name || "" } });
   } catch (error) {
     console.error("PARENT PORTAL LOGIN ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to sign in to Parent Portal." });
   }
+});
+
+
+// Staff class group chat: limited to staff with student-view access in their own school.
+router.get("/staff/chat/:classId", authenticateUser, requirePermission("view_students"), async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const classId = Number(req.params.classId);
+  if (!Number.isInteger(schoolId) || !Number.isInteger(classId)) return res.status(400).json({ success: false, message: "Invalid class." });
+  const classRow = await supabase.from("classes").select("id,school_id,class_name").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+  if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
+  const { data, error } = await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", schoolId).eq("class_id", classId).order("created_at", { ascending: true }).limit(300);
+  if (error) return res.status(500).json({ success: false, message: "Unable to load class group chat." });
+  return res.json({ success: true, class: classRow.data, messages: data || [] });
+});
+router.post("/staff/chat/:classId", authenticateUser, requirePermission("view_students"), async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const classId = Number(req.params.classId);
+  const message = String(req.body?.message || "").trim();
+  if (!Number.isInteger(schoolId) || !Number.isInteger(classId) || !message || message.length > 4000) return res.status(400).json({ success: false, message: "Invalid class or message." });
+  const classRow = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+  if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
+  const { data, error } = await supabase.from("parent_portal_chat_messages").insert({
+    school_id: schoolId, class_id: classId, sender_user_id: req.user.id,
+    sender_type: "staff", sender_name: req.profile.full_name || "School Staff", message,
+  }).select("id,sender_type,sender_name,message,created_at").single();
+  if (error) return res.status(500).json({ success: false, message: "Unable to send class message." });
+  return res.json({ success: true, message: data });
 });
 
 router.use(parentAuth);
@@ -233,17 +266,16 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, exams, attendance] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, exams, attendance] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("meetings").select("id,title,description,meeting_date,start_time,end_time,meeting_link,platform").eq("school_id", school.id).order("meeting_date", { ascending: false }).limit(50),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,exams,attendance]) if (result.error) throw result.error;
+    for (const result of [charges,payments,communications,announcements,exams,attendance]) if (result.error) throw result.error;
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
@@ -254,7 +286,7 @@ router.get("/dashboard", async (req, res) => {
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
-      communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
+      communications: communications.data || [], announcements: announcements.data || [], meetings: [],
       exams: exams.data || [], attendance: attendance.data || [], chat: chat.data || [],
       must_change_password: req.parent.account.must_change_password,
     });
