@@ -93,7 +93,7 @@ export default function ParentPortal() {
   }, [token, mustChangePassword, authConfig]);
 
   useEffect(() => {
-    if (!token || activeTab !== "finance" || mustChangePassword) return undefined;
+    if (!token || mustChangePassword) return undefined;
     let cancelled = false;
     const refreshFinance = async () => {
       try {
@@ -108,7 +108,7 @@ export default function ParentPortal() {
     refreshFinance();
     const timer = window.setInterval(refreshFinance, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [token, activeTab, mustChangePassword, authConfig]);
+  }, [token, mustChangePassword, authConfig]);
 
   const changePassword = async (event) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
