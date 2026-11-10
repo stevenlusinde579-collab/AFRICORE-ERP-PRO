@@ -47,7 +47,7 @@ test("maps aggregate points to all ACSEE divisions including Division 0", () => 
   assert.equal(make([80,80,80]).division, "I");
   assert.equal(make([70,70,70]).division, "I");
   assert.equal(make([60,50,50]).division, "II");
-  assert.equal(make([60,60,60]).division, "III");
+  assert.equal(make([60,60,60]).division, "I");
   assert.equal(make([50,50,40]).division, "III");
   assert.equal(make([35,35,35]).division, "IV");
   assert.equal(make([34,34,35]).division, "0");
