@@ -3833,7 +3833,7 @@ export default function ResultsAnalysis() {
 
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
-                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
+                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} isAlevel={isAlevelClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} examGradingScales={examGradingScales} />}
                     {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
                     {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} examGradingScales={examGradingScales} />}
@@ -4014,7 +4014,7 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }) {
+function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [] }) {
     const levelType = getReportLevelType(exam, report);
     const levelLabel = getReportLevelLabel(levelType);
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
@@ -4033,6 +4033,8 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
         ? (bestSeven.length === 7 ? (applicableGradeScale(bestSevenAverage, examGradingScales, true)?.grade || getGrade(bestSevenAverage)) : "—")
         : (report?.grade || "—");
     const allSubjects = report?.subjects || [];
+    const acseePrincipalSubjects = report?.acseePrincipalSubjects || [];
+    const acseeSubsidiarySubjects = report?.acseeSubsidiarySubjects || [];
 
     return (
         <div className="p-7 text-slate-900 report-page">
@@ -4050,6 +4052,14 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
                     <DetailBox label="Aggregate" value={aggregate != null ? formatNumber(aggregate, 0) : "—"} />
                     <DetailBox label="GPA" value={gpa != null ? formatNumber(gpa, 2) : "—"} />
                     <DetailBox label="Division" value={divisionLabel} />
+                </>}
+                {isAlevel && <>
+                    <DetailBox label="Combination" value={report.acseeCombination?.combination_code || "Not assigned"} />
+                    <DetailBox label="Principal Subjects" value={`${acseePrincipalSubjects.length}/3`} />
+                    <DetailBox label="Principal Average" value={report.acseeEligible ? `${formatNumber(report.percentage, 1)}%` : "—"} />
+                    <DetailBox label="Aggregate" value={report.acseeAggregate ?? "—"} />
+                    <DetailBox label="GPA" value={report.acseeGpa != null ? formatNumber(report.acseeGpa, 2) : "—"} />
+                    <DetailBox label="Division" value={report.acseeDivisionLabel || "Not calculated"} />
                 </>}
                 <DetailBox label="Grade" value={finalGrade} />
                 <DetailBox label="Status" value={report.reportStatus || "—"} />
@@ -4096,7 +4106,17 @@ function StudentReportPrint({ exam, report, isCseeExam, examGradingScales = [] }
             </div>
 
             {levelType === "EARLY_YEARS" && <div className="border border-slate-400 rounded-lg p-3 mb-4"><h3 className="font-extrabold text-xs mb-1">Child Development Summary</h3><p className="text-[10px]">Review learning-area remarks and teacher recommendations to understand the child’s progress and areas needing support.</p></div>}
-            {levelType === "A_LEVEL" && <div className="border border-slate-400 rounded-lg p-3 mb-4"><h3 className="font-extrabold text-xs mb-1">Advanced Level Summary</h3><p className="text-[10px]">Review the registered subject combination and A-Level grades. CSEE Best Seven, aggregate and division do not apply to A-Level.</p></div>}
+            {levelType === "A_LEVEL" && <div className="border border-slate-400 rounded-lg p-3 mb-4">
+                <h3 className="font-extrabold text-xs mb-1">Advanced Level — ACSEE Combination Summary</h3>
+                <p className="text-[10px] mb-2">Combination: <strong>{report.acseeCombination?.combination_code || "Not assigned"}</strong> · Aggregate: <strong>{report.acseeAggregate ?? "—"}</strong> · GPA: <strong>{report.acseeGpa != null ? formatNumber(report.acseeGpa, 2) : "—"}</strong> · Division: <strong>{report.acseeDivisionLabel || "Not calculated"}</strong></p>
+                {report.acseeReason && <p className="text-[10px] text-amber-700 mb-2">{report.acseeReason}</p>}
+                <h4 className="font-bold text-[10px] mb-1">Principal Combination Subjects</h4>
+                <table className="w-full border-collapse text-[9px] report-table mb-2"><thead><tr>{["Subject","Mark (%)","Grade","Points"].map(h=><th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead><tbody>
+                    {acseePrincipalSubjects.map((row,index)=><tr key={row.exam_subject_id || row.subject_id || index}><td className="border border-slate-400 p-1">{row.subject_name || getSubjectName(row.subject)}</td><td className="border border-slate-400 p-1 text-center">{formatNumber(row.percentage,1)}%</td><td className="border border-slate-400 p-1 text-center font-bold">{row.grade}</td><td className="border border-slate-400 p-1 text-center">{row.point}</td></tr>)}
+                </tbody></table>
+                <p className="text-[9px] text-slate-600">Subsidiary subjects are reported separately and are not included in the principal aggregate.</p>
+                {acseeSubsidiarySubjects.length > 0 && <div className="text-[9px] mt-1">{acseeSubsidiarySubjects.map(row=>row.subject_name || getSubjectName(row.subject)).join(", ")}</div>}
+            </div>}
             <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Tabia kwa Ujumla</h3><p className="text-[10px] whitespace-pre-wrap">{report.generalConduct || "____________________________________________"}</p></div>
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Bidii za Kazi za Mikono</h3><p className="text-[10px] whitespace-pre-wrap">{report.manualWorkEffort || "____________________________________________"}</p></div>
