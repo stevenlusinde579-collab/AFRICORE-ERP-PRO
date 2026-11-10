@@ -48,7 +48,11 @@ export const calculateAcseeResult = (subjectResults = [], principalSubjectIds = 
   }
 
   const incomplete = principalSubjects.filter(row =>
-    row.status !== "Complete" || !Number.isFinite(Number(row.percentage))
+    row.status !== "Complete" ||
+    row.percentage === null ||
+    row.percentage === undefined ||
+    row.percentage === "" ||
+    !Number.isFinite(Number(row.percentage))
   );
   if (incomplete.length) {
     return {
