@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
-import { supabase } from "../services/supabase";
 import { useSchool } from "../context/SchoolContext";
 
 export default function ParentPortalManagement() {
   const { schoolId } = useSchool();
   const [classes, setClasses] = useState([]);
+  const [parents, setParents] = useState([]);
+  const [groupMembers, setGroupMembers] = useState([]);
   const [classId, setClassId] = useState("");
   const [messages, setMessages] = useState([]);
   const [chatText, setChatText] = useState("");
@@ -43,16 +44,22 @@ export default function ParentPortalManagement() {
     try {
       const response = await api.get("/parent-portal/staff/chat/" + id);
       setMessages(response.data?.messages || []);
+      setGroupMembers(response.data?.group_members || []);
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kupakia group chat."); }
   };
   useEffect(() => {
     if (!schoolId) return;
-    supabase.from("classes").select("id,class_name").eq("school_id", schoolId).order("class_name")
-      .then(({ data, error: e }) => { if (e) setError(e.message); else setClasses(data || []); });
+    api.get("/parent-portal/staff/classes").then(({ data }) => setClasses(data?.classes || [])).catch((e) => setError(e.response?.data?.message || "Imeshindikana kupakia madarasa yaliyoruhusiwa."));
+    api.get("/parent-portal/staff/parents").then(({ data }) => setParents(data?.parents || [])).catch((e) => setError(e.response?.data?.message || "Imeshindikana kupakia taarifa za wazazi."));
     loadMeetings();
     loadSuggestions();
   }, [schoolId]);
-  useEffect(() => { if (classId) loadChat(classId); }, [classId]);
+  useEffect(() => {
+    if (!classId) return undefined;
+    loadChat(classId);
+    const refreshTimer = window.setInterval(() => loadChat(classId), 5000);
+    return () => window.clearInterval(refreshTimer);
+  }, [classId]);
 
   const sendChat = async (event) => {
     event.preventDefault(); if (!classId || !chatText.trim()) return;
@@ -82,9 +89,13 @@ export default function ParentPortalManagement() {
 
   return (
     <div className="p-6 space-y-6">
-      <div><h1 className="text-3xl font-black text-slate-900">Parent Portal Management</h1><p className="mt-2 text-slate-600">Ratibu mikutano ya wazazi na wasiliana na kundi la wazazi la darasa.</p></div>
+      <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 p-6 text-white shadow-lg"><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">AfriCore · Communication</p><h1 className="mt-2 text-3xl font-black">Parent Portal Management</h1><p className="mt-2 max-w-2xl text-sm text-blue-100">Simamia mawasiliano ya wazazi, vikundi vya madarasa, mikutano na mrejesho wa wazazi.</p><div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3"><div className="rounded-xl bg-white/10 p-3"><p className="text-2xl font-black">{parents.length}</p><p className="text-xs text-blue-100">Wanafunzi / Wazazi</p></div><div className="rounded-xl bg-white/10 p-3"><p className="text-2xl font-black">{classes.length}</p><p className="text-xs text-blue-100">Madarasa yanayoruhusiwa</p></div><div className="col-span-2 rounded-xl bg-white/10 p-3 md:col-span-1"><p className="text-2xl font-black">{suggestions.length}</p><p className="text-xs text-blue-100">Maoni ya wazazi</p></div></div></div>
       {notice && <div className="rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
       {error && <div className="rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-900">Orodha ya wazazi na walezi</h2><p className="mt-1 text-sm text-slate-500">Taarifa za mawasiliano za wazazi kulingana na madarasa unayoruhusiwa kusimamia.</p></div><span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{parents.length} rekodi</span></div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Mwanafunzi</th><th className="p-3">Mzazi / Mlezi</th><th className="p-3">Simu</th><th className="p-3">Barua pepe</th><th className="p-3">Darasa</th></tr></thead><tbody>{parents.map((p)=><tr key={p.student_id} className="border-t border-slate-100"><td className="p-3 font-semibold text-slate-800">{p.student_name}<small className="block text-slate-400">{p.admission_number || "—"}</small></td><td className="p-3">{p.parent_name}</td><td className="p-3">{p.phone || "—"}</td><td className="p-3">{p.email || "—"}</td><td className="p-3">{p.class_name}</td></tr>)}</tbody></table>{!parents.length && <p className="p-6 text-center text-sm text-slate-500">Hakuna taarifa za wazazi katika madarasa unayoruhusiwa kuona.</p>}</div>
+      </section>
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Maoni na malalamiko ya wazazi</h2><p className="mt-1 text-sm text-slate-500">Jibu maoni ya wazazi; majibu yataonekana kwenye Parent Portal ya mwanafunzi husika.</p></div><button type="button" onClick={loadSuggestions} className="rounded-lg border px-4 py-2 text-sm font-semibold">Refresh</button></div>
         <div className="mt-4 space-y-4">{suggestions.map((item)=><article key={item.id} className="rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><b>{item.student?.name || "Mwanafunzi"} · {item.student?.admission_number || ""}</b><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{item.status}</span></div><p className="mt-2 text-xs text-slate-500">{item.category} · {new Date(item.created_at).toLocaleString()}</p><p className="mt-2 whitespace-pre-wrap text-sm">{item.message}</p>{item.staff_reply&&<div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm"><b>Jibu la sasa</b><p className="mt-1">{item.staff_reply}</p></div>}<textarea value={replies[item.id] ?? item.staff_reply ?? ""} onChange={(e)=>setReplies(prev=>({...prev,[item.id]:e.target.value}))} rows={3} placeholder="Andika jibu la shule..." className="mt-3 w-full rounded-xl border p-3"/><button type="button" disabled={busy} onClick={()=>saveSuggestionReply(item)} className="mt-2 rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Hifadhi jibu</button></article>)}{!suggestions.length&&<p className="text-sm text-slate-500">Hakuna maoni mapya kutoka kwa wazazi.</p>}</div>
@@ -104,10 +115,9 @@ export default function ParentPortalManagement() {
           <div className="mt-6"><h3 className="font-bold">Mikutano iliyopangwa</h3>{meetings.map((m)=><article key={m.id} className="border-b py-3"><b>{m.title}</b><p className="text-sm text-slate-500">{new Date(m.starts_at).toLocaleString()}</p>{m.meeting_url&&<a href={m.meeting_url} target="_blank" rel="noreferrer" className="text-sm text-blue-700 underline">Fungua kiungo</a>}</article>)}{!meetings.length&&<p className="mt-2 text-sm text-slate-500">Hakuna mikutano iliyopangwa.</p>}</div>
         </section>
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold">Class Group Chat</h2>
-          <p className="mt-1 text-sm text-slate-500">Ujumbe huu unaonekana kwa wazazi wa darasa husika pamoja na watumishi wanaoruhusiwa.</p>
+          <div className="rounded-xl bg-slate-900 p-4 text-white"><h2 className="text-xl font-bold">Class Group Chat</h2><p className="mt-1 text-sm text-slate-300">Muonekano wa mazungumzo wa WhatsApp; wazazi wa darasa na watumishi wanaoruhusiwa wanaona ujumbe wa kundi moja.</p></div>
           <select value={classId} onChange={(e)=>setClassId(e.target.value)} className="mt-4 w-full rounded-xl border p-3"><option value="">Chagua darasa</option>{classes.map((x)=><option key={x.id} value={x.id}>{x.class_name}</option>)}</select>
-          <div className="mt-4 h-96 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-4">{messages.map((m)=><article key={m.id} className="rounded-lg bg-white p-3 shadow-sm"><b className="text-sm">{m.sender_name}</b><span className="ml-2 text-xs text-slate-400">{m.sender_type}</span><p className="mt-1 text-sm">{m.message}</p><small className="text-slate-400">{new Date(m.created_at).toLocaleString()}</small></article>)}{classId&&!messages.length&&<p className="text-sm text-slate-500">Hakuna ujumbe bado.</p>}</div>
+          <div className="mt-4 grid gap-3 md:grid-cols-[190px_1fr]"><aside className="rounded-xl bg-slate-50 p-3"><h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Wanachama · {groupMembers.length}</h3><div className="space-y-2">{groupMembers.map((member)=><div key={member.student_id} className="flex items-center gap-2 rounded-lg bg-white p-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">{member.parent_name?.slice(0,1)||"M"}</span><div className="min-w-0"><p className="truncate text-xs font-semibold">{member.parent_name}</p><p className="truncate text-[10px] text-slate-400">{member.student_name}</p></div></div>)}{classId&&!groupMembers.length&&<p className="text-xs text-slate-400">Hakuna wazazi wenye akaunti hai.</p>}</div></aside><div className="h-96 space-y-3 overflow-y-auto rounded-xl bg-[#f0f2ed] p-4">{messages.map((m)=><div key={m.id} className={"flex "+(m.sender_type==="staff"?"justify-end":"justify-start")}><article className={"max-w-[85%] rounded-2xl px-4 py-3 shadow-sm "+(m.sender_type==="staff"?"bg-[#d9fdd3]":"bg-white")}><b className="text-xs text-slate-700">{m.sender_name}</b><p className="mt-1 whitespace-pre-wrap break-words text-sm">{m.message}</p><small className="mt-1 block text-right text-[10px] text-slate-400">{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small></article></div>)}{classId&&!messages.length&&<p className="py-16 text-center text-sm text-slate-500">Hakuna ujumbe bado.</p>}</div></div>
           <form onSubmit={sendChat} className="mt-3 flex gap-2"><input disabled={!classId} required value={chatText} onChange={(e)=>setChatText(e.target.value)} placeholder="Andika ujumbe kwa wazazi..." className="min-w-0 flex-1 rounded-xl border p-3"/><button disabled={busy||!classId} className="rounded-xl bg-blue-700 px-5 font-bold text-white disabled:opacity-50">Tuma</button></form>
         </section>
       </div>
