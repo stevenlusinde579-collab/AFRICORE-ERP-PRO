@@ -323,13 +323,43 @@ router.post("/staff/meetings", authenticateUser, requirePermission("view_student
   return res.json({ success: true, meeting: data });
 });
 
+
+// Staff review and reply to Parent Portal suggestions in their own school.
+router.get("/staff/suggestions", authenticateUser, requirePermission("view_students"), async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!Number.isInteger(schoolId)) return res.status(403).json({ success: false, message: "School access is required." });
+  const { data, error } = await supabase.from("parent_portal_suggestions")
+    .select("id,student_id,category,message,status,staff_reply,replied_at,created_at")
+    .eq("school_id", schoolId).order("created_at", { ascending: false }).limit(200);
+  if (error) return res.status(500).json({ success: false, message: "Unable to load parent suggestions." });
+  const studentIds = [...new Set((data || []).map(x => x.student_id))];
+  const students = studentIds.length ? await supabase.from("students").select("id,first_name,middle_name,last_name,admission_number").eq("school_id", schoolId).in("id", studentIds) : { data: [] };
+  if (students.error) return res.status(500).json({ success: false, message: "Unable to load student names." });
+  const studentMap = new Map((students.data || []).map(s => [String(s.id), { name: [s.first_name,s.middle_name,s.last_name].filter(Boolean).join(" "), admission_number: s.admission_number }]));
+  return res.json({ success: true, suggestions: (data || []).map(x => ({ ...x, student: studentMap.get(String(x.student_id)) || null })) });
+});
+router.patch("/staff/suggestions/:id", authenticateUser, requirePermission("view_students"), async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const id = String(req.params.id || "");
+  const reply = String(req.body?.staff_reply || "").trim();
+  const status = String(req.body?.status || (reply ? "responded" : "under_review"));
+  if (!Number.isInteger(schoolId) || !/^[0-9a-f-]{36}$/i.test(id) || !["pending","under_review","responded","closed"].includes(status) || reply.length > 4000) return res.status(400).json({ success: false, message: "Invalid suggestion update." });
+  const { data, error } = await supabase.from("parent_portal_suggestions").update({
+    status, staff_reply: reply || null, replied_by: reply ? req.user.id : null,
+    replied_at: reply ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
+  }).eq("id", id).eq("school_id", schoolId).select("id,status,staff_reply,replied_at").maybeSingle();
+  if (error) return res.status(500).json({ success: false, message: "Unable to update parent suggestion." });
+  if (!data) return res.status(404).json({ success: false, message: "Suggestion not found in your school." });
+  return res.json({ success: true, suggestion: data });
+});
+
 router.use(parentAuth);
 
 router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, exams, attendance] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, meetings, exams, attendance, suggestions] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
@@ -338,8 +368,9 @@ router.get("/dashboard", async (req, res) => {
       supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).or("class_id.is.null,class_id.eq." + Number(classId || 0)).eq("status", "scheduled").order("starts_at", { ascending: true }).limit(50),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
+      supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,exams,attendance]) if (result.error) throw result.error;
+    for (const result of [charges,payments,communications,announcements,meetings,exams,attendance,suggestions]) if (result.error) throw result.error;
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
@@ -351,7 +382,7 @@ router.get("/dashboard", async (req, res) => {
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
-      exams: exams.data || [], attendance: attendance.data || [], chat: chat.data || [],
+      exams: exams.data || [], attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [],
       must_change_password: req.parent.account.must_change_password,
     });
   } catch (error) {
@@ -402,12 +433,13 @@ router.post("/change-password", async (req, res) => {
 });
 
 router.post("/suggestions", async (req, res) => {
-  const suggestion = String(req.body?.suggestion || "").trim();
-  const category = String(req.body?.category || "General").trim().slice(0, 80);
-  if (suggestion.length < 5 || suggestion.length > 4000) return res.status(400).json({ success: false, message: "Suggestion must contain between 5 and 4000 characters." });
-  const { student, school } = req.parent;
-  const tagged = "[Parent Portal | " + fullName(student) + " | Admission: " + (student.admission_number || student.admission_no || "") + "]\n" + suggestion;
-  const { data, error } = await supabase.from("suggestions").insert({ school_id: school.id, category, suggestion: tagged, status: "Pending" }).select("id,category,status,created_at").single();
+  const message = String(req.body?.suggestion || "").trim();
+  const category = String(req.body?.category || "General").trim().slice(0, 80) || "General";
+  if (message.length < 5 || message.length > 4000) return res.status(400).json({ success: false, message: "Suggestion must contain between 5 and 4000 characters." });
+  const { student, school, account } = req.parent;
+  const { data, error } = await supabase.from("parent_portal_suggestions").insert({
+    school_id: school.id, student_id: student.id, parent_account_id: account.id, category, message,
+  }).select("id,category,message,status,created_at").single();
   if (error) return res.status(500).json({ success: false, message: "Unable to submit suggestion." });
   return res.json({ success: true, suggestion: data });
 });
