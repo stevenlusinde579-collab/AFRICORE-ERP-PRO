@@ -347,8 +347,9 @@ export default function AppRoutes() {
                 {/* PARENT PORTAL STAFF MANAGEMENT */}
                 <Route
                     element={
-                        <SuperAdminOrPermissionRoute
-                            permission="view_students"
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 2, 3, 4, 7, 12]}
+                            allowedRoleNames={["Accountant", "Class Teacher"]}
                         />
                     }
                 >
