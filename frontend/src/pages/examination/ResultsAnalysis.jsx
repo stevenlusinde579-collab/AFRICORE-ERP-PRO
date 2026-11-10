@@ -1423,6 +1423,7 @@ export default function ResultsAnalysis() {
 
             rows.push({
                 id: student.id,
+                combination_id: student.combination_id,
                 full_name: safeName(student),
                 admission: getAdmission(student),
                 gender: student.gender,
