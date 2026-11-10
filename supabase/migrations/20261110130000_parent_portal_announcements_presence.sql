@@ -23,6 +23,7 @@ create table if not exists public.parent_portal_presence (
   parent_account_id uuid references public.parent_portal_accounts(id) on delete cascade,
   user_id uuid references auth.users(id) on delete cascade,
   participant_type text not null check (participant_type in ('parent','staff')),
+  participant_key text not null,
   display_name text not null,
   last_seen_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -33,12 +34,8 @@ create table if not exists public.parent_portal_presence (
     (participant_type = 'staff' and user_id is not null and parent_account_id is null)
   )
 );
-create unique index if not exists parent_portal_presence_parent_unique
-  on public.parent_portal_presence(class_id, parent_account_id)
-  where parent_account_id is not null;
-create unique index if not exists parent_portal_presence_staff_unique
-  on public.parent_portal_presence(class_id, user_id)
-  where user_id is not null;
+create unique index if not exists parent_portal_presence_identity_unique
+  on public.parent_portal_presence(class_id, participant_key);
 create index if not exists parent_portal_presence_online_idx
   on public.parent_portal_presence(school_id, class_id, last_seen_at desc);
 
