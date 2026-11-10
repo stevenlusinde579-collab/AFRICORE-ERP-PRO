@@ -17,6 +17,7 @@ import { useRole } from "../context/RoleContext";
 
 import LandingPage from "../pages/landing/LandingPage";
 import ParentPortal from "../pages/ParentPortal";
+import ParentPortalManagement from "../pages/ParentPortalManagement";
 
 import Layout from "../components/layout/Layout";
 
@@ -342,6 +343,20 @@ export default function AppRoutes() {
                     path="class-teacher/subjects"
                     element={<ClassTeacherSubjectTeachers />}
                 />
+
+                {/* PARENT PORTAL STAFF MANAGEMENT */}
+                <Route
+                    element={
+                        <SuperAdminOrPermissionRoute
+                            permission="view_students"
+                        />
+                    }
+                >
+                    <Route
+                        path="parent-portal-management"
+                        element={<ParentPortalManagement />}
+                    />
+                </Route>
 
                 {/* STUDENTS VIEW */}
                 <Route
