@@ -59,6 +59,70 @@ async function loadStudent(studentId, schoolId) {
   if (error) throw error;
   return data;
 }
+
+async function loadClassParentMembers(schoolId, classId) {
+  if (!schoolId || !classId) return [];
+  const { data: students, error: studentsError } = await supabase.from("students")
+    .select("id,first_name,middle_name,last_name,parent_name,guardian_name,current_class_id")
+    .eq("school_id", schoolId).eq("current_class_id", classId).order("first_name");
+  if (studentsError) throw studentsError;
+  const studentRows = students || [];
+  if (!studentRows.length) return [];
+  const ids = studentRows.map((row) => row.id);
+  const { data: accounts, error: accountsError } = await supabase.from("parent_portal_accounts")
+    .select("student_id,username,is_active").eq("school_id", schoolId).eq("is_active", true).in("student_id", ids);
+  if (accountsError) throw accountsError;
+  const accountMap = new Map((accounts || []).map((row) => [String(row.student_id), row]));
+  return studentRows.filter((row) => accountMap.has(String(row.id))).map((row) => {
+    const account = accountMap.get(String(row.id));
+    const studentName = fullName(row);
+    return {
+      student_id: row.id,
+      student_name: studentName,
+      parent_name: row.parent_name || row.guardian_name || ("Mzazi wa " + studentName),
+      username: account.username,
+    };
+  });
+}
+
+const FULL_PARENT_PORTAL_ROLES = new Set([
+  "super admin", "headmaster", "deputy headmaster", "academic master", "secretary", "accountant",
+]);
+
+async function parentPortalStaffAccess(req, res, next) {
+  try {
+    const roleNames = (req.access?.roles || []).map((role) => String(role.role_name || "").trim().toLowerCase());
+    const fullAccess = req.access?.isSuperAdmin === true || roleNames.some((name) => FULL_PARENT_PORTAL_ROLES.has(name));
+    if (fullAccess) {
+      req.parentPortalScope = { fullAccess: true, classIds: null, studentIds: null };
+      return next();
+    }
+    if (!roleNames.includes("class teacher") || !req.profile?.teacher_id || !req.profile?.school_id) {
+      return res.status(403).json({ success: false, message: "Huna ruhusa ya kusimamia Parent Portal." });
+    }
+    const { data: assignments, error: assignmentError } = await supabase.from("teacher_assignments")
+      .select("class_id").eq("school_id", Number(req.profile.school_id)).eq("teacher_id", Number(req.profile.teacher_id));
+    if (assignmentError) throw assignmentError;
+    const classIds = [...new Set((assignments || []).map((row) => Number(row.class_id)).filter(Number.isInteger))];
+    if (!classIds.length) {
+      req.parentPortalScope = { fullAccess: false, classIds: [], studentIds: [] };
+      return next();
+    }
+    const { data: students, error: studentsError } = await supabase.from("students")
+      .select("id").eq("school_id", Number(req.profile.school_id)).in("current_class_id", classIds);
+    if (studentsError) throw studentsError;
+    req.parentPortalScope = {
+      fullAccess: false,
+      classIds,
+      studentIds: (students || []).map((row) => row.id),
+    };
+    return next();
+  } catch (error) {
+    console.error("PARENT PORTAL STAFF ACCESS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kuthibitisha ruhusa za Parent Portal." });
+  }
+}
+
 async function parentAuth(req, res, next) {
   try {
     const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -288,23 +352,59 @@ router.post("/login", async (req, res) => {
 
 
 // Staff class group chat: limited to staff with student-view access in their own school.
-router.get("/staff/chat/:classId", authenticateUser, requirePermission("view_students"), async (req, res) => {
+
+router.get("/staff/classes", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  let query = supabase.from("classes").select("id,class_name").eq("school_id", schoolId).order("class_name");
+  if (!req.parentPortalScope.fullAccess) query = query.in("id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ success: false, message: "Unable to load authorized classes." });
+  return res.json({ success: true, classes: data || [] });
+});
+
+router.get("/staff/parents", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  let query = supabase.from("students")
+    .select("id,first_name,middle_name,last_name,admission_number,parent_name,parent_phone,parent_email,guardian_name,guardian_phone,current_class_id")
+    .eq("school_id", schoolId).order("first_name").limit(2000);
+  if (!req.parentPortalScope.fullAccess) query = query.in("current_class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
+  const { data: students, error } = await query;
+  if (error) return res.status(500).json({ success: false, message: "Unable to load parent contacts." });
+  const classIds = [...new Set((students || []).map((row) => row.current_class_id).filter(Boolean))];
+  const classes = classIds.length ? await supabase.from("classes").select("id,class_name").eq("school_id", schoolId).in("id", classIds) : { data: [] };
+  if (classes.error) return res.status(500).json({ success: false, message: "Unable to load class names." });
+  const classMap = new Map((classes.data || []).map((row) => [String(row.id), row.class_name]));
+  return res.json({ success: true, parents: (students || []).map((row) => ({
+    student_id: row.id,
+    student_name: fullName(row),
+    admission_number: row.admission_number,
+    parent_name: row.parent_name || row.guardian_name || "Not provided",
+    phone: row.parent_phone || row.guardian_phone || "",
+    email: row.parent_email || "",
+    class_name: classMap.get(String(row.current_class_id)) || "Unassigned",
+  })) });
+});
+
+router.get("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const classId = Number(req.params.classId);
   if (!Number.isInteger(schoolId) || !Number.isInteger(classId)) return res.status(400).json({ success: false, message: "Invalid class." });
   const classRow = await supabase.from("classes").select("id,school_id,class_name").eq("id", classId).eq("school_id", schoolId).maybeSingle();
   if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
+  if (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)) return res.status(403).json({ success: false, message: "Huruhusiwi kuona kundi la darasa hili." });
   const { data, error } = await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", schoolId).eq("class_id", classId).order("created_at", { ascending: true }).limit(300);
   if (error) return res.status(500).json({ success: false, message: "Unable to load class group chat." });
-  return res.json({ success: true, class: classRow.data, messages: data || [] });
+  const groupMembers = await loadClassParentMembers(schoolId, classId);
+  return res.json({ success: true, class: classRow.data, messages: data || [], group_members: groupMembers });
 });
-router.post("/staff/chat/:classId", authenticateUser, requirePermission("view_students"), async (req, res) => {
+router.post("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const classId = Number(req.params.classId);
   const message = String(req.body?.message || "").trim();
   if (!Number.isInteger(schoolId) || !Number.isInteger(classId) || !message || message.length > 4000) return res.status(400).json({ success: false, message: "Invalid class or message." });
   const classRow = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
   if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
+  if (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)) return res.status(403).json({ success: false, message: "Huruhusiwi kutuma ujumbe kwenye kundi hili." });
   const { data, error } = await supabase.from("parent_portal_chat_messages").insert({
     school_id: schoolId, class_id: classId, sender_user_id: req.user.id,
     sender_type: "staff", sender_name: req.profile.full_name || "School Staff", message,
@@ -314,17 +414,19 @@ router.post("/staff/chat/:classId", authenticateUser, requirePermission("view_st
 });
 
 
-router.get("/staff/meetings", authenticateUser, requirePermission("view_students"), async (req, res) => {
+router.get("/staff/meetings", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId)) return res.status(403).json({ success: false, message: "School access is required." });
-  const { data, error } = await supabase.from("parent_portal_meetings")
+  let meetingsQuery = supabase.from("parent_portal_meetings")
     .select("id,title,description,class_id,starts_at,ends_at,meeting_url,status")
     .eq("school_id", schoolId).order("starts_at", { ascending: true }).limit(100);
+  if (!req.parentPortalScope.fullAccess) meetingsQuery = meetingsQuery.in("class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
+  const { data, error } = await meetingsQuery;
   if (error) return res.status(500).json({ success: false, message: "Unable to load parent meetings." });
   return res.json({ success: true, meetings: data || [] });
 });
 
-router.post("/staff/meetings", authenticateUser, requirePermission("view_students"), async (req, res) => {
+router.post("/staff/meetings", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const classId = req.body?.class_id ? Number(req.body.class_id) : null;
   const title = String(req.body?.title || "").trim();
@@ -335,6 +437,7 @@ router.post("/staff/meetings", authenticateUser, requirePermission("view_student
   if (meetingUrl && !/^https?:\/\//i.test(meetingUrl)) return res.status(400).json({ success: false, message: "Video meeting link must start with https:// or http://." });
   if (classId !== null && (!Number.isInteger(classId) || classId <= 0)) return res.status(400).json({ success: false, message: "Invalid class selection." });
   if (!Number.isInteger(schoolId) || !title || Number.isNaN(startsAt.getTime()) || (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt <= startsAt))) return res.status(400).json({ success: false, message: "Enter a title and valid meeting start/end times." });
+  if (!req.parentPortalScope.fullAccess && (!classId || !req.parentPortalScope.classIds.includes(classId))) return res.status(403).json({ success: false, message: "Mwalimu wa darasa anaweza kuratibu mikutano ya darasa lake tu." });
   if (classId) {
     const classRow = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
     if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
@@ -351,29 +454,32 @@ router.post("/staff/meetings", authenticateUser, requirePermission("view_student
 
 
 // Staff review and reply to Parent Portal suggestions in their own school.
-router.get("/staff/suggestions", authenticateUser, requirePermission("view_students"), async (req, res) => {
+router.get("/staff/suggestions", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId)) return res.status(403).json({ success: false, message: "School access is required." });
   const { data, error } = await supabase.from("parent_portal_suggestions")
     .select("id,student_id,category,message,status,staff_reply,replied_at,created_at")
     .eq("school_id", schoolId).order("created_at", { ascending: false }).limit(200);
   if (error) return res.status(500).json({ success: false, message: "Unable to load parent suggestions." });
-  const studentIds = [...new Set((data || []).map(x => x.student_id))];
+  const scopedRows = req.parentPortalScope.fullAccess ? (data || []) : (data || []).filter((item) => req.parentPortalScope.studentIds.includes(item.student_id));
+  const studentIds = [...new Set(scopedRows.map(x => x.student_id))];
   const students = studentIds.length ? await supabase.from("students").select("id,first_name,middle_name,last_name,admission_number").eq("school_id", schoolId).in("id", studentIds) : { data: [] };
   if (students.error) return res.status(500).json({ success: false, message: "Unable to load student names." });
   const studentMap = new Map((students.data || []).map(s => [String(s.id), { name: [s.first_name,s.middle_name,s.last_name].filter(Boolean).join(" "), admission_number: s.admission_number }]));
-  return res.json({ success: true, suggestions: (data || []).map(x => ({ ...x, student: studentMap.get(String(x.student_id)) || null })) });
+  return res.json({ success: true, suggestions: scopedRows.map(x => ({ ...x, student: studentMap.get(String(x.student_id)) || null })) });
 });
-router.patch("/staff/suggestions/:id", authenticateUser, requirePermission("view_students"), async (req, res) => {
+router.patch("/staff/suggestions/:id", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const id = String(req.params.id || "");
   const reply = String(req.body?.staff_reply || "").trim();
   const status = String(req.body?.status || (reply ? "responded" : "under_review"));
   if (!Number.isInteger(schoolId) || !/^[0-9a-f-]{36}$/i.test(id) || !["pending","under_review","responded","closed"].includes(status) || reply.length > 4000) return res.status(400).json({ success: false, message: "Invalid suggestion update." });
-  const { data, error } = await supabase.from("parent_portal_suggestions").update({
+  let suggestionUpdate = supabase.from("parent_portal_suggestions").update({
     status, staff_reply: reply || null, replied_by: reply ? req.user.id : null,
     replied_at: reply ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
-  }).eq("id", id).eq("school_id", schoolId).select("id,status,staff_reply,replied_at").maybeSingle();
+  }).eq("id", id).eq("school_id", schoolId);
+  if (!req.parentPortalScope.fullAccess) suggestionUpdate = suggestionUpdate.in("student_id", req.parentPortalScope.studentIds.length ? req.parentPortalScope.studentIds : [-1]);
+  const { data, error } = await suggestionUpdate.select("id,status,staff_reply,replied_at").maybeSingle();
   if (error) return res.status(500).json({ success: false, message: "Unable to update parent suggestion." });
   if (!data) return res.status(404).json({ success: false, message: "Suggestion not found in your school." });
   return res.json({ success: true, suggestion: data });
@@ -403,12 +509,13 @@ router.get("/dashboard", async (req, res) => {
     const totalBalance = chargeRows.reduce((sum, row) => sum + Number(row.balance || 0), 0);
     const chat = classId ? await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", school.id).eq("class_id", classId).order("created_at", { ascending: true }).limit(200) : { data: [] };
     if (chat.error) throw chat.error;
+    const groupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];
     return res.json({
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
-      exams: exams.data || [], attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [],
+      exams: exams.data || [], attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
     });
   } catch (error) {
@@ -429,12 +536,21 @@ router.get("/results/:examId", async (req, res) => {
       supabase.from("student_marks").select("id,subject_id,marks,grade,remarks,status").eq("student_id", student.id).eq("exam_id", examId).order("subject_id"),
     ]);
     if (result.error || marks.error) throw result.error || marks.error;
-    if (result.data?.approved !== true) return res.json({ success: true, exam, result: null, marks: [] });
-    const subjectIds = [...new Set((marks.data || []).map((row) => row.subject_id).filter(Boolean))];
+    // Subject marks are visible as soon as they have been recorded. The overall
+    // result remains official only after the result row has been approved.
+    const markRows = marks.data || [];
+    const subjectIds = [...new Set(markRows.map((row) => row.subject_id).filter(Boolean))];
     const subjects = subjectIds.length ? await supabase.from("subjects").select("id,subject_name").in("id", subjectIds) : { data: [] };
     if (subjects.error) throw subjects.error;
     const subjectNames = new Map((subjects.data || []).map((subject) => [String(subject.id), subject.subject_name]));
-    return res.json({ success: true, exam, result: result.data, marks: (marks.data || []).map((row) => ({ ...row, subject_name: subjectNames.get(String(row.subject_id)) || "Subject" })) });
+    const approved = result.data?.approved === true;
+    return res.json({
+      success: true,
+      exam,
+      result: approved ? result.data : null,
+      result_status: approved ? "approved" : (markRows.length ? "pending_approval" : "not_entered"),
+      marks: markRows.map((row) => ({ ...row, subject_name: subjectNames.get(String(row.subject_id)) || "Subject" })),
+    });
   } catch (error) {
     console.error("PARENT RESULTS ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load examination results." });
