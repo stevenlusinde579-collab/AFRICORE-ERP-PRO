@@ -82,10 +82,10 @@ function StudentProfile() {
 
 
 
-    const loadParentPortalHistory = async () => {
-        if (!student?.id) return;
+    const loadParentPortalHistory = async (studentId = student?.id) => {
+        if (!studentId) return;
         try {
-            const response = await api.get(`/parent-portal/credential-history/${student.id}`);
+            const response = await api.get(`/parent-portal/credential-history/${studentId}`);
             setPortalHistory(response.data?.history || []);
         } catch (historyError) {
             console.error("PARENT PORTAL HISTORY ERROR:", historyError);
@@ -100,7 +100,7 @@ function StudentProfile() {
             const response = await api.post(`/parent-portal/resend/${student.id}`);
             const sms = response.data?.sms;
             setPortalMessage(sms?.success ? "Parent Portal SMS imetumwa kupitia NewHope." : `Akaunti ipo lakini SMS haijatumwa: ${sms?.error || response.data?.message || "Jaribu tena."}`);
-            await loadParentPortalHistory();
+            await loadParentPortalHistory(student.id);
         } catch (sendError) {
             setPortalMessage(sendError.response?.data?.message || "Imeshindikana kutuma Parent Portal SMS.");
         } finally {
@@ -162,7 +162,7 @@ function StudentProfile() {
         } else {
 
             setStudent(data);
-            setTimeout(() => loadParentPortalHistory(), 0);
+            loadParentPortalHistory(data.id);
 
         }
 
@@ -588,6 +588,29 @@ function StudentProfile() {
 
 
 
+
+            <div className="bg-white shadow rounded-xl p-6 mt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-xl font-bold">Parent Portal Credentials</h2>
+                        <p className="mt-1 text-sm text-gray-600">Tuma tena taarifa za kuingia kwa mzazi/mlezi kupitia NewHope SMS.</p>
+                    </div>
+                    <button type="button" onClick={resendParentPortalCredentials} disabled={portalLoading} className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-50">
+                        {portalLoading ? "Inatuma..." : "Resend Parent Portal SMS"}
+                    </button>
+                </div>
+                {portalMessage && <p className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{portalMessage}</p>}
+                <div className="mt-5">
+                    <h3 className="mb-2 font-semibold">SMS History</h3>
+                    {portalHistory.length ? portalHistory.map((item) => (
+                        <div key={item.id} className="flex flex-wrap justify-between gap-2 border-b py-3 text-sm">
+                            <span>{item.recipient_phone || "Namba haipo"} · {new Date(item.created_at).toLocaleString()}</span>
+                            <span className={item.status === "failed" ? "font-semibold text-red-600" : "font-semibold text-emerald-700"}>{item.status}</span>
+                            {item.error_message && <span className="w-full text-xs text-red-600">{item.error_message}</span>}
+                        </div>
+                    )) : <p className="text-sm text-gray-500">Hakuna historia ya SMS ya Parent Portal bado.</p>}
+                </div>
+            </div>
 
         </div>
 
