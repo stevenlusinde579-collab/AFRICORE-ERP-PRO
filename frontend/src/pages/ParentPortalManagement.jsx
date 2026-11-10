@@ -54,7 +54,12 @@ export default function ParentPortalManagement() {
     loadMeetings();
     loadSuggestions();
   }, [schoolId]);
-  useEffect(() => { if (classId) loadChat(classId); }, [classId]);
+  useEffect(() => {
+    if (!classId) return undefined;
+    loadChat(classId);
+    const refreshTimer = window.setInterval(() => loadChat(classId), 5000);
+    return () => window.clearInterval(refreshTimer);
+  }, [classId]);
 
   const sendChat = async (event) => {
     event.preventDefault(); if (!classId || !chatText.trim()) return;
