@@ -4341,7 +4341,12 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam
             <div className="mb-5">
                 <h3 className="font-extrabold text-sm mb-2">{isCseeExam ? "Class Performance & Division Distribution" : "Class Performance Summary"}</h3>
                 <table className="w-full border-collapse text-[8px] report-table">
-                    <thead><tr>{(isCseeExam ? ["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"] : ["Class","Students","Average","Pass Rate"]).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
+                    <thead><tr>{(isCseeExam
+                        ? ["Class","Students","Average","GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"]
+                        : isAlevelExam
+                            ? ["Class","Students","Principal Average","ACSEE GPA","Div I","Div II","Div III","Div IV","Div 0","Pass Rate"]
+                            : ["Class","Students","Average","Pass Rate"]
+                    ).map(h => <th key={h} className="border border-slate-400 p-1 text-center">{h}</th>)}</tr></thead>
                     <tbody>{classRows.map(row => <tr key={row.class_id}>
                         <td className="border border-slate-400 p-1 font-bold">{row.class_name}</td>
                         <td className="border border-slate-400 p-1 text-center">{row.students}</td>
@@ -4349,6 +4354,10 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam
                         {isCseeExam && <>
                             <td className="border border-slate-400 p-1 text-center font-bold">{row.gpa != null ? formatNumber(row.gpa,2) : "—"}</td>
                             {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.divisions?.[d] || 0}</td>)}
+                        </>}
+                        {isAlevelExam && <>
+                            <td className="border border-slate-400 p-1 text-center font-bold">{row.acseeGpa != null ? formatNumber(row.acseeGpa,2) : "—"}</td>
+                            {['I','II','III','IV','0'].map(d => <td key={d} className="border border-slate-400 p-1 text-center font-bold">{row.acseeDivisions?.[d] || 0}</td>)}
                         </>}
                         <td className="border border-slate-400 p-1 text-center">{formatNumber(row.passRate,1)}%</td>
                     </tr>)}</tbody>
