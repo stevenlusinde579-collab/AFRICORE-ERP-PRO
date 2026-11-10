@@ -1636,7 +1636,7 @@ export default function ResultsAnalysis() {
                 missingSubjects: subjectResults.filter(result => result.status === "No Marks").length
             };
         });
-    }, [students, examSubjects, calculateStudentSubject, classMap, exam, subjects, examGradingScales]);
+    }, [students, examSubjects, calculateStudentSubject, classMap, exam, subjects, examGradingScales, isAlevelClass, getAlevelResult]);
 
     const overallRankedStudents = useMemo(() => {
         const ranked = overallStudentAnalysis
@@ -1802,7 +1802,7 @@ export default function ResultsAnalysis() {
             subjectRows,
             classRows
         };
-    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam, isCseeClass]);
+    }, [examSubjects, students, calculateStudentSubject, overallStudentAnalysis, subjectMap, classMap, examGradingScales, isCseeExam, isCseeClass, isAlevelClass, getAlevelResult]);
 
     // ========================================================
     // CLASS OVERALL RESULT
