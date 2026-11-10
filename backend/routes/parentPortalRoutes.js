@@ -6,6 +6,7 @@ import { authenticateUser } from "../middleware/authMiddleware.js";
 import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 const router = express.Router();
+const loginAttempts = new Map();
 const scrypt = promisify(crypto.scrypt);
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://africorepro.vercel.app").replace(/\/$/, "");
 const TOKEN_SECRET = process.env.PARENT_PORTAL_JWT_SECRET || process.env.SUPABASE_SERVICE_KEY;
@@ -102,7 +103,7 @@ async function sendCredentialSms(student, account, sentBy = null) {
     if (String(credentials.approval_status || "").toLowerCase() !== "approved") throw new Error("Sender ID ya shule bado haijaidhinishwa.");
     const admission = String(student.admission_number || student.admission_no || "");
     const url = FRONTEND_URL + "/parent-portal?school=" + encodeURIComponent(student.school_id);
-    const message = "AFR ICORE PARENT PORTAL\nMwanafunzi: " + fullName(student) +
+    const message = "AFRICORE PARENT PORTAL\nMwanafunzi: " + fullName(student) +
       "\nShule: " + (student.school_name || "") +
       "\nUsername: " + account.username +
       "\nPassword ya awali: " + admission +
@@ -152,8 +153,13 @@ router.post("/provision", authenticateUser, requirePermission("create_students")
       if (insertError) throw insertError;
       account = data;
     } else {
-      const { error: updateError } = await supabase.from("parent_portal_accounts").update({ username, updated_at: new Date().toISOString() }).eq("id", account.id);
+      const initialPassword = await hashPassword(admission);
+      const { error: updateError } = await supabase.from("parent_portal_accounts").update({
+        username, password_hash: initialPassword.hash, password_salt: initialPassword.salt,
+        must_change_password: true, updated_at: new Date().toISOString(),
+      }).eq("id", account.id);
       if (updateError) throw updateError;
+      account = { ...account, username, password_hash: initialPassword.hash, password_salt: initialPassword.salt, must_change_password: true };
     }
     const delivery = await sendCredentialSms({ ...student, school_name: (await supabase.from("schools").select("school_name").eq("id", schoolId).single()).data?.school_name }, account, req.user.id);
     return res.json({ success: true, account_created: true, sms: delivery });
@@ -212,14 +218,23 @@ router.post("/login", async (req, res) => {
   try {
     const { data: school, error: schoolError } = await supabase.from("schools").select("id,is_active").eq("id", schoolId).maybeSingle();
     if (schoolError || !school || school.is_active !== true) return res.status(403).json({ success: false, message: "School not found or inactive." });
+    const attemptKey = String(req.ip || "unknown") + ":" + schoolId + ":" + username.toLowerCase();
+    const now = Date.now();
+    const prior = loginAttempts.get(attemptKey);
+    if (prior && prior.blockedUntil > now) return res.status(429).json({ success: false, message: "Umejaribu mara nyingi. Subiri dakika 15 kisha ujaribu tena." });
     const { data: matches, error } = await supabase.from("parent_portal_accounts")
       .select("id,student_id,school_id,username,password_hash,password_salt,must_change_password,is_active")
-      .eq("school_id", schoolId).ilike("username", username).eq("is_active", true).limit(5);
+      .eq("school_id", schoolId).eq("username", username).eq("is_active", true).limit(100);
     if (error) throw error;
     if (!matches?.length) return res.status(401).json({ success: false, message: "Username or password is incorrect." });
     let account = null;
     for (const candidate of matches) if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) { account = candidate; break; }
-    if (!account) return res.status(401).json({ success: false, message: "Username or password is incorrect." });
+    if (!account) {
+      const failed = (prior?.count || 0) + 1;
+      loginAttempts.set(attemptKey, { count: failed, blockedUntil: failed >= 10 ? now + 15 * 60 * 1000 : 0 });
+      return res.status(401).json({ success: false, message: "Username or password is incorrect." });
+    }
+    loginAttempts.delete(attemptKey);
     const student = await loadStudent(account.student_id, schoolId);
     if (!student || String(student.status || student.student_status || "Active").toLowerCase() === "inactive") return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
     await supabase.from("parent_portal_accounts").update({ last_login_at: new Date().toISOString() }).eq("id", account.id);
