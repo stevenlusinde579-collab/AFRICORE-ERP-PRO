@@ -440,6 +440,7 @@ export default function ResultsAnalysis() {
     const [examGradingScales, setExamGradingScales] = useState([]);
     const [studentCombinations, setStudentCombinations] = useState([]);
     const [combinationSubjectLinks, setCombinationSubjectLinks] = useState([]);
+    const [studentSubjectLinks, setStudentSubjectLinks] = useState([]);
 
     // --------------------------------------------------------
     // UI STATE
@@ -935,6 +936,21 @@ export default function ResultsAnalysis() {
                 setCombinationSubjectLinks([]);
             }
 
+            // Load each student's actual subject registrations. Some existing
+            // Advanced students were enrolled before combination_id was added,
+            // so their three registered Advanced subjects are the safe fallback.
+            const studentIdsForSubjects = [...new Set(studentData.map(row => idValue(row.id)).filter(Boolean))];
+            if (studentIdsForSubjects.length > 0) {
+                const { data: registeredSubjects, error: registeredSubjectsError } = await supabase
+                    .from("student_subjects")
+                    .select("student_id, subject_id, class_id, academic_year_id")
+                    .in("student_id", studentIdsForSubjects);
+                if (registeredSubjectsError) throw registeredSubjectsError;
+                setStudentSubjectLinks(registeredSubjects || []);
+            } else {
+                setStudentSubjectLinks([]);
+            }
+
             setStudents(studentData);
 
             console.info("RESULT ANALYSIS DATA LOADED", {
@@ -1017,6 +1033,16 @@ export default function ResultsAnalysis() {
         studentCombinations.map(row => [idValue(row.id), row])
     ), [studentCombinations]);
 
+    const studentSubjectsByStudentId = useMemo(() => {
+        const map = new Map();
+        studentSubjectLinks.forEach(link => {
+            const key = idValue(link.student_id);
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(link);
+        });
+        return map;
+    }, [studentSubjectLinks]);
+
     const isAlevelClass = useCallback(classId => {
         const cls = classMap.get(idValue(classId));
         const classSubjects = examSubjects.filter(es => idValue(es.class_id) === idValue(classId));
@@ -1029,12 +1055,74 @@ export default function ResultsAnalysis() {
     }, [exam, examSubjects, classMap, subjectMap]);
 
     const getAlevelResult = useCallback((student, subjectResults) => {
-        const principalSubjectIds = combinationSubjectsById.get(idValue(student?.combination_id)) || [];
+        const savedCombinationId = idValue(student?.combination_id);
+        const mappedPrincipalIds = combinationSubjectsById.get(savedCombinationId) || [];
+        const registeredRows = (studentSubjectsByStudentId.get(idValue(student?.id)) || [])
+            .filter(link => !link.class_id || idValue(link.class_id) === idValue(student?.class_id || student?.current_class_id))
+            .filter(link => subjectMap.get(idValue(link.subject_id))?.education_level === "Advanced");
+        const registeredPrincipalIds = [...new Set(registeredRows.map(link => idValue(link.subject_id)).filter(Boolean))];
+
+        // Prefer the official combination mapping. For legacy records with no
+        // combination_id, infer principal subjects only when exactly three
+        // Advanced subjects are registered to that student in the exam class.
+        const principalSubjectIds = mappedPrincipalIds.length === 3
+            ? mappedPrincipalIds
+            : (!savedCombinationId && registeredPrincipalIds.length === 3 ? registeredPrincipalIds : mappedPrincipalIds);
+        const registeredSubjectIds = [...new Set(registeredRows.map(link => idValue(link.subject_id)).filter(Boolean))];
+        const resultBySubject = new Map((subjectResults || []).map(row => [idValue(row.subject_id), row]));
+
+        // Build one row for every registered subject, even when the exam has
+        // no mark row yet. This keeps the full combination visible and makes
+        // missing marks distinct from a recorded zero.
+        const completeSubjectRows = registeredSubjectIds.map(subjectId => {
+            const existing = resultBySubject.get(subjectId);
+            if (existing) {
+                const subject = subjectMap.get(subjectId);
+                return { ...existing, subject, subject_name: getSubjectName(subject), isMissing: existing.status === "No Marks" };
+            }
+            const subject = subjectMap.get(subjectId);
+            return {
+                subject_id: subjectId,
+                exam_subject_id: null,
+                subject,
+                subject_name: getSubjectName(subject),
+                total: null,
+                rawTotal: null,
+                rawPossible: null,
+                possible: 100,
+                percentage: null,
+                grade: "—",
+                point: null,
+                pass: false,
+                questions: 0,
+                marked_questions: 0,
+                missing_questions: 0,
+                status: "No Marks",
+                source: "not_recorded",
+                isMissing: true
+            };
+        });
+        const calculationRows = completeSubjectRows.length ? completeSubjectRows : subjectResults;
+        const result = calculateAcseeResult(calculationRows, principalSubjectIds);
+        const principalIdSet = new Set(principalSubjectIds.map(idValue));
+        const registeredSubsidiaries = calculationRows
+            .filter(row => !principalIdSet.has(idValue(row.subject_id)))
+            .map(row => ({ ...row, isPrincipal: false }));
+        const registeredPrincipalRows = (result.principalSubjects || []).map(row => {
+            const subject = subjectMap.get(idValue(row.subject_id));
+            return { ...row, subject, subject_name: getSubjectName(subject) };
+        });
+        const registeredSubjectFallback = !savedCombinationId && registeredPrincipalIds.length === 3;
         return {
-            ...calculateAcseeResult(subjectResults, principalSubjectIds),
-            combination: combinationById.get(idValue(student?.combination_id)) || null
+            ...result,
+            principalSubjects: registeredPrincipalRows,
+            subsidiarySubjects: registeredSubsidiaries,
+            combination: combinationById.get(savedCombinationId) || null,
+            combinationLabel: combinationById.get(savedCombinationId)?.combination_code ||
+                (registeredSubjectFallback ? "Based on registered subjects" : null),
+            usedRegisteredSubjectsFallback: registeredSubjectFallback
         };
-    }, [combinationSubjectsById, combinationById]);
+    }, [combinationSubjectsById, combinationById, studentSubjectsByStudentId, subjectMap]);
 
     const isAlevelExam = useMemo(() => {
         const classIds = [...new Set(examSubjects.map(es => idValue(es.class_id)).filter(Boolean))];
@@ -2150,9 +2238,11 @@ export default function ResultsAnalysis() {
                     ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
                     : (full.pass ? "Passed" : "Failed"),
             acseeEligible: acsee.eligible,
+            isAlevelReport: reportIsAlevel,
             acseeComplete: acsee.complete,
             acseeReason: acsee.reason,
             acseeCombination: acsee.combination,
+            acseeCombinationLabel: acsee.combinationLabel || acsee.combination?.combination_code || null,
             acseeAggregate: acsee.aggregate,
             acseeGpa: acsee.gpa,
             acseeDivision: acsee.division,
@@ -4174,7 +4264,7 @@ function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGr
                     <DetailBox label="Division" value={divisionLabel} />
                 </>}
                 {isAlevel && <>
-                    <DetailBox label="Combination" value={report.acseeCombination?.combination_code || "Not assigned"} />
+                    <DetailBox label="Combination" value={report.acseeCombination?.combination_code || report.acseeCombinationLabel || "Based on registered subjects"} />
                     <DetailBox label="Principal Subjects" value={`${acseePrincipalSubjects.length}/3`} />
                     <DetailBox label="Principal Average" value={report.acseeEligible ? `${formatNumber(report.percentage, 1)}%` : "—"} />
                     <DetailBox label="Aggregate" value={report.acseeAggregate ?? "—"} />
@@ -4817,81 +4907,144 @@ function StudentTrace({
                 </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <DetailBox label="Admission" value={student.admission} />
-                <DetailBox label="Class" value={student.class_name} />
-                <DetailBox label="Jumla ya Marks" value={formatNumber(student.total)} />
-                <DetailBox label="Percentage" value={`${formatNumber(student.percentage, 1)}%`} />
-                <DetailBox label="Grade" value={student.grade || "—"} />
-                <DetailBox label="Position" value={student.position ? `${student.position}/${student.rankTotal || "—"}` : "—"} />
-                {isCseeClass?.(student.class_id) && <>
-                    <DetailBox label="Aggregate" value={student.cseeAggregate ?? "—"} />
-                    <DetailBox label="GPA" value={student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"} />
-                    <DetailBox label="Division" value={student.cseeDivision ? `Division ${student.cseeDivision}` : "—"} />
-                </>}
-                <DetailBox label="Status" value={student.percentage >= 40 ? "Passed" : "Failed"} />
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-slate-200 rounded-xl p-4">
-                    <label className="block text-sm font-extrabold text-slate-800 mb-2">Tabia kwa Ujumla</label>
-                    <textarea
-                        value={reportFields?.generalConduct || ""}
-                        onChange={event => updateReportField(student.id, "generalConduct", event.target.value)}
-                        rows={4}
-                        placeholder="Andika tathmini ya tabia ya mwanafunzi kwa ujumla..."
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-                <div className="border border-slate-200 rounded-xl p-4">
-                    <label className="block text-sm font-extrabold text-slate-800 mb-2">Bidii za Kazi za Mikono</label>
-                    <textarea
-                        value={reportFields?.manualWorkEffort || ""}
-                        onChange={event => updateReportField(student.id, "manualWorkEffort", event.target.value)}
-                        rows={4}
-                        placeholder="Andika tathmini ya bidii za kazi za mikono..."
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-            </div>
-
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-sm">
-                    Subject → Questions → Marks
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100">
-                                <th className="px-3 py-3">Subject</th>
-                                <th className="px-3 py-3">Mark</th>
-                                <th className="px-3 py-3">%</th>
-                                <th className="px-3 py-3">Grade</th>
-                                <th className="px-3 py-3">Questions</th>
-                                <th className="px-3 py-3">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {results.map(result => (
-                                <tr key={result.exam_subject_id} className="border-b last:border-0 border-slate-100">
-                                    <td className="px-3 py-3 font-bold text-slate-800">
-                                        {getSubjectName(subjectMap.get(idValue(result.subject_id)))}
-                                    </td>
-                                    <td className="px-3 py-3 font-semibold">
-                                        {formatNumber(result.total)}
-                                    </td>
-                                    <td className="px-3 py-3">{formatNumber(result.percentage, 1)}%</td>
-                                    <td className="px-3 py-3">
-                                        <span className={`px-2 py-1 rounded-full border text-xs font-bold ${gradeClass(getGrade(result.percentage))}`}>
-                                            {getGrade(result.percentage)}
-                                        </span>
-                                    </td>
-                                    <td className="px-3 py-3">{result.marked_questions}/{result.questions}</td>
-                                    <td className="px-3 py-3 font-bold">{result.pass ? "Passed" : "Failed"}</td>
-                                </tr>
+            {(() => {
+                // Use the education level resolved by the report builder.
+                // Student rows do not always carry a class_name field into this modal.
+                const isAlevel = Boolean(
+                    student.isAlevelReport ||
+                    student.acseeCombination ||
+                    student.acseePrincipalSubjects?.length ||
+                    student.combination_id ||
+                    /advanced|form\\s*(5|6)/i.test([student.class_name, student.className, student.class, student.academic_level].filter(Boolean).join(" "))
+                );
+                const principalKeys = new Set((student.acseePrincipalSubjects || []).flatMap(row => [
+                    idValue(row.subject_id), idValue(row.exam_subject_id)
+                ]).filter(Boolean));
+                const subsidiaryKeys = new Set((student.acseeSubsidiarySubjects || []).flatMap(row => [
+                    idValue(row.subject_id), idValue(row.exam_subject_id)
+                ]).filter(Boolean));
+                const principalResults = isAlevel
+                    ? (student.acseePrincipalSubjects || results.filter(row => principalKeys.has(idValue(row.subject_id)) || principalKeys.has(idValue(row.exam_subject_id))))
+                    : [];
+                const subsidiaryResults = isAlevel
+                    ? (student.acseeSubsidiarySubjects || results.filter(row => subsidiaryKeys.has(idValue(row.subject_id)) || subsidiaryKeys.has(idValue(row.exam_subject_id))))
+                    : [];
+                const classifiedExamSubjectIds = new Set([...principalResults, ...subsidiaryResults].map(row => idValue(row.exam_subject_id)).filter(Boolean));
+                const classifiedSubjectIds = new Set([...principalResults, ...subsidiaryResults].map(row => idValue(row.subject_id)).filter(Boolean));
+                const otherResults = isAlevel ? results.filter(row =>
+                    !classifiedExamSubjectIds.has(idValue(row.exam_subject_id)) &&
+                    !classifiedSubjectIds.has(idValue(row.subject_id))
+                ) : [];
+                const subjectRows = (rows, label) => (
+                    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                            <div>
+                                <h4 className="text-sm font-extrabold text-slate-900">{label}</h4>
+                                <p className="mt-0.5 text-[11px] text-slate-500">{rows.length} subject{rows.length === 1 ? "" : "s"}</p>
+                            </div>
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{rows.filter(row => row.status === "Complete").length}/{rows.length} complete</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[620px] text-sm">
+                                <thead className="bg-white text-[10px] uppercase tracking-wider text-slate-500">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left">Subject</th>
+                                        <th className="px-3 py-3 text-right">Mark</th>
+                                        <th className="px-3 py-3 text-right">Percentage</th>
+                                        <th className="px-3 py-3 text-center">Grade</th>
+                                        <th className="px-3 py-3 text-center">Questions</th>
+                                        <th className="px-4 py-3 text-right">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.length ? rows.map(row => {
+                                        const subjectName = getSubjectName(subjectMap.get(idValue(row.subject_id)));
+                                        // A recorded final subject mark of zero is a real mark, not missing data.
+                                        const hasRecordedMarks = row.status === "Complete" || row.source === "exam_marks" || numberValue(row.marked_questions) > 0 || numberValue(row.total) > 0;
+                                        const statusLabel = !hasRecordedMarks ? "No marks" : row.status === "Partial" ? "Incomplete" : row.pass ? "Passed" : "Failed";
+                                        return (
+                                            <tr key={row.exam_subject_id || row.subject_id} className="border-t border-slate-100 hover:bg-slate-50/70">
+                                                <td className="px-4 py-3 font-bold text-slate-800">{subjectName}</td>
+                                                <td className="px-3 py-3 text-right font-extrabold tabular-nums">{hasRecordedMarks ? formatNumber(row.total) : "—"}</td>
+                                                <td className="px-3 py-3 text-right tabular-nums">{hasRecordedMarks ? `${formatNumber(row.percentage, 1)}%` : "—"}</td>
+                                                <td className="px-3 py-3 text-center"><span className={`inline-flex min-w-8 justify-center rounded-lg border px-2 py-1 text-xs font-extrabold ${hasRecordedMarks ? gradeClass(getGrade(row.percentage)) : "border-slate-200 bg-slate-50 text-slate-400"}`}>{hasRecordedMarks ? getGrade(row.percentage) : "—"}</span></td>
+                                                <td className="px-3 py-3 text-center text-xs tabular-nums text-slate-600">{row.marked_questions}/{row.questions}</td>
+                                                <td className="px-4 py-3 text-right"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${!hasRecordedMarks ? "bg-slate-100 text-slate-600" : row.status === "Partial" ? "bg-amber-50 text-amber-700" : row.pass ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{statusLabel}</span></td>
+                                            </tr>
+                                        );
+                                    }) : <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-400">No subject records available</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                );
+                return isAlevel ? (
+                    <div className="space-y-5">
+                        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-5 text-white shadow-lg md:p-7">
+                            <div className="absolute -right-12 -top-16 h-52 w-52 rounded-full border-[24px] border-white/5" />
+                            <div className="relative flex flex-col justify-between gap-5 md:flex-row md:items-end">
+                                <div>
+                                    <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-blue-100">Advanced Level · Academic Profile</div>
+                                    <h3 className="text-2xl font-black tracking-tight md:text-3xl">{student.full_name}</h3>
+                                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-blue-100">
+                                        <span>Admission: <strong className="text-white">{student.admission || "—"}</strong></span>
+                                        <span>Class: <strong className="text-white">{student.class_name || "—"}</strong></span>
+                                        <span>Combination: <strong className="text-white">{student.acseeCombination?.combination_code || student.acseeCombinationLabel || "Based on registered subjects"}</strong></span>
+                                    </div>
+                                </div>
+                                <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 backdrop-blur">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Academic standing</div>
+                                    <div className="mt-1 text-xl font-black">{student.acseeDivisionLabel || student.reportStatus || "Awaiting marks"}</div>
+                                    <div className="mt-1 text-xs text-blue-100">{student.position ? `Position ${student.position}/${student.rankTotal || "—"}` : "Position unavailable"}</div>
+                                </div>
+                            </div>
+                        </section>
+                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                            {[
+                                ["Principal Marks", student.acseeEligible ? formatNumber(student.total) + " / 300" : "—"],
+                                ["Principal Average", student.acseeEligible ? formatNumber(student.percentage, 1) + "%" : "—"],
+                                ["Aggregate", student.acseeAggregate ?? "—"],
+                                ["GPA", student.acseeGpa != null ? formatNumber(student.acseeGpa, 2) : "—"],
+                                ["Division", student.acseeDivisionLabel || "Pending"]
+                            ].map(([label, value], index) => (
+                                <div key={label} className={`rounded-2xl border p-4 ${index === 4 ? "border-indigo-200 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                                    <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">{label}</div>
+                                    <div className="mt-2 text-xl font-black text-slate-900 md:text-2xl">{value}</div>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                        {student.acseeReason && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{student.acseeReason}</div>}
+                        {subjectRows(principalResults, "Principal Combination Subjects")}
+                        {subjectRows(subsidiaryResults, "Subsidiary Subjects")}
+                        {otherResults.length > 0 && subjectRows(otherResults, "Other Registered Subjects")}
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                        <DetailBox label="Admission" value={student.admission} />
+                        <DetailBox label="Class" value={student.class_name} />
+                        <DetailBox label="Jumla ya Marks" value={formatNumber(student.total)} />
+                        <DetailBox label="Percentage" value={`${formatNumber(student.percentage, 1)}%`} />
+                        <DetailBox label="Grade" value={student.grade || "—"} />
+                        <DetailBox label="Position" value={student.position ? `${student.position}/${student.rankTotal || "—"}` : "—"} />
+                        {isCseeClass?.(student.class_id) && <>
+                            <DetailBox label="Aggregate" value={student.cseeAggregate ?? "—"} />
+                            <DetailBox label="GPA" value={student.cseeGpa != null ? formatNumber(student.cseeGpa, 2) : "—"} />
+                            <DetailBox label="Division" value={student.cseeDivision ? `Division ${student.cseeDivision}` : "—"} />
+                        </>}
+                        <DetailBox label="Status" value={student.percentage >= 40 ? "Passed" : "Failed"} />
+                    </div>
+                );
+            })()}
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <label className="mb-2 block text-sm font-extrabold text-slate-800">Tabia kwa Ujumla</label>
+                    <textarea value={reportFields?.generalConduct || ""} onChange={event => updateReportField(student.id, "generalConduct", event.target.value)} rows={3} placeholder="Andika tathmini ya tabia ya mwanafunzi kwa ujumla..." className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <label className="mb-2 block text-sm font-extrabold text-slate-800">Bidii za Kazi za Mikono</label>
+                    <textarea value={reportFields?.manualWorkEffort || ""} onChange={event => updateReportField(student.id, "manualWorkEffort", event.target.value)} rows={3} placeholder="Andika tathmini ya bidii za kazi za mikono..." className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
             </div>
 
