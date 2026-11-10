@@ -471,8 +471,10 @@ router.post("/staff/meetings", authenticateUser, parentPortalStaffAccess, async 
   const description = String(req.body?.description || "").trim();
   const startsAt = new Date(req.body?.starts_at);
   const endsAt = req.body?.ends_at ? new Date(req.body.ends_at) : null;
-  const meetingUrl = String(req.body?.meeting_url || "").trim();
-  if (meetingUrl && !/^https?:\/\//i.test(meetingUrl)) return res.status(400).json({ success: false, message: "Video meeting link must start with https:// or http://." });
+  const requestedMeetingUrl = String(req.body?.meeting_url || "").trim();
+  if (requestedMeetingUrl && !/^https?:\/\//i.test(requestedMeetingUrl)) return res.status(400).json({ success: false, message: "Video meeting link must start with https:// or http://." });
+  const meetingUrl = requestedMeetingUrl || ("https://meet.jit.si/AfriCoreParent-" + schoolId + "-" + crypto.randomUUID());
+  const meetingProvider = requestedMeetingUrl ? "External video conference" : "Jitsi Meet · Parent Portal";
   if (classId !== null && (!Number.isInteger(classId) || classId <= 0)) return res.status(400).json({ success: false, message: "Invalid class selection." });
   if (!Number.isInteger(schoolId) || !title || Number.isNaN(startsAt.getTime()) || (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt <= startsAt))) return res.status(400).json({ success: false, message: "Enter a title and valid meeting start/end times." });
   if (!req.parentPortalScope.fullAccess && (!classId || !req.parentPortalScope.classIds.includes(classId))) return res.status(403).json({ success: false, message: "Mwalimu wa darasa anaweza kuratibu mikutano ya darasa lake tu." });
@@ -483,7 +485,7 @@ router.post("/staff/meetings", authenticateUser, parentPortalStaffAccess, async 
   const { data, error } = await supabase.from("parent_portal_meetings").insert({
     school_id: schoolId, class_id: classId, title, description: description || null,
     starts_at: startsAt.toISOString(), ends_at: endsAt?.toISOString() || null,
-    meeting_url: meetingUrl || null, meeting_provider: String(req.body?.meeting_provider || "").trim() || null,
+    meeting_url: meetingUrl, meeting_provider: meetingProvider,
     created_by: req.user.id,
   }).select("*").single();
   if (error) return res.status(500).json({ success: false, message: "Unable to schedule parent meeting." });
@@ -561,6 +563,37 @@ router.get("/dashboard", async (req, res) => {
   } catch (error) {
     console.error("PARENT DASHBOARD ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load student information." });
+  }
+});
+
+router.get("/finance", async (req, res) => {
+  const { student, school } = req.parent;
+  try {
+    const [charges, payments] = await Promise.all([
+      supabase.schema("finance").from("student_charges")
+        .select("id,description,amount,paid_amount,balance,due_date,status,term_number,charge_date,invoice_number,created_at")
+        .eq("school_id", school.id).eq("student_id", student.id).order("charge_date", { ascending: false }).limit(200),
+      supabase.schema("finance").from("student_payments")
+        .select("id,payment_number,payment_date,amount,payment_method,provider_name,reference_number,description,status,created_at")
+        .eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(200),
+    ]);
+    if (charges.error || payments.error) throw charges.error || payments.error;
+    const chargeRows = charges.data || [];
+    const paymentRows = payments.data || [];
+    return res.json({
+      success: true,
+      finance: {
+        total_charged: chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        total_paid: paymentRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        balance: chargeRows.reduce((sum, row) => sum + Number(row.balance ?? (Number(row.amount || 0) - Number(row.paid_amount || 0))), 0),
+        charges: chargeRows,
+        payments: paymentRows,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("PARENT FINANCE REFRESH ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kusasisha taarifa za fedha." });
   }
 });
 
