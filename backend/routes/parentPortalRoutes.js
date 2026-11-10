@@ -475,6 +475,8 @@ router.post("/chat", async (req, res) => {
   const { student, school } = req.parent;
   if (!student.current_class_id) return res.status(400).json({ success: false, message: "Student has no active class for group chat." });
   if (!message || message.length > 4000) return res.status(400).json({ success: false, message: "Message must be between 1 and 4000 characters." });
+  const classRow = await supabase.from("classes").select("id").eq("id", student.current_class_id).eq("school_id", school.id).maybeSingle();
+  if (classRow.error || !classRow.data) return res.status(403).json({ success: false, message: "Student's current class is not available in this school." });
   const { data, error } = await supabase.from("parent_portal_chat_messages").insert({
     school_id: school.id, class_id: student.current_class_id, student_id: student.id,
     parent_account_id: req.parent.account.id, sender_type: "parent", sender_name: "Mzazi wa " + fullName(student), message,
