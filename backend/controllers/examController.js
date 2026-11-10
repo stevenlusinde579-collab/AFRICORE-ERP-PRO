@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase.js";
 import { askGemini } from "../services/gemini.service.js";
+import { filterStudentsBySubjectRegistration } from "../services/studentSubjectEligibility.js";
 
 // =====================================================
 // GET ALL EXAMS
@@ -806,6 +807,51 @@ export const getStudentsForExamSubject = async (
             students =
                 fallbackStudents || [];
         }
+
+        // -------------------------------------------------
+        // STRICT SUBJECT REGISTRATION ELIGIBILITY
+        // -------------------------------------------------
+        // A class roster is not a subject roster. A learner may
+        // attend Form 5 while registered for ECA, PCB, HGE, etc.
+        // Only students registered for this exact subject + class
+        // + exam academic year may enter marks for this paper.
+        // Never fall back to every student in the class.
+        // -------------------------------------------------
+
+        let registrationsQuery = supabase
+            .from("student_subjects")
+            .select("student_id, subject_id, class_id, academic_year_id")
+            .eq("subject_id", examSubject.subject_id)
+            .eq("class_id", examSubject.class_id);
+
+        if (
+            examData?.academic_year_id !== null &&
+            examData?.academic_year_id !== undefined
+        ) {
+            registrationsQuery = registrationsQuery.eq(
+                "academic_year_id",
+                examData.academic_year_id
+            );
+        }
+
+        const {
+            data: subjectRegistrations,
+            error: subjectRegistrationsError
+        } = await registrationsQuery;
+
+        if (subjectRegistrationsError) {
+            throw subjectRegistrationsError;
+        }
+
+        students = filterStudentsBySubjectRegistration(
+            students,
+            subjectRegistrations || [],
+            {
+                subjectId: examSubject.subject_id,
+                classId: examSubject.class_id,
+                academicYearId: examData?.academic_year_id ?? null
+            }
+        );
 
         students.sort(
             (a, b) =>
