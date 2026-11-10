@@ -2150,6 +2150,7 @@ export default function ResultsAnalysis() {
                     ? (csee.bestSeven?.length === 7 && (csee.bestSeven.reduce((sum, row) => sum + numberValue(row.total), 0) / 700) * 100 >= 40 ? "Passed" : "Failed")
                     : (full.pass ? "Passed" : "Failed"),
             acseeEligible: acsee.eligible,
+            isAlevelReport: reportIsAlevel,
             acseeComplete: acsee.complete,
             acseeReason: acsee.reason,
             acseeCombination: acsee.combination,
@@ -4819,10 +4820,14 @@ function StudentTrace({
 
 
             {(() => {
+                // Use the education level resolved by the report builder.
+                // Student rows do not always carry a class_name field into this modal.
                 const isAlevel = Boolean(
+                    student.isAlevelReport ||
                     student.acseeCombination ||
                     student.acseePrincipalSubjects?.length ||
-                    /advanced|form\\s*(5|6)/i.test(student.class_name || "")
+                    student.combination_id ||
+                    /advanced|form\\s*(5|6)/i.test([student.class_name, student.className, student.class, student.academic_level].filter(Boolean).join(" "))
                 );
                 const principalKeys = new Set((student.acseePrincipalSubjects || []).flatMap(row => [
                     idValue(row.subject_id), idValue(row.exam_subject_id)
@@ -4862,7 +4867,8 @@ function StudentTrace({
                                 <tbody>
                                     {rows.length ? rows.map(row => {
                                         const subjectName = getSubjectName(subjectMap.get(idValue(row.subject_id)));
-                                        const hasRecordedMarks = row.status !== "No Marks" && (numberValue(row.marked_questions) > 0 || numberValue(row.total) > 0);
+                                        // A recorded final subject mark of zero is a real mark, not missing data.
+                                        const hasRecordedMarks = row.status === "Complete" || row.source === "exam_marks" || numberValue(row.marked_questions) > 0 || numberValue(row.total) > 0;
                                         const statusLabel = !hasRecordedMarks ? "No marks" : row.status === "Partial" ? "Incomplete" : row.pass ? "Passed" : "Failed";
                                         return (
                                             <tr key={row.exam_subject_id} className="border-t border-slate-100 hover:bg-slate-50/70">
