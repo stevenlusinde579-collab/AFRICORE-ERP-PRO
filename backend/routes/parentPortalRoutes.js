@@ -73,7 +73,7 @@ async function loadClassParentMembers(schoolId, classId) {
     .select("student_id,username,is_active").eq("school_id", schoolId).eq("is_active", true).in("student_id", ids);
   if (accountsError) throw accountsError;
   const accountMap = new Map((accounts || []).map((row) => [String(row.student_id), row]));
-  return studentRows.filter((row) => accountMap.has(String(row.id))).map((row) => {
+  const parentMembers = studentRows.filter((row) => accountMap.has(String(row.id))).map((row) => {
     const account = accountMap.get(String(row.id));
     const studentName = fullName(row);
     return {
@@ -81,8 +81,46 @@ async function loadClassParentMembers(schoolId, classId) {
       student_name: studentName,
       parent_name: row.parent_name || row.guardian_name || ("Mzazi wa " + studentName),
       username: account.username,
+      participant_type: "parent",
+      participant_key: "parent:" + account.id,
+      is_online: false,
     };
   });
+
+  const [classTeachers, subjectTeachers] = await Promise.all([
+    supabase.from("teacher_classes").select("teacher_id").eq("class_id", classId),
+    supabase.from("teacher_assignments").select("teacher_id").eq("school_id", schoolId).eq("class_id", classId),
+  ]);
+  if (classTeachers.error || subjectTeachers.error) throw classTeachers.error || subjectTeachers.error;
+  const teacherIds = [...new Set([...(classTeachers.data || []), ...(subjectTeachers.data || [])].map((row) => Number(row.teacher_id)).filter(Number.isInteger))];
+  let staffMembers = [];
+  if (teacherIds.length) {
+    const { data: teachers, error: teachersError } = await supabase.from("teachers")
+      .select("id,first_name,middle_name,last_name,user_id,status,school_id")
+      .eq("school_id", schoolId).in("id", teacherIds);
+    if (teachersError) throw teachersError;
+    const activeTeachers = (teachers || []).filter((row) => !row.status || !["inactive", "terminated", "left"].includes(String(row.status).toLowerCase()));
+    const userIds = activeTeachers.map((row) => row.user_id).filter(Boolean);
+    const profiles = userIds.length ? await supabase.from("profiles").select("id,full_name").eq("school_id", schoolId).in("id", userIds) : { data: [] };
+    if (profiles.error) throw profiles.error;
+    const profileMap = new Map((profiles.data || []).map((row) => [String(row.id), row.full_name]));
+    staffMembers = activeTeachers.filter((row) => row.user_id).map((row) => ({
+      id: "staff:" + row.user_id,
+      user_id: row.user_id,
+      display_name: profileMap.get(String(row.user_id)) || [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
+      role_label: "Mwalimu",
+      participant_type: "staff",
+      participant_key: "staff:" + row.user_id,
+      is_online: false,
+    }));
+  }
+
+  const presence = await supabase.from("parent_portal_presence")
+    .select("participant_key,last_seen_at").eq("school_id", schoolId).eq("class_id", classId);
+  if (presence.error) throw presence.error;
+  const cutoff = Date.now() - 60000;
+  const onlineMap = new Map((presence.data || []).map((row) => [row.participant_key, new Date(row.last_seen_at).getTime() >= cutoff]));
+  return [...parentMembers, ...staffMembers].map((member) => ({ ...member, is_online: onlineMap.get(member.participant_key) === true }));
 }
 
 const FULL_PARENT_PORTAL_ROLES = new Set([
@@ -100,10 +138,15 @@ async function parentPortalStaffAccess(req, res, next) {
     if (!roleNames.includes("class teacher") || !req.profile?.teacher_id || !req.profile?.school_id) {
       return res.status(403).json({ success: false, message: "Huna ruhusa ya kusimamia Parent Portal." });
     }
-    const { data: assignments, error: assignmentError } = await supabase.from("teacher_assignments")
-      .select("class_id").eq("school_id", Number(req.profile.school_id)).eq("teacher_id", Number(req.profile.teacher_id));
-    if (assignmentError) throw assignmentError;
-    const classIds = [...new Set((assignments || []).map((row) => Number(row.class_id)).filter(Number.isInteger))];
+    const [assignments, classTeacherAssignments] = await Promise.all([
+      supabase.from("teacher_assignments").select("class_id")
+        .eq("school_id", Number(req.profile.school_id)).eq("teacher_id", Number(req.profile.teacher_id)),
+      supabase.from("teacher_classes").select("class_id")
+        .eq("teacher_id", Number(req.profile.teacher_id)),
+    ]);
+    if (assignments.error || classTeacherAssignments.error) throw assignments.error || classTeacherAssignments.error;
+    const classIds = [...new Set([...(assignments.data || []), ...(classTeacherAssignments.data || [])]
+      .map((row) => Number(row.class_id)).filter(Number.isInteger))];
     if (!classIds.length) {
       req.parentPortalScope = { fullAccess: false, classIds: [], studentIds: [] };
       return next();
@@ -433,8 +476,10 @@ router.post("/staff/meetings", authenticateUser, parentPortalStaffAccess, async 
   const description = String(req.body?.description || "").trim();
   const startsAt = new Date(req.body?.starts_at);
   const endsAt = req.body?.ends_at ? new Date(req.body.ends_at) : null;
-  const meetingUrl = String(req.body?.meeting_url || "").trim();
-  if (meetingUrl && !/^https?:\/\//i.test(meetingUrl)) return res.status(400).json({ success: false, message: "Video meeting link must start with https:// or http://." });
+  const requestedMeetingUrl = String(req.body?.meeting_url || "").trim();
+  if (requestedMeetingUrl && !/^https?:\/\//i.test(requestedMeetingUrl)) return res.status(400).json({ success: false, message: "Video meeting link must start with https:// or http://." });
+  const meetingUrl = requestedMeetingUrl || ("https://meet.jit.si/AfriCoreParent-" + schoolId + "-" + crypto.randomUUID());
+  const meetingProvider = requestedMeetingUrl ? "External video conference" : "Jitsi Meet · Parent Portal";
   if (classId !== null && (!Number.isInteger(classId) || classId <= 0)) return res.status(400).json({ success: false, message: "Invalid class selection." });
   if (!Number.isInteger(schoolId) || !title || Number.isNaN(startsAt.getTime()) || (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt <= startsAt))) return res.status(400).json({ success: false, message: "Enter a title and valid meeting start/end times." });
   if (!req.parentPortalScope.fullAccess && (!classId || !req.parentPortalScope.classIds.includes(classId))) return res.status(403).json({ success: false, message: "Mwalimu wa darasa anaweza kuratibu mikutano ya darasa lake tu." });
@@ -445,7 +490,7 @@ router.post("/staff/meetings", authenticateUser, parentPortalStaffAccess, async 
   const { data, error } = await supabase.from("parent_portal_meetings").insert({
     school_id: schoolId, class_id: classId, title, description: description || null,
     starts_at: startsAt.toISOString(), ends_at: endsAt?.toISOString() || null,
-    meeting_url: meetingUrl || null, meeting_provider: String(req.body?.meeting_provider || "").trim() || null,
+    meeting_url: meetingUrl, meeting_provider: meetingProvider,
     created_by: req.user.id,
   }).select("*").single();
   if (error) return res.status(500).json({ success: false, message: "Unable to schedule parent meeting." });
@@ -491,36 +536,69 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, exams, attendance, suggestions] = await Promise.all([
+    const [classResult, charges, payments, announcements, meetings, exams, attendance, suggestions] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
-      supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
-      supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
-      supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
-      supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).or("class_id.is.null,class_id.eq." + Number(classId || 0)).eq("status", "scheduled").order("starts_at", { ascending: true }).limit(50),
+      supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,charge_date,invoice_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("charge_date", { ascending: false }).limit(200),
+      supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,provider_name,reference_number,description,status,created_at").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(200),
+      classId ? supabase.from("parent_portal_announcements").select("id,title,message,category,class_id,created_at").eq("school_id", school.id).eq("status", "published").or("class_id.is.null,class_id.eq." + Number(classId)).order("created_at", { ascending: false }).limit(100)
+        : supabase.from("parent_portal_announcements").select("id,title,message,category,class_id,created_at").eq("school_id", school.id).eq("status", "published").is("class_id", null).order("created_at", { ascending: false }).limit(100),
+      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status,class_id").eq("school_id", school.id).or("class_id.is.null,class_id.eq." + Number(classId || 0)).eq("status", "scheduled").order("starts_at", { ascending: true }).limit(50),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,exams,attendance,suggestions]) if (result.error) throw result.error;
+    for (const result of [charges,payments,announcements,meetings,exams,attendance,suggestions]) if (result.error) throw result.error;
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
-    const totalBalance = chargeRows.reduce((sum, row) => sum + Number(row.balance || 0), 0);
+    // Match the accountant's getStudentReceivables summary exactly.
+    const paymentRows = payments.data || [];
+    const totalPaid = paymentRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const totalBalance = chargeRows.reduce((sum, row) => sum + Number(row.balance ?? (Number(row.amount || 0) - Number(row.paid_amount || 0))), 0);
     const chat = classId ? await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", school.id).eq("class_id", classId).order("created_at", { ascending: true }).limit(200) : { data: [] };
     if (chat.error) throw chat.error;
     const groupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];
     return res.json({
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
-      finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
-      communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
+      finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: paymentRows, summary_source: "finance.getStudentReceivables" },
+      announcements: announcements.data || [], meetings: meetings.data || [],
       exams: exams.data || [], attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
     });
   } catch (error) {
     console.error("PARENT DASHBOARD ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load student information." });
+  }
+});
+
+router.get("/finance", async (req, res) => {
+  const { student, school } = req.parent;
+  try {
+    const [charges, payments] = await Promise.all([
+      supabase.schema("finance").from("student_charges")
+        .select("id,description,amount,paid_amount,balance,due_date,status,term_number,charge_date,invoice_number,created_at")
+        .eq("school_id", school.id).eq("student_id", student.id).order("charge_date", { ascending: false }).limit(200),
+      supabase.schema("finance").from("student_payments")
+        .select("id,payment_number,payment_date,amount,payment_method,provider_name,reference_number,description,status,created_at")
+        .eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(200),
+    ]);
+    if (charges.error || payments.error) throw charges.error || payments.error;
+    const chargeRows = charges.data || [];
+    const paymentRows = payments.data || [];
+    return res.json({
+      success: true,
+      finance: {
+        total_charged: chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        total_paid: paymentRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        balance: chargeRows.reduce((sum, row) => sum + Number(row.balance ?? (Number(row.amount || 0) - Number(row.paid_amount || 0))), 0),
+        charges: chargeRows,
+        payments: paymentRows,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("PARENT FINANCE REFRESH ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kusasisha taarifa za fedha." });
   }
 });
 
@@ -599,6 +677,72 @@ router.post("/chat", async (req, res) => {
   }).select("id,sender_type,sender_name,message,created_at").single();
   if (error) return res.status(500).json({ success: false, message: "Unable to send class message." });
   return res.json({ success: true, message: data });
+});
+
+
+router.post("/presence", async (req, res) => {
+  const { student, school, account } = req.parent;
+  const classId = Number(student.current_class_id);
+  if (!Number.isInteger(classId) || classId <= 0) return res.status(400).json({ success: false, message: "Mwanafunzi hana darasa linalotumika." });
+  const participantKey = "parent:" + account.id;
+  const { error } = await supabase.from("parent_portal_presence").upsert({
+    school_id: school.id, class_id: classId, parent_account_id: account.id,
+    user_id: null, participant_type: "parent", participant_key: participantKey,
+    display_name: "Mzazi wa " + fullName(student), last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }, { onConflict: "class_id,participant_key" });
+  if (error) return res.status(500).json({ success: false, message: "Imeshindikana kusasisha hali ya online." });
+  return res.json({ success: true });
+});
+
+router.post("/staff/presence/:classId", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const classId = Number(req.params.classId);
+  if (!Number.isInteger(classId) || (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId))) return res.status(403).json({ success: false, message: "Huruhusiwi kuingia kwenye kundi hili." });
+  const participantKey = "staff:" + req.user.id;
+  const { error } = await supabase.from("parent_portal_presence").upsert({
+    school_id: schoolId, class_id: classId, parent_account_id: null, user_id: req.user.id,
+    participant_type: "staff", participant_key: participantKey,
+    display_name: req.profile?.full_name || "Staff", last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }, { onConflict: "class_id,participant_key" });
+  if (error) return res.status(500).json({ success: false, message: "Imeshindikana kusasisha hali ya online." });
+  return res.json({ success: true });
+});
+
+router.get("/staff/announcements", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  let query = supabase.from("parent_portal_announcements").select("id,title,message,category,class_id,status,created_at")
+    .eq("school_id", schoolId).order("created_at", { ascending: false }).limit(200);
+  if (!req.parentPortalScope.fullAccess) query = query.or("class_id.is.null,class_id.in.(" + (req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds.join(",") : "-1") + ")");
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ success: false, message: "Imeshindikana kupakia matangazo ya Parent Portal." });
+  return res.json({ success: true, announcements: data || [] });
+});
+
+router.post("/staff/announcements", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const classId = req.body?.class_id ? Number(req.body.class_id) : null;
+  const title = String(req.body?.title || "").trim();
+  const message = String(req.body?.message || "").trim();
+  const category = String(req.body?.category || "Taarifa").trim().slice(0, 80) || "Taarifa";
+  if (title.length < 3 || title.length > 180 || message.length < 5 || message.length > 5000) return res.status(400).json({ success: false, message: "Weka kichwa na ujumbe wenye urefu unaokubalika." });
+  if (!req.parentPortalScope.fullAccess && !classId) return res.status(403).json({ success: false, message: "Mwalimu wa darasa anaweza kutuma taarifa kwa darasa lake pekee." });
+  if (classId !== null && (!Number.isInteger(classId) || (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)))) return res.status(403).json({ success: false, message: "Huruhusiwi kutuma taarifa kwa darasa hili." });
+  const { data, error } = await supabase.from("parent_portal_announcements").insert({
+    school_id: schoolId, class_id: classId, title, message, category, created_by: req.user.id,
+  }).select("id,title,message,category,class_id,status,created_at").single();
+  if (error) return res.status(500).json({ success: false, message: "Imeshindikana kuhifadhi taarifa ya Parent Portal." });
+  return res.json({ success: true, announcement: data });
+});
+
+router.patch("/staff/announcements/:id/archive", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const id = String(req.params.id);
+  let query = supabase.from("parent_portal_announcements").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id).eq("school_id", schoolId);
+  if (!req.parentPortalScope.fullAccess) query = query.in("class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
+  const { data, error } = await query.select("id").maybeSingle();
+  if (error) return res.status(500).json({ success: false, message: "Imeshindikana kuficha taarifa." });
+  if (!data) return res.status(404).json({ success: false, message: "Taarifa haijapatikana." });
+  return res.json({ success: true });
 });
 
 router.post("/logout", (_req, res) => res.json({ success: true, message: "Signed out." }));
