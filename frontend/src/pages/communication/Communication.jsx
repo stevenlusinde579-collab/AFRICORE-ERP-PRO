@@ -39,6 +39,7 @@ import {
 import { supabase } from "../../services/supabase";
 import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
+import { useRole } from "../../context/RoleContext";
 
 const APPROVER_ROLE_IDS = [1, 2, 3, 4];
 const TEACHER_ROLE_IDS = [5, 12, 13, 14, 15, 16, 17];
@@ -53,6 +54,7 @@ const getProfileAvatarUrl = (profileId) => {
 
 const Communication = () => {
     const navigate = useNavigate();
+    const { selectedRoleId, selectedRoleName } = useRole();
     const {
         schoolName,
         logo,
@@ -114,6 +116,9 @@ const Communication = () => {
 
     const roleName = profile?.roles?.role_name || "No role assigned";
     const isApprover = APPROVER_ROLE_IDS.includes(Number(profile?.role_id));
+    const effectiveRoleName = String(selectedRoleName || roleName || "").trim().toLowerCase();
+    const canManageParentPortal = [1, 2, 3, 4, 7].includes(Number(selectedRoleId)) || ["accountant", "super admin", "headmaster", "deputy headmaster", "academic master", "secretary"].includes(effectiveRoleName);
+    const canViewParentPortal = canManageParentPortal || Number(selectedRoleId) === 12 || effectiveRoleName === "class teacher";
     const isStudent = Number(profile?.role_id) === 10;
     const isTeacher = Boolean(profile?.teacher_id) || TEACHER_ROLE_IDS.includes(Number(profile?.role_id));
     const requesterType = isStudent ? "student" : isTeacher ? "teacher" : "staff";
@@ -482,6 +487,7 @@ const Communication = () => {
     };
 
     const modules = [
+        ...(canViewParentPortal ? [{ title: "Parent Portal Management", description: canManageParentPortal ? "Simamia wazazi, taarifa za mawasiliano, group chat, mikutano na maoni ya wazazi." : "Angalia taarifa za wazazi wa wanafunzi wa darasa ulilopangiwa na kushiriki mawasiliano ya kundi.", icon: Users, action: () => navigate("/parent-portal-management"), badge: "Parents" }] : []),
         { title: "Live Meetings", description: "Start or join live video conferences.", icon: Video, action: () => navigate("/communication/meetings"), badge: "Live" },
         { title: "Messages", description: "Chat with teachers, staff, parents and other system users.", icon: MessageSquare, action: () => navigate("/communication/chat") },
         { title: "Notifications", description: "View your personal system notifications and alerts.", icon: Bell, action: () => navigate("/communication/notifications") },
@@ -523,7 +529,7 @@ const Communication = () => {
                     <div className="rounded-2xl bg-indigo-700 p-5 text-white shadow-sm"><div className="flex items-center justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10"><FileCheck2 className="h-5 w-5" /></div><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">Office</span></div><p className="mt-6 text-xs text-indigo-200">PERMISSION WORKFLOW</p><h3 className="mt-1 text-xl font-bold">Official Permission</h3><p className="mt-2 text-sm leading-5 text-indigo-100">Submit an office or school permission request, follow its approval status and print the official document after approval.</p><button type="button" onClick={openPermissionRequest} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Request Permission <ArrowRight className="h-4 w-4" /></button></div>
                 </div>
 
-                <div className="mb-6"><div className="mb-4"><h2 className="text-lg font-bold text-slate-900">Communication</h2><p className="mt-1 text-sm text-slate-500">Communication, live meetings and official school permission tools.</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{modules.map((module) => { const Icon = module.icon; return <button key={module.title} type="button" onClick={module.action} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md"><div className="mb-5 flex items-start justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div>{module.badge && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">{module.badge}</span>}</div><h3 className="font-semibold text-slate-900">{module.title}</h3><p className="mt-2 min-h-[40px] text-sm leading-5 text-slate-500">{module.description}</p><div className="mt-5 flex items-center gap-2 text-sm font-semibold text-indigo-600">Open <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" /></div></button>; })}</div></div>
+                <div className="mb-6"><div className="mb-4"><h2 className="text-lg font-bold text-slate-900">Communication</h2><p className="mt-1 text-sm text-slate-500">Communication, parent engagement, live meetings and official school permission tools.</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{modules.map((module) => { const Icon = module.icon; return <button key={module.title} type="button" onClick={module.action} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md"><div className="mb-5 flex items-start justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div>{module.badge && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">{module.badge}</span>}</div><h3 className="font-semibold text-slate-900">{module.title}</h3><p className="mt-2 min-h-[40px] text-sm leading-5 text-slate-500">{module.description}</p><div className="mt-5 flex items-center gap-2 text-sm font-semibold text-indigo-600">Open <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" /></div></button>; })}</div></div>
 
                 <div className="mb-6"><div className="mb-4"><h2 className="text-lg font-bold text-slate-900">External Communication</h2><p className="mt-1 text-sm text-slate-500">Send parent/guardian result communications through the configured gateway.</p></div><div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4"><p className="text-sm font-semibold text-sky-900">NewHope SMS, WhatsApp and Email are available as external communication channels.</p><p className="mt-1 text-sm text-sky-800">SMS uses the active school's NewHope API credentials and approved Sender ID. WhatsApp and Email still require valid provider configuration to send successfully.</p></div><div className="grid gap-4 lg:grid-cols-3"><ChannelCard icon={Mail} title="Email" description="Compose and send result communication by email using the configured email provider." onClick={() => openComposer("email")} buttonText="Open Email Form" /><ChannelCard icon={MessageCircle} title="WhatsApp" description="Compose and send result communication through the configured WhatsApp provider." onClick={() => openComposer("whatsapp")} buttonText="Open WhatsApp Form" /><ChannelCard icon={Smartphone} title="SMS Center" description="Send NewHope SMS to selected staff members or parents/guardians, individually or as a group." onClick={() => setActivePanel("sms-center")} buttonText="Open SMS Center" /></div></div>
 
