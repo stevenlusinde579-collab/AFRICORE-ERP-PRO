@@ -7,6 +7,43 @@ import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 const router = express.Router();
 const loginAttempts = new Map();
+// Process-local presence with a short lease. A client is online only while it
+// continues sending authenticated heartbeats; stale records expire quickly.
+const parentPortalPresence = new Map();
+const PRESENCE_TTL_MS = 45000;
+function presenceKey(schoolId, classId, memberType, memberId) {
+  return [schoolId, classId, memberType, memberId].join(":");
+}
+function recordPresence({ schoolId, classId, memberType, memberId, name }) {
+  const now = Date.now();
+  for (const [key, value] of parentPortalPresence) {
+    if (value.expiresAt <= now) parentPortalPresence.delete(key);
+  }
+  parentPortalPresence.set(presenceKey(schoolId, classId, memberType, memberId), {
+    schoolId: Number(schoolId), classId: Number(classId), memberType,
+    memberId: String(memberId), name: String(name || ""), expiresAt: now + PRESENCE_TTL_MS,
+  });
+}
+function presenceForClass(schoolId, classId) {
+  const now = Date.now();
+  const result = new Map();
+  for (const [key, value] of parentPortalPresence) {
+    if (value.expiresAt <= now) { parentPortalPresence.delete(key); continue; }
+    if (value.schoolId === Number(schoolId) && value.classId === Number(classId)) {
+      result.set(value.memberType + ":" + value.memberId, true);
+    }
+  }
+  return result;
+}
+function withPresence(members, schoolId, classId) {
+  const online = presenceForClass(schoolId, classId);
+  return (members || []).map((member) => ({
+    ...member,
+    online: member.member_type === "staff"
+      ? online.has("staff:" + String(member.user_id))
+      : online.has("parent:" + String(member.student_id)),
+  }));
+}
 const scrypt = promisify(crypto.scrypt);
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://africorepro.vercel.app").replace(/\/$/, "");
 const TOKEN_SECRET = process.env.PARENT_PORTAL_JWT_SECRET || process.env.SUPABASE_SERVICE_KEY;
@@ -411,6 +448,17 @@ router.get("/staff/parents", authenticateUser, parentPortalStaffAccess, async (r
   })) });
 });
 
+router.post("/staff/presence/heartbeat", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const classId = Number(req.body?.class_id);
+  if (!Number.isInteger(schoolId) || !Number.isInteger(classId) || classId <= 0) return res.status(400).json({ success: false, message: "Invalid class." });
+  const classRow = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+  if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
+  if (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)) return res.status(403).json({ success: false, message: "Huruhusiwi kwenye kundi hili." });
+  recordPresence({ schoolId, classId, memberType: "staff", memberId: req.user.id, name: req.profile.full_name });
+  return res.json({ success: true, expires_in_seconds: PRESENCE_TTL_MS / 1000 });
+});
+
 router.get("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const classId = Number(req.params.classId);
@@ -420,7 +468,7 @@ router.get("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, as
   if (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)) return res.status(403).json({ success: false, message: "Huruhusiwi kuona kundi la darasa hili." });
   const { data, error } = await supabase.from("parent_portal_chat_messages").select("id,sender_type,sender_name,message,created_at").eq("school_id", schoolId).eq("class_id", classId).order("created_at", { ascending: true }).limit(300);
   if (error) return res.status(500).json({ success: false, message: "Unable to load class group chat." });
-  const groupMembers = await loadClassParentMembers(schoolId, classId);
+  const groupMembers = withPresence(await loadClassParentMembers(schoolId, classId), schoolId, classId);
   return res.json({ success: true, class: classRow.data, messages: data || [], group_members: groupMembers });
 });
 router.post("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, async (req, res) => {
@@ -513,6 +561,21 @@ router.patch("/staff/suggestions/:id", authenticateUser, parentPortalStaffAccess
 
 router.use(parentAuth);
 
+router.post("/presence/heartbeat", async (req, res) => {
+  const { student, school, account } = req.parent;
+  const classId = Number(student.current_class_id);
+  if (!Number.isInteger(classId) || classId <= 0) return res.status(400).json({ success: false, message: "Student is not assigned to a class." });
+  recordPresence({ schoolId: school.id, classId, memberType: "parent", memberId: student.id, name: account.username });
+  return res.json({ success: true, expires_in_seconds: PRESENCE_TTL_MS / 1000 });
+});
+
+router.get("/presence", async (req, res) => {
+  const { student, school } = req.parent;
+  const classId = Number(student.current_class_id);
+  const online = Number.isInteger(classId) ? presenceForClass(school.id, classId) : new Map();
+  return res.json({ success: true, online_staff: [...online.keys()].filter((key) => key.startsWith("staff:")).map((key) => key.slice(6)) });
+});
+
 router.get("/finance", async (req, res) => {
   const { student, school } = req.parent;
   try {
@@ -568,7 +631,7 @@ router.get("/dashboard", async (req, res) => {
     if (chat.error) throw chat.error;
     const allGroupMembers = classId ? await loadClassParentMembers(school.id, classId) : [];
     // Parent accounts may see their own identity and school staff only; never disclose other parents.
-    const groupMembers = allGroupMembers.filter((member) => member.member_type === "staff" || String(member.student_id) === String(student.id));
+    const groupMembers = withPresence(allGroupMembers.filter((member) => member.member_type === "staff" || String(member.student_id) === String(student.id)), school.id, classId);
     return res.json({
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
