@@ -1810,7 +1810,8 @@ export default function ResultsAnalysis() {
             const total = graded.reduce((sum, row) => sum + numberValue(row.total), 0);
             const avg = graded.length ? total / graded.length : 0;
             const passed = graded.filter(row => row.pass).length;
-            const gradeCounts = Object.fromEntries(gradeLabels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
+            const subjectGradeLabels = isAlevelClass(es.class_id) ? ["A", "B", "C", "D", "E", "S", "F"] : gradeLabels;
+            const gradeCounts = Object.fromEntries(subjectGradeLabels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
             const subjectGpa = isCseeClass(es.class_id) && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
                 exam_subject_id: es.id,
@@ -2010,9 +2011,11 @@ export default function ResultsAnalysis() {
             const average = graded.length ? total / graded.length : 0;
             const passed = graded.filter(row => row.pass).length;
             const classIsCsee = isCseeClass(selectedClassId);
-            const labels = examGradingScales.length && (classIsCsee || !isLegacyOLevelScale(examGradingScales))
-                ? examGradingScales.map(scale => scale.grade)
-                : gradeLabelsForEducationLevel(levelContext, examGradingScales);
+            const labels = isAlevelClass(selectedClassId)
+                ? ["A", "B", "C", "D", "E", "S", "F"]
+                : examGradingScales.length && (classIsCsee || !isLegacyOLevelScale(examGradingScales))
+                    ? examGradingScales.map(scale => scale.grade)
+                    : gradeLabelsForEducationLevel(levelContext, examGradingScales);
             const gradeCounts = Object.fromEntries(labels.map(g => [g, graded.filter(row => String(row.grade) === String(g)).length]));
             const subjectGpa = classIsCsee && graded.length ? graded.reduce((sum, row) => sum + numberValue(row.point), 0) / graded.length : null;
             return {
@@ -2064,9 +2067,14 @@ export default function ResultsAnalysis() {
             totalMarks,
             possible,
             average,
-            passRate: rows.length ? (passedStudents / rows.length) * 100 : 0,
+            passRate: advancedClass
+                ? (acseeEligibleStudents.length ? (passedStudents / acseeEligibleStudents.length) * 100 : 0)
+                : (rows.length ? (passedStudents / rows.length) * 100 : 0),
             passedStudents,
-            failedStudents: rows.length - passedStudents,
+            failedStudents: advancedClass
+                ? acseeEligibleStudents.length - passedStudents
+                : rows.length - passedStudents,
+            unclassifiedStudents: advancedClass ? rows.length - acseeEligibleStudents.length : 0,
             cseeEligibleStudents: eligibleStudents.length,
             cseeGpa: classGpa,
             cseeDivisionDistribution: divisionDistribution,
