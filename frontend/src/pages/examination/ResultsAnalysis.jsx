@@ -4929,8 +4929,12 @@ function StudentTrace({
                 const subsidiaryResults = isAlevel
                     ? (student.acseeSubsidiarySubjects || results.filter(row => subsidiaryKeys.has(idValue(row.subject_id)) || subsidiaryKeys.has(idValue(row.exam_subject_id))))
                     : [];
-                const classifiedIds = new Set([...principalResults, ...subsidiaryResults].map(row => idValue(row.exam_subject_id)));
-                const otherResults = isAlevel ? results.filter(row => !classifiedIds.has(idValue(row.exam_subject_id))) : [];
+                const classifiedExamSubjectIds = new Set([...principalResults, ...subsidiaryResults].map(row => idValue(row.exam_subject_id)).filter(Boolean));
+                const classifiedSubjectIds = new Set([...principalResults, ...subsidiaryResults].map(row => idValue(row.subject_id)).filter(Boolean));
+                const otherResults = isAlevel ? results.filter(row =>
+                    !classifiedExamSubjectIds.has(idValue(row.exam_subject_id)) &&
+                    !classifiedSubjectIds.has(idValue(row.subject_id))
+                ) : [];
                 const subjectRows = (rows, label) => (
                     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
@@ -4959,7 +4963,7 @@ function StudentTrace({
                                         const hasRecordedMarks = row.status === "Complete" || row.source === "exam_marks" || numberValue(row.marked_questions) > 0 || numberValue(row.total) > 0;
                                         const statusLabel = !hasRecordedMarks ? "No marks" : row.status === "Partial" ? "Incomplete" : row.pass ? "Passed" : "Failed";
                                         return (
-                                            <tr key={row.exam_subject_id} className="border-t border-slate-100 hover:bg-slate-50/70">
+                                            <tr key={row.exam_subject_id || row.subject_id} className="border-t border-slate-100 hover:bg-slate-50/70">
                                                 <td className="px-4 py-3 font-bold text-slate-800">{subjectName}</td>
                                                 <td className="px-3 py-3 text-right font-extrabold tabular-nums">{hasRecordedMarks ? formatNumber(row.total) : "—"}</td>
                                                 <td className="px-3 py-3 text-right tabular-nums">{hasRecordedMarks ? `${formatNumber(row.percentage, 1)}%` : "—"}</td>
