@@ -148,6 +148,7 @@ router.post("/provision", authenticateUser, requirePermission("create_students")
     if (!username || !admission) return res.status(400).json({ success: false, message: "Student full name and admission number are required for Parent Portal credentials." });
     let { data: account, error } = await supabase.from("parent_portal_accounts").select("*").eq("student_id", student.id).eq("school_id", schoolId).maybeSingle();
     if (error) throw error;
+    let accountCreated = false;
     if (!account) {
       const password = await hashPassword(admission);
       const { data, error: insertError } = await supabase.from("parent_portal_accounts").insert({
@@ -155,6 +156,7 @@ router.post("/provision", authenticateUser, requirePermission("create_students")
       }).select("*").single();
       if (insertError) throw insertError;
       account = data;
+      accountCreated = true;
     } else {
       // Provisioning is idempotent: never overwrite a password that the parent
       // has already changed. A staff-initiated resend is the explicit reset flow.
@@ -168,7 +170,7 @@ router.post("/provision", authenticateUser, requirePermission("create_students")
       return res.json({ success: true, account_created: false, sms: { success: false, status: "skipped", error: "Parent has already changed the initial password. Use the staff resend action to reset access securely." } });
     }
     const delivery = await sendCredentialSms({ ...student, school_name: schoolInfo.data?.school_name }, account, req.user.id);
-    return res.json({ success: true, account_created: !Boolean(account.created_at), sms: delivery });
+    return res.json({ success: true, account_created: accountCreated, sms: delivery });
   } catch (error) {
     console.error("PARENT PORTAL PROVISION ERROR:", error);
     return res.status(500).json({ success: false, account_created: false, message: error?.message || "Unable to create Parent Portal account." });
