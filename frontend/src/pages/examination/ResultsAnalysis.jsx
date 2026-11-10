@@ -440,6 +440,7 @@ export default function ResultsAnalysis() {
     const [examGradingScales, setExamGradingScales] = useState([]);
     const [studentCombinations, setStudentCombinations] = useState([]);
     const [combinationSubjectLinks, setCombinationSubjectLinks] = useState([]);
+    const [studentSubjectLinks, setStudentSubjectLinks] = useState([]);
 
     // --------------------------------------------------------
     // UI STATE
@@ -935,6 +936,21 @@ export default function ResultsAnalysis() {
                 setCombinationSubjectLinks([]);
             }
 
+            // Load each student's actual subject registrations. Some existing
+            // Advanced students were enrolled before combination_id was added,
+            // so their three registered Advanced subjects are the safe fallback.
+            const studentIdsForSubjects = [...new Set(studentData.map(row => idValue(row.id)).filter(Boolean))];
+            if (studentIdsForSubjects.length > 0) {
+                const { data: registeredSubjects, error: registeredSubjectsError } = await supabase
+                    .from("student_subjects")
+                    .select("student_id, subject_id, class_id, academic_year_id")
+                    .in("student_id", studentIdsForSubjects);
+                if (registeredSubjectsError) throw registeredSubjectsError;
+                setStudentSubjectLinks(registeredSubjects || []);
+            } else {
+                setStudentSubjectLinks([]);
+            }
+
             setStudents(studentData);
 
             console.info("RESULT ANALYSIS DATA LOADED", {
@@ -1017,6 +1033,16 @@ export default function ResultsAnalysis() {
         studentCombinations.map(row => [idValue(row.id), row])
     ), [studentCombinations]);
 
+    const studentSubjectsByStudentId = useMemo(() => {
+        const map = new Map();
+        studentSubjectLinks.forEach(link => {
+            const key = idValue(link.student_id);
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(link);
+        });
+        return map;
+    }, [studentSubjectLinks]);
+
     const isAlevelClass = useCallback(classId => {
         const cls = classMap.get(idValue(classId));
         const classSubjects = examSubjects.filter(es => idValue(es.class_id) === idValue(classId));
@@ -1029,12 +1055,29 @@ export default function ResultsAnalysis() {
     }, [exam, examSubjects, classMap, subjectMap]);
 
     const getAlevelResult = useCallback((student, subjectResults) => {
-        const principalSubjectIds = combinationSubjectsById.get(idValue(student?.combination_id)) || [];
+        const savedCombinationId = idValue(student?.combination_id);
+        const mappedPrincipalIds = combinationSubjectsById.get(savedCombinationId) || [];
+        const registeredRows = (studentSubjectsByStudentId.get(idValue(student?.id)) || [])
+            .filter(link => !link.class_id || idValue(link.class_id) === idValue(student?.class_id || student?.current_class_id))
+            .filter(link => subjectMap.get(idValue(link.subject_id))?.education_level === "Advanced");
+        const registeredPrincipalIds = [...new Set(registeredRows.map(link => idValue(link.subject_id)).filter(Boolean))];
+
+        // Prefer the official combination mapping. For legacy records with no
+        // combination_id, infer principal subjects only when exactly three
+        // Advanced subjects are registered to that student in the exam class.
+        const principalSubjectIds = mappedPrincipalIds.length === 3
+            ? mappedPrincipalIds
+            : (!savedCombinationId && registeredPrincipalIds.length === 3 ? registeredPrincipalIds : mappedPrincipalIds);
+        const result = calculateAcseeResult(subjectResults, principalSubjectIds);
+        const registeredSubjectFallback = !savedCombinationId && registeredPrincipalIds.length === 3;
         return {
-            ...calculateAcseeResult(subjectResults, principalSubjectIds),
-            combination: combinationById.get(idValue(student?.combination_id)) || null
+            ...result,
+            combination: combinationById.get(savedCombinationId) || null,
+            combinationLabel: combinationById.get(savedCombinationId)?.combination_code ||
+                (registeredSubjectFallback ? "Based on registered subjects" : null),
+            usedRegisteredSubjectsFallback: registeredSubjectFallback
         };
-    }, [combinationSubjectsById, combinationById]);
+    }, [combinationSubjectsById, combinationById, studentSubjectsByStudentId, subjectMap]);
 
     const isAlevelExam = useMemo(() => {
         const classIds = [...new Set(examSubjects.map(es => idValue(es.class_id)).filter(Boolean))];
