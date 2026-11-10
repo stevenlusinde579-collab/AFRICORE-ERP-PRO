@@ -260,22 +260,47 @@ router.post("/staff/chat/:classId", authenticateUser, requirePermission("view_st
   return res.json({ success: true, message: data });
 });
 
+
+router.post("/staff/meetings", authenticateUser, requirePermission("view_students"), async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const classId = req.body?.class_id ? Number(req.body.class_id) : null;
+  const title = String(req.body?.title || "").trim();
+  const description = String(req.body?.description || "").trim();
+  const startsAt = new Date(req.body?.starts_at);
+  const endsAt = req.body?.ends_at ? new Date(req.body.ends_at) : null;
+  const meetingUrl = String(req.body?.meeting_url || "").trim();
+  if (!Number.isInteger(schoolId) || !title || Number.isNaN(startsAt.getTime()) || (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt <= startsAt))) return res.status(400).json({ success: false, message: "Enter a title and valid meeting start/end times." });
+  if (classId) {
+    const classRow = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+    if (classRow.error || !classRow.data) return res.status(404).json({ success: false, message: "Class not found in your school." });
+  }
+  const { data, error } = await supabase.from("parent_portal_meetings").insert({
+    school_id: schoolId, class_id: classId, title, description: description || null,
+    starts_at: startsAt.toISOString(), ends_at: endsAt?.toISOString() || null,
+    meeting_url: meetingUrl || null, meeting_provider: String(req.body?.meeting_provider || "").trim() || null,
+    created_by: req.user.id,
+  }).select("*").single();
+  if (error) return res.status(500).json({ success: false, message: "Unable to schedule parent meeting." });
+  return res.json({ success: true, meeting: data });
+});
+
 router.use(parentAuth);
 
 router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, exams, attendance] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, meetings, exams, attendance] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
+      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).or("class_id.is.null,class_id.eq." + Number(classId || 0)).eq("status", "scheduled").order("starts_at", { ascending: true }).limit(50),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
     ]);
-    for (const result of [charges,payments,communications,announcements,exams,attendance]) if (result.error) throw result.error;
+    for (const result of [charges,payments,communications,announcements,meetings,exams,attendance]) if (result.error) throw result.error;
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
@@ -286,7 +311,7 @@ router.get("/dashboard", async (req, res) => {
       success: true,
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
-      communications: communications.data || [], announcements: announcements.data || [], meetings: [],
+      communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
       exams: exams.data || [], attendance: attendance.data || [], chat: chat.data || [],
       must_change_password: req.parent.account.must_change_password,
     });
@@ -309,7 +334,11 @@ router.get("/results/:examId", async (req, res) => {
     ]);
     if (result.error || marks.error) throw result.error || marks.error;
     if (result.data?.approved !== true) return res.json({ success: true, exam, result: null, marks: [] });
-    return res.json({ success: true, exam, result: result.data, marks: marks.data || [] });
+    const subjectIds = [...new Set((marks.data || []).map((row) => row.subject_id).filter(Boolean))];
+    const subjects = subjectIds.length ? await supabase.from("subjects").select("id,subject_name").in("id", subjectIds) : { data: [] };
+    if (subjects.error) throw subjects.error;
+    const subjectNames = new Map((subjects.data || []).map((subject) => [String(subject.id), subject.subject_name]));
+    return res.json({ success: true, exam, result: result.data, marks: (marks.data || []).map((row) => ({ ...row, subject_name: subjectNames.get(String(row.subject_id)) || "Subject" })) });
   } catch (error) {
     console.error("PARENT RESULTS ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load examination results." });
