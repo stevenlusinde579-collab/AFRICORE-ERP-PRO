@@ -1844,6 +1844,7 @@ export default function ResultsAnalysis() {
         const classExamSubjects = examSubjects.filter(
             es => idValue(es.class_id) === idValue(selectedClassId)
         );
+        const advancedClass = isAlevelClass(selectedClassId);
 
         const rows = classStudents.map(student => {
             const subjectResults = classExamSubjects.map(es =>
@@ -1953,8 +1954,12 @@ export default function ResultsAnalysis() {
 
         const subjectCount = classExamSubjects.length;
         const totalMarks = rows.reduce((sum, row) => sum + numberValue(row.total), 0);
-        const possible = rows.length * subjectCount * 100;
-        const average = rows.length && subjectCount ? totalMarks / (rows.length * subjectCount) : 0;
+        const possible = rows.length * (advancedClass ? 300 : subjectCount * 100);
+        const average = advancedClass
+            ? (rows.filter(row => row.acseeEligible).length
+                ? rows.filter(row => row.acseeEligible).reduce((sum, row) => sum + numberValue(row.percentage), 0) / rows.filter(row => row.acseeEligible).length
+                : 0)
+            : (rows.length && subjectCount ? totalMarks / (rows.length * subjectCount) : 0);
         const passedStudents = rows.filter(row => row.pass).length;
         const eligibleStudents = rows.filter(row => row.cseeEligible && row.cseeGpa != null);
         const classGpa = eligibleStudents.length ? eligibleStudents.reduce((sum, row) => sum + numberValue(row.cseeGpa), 0) / eligibleStudents.length : null;
