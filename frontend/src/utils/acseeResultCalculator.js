@@ -66,13 +66,6 @@ export const calculateAcseeResult = (subjectResults = [], principalSubjectIds = 
     return { ...row, percentage, grade, point: getAcseeGradePoint(grade), isPrincipal: true };
   });
   const aggregate = graded.reduce((sum, row) => sum + row.point, 0);
-  let division = null;
-  if (aggregate >= 3 && aggregate <= 9) division = "I";
-  else if (aggregate >= 10 && aggregate <= 12) division = "II";
-  else if (aggregate >= 13 && aggregate <= 17) division = "III";
-  else if (aggregate >= 18 && aggregate <= 19) division = "IV";
-  else if (aggregate >= 20 && aggregate <= 21) division = "0";
-
   const total = graded.reduce((sum, row) => sum + row.percentage, 0);
   const average = total / 3;
   const principalPassCount = graded.filter(row => ["A", "B", "C", "D", "E"].includes(row.grade)).length;
@@ -99,8 +92,8 @@ export const calculateAcseeResult = (subjectResults = [], principalSubjectIds = 
     principalSubjects: graded,
     subsidiarySubjects,
     aggregate,
-    division,
-    divisionLabel: division === "0" ? "Division 0" : division ? `Division ${division}` : "Not classified",
+    division: awardDivision || "0",
+    divisionLabel: awardDivision ? `Division ${awardDivision}` : "Division 0",
     gpa: Number((aggregate / 3).toFixed(4)),
     average: Number(average.toFixed(2)),
     total: Number(total.toFixed(2)),
