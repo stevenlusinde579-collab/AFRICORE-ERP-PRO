@@ -51,6 +51,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { getEducationLevelType, gradeForEducationLevel, getApplicableGradeScale, remarkForEducationLevel, gradeLabelsForEducationLevel } from "../../utils/resultGrading";
 import { normalizeExamMarksToPercentage } from "../../utils/examMarkNormalization";
+import { calculateAcseeResult } from "../../utils/acseeResultCalculator";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 
