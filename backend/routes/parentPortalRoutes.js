@@ -276,6 +276,16 @@ router.post("/staff/chat/:classId", authenticateUser, requirePermission("view_st
 });
 
 
+router.get("/staff/meetings", authenticateUser, requirePermission("view_students"), async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!Number.isInteger(schoolId)) return res.status(403).json({ success: false, message: "School access is required." });
+  const { data, error } = await supabase.from("parent_portal_meetings")
+    .select("id,title,description,class_id,starts_at,ends_at,meeting_url,status")
+    .eq("school_id", schoolId).order("starts_at", { ascending: true }).limit(100);
+  if (error) return res.status(500).json({ success: false, message: "Unable to load parent meetings." });
+  return res.json({ success: true, meetings: data || [] });
+});
+
 router.post("/staff/meetings", authenticateUser, requirePermission("view_students"), async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const classId = req.body?.class_id ? Number(req.body.class_id) : null;
