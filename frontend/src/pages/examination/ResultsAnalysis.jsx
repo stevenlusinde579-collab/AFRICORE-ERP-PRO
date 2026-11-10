@@ -3593,6 +3593,17 @@ export default function ResultsAnalysis() {
                                     <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Pos.</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Grade</th>{isAlevelClass(selectedClassId) && <><th className="px-3 py-3">GPA</th><th className="px-3 py-3">Division</th><th className="px-3 py-3">Combination</th></>}<th className="px-3 py-3">Status</th><th className="px-3 py-3">Missing</th></tr></thead><tbody>{classOverall.students.map(row => <tr key={row.id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.position}</td><td className="px-3 py-3 font-semibold">{row.full_name}<div className="text-xs text-slate-500">{row.admission}</div></td><td className="px-3 py-3 font-bold">{formatNumber(row.total)}</td><td className="px-3 py-3">{formatNumber(row.percentage,1)}%</td><td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full border text-xs font-bold ${gradeClass(row.grade)}`}>{row.grade}</span></td>{isAlevelClass(selectedClassId) && <><td className="px-3 py-3 font-bold">{row.acseeGpa != null ? formatNumber(row.acseeGpa,2) : "—"}</td><td className="px-3 py-3 font-bold">{row.acseeDivision ? `Div ${row.acseeDivision}` : "—"}</td><td className="px-3 py-3">{row.acseeCombination?.combination_code || "—"}</td></>}<td className="px-3 py-3">{isAlevelClass(selectedClassId) && !row.acseeEligible ? <span className="text-amber-700 font-bold">Awaiting principal marks</span> : row.pass ? <span className="text-emerald-700 font-bold">Passed</span> : <span className="text-red-700 font-bold">Division 0 / Failed</span>}</td><td className="px-3 py-3">{row.missingSubjects}</td></tr>)}</tbody></table></div>
                                 </Panel>
 
+                                {isAlevelClass(selectedClassId) && <Panel title="ACSEE Division Distribution" icon={FaGraduationCap}>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                        {classOverall.acseeDivisionDistribution.map(row => (
+                                            <div key={row.division} className="border border-slate-200 rounded-xl p-4 text-center">
+                                                <div className="text-xs uppercase tracking-wide text-slate-500 font-bold">Division {row.division}</div>
+                                                <div className="text-2xl font-extrabold text-slate-900 mt-1">{row.count}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-3">Aggregate, GPA and Division use the student's three mapped principal combination subjects only. Subsidiary subjects are excluded.</p>
+                                </Panel>}
                                 <Panel title="Class Subject Performance" icon={FaChartBar}>
                                     <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100"><th className="px-3 py-3">Subject</th><th className="px-3 py-3">Candidates</th><th className="px-3 py-3">Average</th><th className="px-3 py-3">Highest</th><th className="px-3 py-3">Lowest</th><th className="px-3 py-3">Pass Rate</th></tr></thead><tbody>{[...classOverall.subjects].sort((a,b)=>b.average-a.average).map(row => <tr key={row.exam_subject_id} className="border-b last:border-0 border-slate-100"><td className="px-3 py-3 font-bold">{row.subject_name}</td><td className="px-3 py-3">{row.analysed}/{row.candidates}</td><td className="px-3 py-3">{formatNumber(row.average,1)}%</td><td className="px-3 py-3">{formatNumber(row.highest,1)}%</td><td className="px-3 py-3">{formatNumber(row.lowest,1)}%</td><td className="px-3 py-3 font-semibold">{formatNumber(row.pass_rate,1)}%</td></tr>)}</tbody></table></div>
                                 </Panel>
@@ -4394,7 +4405,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam
     const classRows = data.classRows || [];
     return (
         <div className="p-6 text-slate-900 report-page">
-            <ReportHeader exam={exam} title={`${levelLabel} — School Overall Report`} subtitle={isCseeExam ? "Whole School Performance · Best Seven Classification" : "Whole School Performance · Configured Grading"} />
+            <ReportHeader exam={exam} title={`${levelLabel} — School Overall Report`} subtitle={isAlevelExam ? "Whole School Performance · ACSEE Principal Combination Results" : isCseeExam ? "Whole School Performance · Best Seven Classification" : "Whole School Performance · Configured Grading"} />
 
             <div className="grid grid-cols-5 gap-2 text-[9px] mb-4">
                 <DetailBox label="Candidates" value={data.candidates || 0} />
