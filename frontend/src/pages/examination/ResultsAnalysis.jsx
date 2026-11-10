@@ -1381,23 +1381,37 @@ export default function ResultsAnalysis() {
                 })
             ].filter(Boolean).join(" ");
             const ordinaryLevel = isOrdinaryLevel(levelContext);
+            const advancedLevel = isAlevelClass(student.current_class_id);
             const csee = ordinaryLevel
                 ? calculateResult(allSubjectResults, examGradingScales)
                 : { eligible: false, analysedSubjects: allSubjectResults.length, bestSeven: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable" };
+            const acsee = advancedLevel
+                ? getAlevelResult(student, allSubjectResults)
+                : { eligible: false, complete: false, principalSubjects: [], subsidiarySubjects: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", average: null, total: null, reason: null };
             const bestSeven = csee.bestSeven || [];
-            const total = ordinaryLevel
-                ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
-                : allSubjectResults.reduce((sum, result) => sum + numberValue(result.total), 0);
-            const possible = ordinaryLevel ? 700 : allSubjectResults.length * 100;
-            const average = ordinaryLevel
-                ? (bestSeven.length ? (total / 700) * 100 : 0)
-                : (possible > 0 ? (total / possible) * 100 : 0);
+            const total = advancedLevel
+                ? numberValue(acsee.total)
+                : ordinaryLevel
+                    ? bestSeven.reduce((sum, result) => sum + numberValue(result.total), 0)
+                    : allSubjectResults.reduce((sum, result) => sum + numberValue(result.total), 0);
+            const possible = advancedLevel ? 300 : ordinaryLevel ? 700 : allSubjectResults.length * 100;
+            const average = advancedLevel
+                ? numberValue(acsee.average)
+                : ordinaryLevel
+                    ? (bestSeven.length ? (total / 700) * 100 : 0)
+                    : (possible > 0 ? (total / possible) * 100 : 0);
             const percentage = average;
-            const overallConfigured = applicableGradeScale(average, examGradingScales, ordinaryLevel);
-            const grade = gradeForEducationLevel(average, levelContext, examGradingScales);
-            const passed = overallConfigured
-                ? String(overallConfigured.result || "").toUpperCase() === "PASS"
-                : average >= 40;
+            const overallConfigured = advancedLevel ? null : applicableGradeScale(average, examGradingScales, ordinaryLevel);
+            const grade = advancedLevel && !acsee.eligible
+                ? "—"
+                : advancedLevel
+                    ? acsee.grade
+                    : gradeForEducationLevel(average, levelContext, examGradingScales);
+            const passed = advancedLevel
+                ? acsee.eligible && acsee.passed
+                : overallConfigured
+                    ? String(overallConfigured.result || "").toUpperCase() === "PASS"
+                    : average >= 40;
             const hasMarks = markedResults.some(result => result.total > 0 || result.marked_questions > 0);
 
             // Calculate GPA/Division for this exact studentAnalysis row.
@@ -1429,11 +1443,21 @@ export default function ResultsAnalysis() {
                 cseeDivision: csee.division,
                 cseeDivisionLabel: csee.divisionLabel,
                 cseeBestSeven: csee.bestSeven,
-                // Direct fields used by Student Report and print views.
-                aggregate: csee.aggregate,
-                gpa: csee.gpa,
-                division: csee.division,
-                divisionLabel: csee.divisionLabel,
+                acseeEligible: acsee.eligible,
+                acseeComplete: acsee.complete,
+                acseeReason: acsee.reason,
+                acseeCombination: acsee.combination,
+                acseeAggregate: acsee.aggregate,
+                acseeGpa: acsee.gpa,
+                acseeDivision: acsee.division,
+                acseeDivisionLabel: acsee.divisionLabel,
+                acseePrincipalSubjects: acsee.principalSubjects,
+                acseeSubsidiarySubjects: acsee.subsidiarySubjects,
+                // Generic classification fields follow the education level.
+                aggregate: advancedLevel ? acsee.aggregate : csee.aggregate,
+                gpa: advancedLevel ? acsee.gpa : csee.gpa,
+                division: advancedLevel ? acsee.division : csee.division,
+                divisionLabel: advancedLevel ? acsee.divisionLabel : csee.divisionLabel,
                 bestSeven: csee.bestSeven,
                 analysedSubjects: csee.analysedSubjects,
                 subjects: subjectResults,
