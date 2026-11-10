@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
 
 
@@ -26,6 +27,9 @@ function StudentProfile() {
     const [loading, setLoading] = useState(true);
 
     const [error, setError] = useState("");
+    const [portalHistory, setPortalHistory] = useState([]);
+    const [portalLoading, setPortalLoading] = useState(false);
+    const [portalMessage, setPortalMessage] = useState("");
 
 
 
@@ -77,6 +81,32 @@ function StudentProfile() {
 
 
 
+
+    const loadParentPortalHistory = async () => {
+        if (!student?.id) return;
+        try {
+            const response = await api.get(`/parent-portal/credential-history/${student.id}`);
+            setPortalHistory(response.data?.history || []);
+        } catch (historyError) {
+            console.error("PARENT PORTAL HISTORY ERROR:", historyError);
+        }
+    };
+
+    const resendParentPortalCredentials = async () => {
+        if (!student?.id || portalLoading) return;
+        setPortalLoading(true);
+        setPortalMessage("");
+        try {
+            const response = await api.post(`/parent-portal/resend/${student.id}`);
+            const sms = response.data?.sms;
+            setPortalMessage(sms?.success ? "Parent Portal SMS imetumwa kupitia NewHope." : `Akaunti ipo lakini SMS haijatumwa: ${sms?.error || response.data?.message || "Jaribu tena."}`);
+            await loadParentPortalHistory();
+        } catch (sendError) {
+            setPortalMessage(sendError.response?.data?.message || "Imeshindikana kutuma Parent Portal SMS.");
+        } finally {
+            setPortalLoading(false);
+        }
+    };
 
     const getStudent = async (
         currentSchoolId,
@@ -132,6 +162,7 @@ function StudentProfile() {
         } else {
 
             setStudent(data);
+            setTimeout(() => loadParentPortalHistory(), 0);
 
         }
 
