@@ -438,6 +438,8 @@ export default function ResultsAnalysis() {
     const [subjects, setSubjects] = useState([]);
     const [classes, setClasses] = useState([]);
     const [examGradingScales, setExamGradingScales] = useState([]);
+    const [studentCombinations, setStudentCombinations] = useState([]);
+    const [combinationSubjectLinks, setCombinationSubjectLinks] = useState([]);
 
     // --------------------------------------------------------
     // UI STATE
@@ -808,6 +810,7 @@ export default function ResultsAnalysis() {
                 last_name,
                 gender,
                 current_class_id,
+                combination_id,
                 class_name,
                 stream,
                 student_status,
@@ -909,6 +912,29 @@ export default function ResultsAnalysis() {
                     : student;
             });
 
+            // Load each student's saved Advanced combination and its mapped
+            // principal subjects. These are read-only inputs to Result Analysis.
+            const combinationIds = [...new Set(
+                studentData.map(row => idValue(row.combination_id)).filter(Boolean)
+            )];
+            if (combinationIds.length > 0) {
+                const [combinationsResult, linksResult] = await Promise.all([
+                    supabase.from("subject_combinations")
+                        .select("id, combination_code, combination_name, is_active")
+                        .in("id", combinationIds),
+                    supabase.from("combination_subjects")
+                        .select("combination_id, subject_id")
+                        .in("combination_id", combinationIds)
+                ]);
+                if (combinationsResult.error) throw combinationsResult.error;
+                if (linksResult.error) throw linksResult.error;
+                setStudentCombinations(combinationsResult.data || []);
+                setCombinationSubjectLinks(linksResult.data || []);
+            } else {
+                setStudentCombinations([]);
+                setCombinationSubjectLinks([]);
+            }
+
             setStudents(studentData);
 
             console.info("RESULT ANALYSIS DATA LOADED", {
@@ -976,6 +1002,44 @@ export default function ResultsAnalysis() {
         classes.forEach(cls => map.set(idValue(cls.id), cls));
         return map;
     }, [classes]);
+
+    const combinationSubjectsById = useMemo(() => {
+        const map = new Map();
+        combinationSubjectLinks.forEach(link => {
+            const key = idValue(link.combination_id);
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(idValue(link.subject_id));
+        });
+        return map;
+    }, [combinationSubjectLinks]);
+
+    const combinationById = useMemo(() => new Map(
+        studentCombinations.map(row => [idValue(row.id), row])
+    ), [studentCombinations]);
+
+    const isAlevelClass = useCallback(classId => {
+        const cls = classMap.get(idValue(classId));
+        const classSubjects = examSubjects.filter(es => idValue(es.class_id) === idValue(classId));
+        const levelContext = [
+            exam?.education_level, exam?.level, exam?.exam_type,
+            cls?.academic_level, cls?.class_name, cls?.name, cls?.short_name,
+            ...classSubjects.map(es => subjectMap.get(idValue(es.subject_id))?.education_level)
+        ].filter(Boolean).join(" ");
+        return getEducationLevelType(levelContext) === "A_LEVEL";
+    }, [exam, examSubjects, classMap, subjectMap]);
+
+    const getAlevelResult = useCallback((student, subjectResults) => {
+        const principalSubjectIds = combinationSubjectsById.get(idValue(student?.combination_id)) || [];
+        return {
+            ...calculateAcseeResult(subjectResults, principalSubjectIds),
+            combination: combinationById.get(idValue(student?.combination_id)) || null
+        };
+    }, [combinationSubjectsById, combinationById]);
+
+    const isAlevelExam = useMemo(() => {
+        const classIds = [...new Set(examSubjects.map(es => idValue(es.class_id)).filter(Boolean))];
+        return classIds.length > 0 && classIds.every(classId => isAlevelClass(classId));
+    }, [examSubjects, isAlevelClass]);
 
     const questionMap = useMemo(() => {
         const map = new Map();
