@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/parent-portal-foundation
+      - main
   pull_request:
     branches:
       - main
