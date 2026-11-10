@@ -1472,13 +1472,15 @@ export default function ResultsAnalysis() {
                 completeSubjects,
                 partialSubjects,
                 missingSubjects,
-                status: allSubjectResults.length === 0
-                    ? "No Marks"
-                    : completeSubjects === allSubjectResults.length
-                        ? "Complete"
-                        : hasMarks
-                            ? "Partial"
-                            : "No Marks"
+                status: advancedLevel && !acsee.eligible
+                    ? "Partial"
+                    : allSubjectResults.length === 0
+                        ? "No Marks"
+                        : completeSubjects === allSubjectResults.length
+                            ? "Complete"
+                            : hasMarks
+                                ? "Partial"
+                                : "No Marks"
             });
         });
 
@@ -2738,12 +2740,13 @@ export default function ResultsAnalysis() {
                 return (
                     student.percentage < 40 ||
                     student.missingSubjects > 0 ||
-                    student.partialSubjects > 0
+                    student.partialSubjects > 0 ||
+                    (isAlevelClass(student.class_id) && !student.acseeEligible)
                 );
             })
             .sort((a, b) => a.percentage - b.percentage)
             .slice(0, 12);
-    }, [studentAnalysis]);
+    }, [studentAnalysis, isAlevelClass]);
 
     const performanceSummary = useMemo(() => {
         const insights = [];
@@ -3778,7 +3781,11 @@ export default function ResultsAnalysis() {
                                                 <td className="px-3 py-3 font-bold">{(isAlevelExam ? student.acseeDivision : student.cseeDivision) ? `Div ${isAlevelExam ? student.acseeDivision : student.cseeDivision}` : "—"}</td>
                                             </>}
                                             <td className="px-3 py-3">
-                                                {student.status === "Complete" ? (
+                                                {isAlevelExam && !student.acseeEligible ? (
+                                                    <span className="text-amber-700 text-xs font-bold inline-flex items-center gap-1">
+                                                        <FaExclamationTriangle /> Awaiting combination / principal marks
+                                                    </span>
+                                                ) : student.status === "Complete" ? (
                                                     <span className="text-emerald-700 text-xs font-bold inline-flex items-center gap-1">
                                                         <FaCheckCircle /> Complete
                                                     </span>
@@ -4127,6 +4134,7 @@ function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGr
                     {acseePrincipalSubjects.map((row,index)=><tr key={row.exam_subject_id || row.subject_id || index}><td className="border border-slate-400 p-1">{row.subject_name || getSubjectName(row.subject)}</td><td className="border border-slate-400 p-1 text-center">{formatNumber(row.percentage,1)}%</td><td className="border border-slate-400 p-1 text-center font-bold">{row.grade}</td><td className="border border-slate-400 p-1 text-center">{row.point}</td></tr>)}
                 </tbody></table>
                 <p className="text-[9px] text-slate-600">Subsidiary subjects are reported separately and are not included in the principal aggregate.</p>
+                <p className="text-[9px] text-slate-600 mt-2">This is a school examination classification based on marks saved for this examination. It is not a final NECTA ACSEE award unless the saved marks already include the required continuous-assessment weighting and all other award requirements.</p>
                 {acseeSubsidiarySubjects.length > 0 && <div className="text-[9px] mt-1">{acseeSubsidiarySubjects.map(row=>row.subject_name || getSubjectName(row.subject)).join(", ")}</div>}
             </div>}
             <div className="grid grid-cols-2 gap-3 mt-4">
@@ -4341,6 +4349,7 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam
                     {finalRows.map(student=><tr key={student.id}><td className="border border-slate-400 p-1 text-center">{student.position || "—"}</td><td className="border border-slate-400 p-1 font-bold">{student.full_name}</td><td className="border border-slate-400 p-1">{student.admission}</td><td className="border border-slate-400 p-1">{student.acseeCombination?.combination_code || "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeEligible ? `${formatNumber(student.percentage,1)}%` : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeAggregate ?? "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeGpa != null ? formatNumber(student.acseeGpa,2) : "—"}</td><td className="border border-slate-400 p-1 text-center">{student.acseeDivisionLabel || "Awaiting marks"}</td></tr>)}
                 </tbody></table>
                 <p className="text-[8px] text-slate-600 mt-2">Only the three principal subjects registered under each student's combination contribute to ACSEE aggregate and division. Subsidiary subjects are excluded.</p>
+                <p className="text-[8px] text-slate-600 mt-2">ACSEE-style school classification uses the three principal subjects saved for each student. It is not a final NECTA award unless required CA weighting and other award conditions are included in the saved marks.</p>
             </div>}
             <SubjectSummaryTable subjects={data.subjectRows || []} />
 
