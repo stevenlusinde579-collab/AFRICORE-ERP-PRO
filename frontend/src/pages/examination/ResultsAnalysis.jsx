@@ -1833,29 +1833,50 @@ export default function ResultsAnalysis() {
             const classInfo = classMap.get(idValue(selectedClassId));
             const levelContext = [exam?.education_level, exam?.level, exam?.exam_type, classInfo?.academic_level, classInfo?.class_name, classInfo?.name, classInfo?.short_name].filter(Boolean).join(" ");
             const classIsCsee = isCseeClass(selectedClassId);
-            const configuredOverall = applicableGradeScale(average, examGradingScales, classIsCsee);
-            const grade = gradeForEducationLevel(average, levelContext, examGradingScales);
+            const classIsAlevel = isAlevelClass(selectedClassId);
+            const acsee = classIsAlevel
+                ? getAlevelResult(student, subjectResults)
+                : { eligible: false, complete: false, principalSubjects: [], subsidiarySubjects: [], aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", average: null, total: null, reason: null };
             const csee = classIsCsee
                 ? calculateResult(subjectResults, examGradingScales)
                 : { eligible: false, aggregate: null, gpa: null, division: null, divisionLabel: "Not applicable", bestSeven: [] };
+            const configuredOverall = classIsAlevel ? null : applicableGradeScale(average, examGradingScales, classIsCsee);
+            const finalAverage = classIsAlevel ? numberValue(acsee.average) : average;
+            const finalGrade = classIsAlevel && !acsee.eligible
+                ? "—"
+                : classIsAlevel ? acsee.grade : gradeForEducationLevel(average, levelContext, examGradingScales);
             return {
                 ...student,
                 full_name: safeName(student),
                 admission: getAdmission(student),
                 subjects: subjectResults,
                 subjectCount,
-                total,
-                possible: subjectCount * 100,
-                percentage: average,
-                grade,
-                remark: configuredOverall?.remark || (classIsCsee ? getRemark(grade) : grade),
-                pass: configuredOverall ? String(configuredOverall.result || "").toUpperCase() === "PASS" : average >= 40,
+                total: classIsAlevel ? numberValue(acsee.total) : total,
+                possible: classIsAlevel ? 300 : subjectCount * 100,
+                percentage: finalAverage,
+                grade: finalGrade,
+                remark: classIsAlevel
+                    ? (acsee.eligible ? finalGrade : (acsee.reason || "Awaiting principal marks"))
+                    : configuredOverall?.remark || (classIsCsee ? getRemark(finalGrade) : finalGrade),
+                pass: classIsAlevel
+                    ? acsee.eligible && acsee.passed
+                    : configuredOverall ? String(configuredOverall.result || "").toUpperCase() === "PASS" : average >= 40,
                 cseeEligible: csee.eligible,
                 cseeAggregate: csee.aggregate,
                 cseeGpa: csee.gpa,
                 cseeDivision: csee.division,
                 cseeDivisionLabel: csee.divisionLabel,
                 cseeBestSeven: csee.bestSeven,
+                acseeEligible: acsee.eligible,
+                acseeComplete: acsee.complete,
+                acseeReason: acsee.reason,
+                acseeCombination: acsee.combination,
+                acseeAggregate: acsee.aggregate,
+                acseeGpa: acsee.gpa,
+                acseeDivision: acsee.division,
+                acseeDivisionLabel: acsee.divisionLabel,
+                acseePrincipalSubjects: acsee.principalSubjects,
+                acseeSubsidiarySubjects: acsee.subsidiarySubjects,
                 missingSubjects: subjectResults.filter(row => row.status === "No Marks").length
             };
         });
@@ -1945,7 +1966,7 @@ export default function ResultsAnalysis() {
             })),
             topStudents: rankedWithPosition.slice(0, 10)
         };
-    }, [selectedClassId, students, examSubjects, calculateStudentSubject, subjectMap, classMap, examGradingScales, isCseeClass]);
+    }, [selectedClassId, students, examSubjects, calculateStudentSubject, subjectMap, classMap, examGradingScales, isCseeClass, isAlevelClass, getAlevelResult]);
 
 
     const getStudentReport = useCallback(student => {
