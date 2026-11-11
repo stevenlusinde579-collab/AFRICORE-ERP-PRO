@@ -141,7 +141,7 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
         const config = authToken ? { headers: { Authorization: "Bearer " + authToken } } : undefined;
         const response = isAdmin ? await api.get("/parent-portal/staff/meetings", config) : await api.get("/parent-portal/meetings/active", config);
         const rows = isAdmin ? (response.data?.meetings || []).filter(row => row.status === "scheduled" && !row.ends_at) : [response.data?.meeting].filter(Boolean);
-        if (active && !rows.some(row => String(row.id) === String(meeting.id))) { setRoomState("Mkutano umemalizika"); onLeave?.(); }
+        if (active && !rows.some(row => String(row.id) === String(meeting.id))) { setRoomState("Mkutano umemalizika"); onLeaveRef.current?.(); }
       } catch (e) {
         if (active && [401,403].includes(e?.response?.status)) { setError("Ruhusa ya mkutano imeisha. Ingia tena."); onLeaveRef.current?.(); }
       }
