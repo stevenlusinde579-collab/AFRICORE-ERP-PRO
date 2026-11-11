@@ -3,6 +3,7 @@ import { supabase } from "../services/supabase";
 import api from "../services/api";
 
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+
 const idOf = (value) => String(value ?? "").trim();
 
 function VideoTile({ participant, stream, local }) {
@@ -23,7 +24,7 @@ function VideoTile({ participant, stream, local }) {
 export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = false, onEnd, onLeave, authToken = "" }) {
   const channelRef = useRef(null), localStreamRef = useRef(null), peersRef = useRef(new Map()), remoteStreamsRef = useRef(new Map()), pendingIceRef = useRef(new Map());
   const identityRef = useRef(""), nameRef = useRef(""), mountedRef = useRef(false), onLeaveRef = useRef(onLeave);
-  const [participants, setParticipants] = useState([]), [version, setVersion] = useState(0);
+  const [participants, setParticipants] = useState([]), [version, setVersion] = useState(0), [reactions, setReactions] = useState([]), [handRaised, setHandRaised] = useState(false), [applauseCount, setApplauseCount] = useState(0);
   const [cameraOn, setCameraOn] = useState(false), [micOn, setMicOn] = useState(false), [connecting, setConnecting] = useState(true);
   const [error, setError] = useState(""), [ending, setEnding] = useState(false), [roomState, setRoomState] = useState("Inaunganisha");
 
@@ -104,6 +105,25 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
             else await peer.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(() => {});
           },
           "participant-left": p => { if (idOf(p?.user_id) !== identity) closePeer(p?.user_id); },
+          "meeting-reaction": p => {
+            const from = idOf(p?.user_id || p?.from);
+            if (!from || from === identity) return;
+            const displayName = p?.display_name || "Mshiriki";
+            if (p?.type === "applause") {
+              setApplauseCount(value => value + 1);
+              const item = { id: String(Date.now() + Math.random()), emoji: "👏", display_name: displayName };
+              setReactions(current => [...current.slice(-7), item]);
+              window.setTimeout(() => setReactions(current => current.filter(reaction => reaction.id !== item.id)), 2200);
+            } else if (p?.type === "raise_hand") {
+              const raised = Boolean(p.enabled);
+              setParticipants(current => current.map(person => idOf(person.user_id) === from ? { ...person, hand_raised: raised } : person));
+              if (raised) {
+                const item = { id: String(Date.now() + Math.random()), emoji: "✋", display_name: displayName };
+                setReactions(current => [...current.slice(-7), item]);
+                window.setTimeout(() => setReactions(current => current.filter(reaction => reaction.id !== item.id)), 2200);
+              }
+            }
+          },
         };
         Object.entries(handlers).forEach(([event, handler]) => channel.on("broadcast", { event }, ({ payload }) => {
           if (!cancelled) Promise.resolve(handler(payload || {})).catch(e => console.warn("Meeting signalling failed", e));
@@ -124,7 +144,7 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
           });
         });
         if (cancelled) return;
-        await channel.track({ user_id: identity, display_name: nameRef.current, joined_at: new Date().toISOString(), mic_enabled: true, camera_enabled: true, role: isAdmin ? "host" : "participant" });
+        await channel.track({ user_id: identity, display_name: nameRef.current, joined_at: new Date().toISOString(), mic_enabled: true, camera_enabled: true, hand_raised: false, role: isAdmin ? "host" : "participant" });
         setRoomState("Imeunganishwa");
       } catch (e) { if (!cancelled) setError(e?.message || "Imeshindikana kuunganisha video conference."); }
       finally { if (!cancelled) setConnecting(false); }
@@ -153,6 +173,26 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
   const toggleCamera = async () => { const t = localStreamRef.current?.getVideoTracks?.()[0]; if (!t) return; t.enabled = !t.enabled; setCameraOn(t.enabled); await send("media-state", { user_id: identityRef.current, camera_enabled: t.enabled }); };
   const toggleMic = async () => { const t = localStreamRef.current?.getAudioTracks?.()[0]; if (!t) return; t.enabled = !t.enabled; setMicOn(t.enabled); await send("media-state", { user_id: identityRef.current, mic_enabled: t.enabled }); };
   const leave = async () => { await send("participant-left", { user_id: identityRef.current }); onLeave?.(); };
+  const sendApplause = async () => {
+    if (connecting || !identityRef.current) return;
+    setApplauseCount(value => value + 1);
+    const item = { id: String(Date.now() + Math.random()), emoji: "👏", display_name: nameRef.current || "Mshiriki" };
+    setReactions(current => [...current.slice(-7), item]);
+    window.setTimeout(() => setReactions(current => current.filter(reaction => reaction.id !== item.id)), 2200);
+    await send("meeting-reaction", { type: "applause", user_id: identityRef.current, display_name: nameRef.current || "Mshiriki" });
+  };
+  const toggleRaiseHand = async () => {
+    if (connecting || !identityRef.current) return;
+    const enabled = !handRaised;
+    setHandRaised(enabled);
+    setParticipants(current => current.map(person => idOf(person.user_id) === identityRef.current ? { ...person, hand_raised: enabled } : person));
+    await send("meeting-reaction", { type: "raise_hand", user_id: identityRef.current, display_name: nameRef.current || "Mshiriki", enabled });
+    if (enabled) {
+      const item = { id: String(Date.now() + Math.random()), emoji: "✋", display_name: nameRef.current || "Mshiriki" };
+      setReactions(current => [...current.slice(-7), item]);
+      window.setTimeout(() => setReactions(current => current.filter(reaction => reaction.id !== item.id)), 2200);
+    }
+  };
   const end = async () => { if (!isAdmin || ending) return; setEnding(true); try { await onEnd?.(); } catch (e) { setError(e?.message || "Imeshindikana kumaliza mkutano."); setEnding(false); } };
   const tiles = [{ participant: { user_id: identityRef.current, display_name: nameRef.current }, stream: localStreamRef.current, local: true },
     ...participants.filter(p => p.user_id !== identityRef.current).map(participant => ({ participant, stream: remoteStreamsRef.current.get(participant.user_id), local: false }))];
@@ -160,7 +200,8 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
   return <section className="overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-900/80 p-4 md:p-5"><div><div className="flex items-center gap-2"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500"/><span className="text-xs font-black uppercase tracking-widest text-rose-300">LIVE</span><span className="text-xs text-slate-400">{roomState}</span></div><h2 className="mt-1 text-lg font-black">{meeting?.title || "Mkutano wa wazazi"}</h2><p className="mt-1 text-xs text-slate-400">{participants.length} washiriki wameunganishwa</p></div><span className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">{connecting ? "Inaunganisha..." : "Mkutano unaendelea"}</span></header>
     {error && <div role="alert" className="m-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-200">{error}</div>}
+    {reactions.length > 0 && <div aria-live="polite" className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-slate-900/50 px-4 py-3">{reactions.map(item => <span key={item.id} title={item.display_name} className="animate-bounce rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xl">{item.emoji}<span className="ml-1 text-[10px] text-slate-300">{item.display_name}</span></span>)}</div>}
     <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">{tiles.map(tile => <VideoTile key={tile.participant.user_id} participant={tile.participant} stream={tile.stream} local={tile.local}/>)}{!connecting && participants.length <= 1 && <div className="rounded-2xl border border-dashed border-white/15 p-6 text-center text-sm text-slate-400">Subiri washiriki wengine waingie kwenye mkutano.</div>}</div>
-    <footer className="flex flex-wrap items-center justify-center gap-3 border-t border-white/10 bg-slate-900/80 p-4"><button type="button" onClick={toggleMic} disabled={connecting} className={"rounded-xl px-5 py-3 text-sm font-bold " + (micOn ? "bg-emerald-600" : "bg-slate-700")}>{micOn ? "Zima Mic" : "Washa Mic"}</button><button type="button" onClick={toggleCamera} disabled={connecting} className={"rounded-xl px-5 py-3 text-sm font-bold " + (cameraOn ? "bg-blue-600" : "bg-slate-700")}>{cameraOn ? "Zima Kamera" : "Washa Kamera"}</button>{isAdmin ? <button type="button" onClick={end} disabled={ending || connecting} className="rounded-xl bg-rose-600 px-6 py-3 text-sm font-black hover:bg-rose-500 disabled:opacity-50">{ending ? "Inamaliza..." : "Maliza mkutano"}</button> : <button type="button" onClick={leave} className="rounded-xl bg-rose-600 px-6 py-3 text-sm font-black hover:bg-rose-500">Ondoka</button>}</footer>
+    <footer className="flex flex-wrap items-center justify-center gap-3 border-t border-white/10 bg-slate-900/80 p-4"><button type="button" onClick={sendApplause} disabled={connecting} title="Piga makofi / Applause" aria-label="Piga makofi" className="rounded-xl border border-white/10 bg-slate-800/80 px-4 py-3 text-xl transition hover:bg-white/15 disabled:opacity-40">👏 {applauseCount > 0 && <span className="ml-1 text-xs font-bold">{applauseCount}</span>}</button><button type="button" onClick={toggleRaiseHand} disabled={connecting} title={handRaised ? "Shusha mkono" : "Inua mkono kuomba ruhusa ya kuongea"} aria-label={handRaised ? "Shusha mkono" : "Inua mkono"} aria-pressed={handRaised} className={"rounded-xl border px-4 py-3 text-xl transition disabled:opacity-40 " + (handRaised ? "border-amber-300/40 bg-amber-500/20 text-amber-100" : "border-white/10 bg-slate-800/80 hover:bg-white/15")}>✋ <span className="ml-1 text-xs font-bold">{handRaised ? "Shusha mkono" : "Omba nafasi ya kuongea"}</span></button><button type="button" onClick={toggleMic} disabled={connecting} className={"rounded-xl px-5 py-3 text-sm font-bold " + (micOn ? "bg-emerald-600" : "bg-slate-700")}>{micOn ? "Zima Mic" : "Washa Mic"}</button><button type="button" onClick={toggleCamera} disabled={connecting} className={"rounded-xl px-5 py-3 text-sm font-bold " + (cameraOn ? "bg-blue-600" : "bg-slate-700")}>{cameraOn ? "Zima Kamera" : "Washa Kamera"}</button>{isAdmin ? <button type="button" onClick={end} disabled={ending || connecting} className="rounded-xl bg-rose-600 px-6 py-3 text-sm font-black hover:bg-rose-500 disabled:opacity-50">{ending ? "Inamaliza..." : "Maliza mkutano"}</button> : <button type="button" onClick={leave} className="rounded-xl bg-rose-600 px-6 py-3 text-sm font-black hover:bg-rose-500">Ondoka</button>}</footer>
   </section>;
 }
