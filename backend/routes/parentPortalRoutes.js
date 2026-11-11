@@ -61,25 +61,6 @@ function canAdministerParentMeetings(req) {
   ].includes(name));
 }
 
-async function closeLiveKitParentRoom(schoolId, meetingId) {
-  const settings = liveKitSettings();
-  const roomName = parentMeetingRoomName(schoolId, meetingId);
-  const now = Math.floor(Date.now() / 1000);
-  const token = liveKitJwt(settings.apiKey, settings.apiSecret, {
-    iss: settings.apiKey, sub: "africore-parent-admin", nbf: now - 5, iat: now, exp: now + 300,
-    video: { roomAdmin: true, room: roomName },
-  });
-  const response = await fetch(settings.host + "/twirp/livekit.RoomService/DeleteRoom", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-    body: JSON.stringify({ room: roomName }),
-  });
-  if (!response.ok && response.status !== 404) {
-    const detail = await response.text().catch(() => "");
-    throw new Error("LiveKit room could not be closed (HTTP " + response.status + "): " + detail.slice(0, 300));
-  }
-}
-
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://africorepro.vercel.app").replace(/\/$/, "");
 const TOKEN_SECRET = process.env.PARENT_PORTAL_JWT_SECRET || process.env.SUPABASE_SERVICE_KEY;
 
