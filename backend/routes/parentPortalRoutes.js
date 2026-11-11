@@ -785,14 +785,27 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
       marksByStudent.get(sid).push({ ...mark, subject_name: subjectMap.get(String(mark.subject_id)) || "Subject" });
     }
 
+    const requestedReports = Array.isArray(req.body?.report_snapshots) ? req.body.report_snapshots : [];
+    const reportsByStudent = new Map(requestedReports.map(item => [String(item.student_id), item.report]));
     const publishedAt = new Date().toISOString();
-    const rows = approvedResults.filter(row => validStudentIds.has(Number(row.student_id))).map(result => ({
-      school_id: schoolId, exam_id: examId, student_id: Number(result.student_id),
-      exam_snapshot: examQuery.data, result_snapshot: result,
-      marks_snapshot: marksByStudent.get(Number(result.student_id)) || [],
-      subjects_snapshot: subjectIds.map(id => ({ id, subject_name: subjectMap.get(String(id)) || "Subject" })),
-      published_at: publishedAt, published_by: req.user.id,
-    }));
+    const rows = approvedResults.filter(row => validStudentIds.has(Number(row.student_id))).map(result => {
+      const reportForm = reportsByStudent.get(String(result.student_id));
+      const savedMarks = marksByStudent.get(Number(result.student_id)) || [];
+      // Only accept a report form for the exact student in this approved batch.
+      // The raw approved result and marks remain separately stored as the source of truth.
+      const reportMatches = reportForm
+        && Number(reportForm.id) === Number(result.student_id)
+        && Array.isArray(reportForm.subjects)
+        && reportForm.subjects.every(subject => subject && typeof subject.subject_name === "string");
+      return {
+        school_id: schoolId, exam_id: examId, student_id: Number(result.student_id),
+        exam_snapshot: examQuery.data,
+        result_snapshot: reportMatches ? { ...result, report_form: reportForm } : result,
+        marks_snapshot: savedMarks,
+        subjects_snapshot: subjectIds.map(id => ({ id, subject_name: subjectMap.get(String(id)) || "Subject" })),
+        published_at: publishedAt, published_by: req.user.id,
+      };
+    });
     if (!rows.length) return res.status(409).json({ success: false, message: "Hakuna wanafunzi halali wenye matokeo yaliyoidhinishwa." });
     const saved = await supabase.from("parent_portal_result_snapshots").upsert(rows, { onConflict: "school_id,exam_id,student_id" });
     if (saved.error) throw saved.error;
