@@ -177,7 +177,6 @@ export default function SchoolOverview() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-3">
                     <div><h2 className="text-lg font-bold text-slate-900">Headmaster wa shule hii</h2><p className="text-sm text-slate-500">Tazama taarifa na utume tena login credentials.</p></div>
                     {school?.is_active === true && headmasters.length === 0 && <button type="button" onClick={() => navigate(`/school-management/headmasters/add?school_id=${encodeURIComponent(id)}`)} className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">Add Headmaster</button>}
