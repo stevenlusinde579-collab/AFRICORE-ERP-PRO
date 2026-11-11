@@ -18,8 +18,8 @@ function normalizeParentIdentity(parent) {
 function normalizeClassLabel(name) {
   const roman = { i: "1", ii: "2", iii: "3", iv: "4", v: "5", vi: "6", vii: "7" };
   return String(name || "").normalize("NFKC").toLowerCase()
-    .replace(/\\b(standard|std|form)\\s+(vii|vi|iv|iii|ii|i)\\b/g, (_match, level, numeral) => level + " " + roman[numeral])
-    .replace(/[_-]+/g, " ").replace(/\\s+/g, " ").trim();
+    .replace(/\b(standard|std|form)\s+(vii|vi|iv|iii|ii|i)\b/g, (_match, level, numeral) => level + " " + roman[numeral])
+    .replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function uniqueClassOptions(rows = []) {
@@ -48,13 +48,13 @@ function classOrder(name) {
   if (/\b(kg|kindergarten)\b/.test(value)) return 20;
   if (/\b(pre primary|preprimary|pre unit)\b/.test(value)) return 30;
   const roman = "(vi|v|iv|iii|ii|i|[1-7])";
-  const standard = value.match(new RegExp("\\b(?:standard|std)\\s*" + roman));
+  const standard = value.match(new RegExp("\b(?:standard|std)\s*" + roman));
   if (standard) {
     const token = standard[1];
     const number = /^[1-7]$/.test(token) ? Number(token) : ({ i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7 }[token] || 0);
     return 40 + number;
   }
-  const form = value.match(new RegExp("\\bform\\s*(vi|v|iv|iii|ii|i|[1-6])"));
+  const form = value.match(new RegExp("\bform\s*(vi|v|iv|iii|ii|i|[1-6])"));
   if (form) {
     const token = form[1];
     const number = /^[1-6]$/.test(token) ? Number(token) : ({ i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6 }[token] || 0);
