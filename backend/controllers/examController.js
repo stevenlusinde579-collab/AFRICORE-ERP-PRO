@@ -22,6 +22,7 @@ export const getExams = async (req, res) => {
             .from("exams")
             .select("*")
             .eq("academic_year_id", Number(academic_year_id))
+            .is("deleted_at", null)
             .order("created_at", { ascending: false });
 
         if (school_id) {
@@ -73,6 +74,7 @@ export const getExamById = async (req, res) => {
             .from("exams")
             .select("*")
             .eq("id", id)
+            .is("deleted_at", null)
             .single();
 
         if (error) {
@@ -254,36 +256,94 @@ export const updateExam = async (req, res) => {
 
 export const deleteExam = async (req, res) => {
     try {
-        const { id } = req.params;
-
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                message: "Exam ID is required"
-            });
+        const examId = Number(req.params.id);
+        const schoolId = Number(req.profile?.school_id);
+        if (!Number.isInteger(examId) || examId <= 0) {
+            return res.status(400).json({ success: false, message: "Valid exam ID is required." });
         }
-
-        const { error } = await supabase
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(403).json({ success: false, message: "School context is required." });
+        }
+        const { data, error } = await supabase
             .from("exams")
-            .delete()
-            .eq("id", id);
-
-        if (error) {
-            throw error;
-        }
-
-        return res.json({
-            success: true,
-            message: "Exam deleted successfully"
-        });
-
+            .update({
+                deleted_at: new Date().toISOString(),
+                deleted_by: req.user?.id || null,
+                delete_reason: "Moved to Recycle Bin"
+            })
+            .eq("id", examId)
+            .eq("school_id", schoolId)
+            .is("deleted_at", null)
+            .select("id,exam_name,deleted_at")
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ success: false, message: "Examination not found or already in Recycle Bin." });
+        return res.json({ success: true, message: "Examination moved to Recycle Bin. Its records have been preserved.", exam: data });
     } catch (error) {
-        console.error("DELETE EXAM ERROR:", error);
+        console.error("SOFT DELETE EXAM ERROR:", error);
+        return res.status(500).json({ success: false, message: error.message || "Failed to move examination to Recycle Bin." });
+    }
+};
 
-        return res.status(500).json({
-            success: false,
-            message: error.message
-        });
+export const getDeletedExams = async (req, res) => {
+    try {
+        const schoolId = Number(req.profile?.school_id);
+        const academicYearId = req.query.academic_year_id ? Number(req.query.academic_year_id) : null;
+        if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(403).json({ success: false, message: "School context is required." });
+        let query = supabase.from("exams").select("id,school_id,academic_year_id,exam_name,exam_type,term,start_date,end_date,status,deleted_at,deleted_by,delete_reason,created_at")
+            .eq("school_id", schoolId).not("deleted_at", "is", null).order("deleted_at", { ascending: false });
+        if (academicYearId && Number.isInteger(academicYearId)) query = query.eq("academic_year_id", academicYearId);
+        const { data, error } = await query;
+        if (error) throw error;
+        return res.json({ success: true, exams: data || [] });
+    } catch (error) {
+        console.error("GET DELETED EXAMS ERROR:", error);
+        return res.status(500).json({ success: false, message: error.message || "Unable to load Recycle Bin." });
+    }
+};
+
+export const restoreExam = async (req, res) => {
+    try {
+        const examId = Number(req.params.id);
+        const schoolId = Number(req.profile?.school_id);
+        if (!Number.isInteger(examId) || examId <= 0 || !Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "Valid examination and school are required." });
+        }
+        const { data, error } = await supabase.from("exams")
+            .update({ deleted_at: null, deleted_by: null, delete_reason: null })
+            .eq("id", examId).eq("school_id", schoolId).not("deleted_at", "is", null)
+            .select("id,exam_name").maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ success: false, message: "Deleted examination not found." });
+        return res.json({ success: true, message: "Examination restored successfully.", exam: data });
+    } catch (error) {
+        console.error("RESTORE EXAM ERROR:", error);
+        return res.status(500).json({ success: false, message: error.message || "Unable to restore examination." });
+    }
+};
+
+export const permanentlyDeleteExam = async (req, res) => {
+    try {
+        const examId = Number(req.params.id);
+        const schoolId = Number(req.profile?.school_id);
+        if (req.body?.confirm_permanent_delete !== true) {
+            return res.status(400).json({ success: false, message: "Explicit permanent-delete confirmation is required." });
+        }
+        if (!Number.isInteger(examId) || examId <= 0 || !Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "Valid examination and school are required." });
+        }
+        const { data: exam, error: findError } = await supabase.from("exams")
+            .select("id,exam_name").eq("id", examId).eq("school_id", schoolId)
+            .not("deleted_at", "is", null).maybeSingle();
+        if (findError) throw findError;
+        if (!exam) return res.status(404).json({ success: false, message: "Examination is not in the Recycle Bin." });
+        // Published Parent Portal snapshots have no FK to exams and remain intact.
+        const { error: deleteError } = await supabase.from("exams").delete().eq("id", examId).eq("school_id", schoolId).not("deleted_at", "is", null);
+        if (deleteError) throw deleteError;
+        return res.json({ success: true, message: "Examination permanently deleted. Published Parent Portal result copies are retained." });
+    } catch (error) {
+        console.error("PERMANENT EXAM DELETE ERROR:", error);
+        return res.status(500).json({ success: false, message: error.message || "Unable to permanently delete examination." });
     }
 };
 
