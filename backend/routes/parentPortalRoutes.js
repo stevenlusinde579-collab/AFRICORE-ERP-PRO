@@ -953,31 +953,29 @@ router.get("/results/:examId", async (req, res) => {
   const { student, school } = req.parent;
   if (!Number.isInteger(examId)) return res.status(400).json({ success: false, message: "Invalid examination." });
   try {
-    const { data: exam, error: examError } = await supabase.from("exams").select("id,exam_name,school_id,status").eq("id", examId).eq("school_id", school.id).maybeSingle();
-    if (examError || !exam) return res.status(404).json({ success: false, message: "Examination not found." });
-    const [result, marks] = await Promise.all([
-      supabase.from("results").select("id,total_marks,average_marks,grade,division,position,remarks,approved").eq("student_id", student.id).eq("exam_id", examId).maybeSingle(),
-      supabase.from("student_marks").select("id,subject_id,marks,grade,remarks,status").eq("student_id", student.id).eq("exam_id", examId).order("subject_id"),
-    ]);
-    if (result.error || marks.error) throw result.error || marks.error;
-    // Subject marks are visible as soon as they have been recorded. The overall
-    // result remains official only after the result row has been approved.
-    const markRows = marks.data || [];
-    const subjectIds = [...new Set(markRows.map((row) => row.subject_id).filter(Boolean))];
-    const subjects = subjectIds.length ? await supabase.from("subjects").select("id,subject_name").in("id", subjectIds) : { data: [] };
-    if (subjects.error) throw subjects.error;
-    const subjectNames = new Map((subjects.data || []).map((subject) => [String(subject.id), subject.subject_name]));
-    const approved = result.data?.approved === true;
+    // Published result snapshots are the authoritative Parent Portal source.
+    // They survive soft and permanent deletion of the original examination.
+    const snapshotQuery = await supabase.from("parent_portal_result_snapshots")
+      .select("exam_snapshot,result_snapshot,marks_snapshot,subjects_snapshot,published_at")
+      .eq("school_id", school.id).eq("student_id", student.id).eq("exam_id", examId).maybeSingle();
+    if (snapshotQuery.error) throw snapshotQuery.error;
+    if (!snapshotQuery.data) return res.status(404).json({ success: false, message: "Matokeo ya mtihani huu bado hayajachapishwa kwa Parent Portal." });
+    const snapshot = snapshotQuery.data;
+    const subjectNames = new Map((snapshot.subjects_snapshot || []).map(subject => [String(subject.id), subject.subject_name]));
     return res.json({
       success: true,
-      exam,
-      result: approved ? result.data : null,
-      result_status: approved ? "approved" : (markRows.length ? "pending_approval" : "not_entered"),
-      marks: markRows.map((row) => ({ ...row, subject_name: subjectNames.get(String(row.subject_id)) || "Subject" })),
+      exam: snapshot.exam_snapshot,
+      result: snapshot.result_snapshot,
+      result_status: "published",
+      published_at: snapshot.published_at,
+      marks: (snapshot.marks_snapshot || []).map(mark => ({
+        ...mark,
+        subject_name: mark.subject_name || subjectNames.get(String(mark.subject_id)) || "Subject",
+      })),
     });
   } catch (error) {
-    console.error("PARENT RESULTS ERROR:", error);
-    return res.status(500).json({ success: false, message: "Unable to load examination results." });
+    console.error("PARENT RESULTS SNAPSHOT ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load published examination results." });
   }
 });
 
