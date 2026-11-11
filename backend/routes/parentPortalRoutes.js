@@ -787,6 +787,17 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
 
     const requestedReports = Array.isArray(req.body?.report_snapshots) ? req.body.report_snapshots : [];
     const reportsByStudent = new Map(requestedReports.map(item => [String(item.student_id), item.report]));
+    const batchStudentKeys = approvedResults.map(row => String(row.student_id));
+    const reportBatchIsComplete = requestedReports.length === approvedResults.length
+      && batchStudentKeys.every(studentKey => {
+        const report = reportsByStudent.get(studentKey);
+        return report && Number(report.id) === Number(studentKey)
+          && Array.isArray(report.subjects)
+          && report.subjects.every(subject => subject && typeof subject.subject_name === "string");
+      });
+    if (!reportBatchIsComplete) {
+      return res.status(422).json({ success: false, message: "Report form data haijakamilika kwa kundi hili. Hakuna matokeo yaliyochapishwa; tafadhali refresh Result Analysis kisha ujaribu tena." });
+    }
     const publishedAt = new Date().toISOString();
     const rows = approvedResults.filter(row => validStudentIds.has(Number(row.student_id))).map(result => {
       const reportForm = reportsByStudent.get(String(result.student_id));
