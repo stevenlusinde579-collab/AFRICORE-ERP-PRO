@@ -461,7 +461,7 @@ router.get("/staff/meeting-classes", authenticateUser, parentPortalStaffAccess, 
     const classIds = rows.map((row) => row.id);
     const [studentResult, yearResult] = await Promise.all([
       supabase.from("students").select("current_class_id").eq("school_id", schoolId).in("current_class_id", classIds).limit(10000),
-      supabase.from("academic_years").select("id,year_name").eq("school_id", schoolId),
+      supabase.from("academic_years").select("id,year_name,is_active").eq("school_id", schoolId),
     ]);
     if (studentResult.error) throw studentResult.error;
     if (yearResult.error) throw yearResult.error;
@@ -470,12 +470,20 @@ router.get("/staff/meeting-classes", authenticateUser, parentPortalStaffAccess, 
       const key = String(student.current_class_id);
       counts.set(key, (counts.get(key) || 0) + 1);
     });
-    const years = new Map((yearResult.data || []).map((year) => [String(year.id), year.year_name]));
+    const years = new Map((yearResult.data || []).map((year) => [String(year.id), year]));
+    const activeYear = (yearResult.data || []).find((year) => year.is_active === true) || null;
     const classes = rows
-      .filter((row) => (counts.get(String(row.id)) || 0) > 0)
+      .filter((row) => {
+        const hasStudents = (counts.get(String(row.id)) || 0) > 0;
+        const year = row.academic_year_id ? years.get(String(row.academic_year_id)) : null;
+        // Prefer the school's active academic year. If the school has no active
+        // year configured, keep occupied classes visible instead of hiding them.
+        const belongsToActiveYear = !activeYear || String(row.academic_year_id) === String(activeYear.id);
+        return hasStudents && belongsToActiveYear && (!row.academic_year_id || year);
+      })
       .map((row) => ({
         ...row,
-        academic_year_name: years.get(String(row.academic_year_id)) || null,
+        academic_year_name: years.get(String(row.academic_year_id))?.year_name || null,
         student_count: counts.get(String(row.id)) || 0,
       }));
     return res.json({ success: true, classes });
