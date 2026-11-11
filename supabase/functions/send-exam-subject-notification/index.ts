@@ -576,6 +576,20 @@ const {
         Number(teacher.school_id) === Number(exam.school_id)
       );
 
+      if (!scopedTeachers.length) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            exam_subject_id: examSubjectId,
+            teachers_notified: 0,
+            channels,
+            message: "Hakuna teacher assignment ya subject/class hii ndani ya shule hii.",
+            results: [],
+          }),
+          { headers: corsHeaders }
+        );
+      }
+
       // Use the phone number captured on the teacher registration profile
       // when the teachers record itself does not contain one.
       const profileIds = [
