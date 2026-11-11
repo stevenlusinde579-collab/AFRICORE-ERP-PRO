@@ -15,6 +15,32 @@ function normalizeParentIdentity(parent) {
   return "name:" + name;
 }
 
+function normalizeClassLabel(name) {
+  const roman = { i: "1", ii: "2", iii: "3", iv: "4", v: "5", vi: "6", vii: "7" };
+  return String(name || "").normalize("NFKC").toLowerCase()
+    .replace(/\b(standard|std|form)\s+(vii|vi|iv|iii|ii|i)\b/g, (_match, level, numeral) => level + " " + roman[numeral])
+    .replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function uniqueClassOptions(rows = []) {
+  const unique = new Map();
+  rows.forEach((item) => {
+    const key = normalizeClassLabel(item.class_name) || "class-id:" + String(item.id);
+    const current = unique.get(key);
+    const score = (row) => [
+      row.is_active === true ? 1 : 0,
+      Number(row.student_count || 0),
+      Number(row.id || 0),
+    ];
+    const candidateScore = score(item);
+    const currentScore = current ? score(current) : [];
+    if (!current || candidateScore.some((value, index) => value > currentScore[index] && candidateScore.slice(0, index).every((v, j) => v === currentScore[j]))) {
+      unique.set(key, item);
+    }
+  });
+  return [...unique.values()];
+}
+
 function classOrder(name) {
   const value = String(name || "").toLowerCase().replace(/[_-]+/g, " ").trim();
   if (/\bbaby\b/.test(value)) return 0;
@@ -22,13 +48,13 @@ function classOrder(name) {
   if (/\b(kg|kindergarten)\b/.test(value)) return 20;
   if (/\b(pre primary|preprimary|pre unit)\b/.test(value)) return 30;
   const roman = "(vi|v|iv|iii|ii|i|[1-7])";
-  const standard = value.match(new RegExp("\\b(?:standard|std)\\s*" + roman));
+  const standard = value.match(new RegExp("\b(?:standard|std)\s*" + roman));
   if (standard) {
     const token = standard[1];
     const number = /^[1-7]$/.test(token) ? Number(token) : ({ i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7 }[token] || 0);
     return 40 + number;
   }
-  const form = value.match(new RegExp("\\bform\\s*(vi|v|iv|iii|ii|i|[1-6])"));
+  const form = value.match(new RegExp("\bform\s*(vi|v|iv|iii|ii|i|[1-6])"));
   if (form) {
     const token = form[1];
     const number = /^[1-6]$/.test(token) ? Number(token) : ({ i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6 }[token] || 0);
@@ -62,11 +88,11 @@ export default function ParentPortalManagement() {
   const [liveRoom, setLiveRoom] = useState(null);
 
   const orderedClasses = useMemo(
-    () => [...classes].sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
+    () => uniqueClassOptions(classes).sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
     [classes]
   );
   const orderedMeetingClasses = useMemo(
-    () => [...meetingClasses].sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
+    () => uniqueClassOptions(meetingClasses).sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
     [meetingClasses]
   );
   const parentStats = useMemo(() => {
