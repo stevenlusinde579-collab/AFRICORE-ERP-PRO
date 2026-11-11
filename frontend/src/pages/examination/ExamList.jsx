@@ -1,13 +1,15 @@
 ﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../services/api";
 import {
     FaArrowLeft,
     FaEye,
     FaPlus,
     FaTrash,
     FaSpinner,
-    FaSearch
+    FaSearch,
+    FaUndo,
+    FaArchive
 } from "react-icons/fa";
 
 import { useSchool } from "../../context/SchoolContext";
@@ -34,6 +36,10 @@ function ExamList() {
     // =====================================================
 
     const [exams, setExams] = useState([]);
+    const [deletedExams, setDeletedExams] = useState([]);
+    const [showRecycleBin, setShowRecycleBin] = useState(false);
+    const [binLoading, setBinLoading] = useState(false);
+    const [binActionId, setBinActionId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState(null);
     const [search, setSearch] = useState("");
@@ -160,7 +166,7 @@ function ExamList() {
 
 
             const response =
-                await axios.get(
+                await api.get(
                     API_URL,
                     {
                         params
@@ -260,7 +266,7 @@ function ExamList() {
             // -------------------------------------------------
 
             const response =
-                await axios.delete(
+                await api.delete(
                     `${API_URL}/${id}`,
                     {
                         params: {
@@ -319,6 +325,59 @@ function ExamList() {
 
     };
 
+
+    const loadRecycleBin = async () => {
+        if (!school?.id) return;
+        try {
+            setBinLoading(true);
+            const response = await api.get(`${API_URL}/recycle-bin`, {
+                params: { academic_year_id: Number(activeAcademicYearId) }
+            });
+            if (!response.data?.success) throw new Error(response.data?.message || "Unable to load Recycle Bin.");
+            setDeletedExams(Array.isArray(response.data.exams) ? response.data.exams : []);
+        } catch (loadError) {
+            setError(loadError?.response?.data?.message || loadError.message || "Unable to load Recycle Bin.");
+        } finally {
+            setBinLoading(false);
+        }
+    };
+
+    const handleRestore = async (id) => {
+        try {
+            setBinActionId(id);
+            const response = await api.post(`${API_URL}/${id}/restore`);
+            if (!response.data?.success) throw new Error(response.data?.message || "Restore failed.");
+            setDeletedExams(rows => rows.filter(row => String(row.id) !== String(id)));
+            await loadExams(true);
+        } catch (actionError) {
+            setError(actionError?.response?.data?.message || actionError.message || "Restore failed.");
+        } finally {
+            setBinActionId(null);
+        }
+    };
+
+    const handlePermanentDelete = async (id) => {
+        const confirmed = window.confirm("WARNING: This permanently deletes the exam and its working records. Published Parent Portal result copies are retained. Continue?");
+        if (!confirmed) return;
+        try {
+            setBinActionId(id);
+            const response = await api.delete(`${API_URL}/${id}/permanent`, {
+                data: { confirm_permanent_delete: true }
+            });
+            if (!response.data?.success) throw new Error(response.data?.message || "Permanent deletion failed.");
+            setDeletedExams(rows => rows.filter(row => String(row.id) !== String(id)));
+        } catch (actionError) {
+            setError(actionError?.response?.data?.message || actionError.message || "Permanent deletion failed.");
+        } finally {
+            setBinActionId(null);
+        }
+    };
+
+    const toggleRecycleBin = async () => {
+        const next = !showRecycleBin;
+        setShowRecycleBin(next);
+        if (next) await loadRecycleBin();
+    };
 
     // =====================================================
     // SEARCH
@@ -417,6 +476,13 @@ function ExamList() {
                 </div>
 
 
+                <div className="flex flex-wrap gap-2">
+                <button
+                    onClick={toggleRecycleBin}
+                    className="px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 flex items-center justify-center gap-2 hover:bg-amber-100"
+                >
+                    <FaArchive /> {showRecycleBin ? "Hide Recycle Bin" : "Recycle Bin"}
+                </button>
                 <button
                     onClick={() =>
                         navigate("/examination/create")
@@ -426,9 +492,36 @@ function ExamList() {
                     <FaPlus />
                     Create Examination
                 </button>
+                </div>
 
             </div>
 
+
+            {showRecycleBin && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
+                    <div>
+                        <h2 className="text-lg font-bold text-amber-950">Recycle Bin</h2>
+                        <p className="text-sm text-amber-800">Deleted exams remain here with their working records. Restore them or permanently delete them.</p>
+                    </div>
+                    {binLoading ? <div className="py-6 text-center"><FaSpinner className="animate-spin inline mr-2" />Loading deleted exams...</div> :
+                        deletedExams.length === 0 ? <p className="py-4 text-sm text-amber-900">Recycle Bin is empty.</p> :
+                        <div className="overflow-x-auto bg-white rounded-xl border border-amber-200">
+                            <table className="w-full text-sm">
+                                <thead className="bg-amber-100"><tr><th className="text-left p-3">Examination</th><th className="text-left p-3">Deleted at</th><th className="text-right p-3">Actions</th></tr></thead>
+                                <tbody>{deletedExams.map(row => (
+                                    <tr key={row.id} className="border-t">
+                                        <td className="p-3 font-medium">{row.exam_name || "Examination"} <span className="text-xs text-gray-500">#{row.id}</span></td>
+                                        <td className="p-3">{row.deleted_at ? new Date(row.deleted_at).toLocaleString() : "—"}</td>
+                                        <td className="p-3"><div className="flex justify-end gap-2">
+                                            <button disabled={binActionId === row.id} onClick={() => handleRestore(row.id)} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"><FaUndo className="inline mr-1" />Restore</button>
+                                            <button disabled={binActionId === row.id} onClick={() => handlePermanentDelete(row.id)} className="px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"><FaTrash className="inline mr-1" />Delete Permanently</button>
+                                        </div></td>
+                                    </tr>
+                                ))}</tbody>
+                            </table>
+                        </div>}
+                </div>
+            )}
 
             {/* =================================================
                 ERROR

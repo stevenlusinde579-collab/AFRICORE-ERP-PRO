@@ -429,6 +429,10 @@ export default function ResultsAnalysis() {
     const [error, setError] = useState("");
     const [sendingChannel, setSendingChannel] = useState("");
     const [communicationStatus, setCommunicationStatus] = useState({});
+    const [showBulkPublish, setShowBulkPublish] = useState(false);
+    const [bulkPublishMode, setBulkPublishMode] = useState("portal");
+    const [bulkPublishing, setBulkPublishing] = useState(false);
+    const [bulkPublishFeedback, setBulkPublishFeedback] = useState("");
 
     const [exam, setExam] = useState(null);
     const [examSubjects, setExamSubjects] = useState([]);
@@ -3124,6 +3128,55 @@ export default function ResultsAnalysis() {
     }, [printReport, documentBrandName]);
 
 
+    const handleBulkPublishResults = async () => {
+        if (!exam?.id && !examId) return;
+        setBulkPublishing(true);
+        setBulkPublishFeedback("");
+        let portalCount = 0;
+        let smsSent = 0;
+        let smsFailed = 0;
+        try {
+            if (bulkPublishMode === "portal" || bulkPublishMode === "both") {
+                const published = await api.post(`/parent-portal/staff/exams/${exam?.id || examId}/publish-results`);
+                portalCount = Number(published.data?.published_count || 0);
+                if (!published.data?.success) throw new Error(published.data?.message || "Parent Portal publication failed.");
+            }
+            if (bulkPublishMode === "sms" || bulkPublishMode === "both") {
+                const recipients = (overallRankedStudents || []).map(student => getStudentReport(student));
+                for (const report of recipients) {
+                    const phone = getParentPhone(report);
+                    if (!phone) { smsFailed += 1; continue; }
+                    try {
+                        const message = buildStudentResultSmsMessage(exam, report);
+                        const response = await api.post("/communication/parent-result", {
+                            school_id: report.school_id || exam?.school_id || null,
+                            student_id: report.id,
+                            exam_id: exam?.id || examId,
+                            parent_name: getParentName(report),
+                            recipient: phone,
+                            channel: "sms",
+                            subject: `${exam?.name || exam?.exam_name || "Examination"} Results - ${report.full_name}`,
+                            message,
+                        });
+                        if (response.data?.success) smsSent += 1;
+                        else smsFailed += 1;
+                    } catch (smsError) {
+                        smsFailed += 1;
+                        console.error("BULK RESULT SMS ERROR", report.id, smsError);
+                    }
+                }
+            }
+            setBulkPublishFeedback([
+                portalCount ? `Parent Portal: ${portalCount} student result(s) published.` : "",
+                bulkPublishMode !== "portal" ? `SMS sent: ${smsSent}; failed or missing phone: ${smsFailed}.` : "",
+            ].filter(Boolean).join(" "));
+        } catch (publishError) {
+            setBulkPublishFeedback(publishError?.response?.data?.message || publishError.message || "Unable to publish examination results.");
+        } finally {
+            setBulkPublishing(false);
+        }
+    };
+
     // ========================================================
     // TABS
     // ========================================================
@@ -3331,7 +3384,13 @@ export default function ResultsAnalysis() {
                             </div>
                         </div>
 
-                        <div className="no-print flex items-center gap-2">
+                        <div className="no-print flex items-center gap-2 flex-wrap">
+                            <button
+                                onClick={() => { setShowBulkPublish(true); setBulkPublishFeedback(""); }}
+                                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2"
+                            >
+                                <FaEnvelope /> Publish to Parents
+                            </button>
                             <button
                                 onClick={() => loadAnalysis(true)}
                                 disabled={refreshing}
@@ -3413,6 +3472,31 @@ export default function ResultsAnalysis() {
                     </div>
                 </div>
 
+
+                {showBulkPublish && (
+                    <div className="no-print fixed inset-0 z-[70] bg-slate-950/50 p-4 flex items-center justify-center">
+                        <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+                            <div>
+                                <h2 className="text-xl font-extrabold text-slate-900">Publish Examination Results</h2>
+                                <p className="text-sm text-slate-500 mt-1">Chagua njia ya kuwafikishia wazazi matokeo ya mtihani huu.</p>
+                            </div>
+                            <label className="block text-sm font-semibold text-slate-700">Delivery method</label>
+                            <select value={bulkPublishMode} onChange={event => setBulkPublishMode(event.target.value)} className="w-full rounded-xl border border-slate-300 p-3">
+                                <option value="portal">Parent Portal only</option>
+                                <option value="sms">Normal SMS (NewHope)</option>
+                                <option value="both">Both simultaneously</option>
+                            </select>
+                            {bulkPublishFeedback && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{bulkPublishFeedback}</div>}
+                            <p className="text-xs text-slate-500">Parent Portal will receive a separate result copy for each student. SMS is sent to each student's registered parent/guardian phone number. Individual send buttons remain available.</p>
+                            <div className="flex justify-end gap-2">
+                                <button onClick={() => setShowBulkPublish(false)} disabled={bulkPublishing} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700">Close</button>
+                                <button onClick={handleBulkPublishResults} disabled={bulkPublishing} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold disabled:opacity-50">
+                                    {bulkPublishing ? "Publishing..." : "Confirm & Publish"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* ====================================================
                     TABS

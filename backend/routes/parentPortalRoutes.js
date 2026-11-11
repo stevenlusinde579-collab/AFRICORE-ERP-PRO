@@ -740,6 +740,73 @@ router.patch("/staff/suggestions/:id", authenticateUser, parentPortalStaffAccess
   return res.json({ success: true, suggestion: data });
 });
 
+// Publish immutable, student-scoped result copies for Parent Portal.
+// Snapshots intentionally do not reference exams/students with foreign keys.
+router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePermission("EXAM_VIEW"), async (req, res) => {
+  const examId = Number(req.params.examId);
+  const schoolId = Number(req.profile?.school_id);
+  if (!Number.isInteger(examId) || examId <= 0 || !Number.isInteger(schoolId) || schoolId <= 0) {
+    return res.status(400).json({ success: false, message: "Invalid exam or school context." });
+  }
+  try {
+    const examQuery = await supabase.from("exams").select("*").eq("id", examId).eq("school_id", schoolId).is("deleted_at", null).maybeSingle();
+    if (examQuery.error) throw examQuery.error;
+    if (!examQuery.data) return res.status(404).json({ success: false, message: "Examination not found in your school." });
+    const [resultsQuery, marksQuery] = await Promise.all([
+      supabase.from("results").select("id,student_id,total_marks,average_marks,grade,division,position,remarks,approved,created_at").eq("exam_id", examId).eq("approved", true),
+      supabase.from("student_marks").select("id,student_id,subject_id,marks,grade,remarks,status,created_at").eq("exam_id", examId),
+    ]);
+    if (resultsQuery.error || marksQuery.error) throw resultsQuery.error || marksQuery.error;
+    const approvedResults = resultsQuery.data || [];
+    if (!approvedResults.length) return res.status(409).json({ success: false, message: "Hakuna matokeo yaliyoidhinishwa ya kuchapisha kwa wazazi." });
+    const studentIds = [...new Set(approvedResults.map(row => Number(row.student_id)).filter(Number.isInteger))];
+    const subjectIds = [...new Set((marksQuery.data || []).map(row => Number(row.subject_id)).filter(Number.isInteger))];
+    const [studentsQuery, subjectsQuery] = await Promise.all([
+      supabase.from("students").select("id,school_id").eq("school_id", schoolId).in("id", studentIds),
+      subjectIds.length ? supabase.from("subjects").select("id,subject_name").in("id", subjectIds) : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (studentsQuery.error || subjectsQuery.error) throw studentsQuery.error || subjectsQuery.error;
+    const validStudentIds = new Set((studentsQuery.data || []).map(row => Number(row.id)));
+    const subjectMap = new Map((subjectsQuery.data || []).map(row => [String(row.id), row.subject_name]));
+    const marksByStudent = new Map();
+    for (const mark of marksQuery.data || []) {
+      const sid = Number(mark.student_id);
+      if (!validStudentIds.has(sid)) continue;
+      if (!marksByStudent.has(sid)) marksByStudent.set(sid, []);
+      marksByStudent.get(sid).push({ ...mark, subject_name: subjectMap.get(String(mark.subject_id)) || "Subject" });
+    }
+    const publishedAt = new Date().toISOString();
+    const rows = approvedResults.filter(row => validStudentIds.has(Number(row.student_id))).map(result => ({
+      school_id: schoolId,
+      exam_id: examId,
+      student_id: Number(result.student_id),
+      exam_snapshot: {
+        id: examQuery.data.id,
+        exam_name: examQuery.data.exam_name,
+        exam_type: examQuery.data.exam_type,
+        term: examQuery.data.term,
+        start_date: examQuery.data.start_date,
+        end_date: examQuery.data.end_date,
+        academic_year_id: examQuery.data.academic_year_id,
+        status: examQuery.data.status,
+      },
+      result_snapshot: result,
+      marks_snapshot: marksByStudent.get(Number(result.student_id)) || [],
+      subjects_snapshot: subjectIds.map(id => ({ id, subject_name: subjectMap.get(String(id)) || "Subject" })),
+      published_at: publishedAt,
+      published_by: req.user.id,
+    }));
+    if (!rows.length) return res.status(409).json({ success: false, message: "Hakuna wanafunzi halali wenye matokeo yaliyoidhinishwa." });
+    const saved = await supabase.from("parent_portal_result_snapshots")
+      .upsert(rows, { onConflict: "school_id,exam_id,student_id" });
+    if (saved.error) throw saved.error;
+    return res.json({ success: true, published_count: rows.length, published_at: publishedAt, message: "Matokeo yaliyoidhinishwa yamechapishwa kwenye Parent Portal." });
+  } catch (error) {
+    console.error("PARENT PORTAL RESULT PUBLISH ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Unable to publish results to Parent Portal." });
+  }
+});
+
 router.use(parentAuth);
 
 
@@ -846,18 +913,24 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, exams, attendance, suggestions] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, meetings, exams, publishedSnapshots, attendance, suggestions] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
-      supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
+      supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).is("deleted_at", null).order("start_date", { ascending: false }).limit(100),
+      supabase.from("parent_portal_result_snapshots").select("exam_id,exam_snapshot,published_at").eq("school_id", school.id).eq("student_id", student.id).order("published_at", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,exams,attendance,suggestions]) if (result.error) throw result.error;
+    for (const result of [charges,payments,communications,announcements,meetings,exams,publishedSnapshots,attendance,suggestions]) if (result.error) throw result.error;
+    const examMap = new Map((exams.data || []).map(row => [String(row.id), row]));
+    for (const snapshot of publishedSnapshots.data || []) {
+      if (snapshot.exam_snapshot) examMap.set(String(snapshot.exam_id), { ...snapshot.exam_snapshot, id: snapshot.exam_id, published_at: snapshot.published_at, result_published: true });
+    }
+    const parentExams = [...examMap.values()].sort((a, b) => String(b.start_date || b.published_at || "").localeCompare(String(a.start_date || a.published_at || "")));
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
@@ -872,7 +945,7 @@ router.get("/dashboard", async (req, res) => {
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
-      exams: exams.data || [], attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
+      exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
     });
   } catch (error) {
@@ -886,31 +959,29 @@ router.get("/results/:examId", async (req, res) => {
   const { student, school } = req.parent;
   if (!Number.isInteger(examId)) return res.status(400).json({ success: false, message: "Invalid examination." });
   try {
-    const { data: exam, error: examError } = await supabase.from("exams").select("id,exam_name,school_id,status").eq("id", examId).eq("school_id", school.id).maybeSingle();
-    if (examError || !exam) return res.status(404).json({ success: false, message: "Examination not found." });
-    const [result, marks] = await Promise.all([
-      supabase.from("results").select("id,total_marks,average_marks,grade,division,position,remarks,approved").eq("student_id", student.id).eq("exam_id", examId).maybeSingle(),
-      supabase.from("student_marks").select("id,subject_id,marks,grade,remarks,status").eq("student_id", student.id).eq("exam_id", examId).order("subject_id"),
-    ]);
-    if (result.error || marks.error) throw result.error || marks.error;
-    // Subject marks are visible as soon as they have been recorded. The overall
-    // result remains official only after the result row has been approved.
-    const markRows = marks.data || [];
-    const subjectIds = [...new Set(markRows.map((row) => row.subject_id).filter(Boolean))];
-    const subjects = subjectIds.length ? await supabase.from("subjects").select("id,subject_name").in("id", subjectIds) : { data: [] };
-    if (subjects.error) throw subjects.error;
-    const subjectNames = new Map((subjects.data || []).map((subject) => [String(subject.id), subject.subject_name]));
-    const approved = result.data?.approved === true;
+    // Published result snapshots are the authoritative Parent Portal source.
+    // They survive soft and permanent deletion of the original examination.
+    const snapshotQuery = await supabase.from("parent_portal_result_snapshots")
+      .select("exam_snapshot,result_snapshot,marks_snapshot,subjects_snapshot,published_at")
+      .eq("school_id", school.id).eq("student_id", student.id).eq("exam_id", examId).maybeSingle();
+    if (snapshotQuery.error) throw snapshotQuery.error;
+    if (!snapshotQuery.data) return res.status(404).json({ success: false, message: "Matokeo ya mtihani huu bado hayajachapishwa kwa Parent Portal." });
+    const snapshot = snapshotQuery.data;
+    const subjectNames = new Map((snapshot.subjects_snapshot || []).map(subject => [String(subject.id), subject.subject_name]));
     return res.json({
       success: true,
-      exam,
-      result: approved ? result.data : null,
-      result_status: approved ? "approved" : (markRows.length ? "pending_approval" : "not_entered"),
-      marks: markRows.map((row) => ({ ...row, subject_name: subjectNames.get(String(row.subject_id)) || "Subject" })),
+      exam: snapshot.exam_snapshot,
+      result: snapshot.result_snapshot,
+      result_status: "published",
+      published_at: snapshot.published_at,
+      marks: (snapshot.marks_snapshot || []).map(mark => ({
+        ...mark,
+        subject_name: mark.subject_name || subjectNames.get(String(mark.subject_id)) || "Subject",
+      })),
     });
   } catch (error) {
-    console.error("PARENT RESULTS ERROR:", error);
-    return res.status(500).json({ success: false, message: "Unable to load examination results." });
+    console.error("PARENT RESULTS SNAPSHOT ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load published examination results." });
   }
 });
 

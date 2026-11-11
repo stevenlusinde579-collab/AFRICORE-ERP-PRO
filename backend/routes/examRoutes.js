@@ -1,4 +1,6 @@
 import express from "express";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 import {
 
@@ -11,6 +13,9 @@ import {
     updateExam,
 
     deleteExam,
+    getDeletedExams,
+    restoreExam,
+    permanentlyDeleteExam,
 
     getExamSubjects,
 
@@ -245,6 +250,14 @@ router.get(
 
 
 // =====================================================
+// EXAM RECYCLE BIN
+// =====================================================
+router.get("/recycle-bin", authenticateUser, requirePermission("EXAM_VIEW"), getDeletedExams);
+router.post("/:id/restore", authenticateUser, requirePermission("EXAM_DELETE"), restoreExam);
+router.delete("/:id/permanent", authenticateUser, requirePermission("EXAM_DELETE"), permanentlyDeleteExam);
+
+
+// =====================================================
 // GET ALL EXAMINATION PAPERS HISTORY
 //
 // GET /api/exams/papers/history
@@ -381,6 +394,8 @@ router.delete(
 
     "/:id",
 
+    authenticateUser,
+    requirePermission("EXAM_DELETE"),
     deleteExam
 
 );
