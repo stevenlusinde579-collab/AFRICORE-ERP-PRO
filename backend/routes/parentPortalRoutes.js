@@ -531,19 +531,26 @@ router.get("/staff/parents", authenticateUser, parentPortalStaffAccess, async (r
   const schoolId = Number(req.profile?.school_id);
   try {
     const authorizedClasses = await loadParentPortalClassOptions(schoolId, req.parentPortalScope.fullAccess ? null : req.parentPortalScope.classIds);
-    const visibleClassIds = authorizedClasses.map((row) => row.id);
+    const visibleClassIds = [...new Set(authorizedClasses.flatMap((row) => row.source_class_ids || [row.id]))];
     if (!visibleClassIds.length) return res.json({ success: true, parents: [] });
     const { data: students, error } = await supabase.from("students")
       .select("id,first_name,middle_name,last_name,admission_number,parent_name,parent_phone,parent_email,guardian_name,guardian_phone,current_class_id")
       .eq("school_id", schoolId).in("current_class_id", visibleClassIds).order("first_name").limit(2000);
     if (error) throw error;
-    const classMap = new Map(authorizedClasses.map((row) => [String(row.id), row.class_name]));
-    return res.json({ success: true, parents: (students || []).map((row) => ({
-      student_id: row.id, student_name: fullName(row), admission_number: row.admission_number,
-      parent_name: row.parent_name || row.guardian_name || "Not provided",
-      phone: row.parent_phone || row.guardian_phone || "", email: row.parent_email || "",
-      class_id: row.current_class_id || null, class_name: classMap.get(String(row.current_class_id)) || "Unassigned",
-    })) });
+    const classMap = new Map();
+    authorizedClasses.forEach((row) => (row.source_class_ids || [row.id]).forEach((id) => {
+      classMap.set(String(id), { id: row.id, name: row.class_name });
+    }));
+    return res.json({ success: true, parents: (students || []).map((row) => {
+      const canonicalClass = classMap.get(String(row.current_class_id));
+      return {
+        student_id: row.id, student_name: fullName(row), admission_number: row.admission_number,
+        parent_name: row.parent_name || row.guardian_name || "Not provided",
+        phone: row.parent_phone || row.guardian_phone || "", email: row.parent_email || "",
+        class_id: canonicalClass?.id || row.current_class_id || null,
+        class_name: canonicalClass?.name || "Unassigned",
+      };
+    }) });
   } catch (error) {
     console.error("PARENT PORTAL PARENT DIRECTORY ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load parent contacts." });
