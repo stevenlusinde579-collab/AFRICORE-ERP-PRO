@@ -3392,7 +3392,7 @@ export default function ResultsAnalysis() {
                                 <FaEnvelope /> Publish to Parents
                             </button>
                             <button
-                                onClick={() => loadAnalysis(true)
+                                onClick={() => loadAnalysis(true)}
                                 disabled={refreshing}
                                 className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm font-semibold flex items-center gap-2 disabled:opacity-60"
                             >
