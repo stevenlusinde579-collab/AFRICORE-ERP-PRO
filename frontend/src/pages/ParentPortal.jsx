@@ -250,6 +250,7 @@ export default function ParentPortal() {
             <ParentLiveMeeting
               meeting={liveRoom.meeting}
               connectionInfo={liveRoom.connectionInfo}
+              authToken={token}
               onLeave={() => setLiveRoom(null)}
             />
           ) : (
