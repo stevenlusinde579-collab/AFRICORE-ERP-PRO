@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
+import ParentLiveMeeting from "../components/ParentLiveMeeting";
 
 const TOKEN_KEY = "africore_parent_portal_token";
 const money = (value) => new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -26,6 +27,8 @@ export default function ParentPortal() {
   const [newPassword, setNewPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [liveMeeting, setLiveMeeting] = useState(null);
+  const [liveRoom, setLiveRoom] = useState(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const authConfig = useMemo(() => ({ headers: { Authorization: "Bearer " + token } }), [token]);
@@ -106,6 +109,36 @@ export default function ParentPortal() {
     const refresh = window.setInterval(() => loadDashboard(token), 3000);
     return () => window.clearInterval(refresh);
   }, [token, activeTab, mustChangePassword]);
+
+  const joinParentLiveMeeting = async (meeting) => {
+    if (!meeting?.id) return;
+    setBusy(true); setError("");
+    try {
+      const response = await api.post("/parent-portal/meetings/" + meeting.id + "/token", {}, authConfig);
+      setLiveRoom({ meeting: response.data.meeting, connectionInfo: response.data });
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kujiunga na mkutano."); }
+    finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    if (!token || mustChangePassword) return undefined;
+    let mounted = true;
+    const refreshLiveMeeting = async () => {
+      try {
+        const response = await api.get("/parent-portal/meetings/active", authConfig);
+        if (!mounted) return;
+        const nextMeeting = response.data?.meeting || null;
+        setLiveMeeting(nextMeeting);
+        if (!nextMeeting) setLiveRoom(null);
+      } catch (e) {
+        // Keep the current room visible during a temporary network interruption.
+        console.warn("Parent live meeting refresh failed:", e?.response?.data?.message || e?.message);
+      }
+    };
+    refreshLiveMeeting();
+    const timer = window.setInterval(refreshLiveMeeting, 5000);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, [token, mustChangePassword]);
 
   const changePassword = async (event) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
@@ -208,25 +241,32 @@ export default function ParentPortal() {
           {resultData?.marks?.length ? <div className="overflow-hidden rounded-xl border border-slate-200"><div className="border-b bg-slate-50 px-4 py-3 font-bold text-slate-700">Alama za masomo</div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Somo</th><th className="px-4 py-3">Alama</th><th className="px-4 py-3">Grade</th><th className="px-4 py-3">Maoni</th></tr></thead><tbody>{resultData.marks.map((m)=><tr key={m.id} className="border-t"><td className="px-4 py-3 font-semibold">{m.subject_name || "Somo"}</td><td className="px-4 py-3 font-bold">{m.marks ?? "—"}</td><td className="px-4 py-3">{m.grade || "—"}</td><td className="px-4 py-3 text-slate-500">{m.remarks || "—"}</td></tr>)}</tbody></table></div></div> : selectedExam && resultData && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">{resultData.result_status === "pending_approval" ? "Alama za masomo bado hazijahifadhiwa kwa mtihani huu." : "Bado hakuna alama zilizorekodiwa kwa mtihani huu."}</p>}
           {selectedExam && !resultData && <p className="text-sm text-slate-500">Inapakia matokeo...</p>}</section>}
         {activeTab==="communication" && <div className="space-y-4"><section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="mb-3 font-bold">Ujumbe kutoka shule</h2>{data.communications.map((m)=><article key={m.id} className="border-b py-3"><div className="flex justify-between gap-2"><b>{m.subject || m.channel}</b><small>{dateText(m.sent_at || m.created_at)}</small></div><p className="mt-1 text-sm">{m.message}</p><small className="text-slate-500">{m.channel} · {m.status}</small></article>)}{!data.communications.length&&<p className="text-sm text-slate-500">Hakuna ujumbe uliohifadhiwa.</p>}</section><section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="mb-3 font-bold">Mikutano na video conference</h2>{data.meetings.map((m)=><article key={m.id} className="border-b py-3"><b>{m.title}</b><p className="text-sm text-slate-600">{m.description}</p><p className="text-xs text-slate-500">{new Date(m.starts_at).toLocaleString()} {m.ends_at ? " - " + new Date(m.ends_at).toLocaleTimeString() : ""}</p>{m.meeting_url&&<a className="mt-2 inline-block text-blue-700 underline" href={m.meeting_url} target="_blank" rel="noreferrer">Jiunge na video conference</a>}</article>)}{!data.meetings.length&&<p className="text-sm text-slate-500">Hakuna mikutano iliyopangwa.</p>}</section></div>}
-        {activeTab==="video" && <section className="relative isolate overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-950 p-5 text-white shadow-[0_25px_70px_-25px_rgba(15,23,42,.75)] md:p-8">
-          <div className="pointer-events-none absolute -right-20 -top-24 -z-10 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl"/>
-          <div className="pointer-events-none absolute -bottom-24 -left-16 -z-10 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"/>
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_.9fr] lg:items-center">
-            <div><span className="inline-flex rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-bold tracking-widest text-cyan-200">AFRICORE · PARENT CONNECT</span>
-              <h2 className="mt-5 max-w-xl text-3xl font-black leading-tight md:text-4xl">Video Conference <span className="text-cyan-300">with your school</span></h2>
-              <p className="mt-3 max-w-lg text-sm leading-6 text-slate-300">Jiunge na mikutano ya wazazi iliyoratibiwa na shule. Mikutano hii ni tofauti na mikutano ya ndani ya staff.</p>
-              <div className="mt-6 flex flex-wrap gap-3"><span className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm">🔒 Parent access</span><span className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm">🎥 Live sessions</span></div>
+        {activeTab==="video" && <section className="space-y-5">
+          {liveRoom ? (
+            <ParentLiveMeeting
+              meeting={liveRoom.meeting}
+              connectionInfo={liveRoom.connectionInfo}
+              onLeave={() => setLiveRoom(null)}
+            />
+          ) : (
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 p-6 text-white shadow-xl md:p-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div><p className="text-xs font-black uppercase tracking-[.2em] text-cyan-300">AfriCore · Parent Connect</p><h2 className="mt-2 text-2xl font-black md:text-3xl">Video Conference</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Jiunge moja kwa moja na mkutano wa shule pale uongozi utakapoanzisha mkutano LIVE.</p></div>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">{liveMeeting ? "● LIVE NOW" : "Hakuna mkutano LIVE"}</span>
+              </div>
+              {liveMeeting ? (
+                <article className="mt-6 rounded-2xl border border-rose-300/30 bg-rose-400/10 p-5">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-rose-200"><span className="h-2 w-2 animate-pulse rounded-full bg-rose-400"/> Mkutano unaendelea sasa</div>
+                  <h3 className="mt-3 text-xl font-black">{liveMeeting.title}</h3>
+                  {liveMeeting.description && <p className="mt-2 text-sm text-slate-300">{liveMeeting.description}</p>}
+                  <p className="mt-2 text-xs text-slate-400">Umeanzishwa: {new Date(liveMeeting.starts_at).toLocaleString()}</p>
+                  <button type="button" disabled={busy} onClick={() => joinParentLiveMeeting(liveMeeting)} className="mt-5 rounded-xl bg-cyan-300 px-7 py-3.5 text-sm font-black text-slate-950 shadow-lg transition hover:bg-cyan-200 disabled:opacity-50">{busy ? "Inaingia kwenye mkutano..." : "Join Meeting"}</button>
+                </article>
+              ) : (
+                <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/[.04] p-8 text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl">🎥</div><h3 className="mt-4 text-lg font-bold">Hakuna mkutano unaoendelea</h3><p className="mt-2 text-sm text-slate-400">Uongozi wa shule utakapoanzisha mkutano, kichwa chake na kitufe cha Join Meeting vitaonekana hapa moja kwa moja.</p></div>
+              )}
             </div>
-            <div className="relative mx-auto flex aspect-[4/3] w-full max-w-md items-center justify-center rounded-[2rem] border border-white/15 bg-gradient-to-br from-slate-800 via-blue-950 to-indigo-950 shadow-[inset_0_2px_20px_rgba(255,255,255,.08),0_30px_50px_-25px_rgba(0,0,0,.8)]" style={{transform:"perspective(900px) rotateY(-7deg) rotateX(4deg)"}}>
-              <div className="absolute left-5 top-5 flex gap-2"><i className="h-2 w-2 rounded-full bg-rose-400"/><i className="h-2 w-2 rounded-full bg-amber-300"/><i className="h-2 w-2 rounded-full bg-emerald-400"/></div>
-              <div className="text-center"><div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[2rem] border border-cyan-200/30 bg-cyan-300/10 text-5xl shadow-[0_0_50px_rgba(34,211,238,.2)]">🎥</div><p className="mt-5 text-lg font-bold">School · Parent meeting</p><p className="mt-1 text-xs text-slate-400">Connect from anywhere</p></div>
-              <div className="absolute bottom-4 flex gap-3"><span className="rounded-full bg-white/10 px-3 py-2 text-xs">🎙️</span><span className="rounded-full bg-white/10 px-3 py-2 text-xs">📹</span><span className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold">Ready to join</span></div>
-            </div>
-          </div>
-          <div className="mt-8 rounded-2xl border border-white/10 bg-white/[.06] p-5 backdrop-blur"><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-lg font-bold">Mikutano yako</h3><p className="text-xs text-slate-400">Ratiba rasmi kutoka Parent Portal Management</p></div><span className="rounded-full bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-200">{data.meetings.length} sessions</span></div>
-            {data.meetings.map((m)=><article key={m.id} className="mb-3 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/70 p-4 last:mb-0"><div className="min-w-0"><b className="block">{m.title}</b><p className="mt-1 text-sm text-slate-300">{m.description || "Mkutano wa mzazi na shule"}</p><p className="mt-2 text-xs text-cyan-200">{new Date(m.starts_at).toLocaleString()} {m.ends_at ? " · "+new Date(m.ends_at).toLocaleTimeString() : ""}</p></div>{m.meeting_url ? <a href={m.meeting_url} target="_blank" rel="noreferrer" className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-900/40 transition hover:-translate-y-0.5 hover:bg-cyan-200">Jiunge sasa ↗</a> : <span className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-xs text-amber-200">Kiungo bado hakijawekwa</span>}</article>)}
-            {!data.meetings.length&&<p className="rounded-xl border border-dashed border-white/20 p-8 text-center text-sm text-slate-400">Hakuna video conference iliyopangwa kwa sasa.</p>}
-          </div>
+          )}
         </section>}
         {activeTab==="chat" && <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 px-5 py-4 text-white"><div><h2 className="font-bold">Kundi la wazazi · {student.class_name}</h2><p className="mt-1 text-xs text-slate-300">Mawasiliano ya wazazi na shule kwa darasa hili</p></div><span className="rounded-full bg-white/10 px-3 py-1 text-xs">{groupMembers.length} wanachama</span></div><div className="grid md:grid-cols-[220px_1fr]"><aside className="border-b bg-slate-50 p-4 md:border-b-0 md:border-r"><h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Wanachama wa kundi</h3><div className="space-y-3">{groupMembers.map((member)=><div key={(member.member_type || "parent")+"-"+(member.student_id || member.user_id || member.member_name)} className="flex items-center gap-2"><div className={"flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold "+(member.member_type==="staff"?"bg-violet-100 text-violet-700":"bg-blue-100 text-blue-700")}>{(member.member_name || member.parent_name || "M").slice(0,1).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-800">{member.member_name || member.parent_name}</p><p className="truncate text-[11px] text-slate-400">{member.member_type==="staff" ? "Staff wa shule" : "Mzazi · "+(member.student_name || "")}</p><span className={"mt-1 inline-flex items-center gap-1 text-[10px] "+(member.online?"text-emerald-600":"text-slate-400")}><i className={"h-1.5 w-1.5 rounded-full "+(member.online?"bg-emerald-500":"bg-slate-300")}/>{member.online?"Online":"Offline"}</span></div></div>)}{!groupMembers.length&&<p className="text-xs text-slate-500">Orodha ya wanachama haipatikani.</p>}</div></aside><div className="min-w-0 bg-[#f0f2ed] p-4"><div className="max-h-[440px] min-h-[260px] space-y-3 overflow-y-auto rounded-xl p-2">{data.chat.map((m)=><div key={m.id} className={"flex "+(m.sender_type==="parent"?"justify-end":"justify-start")}><article className={"max-w-[85%] rounded-2xl px-4 py-3 shadow-sm "+(m.sender_type==="parent"?"rounded-br-sm bg-[#d9fdd3]":"rounded-bl-sm bg-white")}><b className="text-xs text-slate-700">{m.sender_name}</b><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-800">{m.message}</p><small className="mt-1 block text-right text-[10px] text-slate-400">{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small></article></div>)}{!data.chat.length&&<p className="py-16 text-center text-sm text-slate-500">Karibu. Hakuna ujumbe bado.</p>}</div><form onSubmit={sendChat} className="mt-3 flex gap-2 rounded-xl bg-white p-2"><input value={chatMessage} onChange={(e)=>setChatMessage(e.target.value)} required maxLength={4000} placeholder="Andika ujumbe kwa kundi..." className="min-w-0 flex-1 border-0 p-2 text-sm outline-none"/><button disabled={busy} className="rounded-lg bg-emerald-600 px-5 font-bold text-white disabled:opacity-50">Tuma</button></form></div></div></section>}
         {activeTab==="attendance" && <div className="space-y-5">
