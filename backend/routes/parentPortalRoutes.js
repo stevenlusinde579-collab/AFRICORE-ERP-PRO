@@ -5,6 +5,7 @@ import { supabase } from "../config/supabase.js";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 import { requirePermission } from "../middleware/permissionMiddleware.js";
 
+
 const router = express.Router();
 const loginAttempts = new Map();
 // Process-local presence with a short lease. A client is online only while it
@@ -45,6 +46,75 @@ function withPresence(members, schoolId, classId) {
   }));
 }
 const scrypt = promisify(crypto.scrypt);
+
+
+function liveKitSettings() {
+  const url = String(process.env.LIVEKIT_URL || "").trim();
+  const apiKey = String(process.env.LIVEKIT_API_KEY || "").trim();
+  const apiSecret = String(process.env.LIVEKIT_API_SECRET || "").trim();
+  if (!url || !apiKey || !apiSecret) {
+    const error = new Error("LiveKit haijaunganishwa kwenye backend. Weka LIVEKIT_URL, LIVEKIT_API_KEY na LIVEKIT_API_SECRET kwenye Render.");
+    error.status = 503;
+    throw error;
+  }
+  let parsed;
+  try { parsed = new URL(url); } catch { throw Object.assign(new Error("LIVEKIT_URL si sahihi."), { status: 503 }); }
+  const host = parsed.protocol === "wss:" ? "https://" + parsed.host : parsed.protocol === "ws:" ? "http://" + parsed.host : url;
+  if (!/^https?:\/\//i.test(host)) throw Object.assign(new Error("LIVEKIT_URL lazima ianze na wss:// au https://."), { status: 503 });
+  return { url, host, apiKey, apiSecret };
+}
+
+function parentMeetingRoomName(schoolId, meetingId) {
+  return "africore-parent-" + Number(schoolId) + "-" + String(meetingId).replace(/[^a-zA-Z0-9-]/g, "");
+}
+
+function liveKitJwt(apiKey, apiSecret, claims) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const header = encode({ alg: "HS256", typ: "JWT" });
+  const payload = encode(claims);
+  const unsigned = header + "." + payload;
+  const signature = crypto.createHmac("sha256", apiSecret).update(unsigned).digest("base64url");
+  return unsigned + "." + signature;
+}
+
+async function issueParentMeetingToken({ schoolId, meetingId, identity, name }) {
+  const settings = liveKitSettings();
+  const roomName = parentMeetingRoomName(schoolId, meetingId);
+  const now = Math.floor(Date.now() / 1000);
+  const token = liveKitJwt(settings.apiKey, settings.apiSecret, {
+    iss: settings.apiKey, sub: String(identity), nbf: now - 5, iat: now, exp: now + 6 * 60 * 60,
+    name: String(name || "Mshiriki").slice(0, 120),
+    video: { roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true },
+  });
+  return { token, serverUrl: settings.url, roomName };
+}
+
+function canAdministerParentMeetings(req) {
+  const roleNames = (req.access?.roles || []).map((role) => String(role.role_name || "").trim().toLowerCase());
+  return req.access?.isSuperAdmin === true || roleNames.some((name) => [
+    "super admin", "headmaster", "deputy headmaster", "academic master", "school admin", "admin",
+  ].includes(name));
+}
+
+async function closeLiveKitParentRoom(schoolId, meetingId) {
+  const settings = liveKitSettings();
+  const roomName = parentMeetingRoomName(schoolId, meetingId);
+  const now = Math.floor(Date.now() / 1000);
+  const token = liveKitJwt(settings.apiKey, settings.apiSecret, {
+    iss: settings.apiKey, sub: "africore-parent-admin", nbf: now - 5, iat: now, exp: now + 300,
+    video: { roomAdmin: true, room: roomName },
+  });
+  const response = await fetch(settings.host + "/twirp/livekit.RoomService/DeleteRoom", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ room: roomName }),
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => "");
+    throw new Error("LiveKit room could not be closed (HTTP " + response.status + "): " + detail.slice(0, 300));
+  }
+}
+
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://africorepro.vercel.app").replace(/\/$/, "");
 const TOKEN_SECRET = process.env.PARENT_PORTAL_JWT_SECRET || process.env.SUPABASE_SERVICE_KEY;
 
@@ -488,11 +558,90 @@ router.post("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, a
 });
 
 
+
+
+// Live parent meetings: one school-wide live room at a time. Only school
+// leadership can start/end; class teachers and other scoped staff cannot.
+router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const title = String(req.body?.title || "").trim().slice(0, 180);
+  const description = String(req.body?.description || "").trim().slice(0, 2000);
+  if (!Number.isInteger(schoolId) || !title) return res.status(400).json({ success: false, message: "Weka kichwa cha mkutano." });
+  if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Ni uongozi wa shule pekee unaoweza kuanzisha mkutano wa wazazi." });
+  let createdMeetingId = null;
+  try {
+    liveKitSettings();
+    const current = await supabase.from("parent_portal_meetings")
+      .select("id,title,status").eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: false }).limit(1).maybeSingle();
+    if (current.error) throw current.error;
+    if (current.data) return res.status(409).json({ success: false, message: "Kuna mkutano mwingine ambao bado uko LIVE. Maliza mkutano huo kwanza.", meeting: current.data });
+    const now = new Date().toISOString();
+    const inserted = await supabase.from("parent_portal_meetings").insert({
+      school_id: schoolId, class_id: null, title, description: description || null,
+      starts_at: now, ends_at: null, meeting_url: null, meeting_provider: "LiveKit",
+      status: "scheduled", created_by: req.user.id,
+    }).select("id,title,description,class_id,starts_at,ends_at,status").single();
+    if (inserted.error) throw inserted.error;
+    const meeting = inserted.data;
+    createdMeetingId = meeting.id;
+    const live = await issueParentMeetingToken({
+      schoolId, meetingId: meeting.id, identity: "staff-" + req.user.id,
+      name: req.profile?.full_name || "School Admin",
+    });
+    return res.json({ success: true, meeting, ...live });
+  } catch (error) {
+    if (createdMeetingId) await supabase.from("parent_portal_meetings").update({ status: "completed", ends_at: new Date().toISOString() }).eq("id", createdMeetingId).eq("school_id", schoolId);
+    console.error("PARENT LIVE MEETING START ERROR:", error);
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kuanzisha mkutano." });
+  }
+});
+
+router.post("/staff/meetings/:id/token", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Huna ruhusa ya kuingia kama msimamizi wa mkutano." });
+  try {
+    const found = await supabase.from("parent_portal_meetings")
+      .select("id,title,description,starts_at,status").eq("id", req.params.id)
+      .eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null).lte("starts_at", new Date().toISOString()).maybeSingle();
+    if (found.error) throw found.error;
+    if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE kwa sasa." });
+    const live = await issueParentMeetingToken({ schoolId, meetingId: found.data.id, identity: "staff-" + req.user.id, name: req.profile?.full_name || "School Admin" });
+    return res.json({ success: true, meeting: found.data, ...live });
+  } catch (error) {
+    console.error("PARENT LIVE MEETING STAFF TOKEN ERROR:", error);
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kuingia kwenye mkutano." });
+  }
+});
+
+router.patch("/staff/meetings/:id/end", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Ni uongozi wa shule pekee unaoweza kumaliza mkutano." });
+  try {
+    const endedAt = new Date().toISOString();
+    const current = await supabase.from("parent_portal_meetings").select("id")
+      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").maybeSingle();
+    if (current.error) throw current.error;
+    if (!current.data) return res.status(404).json({ success: false, message: "Mkutano huu haupo LIVE au tayari umemalizika." });
+    await closeLiveKitParentRoom(schoolId, req.params.id);
+    const updated = await supabase.from("parent_portal_meetings").update({
+      status: "completed", ends_at: endedAt,
+    }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit")
+      .select("id,title,status,ends_at").maybeSingle();
+    if (updated.error) throw updated.error;
+    if (!updated.data) return res.status(409).json({ success: false, message: "Mkutano umebadilika. Refresh taarifa za mkutano." });
+    return res.json({ success: true, meeting: updated.data, message: "Mkutano umemalizika." });
+  } catch (error) {
+    console.error("PARENT LIVE MEETING END ERROR:", error);
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kumaliza mkutano." });
+  }
+});
+
 router.get("/staff/meetings", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId)) return res.status(403).json({ success: false, message: "School access is required." });
   let meetingsQuery = supabase.from("parent_portal_meetings")
-    .select("id,title,description,class_id,starts_at,ends_at,meeting_url,status")
+    .select("id,title,description,class_id,starts_at,ends_at,meeting_url,meeting_provider,status")
     .eq("school_id", schoolId).order("starts_at", { ascending: true }).limit(100);
   if (!req.parentPortalScope.fullAccess) meetingsQuery = meetingsQuery.in("class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
   const { data, error } = await meetingsQuery;
@@ -561,6 +710,47 @@ router.patch("/staff/suggestions/:id", authenticateUser, parentPortalStaffAccess
 
 router.use(parentAuth);
 
+
+
+router.get("/meetings/active", async (req, res) => {
+  const { student, school } = req.parent;
+  try {
+    const classId = Number(student.current_class_id || 0);
+    const result = await supabase.from("parent_portal_meetings")
+      .select("id,title,description,starts_at,status")
+      .eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .lte("starts_at", new Date().toISOString()).is("class_id", null)
+      .order("starts_at", { ascending: false }).limit(1).maybeSingle();
+    if (result.error) throw result.error;
+    return res.json({ success: true, meeting: result.data || null });
+  } catch (error) {
+    console.error("PARENT ACTIVE MEETING LOOKUP ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kuangalia mkutano LIVE." });
+  }
+});
+
+router.post("/meetings/:id/token", async (req, res) => {
+  const { student, school, account } = req.parent;
+  try {
+    const classId = Number(student.current_class_id || 0);
+    const found = await supabase.from("parent_portal_meetings")
+      .select("id,title,description,starts_at,status,class_id")
+      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .lte("starts_at", new Date().toISOString()).is("class_id", null).maybeSingle();
+    if (found.error) throw found.error;
+    if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
+    const name = account.username || fullName(student) || "Mzazi";
+    const live = await issueParentMeetingToken({
+      schoolId: school.id, meetingId: found.data.id,
+      identity: "parent-" + account.id, name,
+    });
+    return res.json({ success: true, meeting: found.data, ...live });
+  } catch (error) {
+    console.error("PARENT LIVE MEETING TOKEN ERROR:", error);
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kujiunga na mkutano." });
+  }
+});
+
 router.post("/presence/heartbeat", async (req, res) => {
   const { student, school, account } = req.parent;
   const classId = Number(student.current_class_id);
@@ -617,7 +807,7 @@ router.get("/dashboard", async (req, res) => {
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).or("class_id.is.null,class_id.eq." + Number(classId || 0)).eq("status", "scheduled").order("starts_at", { ascending: true }).limit(50),
+      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
