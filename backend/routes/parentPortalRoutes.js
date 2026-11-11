@@ -602,7 +602,7 @@ router.patch("/staff/meetings/:id/end", authenticateUser, parentPortalStaffAcces
     const endedAt = new Date().toISOString();
     const updated = await supabase.from("parent_portal_meetings").update({
       status: "completed", ends_at: endedAt,
-    }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "active")
+    }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled")
       .select("id,title,status,ends_at").maybeSingle();
     if (updated.error) throw updated.error;
     if (!updated.data) return res.status(404).json({ success: false, message: "Mkutano huu haupo LIVE au tayari umemalizika." });
@@ -785,7 +785,7 @@ router.get("/dashboard", async (req, res) => {
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "active").order("starts_at", { ascending: true }).limit(50),
+      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
