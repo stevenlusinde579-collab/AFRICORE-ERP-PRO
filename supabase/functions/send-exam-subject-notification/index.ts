@@ -505,7 +505,6 @@ const {
           .select(
             "teacher_id, subject_id, class_id, school_id"
           )
-          .eq("school_id", exam.school_id)
           .eq(
             "subject_id",
             examSubject.subject_id
@@ -519,12 +518,16 @@ const {
         throw assignmentError;
       }
 
+      // Legacy/manual assignment rows may have a NULL school_id.
+      // Resolve those through the linked teacher, then enforce the teacher's
+      // own school below. Explicitly cross-school rows are never accepted.
+      const scopedAssignments = (assignments || []).filter(row =>
+        row.school_id == null || Number(row.school_id) === Number(exam.school_id)
+      );
       const teacherIds = [
         ...new Set(
-          (assignments || [])
-            .map(row =>
-              row.teacher_id
-            )
+          scopedAssignments
+            .map(row => row.teacher_id)
             .filter(Boolean)
         ),
       ];
@@ -555,7 +558,7 @@ const {
         await adminClient
           .from("teachers")
           .select(
-            "id, first_name, middle_name, last_name, phone, email, user_id, status"
+            "id, first_name, middle_name, last_name, phone, email, user_id, status, school_id"
           )
           .in(
             "id",
@@ -565,6 +568,12 @@ const {
       if (teacherError) {
         throw teacherError;
       }
+
+      // The teacher record is the authoritative school boundary, including
+      // for legacy teacher_assignments rows that did not store school_id.
+      const scopedTeachers = (teachers || []).filter(teacher =>
+        Number(teacher.school_id) === Number(exam.school_id)
+      );
 
       // Use the phone number captured on the teacher registration profile
       // when the teachers record itself does not contain one.
