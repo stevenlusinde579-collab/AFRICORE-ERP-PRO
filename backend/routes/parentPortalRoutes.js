@@ -432,60 +432,92 @@ router.post("/login", async (req, res) => {
 
 // Staff class group chat: limited to staff with student-view access in their own school.
 
+// Build one option per logical class for every Parent Portal class selector.
+// Historical class rows may repeat the same class name for different academic years.
+async function loadParentPortalClassOptions(schoolId, allowedClassIds, { requireActive = false } = {}) {
+  let classQuery = supabase.from("classes")
+    .select("id,class_name,academic_year_id,is_active")
+    .eq("school_id", schoolId).order("class_name");
+  if (requireActive) classQuery = classQuery.eq("is_active", true);
+  if (Array.isArray(allowedClassIds)) classQuery = classQuery.in("id", allowedClassIds.length ? allowedClassIds : [-1]);
+
+  const { data: classRows, error: classError } = await classQuery;
+  if (classError) throw classError;
+  if (!classRows?.length) return [];
+
+  const classIds = classRows.map((row) => row.id);
+  const [studentsResult, yearsResult] = await Promise.all([
+    supabase.from("students").select("current_class_id").eq("school_id", schoolId).in("current_class_id", classIds).limit(10000),
+    supabase.from("academic_years").select("id,year_name,is_active").eq("school_id", schoolId),
+  ]);
+  if (studentsResult.error) throw studentsResult.error;
+  if (yearsResult.error) throw yearsResult.error;
+
+  const studentCounts = new Map();
+  (studentsResult.data || []).forEach((student) => {
+    const id = String(student.current_class_id);
+    studentCounts.set(id, (studentCounts.get(id) || 0) + 1);
+  });
+  const years = new Map((yearsResult.data || []).map((year) => [String(year.id), year]));
+  const activeYearIds = new Set((yearsResult.data || []).filter((year) => year.is_active === true).map((year) => String(year.id)));
+
+  let candidates = classRows.filter((row) => (studentCounts.get(String(row.id)) || 0) > 0);
+  const hasOccupiedActiveYear = candidates.some((row) => activeYearIds.has(String(row.academic_year_id)));
+  if (activeYearIds.size && hasOccupiedActiveYear) {
+    candidates = candidates.filter((row) => activeYearIds.has(String(row.academic_year_id)) || !row.academic_year_id);
+  }
+
+  const romanToNumber = (value) => ({ i: "1", ii: "2", iii: "3", iv: "4", v: "5", vi: "6", vii: "7" }[value] || value);
+  const labelKey = (value) => String(value || "").normalize("NFKC").toLowerCase()
+    .replace(/\\b(standard|std|form)\\s+(vii|vi|iv|iii|ii|i)\\b/g, (_match, level, roman) => level + " " + romanToNumber(roman))
+    .replace(/[_-]+/g, " ").replace(/\\s+/g, " ").trim();
+
+  const preferred = (candidate, current) => {
+    const candidateYear = activeYearIds.has(String(candidate.academic_year_id)) ? 1 : 0;
+    const currentYear = activeYearIds.has(String(current.academic_year_id)) ? 1 : 0;
+    if (candidateYear !== currentYear) return candidateYear > currentYear;
+    const candidateActive = candidate.is_active === true ? 1 : 0;
+    const currentActive = current.is_active === true ? 1 : 0;
+    if (candidateActive !== currentActive) return candidateActive > currentActive;
+    const candidateCount = studentCounts.get(String(candidate.id)) || 0;
+    const currentCount = studentCounts.get(String(current.id)) || 0;
+    if (candidateCount !== currentCount) return candidateCount > currentCount;
+    const candidateYearName = String(years.get(String(candidate.academic_year_id))?.year_name || "");
+    const currentYearName = String(years.get(String(current.academic_year_id))?.year_name || "");
+    if (candidateYearName !== currentYearName) return candidateYearName.localeCompare(currentYearName) > 0;
+    return Number(candidate.id) > Number(current.id);
+  };
+
+  const unique = new Map();
+  candidates.forEach((row) => {
+    const key = labelKey(row.class_name) || "class-id:" + String(row.id);
+    const existing = unique.get(key);
+    if (!existing || preferred(row, existing)) unique.set(key, row);
+  });
+  return [...unique.values()].map((row) => ({
+    ...row,
+    academic_year_name: years.get(String(row.academic_year_id))?.year_name || null,
+    student_count: studentCounts.get(String(row.id)) || 0,
+  })).sort((a, b) => String(a.class_name || "").localeCompare(String(b.class_name || "")));
+}
+
 router.get("/staff/classes", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
-  let query = supabase.from("classes").select("id,class_name").eq("school_id", schoolId).order("class_name");
-  if (!req.parentPortalScope.fullAccess) query = query.in("id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ success: false, message: "Unable to load authorized classes." });
-  return res.json({ success: true, classes: data || [] });
+  if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(403).json({ success: false, message: "School access is required." });
+  try {
+    const classes = await loadParentPortalClassOptions(schoolId, req.parentPortalScope.fullAccess ? null : req.parentPortalScope.classIds);
+    return res.json({ success: true, classes });
+  } catch (error) {
+    console.error("PARENT PORTAL CLASS LIST ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load authorized classes." });
+  }
 });
 
-// Meeting target list: only active classes that currently contain students.
-// This prevents selecting empty historical class records with duplicate names
-// (for example, Form 4 from a previous academic year).
 router.get("/staff/meeting-classes", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(403).json({ success: false, message: "School access is required." });
   try {
-    let classQuery = supabase.from("classes")
-      .select("id,class_name,academic_year_id,is_active")
-      .eq("school_id", schoolId).eq("is_active", true).order("class_name");
-    if (!req.parentPortalScope.fullAccess) {
-      classQuery = classQuery.in("id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
-    }
-    const { data: classRows, error: classError } = await classQuery;
-    if (classError) throw classError;
-    const rows = classRows || [];
-    if (!rows.length) return res.json({ success: true, classes: [] });
-    const classIds = rows.map((row) => row.id);
-    const [studentResult, yearResult] = await Promise.all([
-      supabase.from("students").select("current_class_id").eq("school_id", schoolId).in("current_class_id", classIds).limit(10000),
-      supabase.from("academic_years").select("id,year_name,is_active").eq("school_id", schoolId),
-    ]);
-    if (studentResult.error) throw studentResult.error;
-    if (yearResult.error) throw yearResult.error;
-    const counts = new Map();
-    (studentResult.data || []).forEach((student) => {
-      const key = String(student.current_class_id);
-      counts.set(key, (counts.get(key) || 0) + 1);
-    });
-    const years = new Map((yearResult.data || []).map((year) => [String(year.id), year]));
-    const activeYearIds = new Set((yearResult.data || []).filter((year) => year.is_active === true).map((year) => String(year.id)));
-    const classes = rows
-      .filter((row) => {
-        const hasStudents = (counts.get(String(row.id)) || 0) > 0;
-        const year = row.academic_year_id ? years.get(String(row.academic_year_id)) : null;
-        // Prefer the school's active academic year. If the school has no active
-        // year configured, keep occupied classes visible instead of hiding them.
-        const belongsToActiveYear = activeYearIds.size === 0 || activeYearIds.has(String(row.academic_year_id));
-        return hasStudents && belongsToActiveYear && (!row.academic_year_id || year);
-      })
-      .map((row) => ({
-        ...row,
-        academic_year_name: years.get(String(row.academic_year_id))?.year_name || null,
-        student_count: counts.get(String(row.id)) || 0,
-      }));
+    const classes = await loadParentPortalClassOptions(schoolId, req.parentPortalScope.fullAccess ? null : req.parentPortalScope.classIds, { requireActive: true });
     return res.json({ success: true, classes });
   } catch (error) {
     console.error("PARENT MEETING CLASS LIST ERROR:", error);
@@ -495,26 +527,25 @@ router.get("/staff/meeting-classes", authenticateUser, parentPortalStaffAccess, 
 
 router.get("/staff/parents", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
-  let query = supabase.from("students")
-    .select("id,first_name,middle_name,last_name,admission_number,parent_name,parent_phone,parent_email,guardian_name,guardian_phone,current_class_id")
-    .eq("school_id", schoolId).order("first_name").limit(2000);
-  if (!req.parentPortalScope.fullAccess) query = query.in("current_class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
-  const { data: students, error } = await query;
-  if (error) return res.status(500).json({ success: false, message: "Unable to load parent contacts." });
-  const classIds = [...new Set((students || []).map((row) => row.current_class_id).filter(Boolean))];
-  const classes = classIds.length ? await supabase.from("classes").select("id,class_name").eq("school_id", schoolId).in("id", classIds) : { data: [] };
-  if (classes.error) return res.status(500).json({ success: false, message: "Unable to load class names." });
-  const classMap = new Map((classes.data || []).map((row) => [String(row.id), row.class_name]));
-  return res.json({ success: true, parents: (students || []).map((row) => ({
-    student_id: row.id,
-    student_name: fullName(row),
-    admission_number: row.admission_number,
-    parent_name: row.parent_name || row.guardian_name || "Not provided",
-    phone: row.parent_phone || row.guardian_phone || "",
-    email: row.parent_email || "",
-    class_id: row.current_class_id || null,
-    class_name: classMap.get(String(row.current_class_id)) || "Unassigned",
-  })) });
+  try {
+    const authorizedClasses = await loadParentPortalClassOptions(schoolId, req.parentPortalScope.fullAccess ? null : req.parentPortalScope.classIds);
+    const visibleClassIds = authorizedClasses.map((row) => row.id);
+    if (!visibleClassIds.length) return res.json({ success: true, parents: [] });
+    const { data: students, error } = await supabase.from("students")
+      .select("id,first_name,middle_name,last_name,admission_number,parent_name,parent_phone,parent_email,guardian_name,guardian_phone,current_class_id")
+      .eq("school_id", schoolId).in("current_class_id", visibleClassIds).order("first_name").limit(2000);
+    if (error) throw error;
+    const classMap = new Map(authorizedClasses.map((row) => [String(row.id), row.class_name]));
+    return res.json({ success: true, parents: (students || []).map((row) => ({
+      student_id: row.id, student_name: fullName(row), admission_number: row.admission_number,
+      parent_name: row.parent_name || row.guardian_name || "Not provided",
+      phone: row.parent_phone || row.guardian_phone || "", email: row.parent_email || "",
+      class_id: row.current_class_id || null, class_name: classMap.get(String(row.current_class_id)) || "Unassigned",
+    })) });
+  } catch (error) {
+    console.error("PARENT PORTAL PARENT DIRECTORY ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load parent contacts." });
+  }
 });
 router.post("/staff/presence/heartbeat", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
