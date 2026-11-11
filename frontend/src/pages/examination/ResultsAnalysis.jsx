@@ -308,35 +308,55 @@ const toGsm7SmsText = value => [...String(value ?? "").normalize("NFD")]
     .filter(Boolean)
     .join(" ");
 
-const buildStudentResultSmsMessage = (exam, report) => {
-    const studentName = toGsm7SmsText(report.full_name || "Student").slice(0, 40);
-    const examName = toGsm7SmsText(exam?.name || exam?.exam_name || exam?.title || "Examination").slice(0, 36);
-    const className = toGsm7SmsText(report.class_name || "Class").slice(0, 18);
-    const position = toGsm7SmsText(`${report.position ?? "-"}${report.rankTotal ? `/${report.rankTotal}` : ""}`);
-    const aggregate = report.aggregate != null
-        ? toGsm7SmsText(report.aggregate)
-        : (report.cseeEligible ? "Not calculated" : "N/A");
-    const gpa = report.gpa != null
-        ? toGsm7SmsText(formatNumber(report.gpa, 2))
-        : (report.cseeEligible ? "Not calculated" : "N/A");
-    const division = toGsm7SmsText(
-        report.divisionLabel && report.divisionLabel !== "Not applicable"
-            ? report.divisionLabel
-            : (report.cseeEligible ? "Not calculated" : "N/A")
-    );
-    const average = toGsm7SmsText(formatNumber(report.percentage, 1));
-    const grade = toGsm7SmsText(report.grade || "-");
-    const status = toGsm7SmsText(report.reportStatus || (report.percentage >= 40 ? "Passed" : "Failed"));
+const getSmsSubjectAbbreviation = value => {
+    const name = toGsm7SmsText(value).toUpperCase().replace(/[^A-Z0-9 ]/g, " ").trim();
+    const known = {
+        MATHEMATICS: "MATH", ENGLISH: "ENG", KISWAHILI: "KIS", BIOLOGY: "BIO",
+        CHEMISTRY: "CHEM", PHYSICS: "PHY", GEOGRAPHY: "GEO", HISTORY: "HIST",
+        CIVICS: "CIV", COMMERCE: "COMM", "BOOK KEEPING": "BK", "BOOK-KEEPING": "BK",
+        "BUSINESS STUDIES": "BUS", AGRICULTURE: "AGR", "BASIC MATHEMATICS": "B-MATH",
+        "INFORMATION AND COMMUNICATION TECHNOLOGY": "ICT", COMPUTER: "COMP",
+        "COMPUTER STUDIES": "COMP", ECONOMICS: "ECON", LITERATURE: "LIT",
+        FRENCH: "FRE", ARABIC: "ARA", MUSIC: "MUS", ART: "ART",
+        "PHYSICAL EDUCATION": "PE", "GENERAL STUDIES": "GS"
+    };
+    if (known[name]) return known[name];
+    const words = name.split(/\s+/).filter(Boolean);
+    return (words.length > 1 ? words.map(word => word[0]).join("") : name.slice(0, 4)).slice(0, 6);
+};
 
-    // SMS carries the essential overall result only. Full subject-by-subject
-    // marks remain available in the Result Analysis report and PDF.
-    let message = `AfriCore Results: ${studentName}; ${examName} (${className}). Pos ${position}; Agg ${aggregate}; GPA ${gpa}; Div ${division}; Avg ${average}%; Grade ${grade}; ${status}.`;
-
-    // Keep the payload within two GSM-7 SMS segments (300 basic characters).
-    if (message.length > 300) {
-        message = `AfriCore Results: ${studentName.slice(0, 24)}; ${examName.slice(0, 24)} (${className.slice(0, 12)}). Pos ${position}; Agg ${aggregate}; GPA ${gpa}; Div ${division}; Avg ${average}%; Grade ${grade}; ${status}.`;
+const buildStudentResultSmsMessage = (exam, report, schoolName) => {
+    const school = toGsm7SmsText(schoolName || "School").toUpperCase().slice(0, 26);
+    const student = toGsm7SmsText(report.full_name || "Student").slice(0, 28);
+    const className = toGsm7SmsText(report.class_name || "").slice(0, 10);
+    const subjects = (Array.isArray(report.subjects) ? report.subjects : [])
+        .filter(row => row && (row.subject_name || row.subject) && (row.total != null || row.percentage != null))
+        .map(row => ({
+            label: getSmsSubjectAbbreviation(row.subject_name || row.subject),
+            mark: toGsm7SmsText(formatNumber(row.percentage != null ? row.percentage : row.total, 0))
+        }));
+    const average = toGsm7SmsText(formatNumber(report.percentage, 0));
+    const division = report.divisionLabel && report.divisionLabel !== "Not applicable"
+        ? toGsm7SmsText(report.divisionLabel.replace(/^Division\s*/i, "Div "))
+        : (report.division != null ? `Div ${toGsm7SmsText(report.division)}` : "");
+    const grade = toGsm7SmsText(report.grade || "");
+    const position = report.position != null ? ` Pos ${toGsm7SmsText(report.position)}${report.rankTotal ? `/${toGsm7SmsText(report.rankTotal)}` : ""}.` : "";
+    const prefix = `${school}: ${student}${className ? ` ${className}` : ""}. `;
+    const suffix = ` Avg ${average}%.${division ? ` ${division}.` : ""}${grade ? ` Gr ${grade}.` : ""}${position}`;
+    let subjectText = "";
+    let included = 0;
+    for (const row of subjects) {
+        const next = `${subjectText ? " " : ""}${row.label} ${row.mark}`;
+        if ((prefix + subjectText + next + suffix).length > 300) break;
+        subjectText += next;
+        included += 1;
     }
-
+    const omitted = subjects.length - included;
+    const more = omitted > 0 ? ` +${omitted} sub.` : "";
+    let message = `${prefix}${subjectText || "Subject marks pending"}${more}.${suffix} Full report: Parent Portal.`;
+    if (message.length > 300) {
+        message = `${school.slice(0, 16)}: ${student.slice(0, 18)}. Avg ${average}%.${division ? ` ${division}.` : ""} Parent Portal.`;
+    }
     return message.slice(0, 300);
 };
 
@@ -2289,7 +2309,7 @@ export default function ResultsAnalysis() {
         // SMS is a compact GSM-7 summary to reduce NewHope segment charges.
         // Email and WhatsApp retain the complete report with subject details.
         const message = channel === "sms"
-            ? buildStudentResultSmsMessage(exam, report)
+            ? buildStudentResultSmsMessage(exam, report, documentBrandName)
             : buildStudentResultMessage(exam, report);
         const phone = getParentPhone(report);
         const email = getParentEmail(report);
@@ -3184,7 +3204,7 @@ export default function ResultsAnalysis() {
                     const phone = getParentPhone(report);
                     if (!phone) { smsFailed += 1; continue; }
                     try {
-                        const message = buildStudentResultSmsMessage(exam, report);
+                        const message = buildStudentResultSmsMessage(exam, report, documentBrandName);
                         const response = await api.post("/communication/parent-result", {
                             school_id: report.school_id || exam?.school_id || null,
                             student_id: report.id,
@@ -4386,7 +4406,7 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [] }) {
+export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [], schoolName, hideFinalClassification = false }) {
     const levelType = getReportLevelType(exam, report);
     const levelLabel = getReportLevelLabel(levelType);
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
@@ -4410,7 +4430,7 @@ export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false,
 
     return (
         <div className="p-7 text-slate-900 report-page">
-            <ReportHeader exam={exam} title={`${levelLabel} — Student Academic Report`} subtitle={`${report.class_name || "Class"} · ${report.stream || ""} · Position ${report.position || "—"}/${report.rankTotal || "—"}`} />
+            <ReportHeader exam={exam} title={`${levelLabel} — Student Academic Report`} subtitle={`${report.class_name || "Class"} · ${report.stream || ""} · Position ${report.position || "—"}/${report.rankTotal || "—"}`} schoolNameOverride={schoolName} />
 
             <div className="grid grid-cols-4 gap-2 text-[10px] mb-4">
                 <DetailBox label="Student Name" value={report.full_name || "—"} />
@@ -4437,7 +4457,7 @@ export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false,
                 <DetailBox label="Status" value={report.reportStatus || "—"} />
             </div>
 
-            {isCseeExam && <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />}
+            {isCseeExam && !hideFinalClassification && <DivisionSummary distribution={division ? [{ division, count: 1 }] : []} title="Student Final Classification" />}
 
             {isCseeExam && <div className="mb-4">
                 <h3 className="font-extrabold text-sm mb-2">Best Seven Subjects — Final Calculation</h3>
