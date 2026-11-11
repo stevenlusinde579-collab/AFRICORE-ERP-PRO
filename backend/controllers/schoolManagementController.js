@@ -521,6 +521,44 @@ export const createSchoolHeadmaster = async (req, res) => {
 
 
 
+
+
+/** Update an existing Headmaster's Auth email so email becomes the login username. */
+export const updateHeadmasterEmail = async (req, res) => {
+    try {
+        const profileId = String(req.params.profileId || "").trim();
+        const email = String(req.body?.email || "").trim().toLowerCase();
+        if (!profileId || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+            return res.status(400).json({ success: false, message: "Weka email sahihi ya Headmaster." });
+        }
+        const { data: profile, error: profileError } = await supabase
+            .from("profiles").select("id,role_id").eq("id", profileId).maybeSingle();
+        if (profileError) throw profileError;
+        if (!profile) return res.status(404).json({ success: false, message: "Headmaster hakupatikana." });
+
+        const { data: role, error: roleError } = await supabase
+            .from("roles").select("id").eq("role_name", "Headmaster").maybeSingle();
+        if (roleError) throw roleError;
+        const { data: roleAssignment, error: assignmentError } = await supabase
+            .from("profile_roles").select("profile_id").eq("profile_id", profileId)
+            .eq("role_id", role?.id || -1).limit(1).maybeSingle();
+        if (assignmentError) throw assignmentError;
+        if (!role || (Number(profile.role_id) !== Number(role.id) && !roleAssignment)) {
+            return res.status(403).json({ success: false, message: "Akaunti hii si ya Headmaster." });
+        }
+
+        const { data: updated, error: updateError } = await supabase.auth.admin.updateUserById(
+            profileId, { email, email_confirm: true }
+        );
+        if (updateError) throw updateError;
+        return res.json({ success: true, email: updated?.user?.email || email, message: "Email ya login imehifadhiwa. Username ya Headmaster sasa ni email hii." });
+    } catch (error) {
+        console.error("UPDATE HEADMASTER EMAIL ERROR:", error);
+        return res.status(400).json({ success: false, message: error?.message || "Imeshindikana kubadilisha email ya Headmaster." });
+    }
+};
+
+
 /**
  * POST /api/schools/headmasters/:profileId/resend-credentials
  * Super Admin only (router guard). Resets the same account, then sends school SMS.
