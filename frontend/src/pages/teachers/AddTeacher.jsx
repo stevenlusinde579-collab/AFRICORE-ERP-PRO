@@ -619,6 +619,12 @@ export default function AddTeacher() {
       return false;
     }
 
+    if (!teacher.phone?.trim()) {
+      setMessage("Namba ya simu ni lazima ili kupokea login credentials kwa SMS.");
+      setMessageType("error");
+      return false;
+    }
+
     if (!teacher.gender) {
       setMessage(
         "Please select gender."
