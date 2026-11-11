@@ -666,18 +666,19 @@ export const getHeadmasters = async (req, res) => {
 
         if (profilesError) throw profilesError;
 
-        const headmasters = (profiles || []).map((profile) => {
+        const headmasters = await Promise.all((profiles || []).map(async (profile) => {
             const roleRow = (roleRows || []).find(
                 (row) => row.profile_id === profile.id && row.is_active === true
             );
-
+            const { data: authData } = await supabase.auth.admin.getUserById(profile.id);
             return {
                 id: profile.id,
                 full_name: profile.full_name || "Headmaster",
+                email: authData?.user?.email || null,
                 phone: profile.phone || null,
                 school_id: roleRow?.school_id ?? profile.school_id ?? null
             };
-        });
+        }));
 
         return res.json({ success: true, headmasters });
     } catch (error) {
