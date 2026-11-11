@@ -565,20 +565,25 @@ router.post("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, a
 router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const title = String(req.body?.title || "").trim().slice(0, 180);
+  const classId = Number(req.body?.class_id);
   const description = String(req.body?.description || "").trim().slice(0, 2000);
-  if (!Number.isInteger(schoolId) || !title) return res.status(400).json({ success: false, message: "Weka kichwa cha mkutano." });
+  if (!Number.isInteger(schoolId) || !title || !Number.isInteger(classId) || classId <= 0) return res.status(400).json({ success: false, message: "Weka kichwa cha mkutano na uchague darasa." });
   if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Ni uongozi wa shule pekee unaoweza kuanzisha mkutano wa wazazi." });
+  if (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)) return res.status(403).json({ success: false, message: "Huna ruhusa ya kuanzisha mkutano kwa darasa hili." });
   let createdMeetingId = null;
   try {
     liveKitSettings();
+    const classCheck = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+    if (classCheck.error) throw classCheck.error;
+    if (!classCheck.data) return res.status(404).json({ success: false, message: "Darasa ulilochagua halipo kwenye shule yako." });
     const current = await supabase.from("parent_portal_meetings")
-      .select("id,title,status").eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .select("id,title,status").eq("school_id", schoolId).eq("class_id", classId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (current.error) throw current.error;
     if (current.data) return res.status(409).json({ success: false, message: "Kuna mkutano mwingine ambao bado uko LIVE. Maliza mkutano huo kwanza.", meeting: current.data });
     const now = new Date().toISOString();
     const inserted = await supabase.from("parent_portal_meetings").insert({
-      school_id: schoolId, class_id: null, title, description: description || null,
+      school_id: schoolId, class_id: classId, title, description: description || null,
       starts_at: now, ends_at: null, meeting_url: null, meeting_provider: "LiveKit",
       status: "scheduled", created_by: req.user.id,
     }).select("id,title,description,class_id,starts_at,ends_at,status").single();
@@ -716,10 +721,11 @@ router.get("/meetings/active", async (req, res) => {
   const { student, school } = req.parent;
   try {
     const classId = Number(student.current_class_id || 0);
+    if (!Number.isInteger(classId) || classId <= 0) return res.json({ success: true, meeting: null });
     const result = await supabase.from("parent_portal_meetings")
-      .select("id,title,description,starts_at,status")
+      .select("id,title,description,starts_at,status,class_id")
       .eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
-      .lte("starts_at", new Date().toISOString()).is("class_id", null)
+      .lte("starts_at", new Date().toISOString()).eq("class_id", classId)
       .order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (result.error) throw result.error;
     return res.json({ success: true, meeting: result.data || null });
@@ -733,10 +739,11 @@ router.post("/meetings/:id/token", async (req, res) => {
   const { student, school, account } = req.parent;
   try {
     const classId = Number(student.current_class_id || 0);
+    if (!Number.isInteger(classId) || classId <= 0) return res.status(403).json({ success: false, message: "Mwanafunzi hajapangiwa darasa." });
     const found = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status,class_id")
       .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
-      .lte("starts_at", new Date().toISOString()).is("class_id", null).maybeSingle();
+      .lte("starts_at", new Date().toISOString()).eq("class_id", classId).maybeSingle();
     if (found.error) throw found.error;
     if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
     const name = account.username || fullName(student) || "Mzazi";
