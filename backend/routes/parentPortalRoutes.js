@@ -746,83 +746,61 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
   const examId = Number(req.params.examId);
   const schoolId = Number(req.profile?.school_id);
   const offset = Math.max(0, Number.parseInt(req.body?.offset, 10) || 0);
-  const batchSize = Math.min(25, Math.max(5, Number.parseInt(req.body?.limit, 10) || 20));
-  if (!Number.isInteger(examId) || examId <= 0 || !Number.isInteger(schoolId) || schoolId <= 0) {
-    return res.status(400).json({ success: false, message: "Invalid exam or school context." });
-  }
+  const requestedReports = Array.isArray(req.body?.report_snapshots) ? req.body.report_snapshots : [];
+  const requestedTotal = Math.max(0, Number.parseInt(req.body?.total_count, 10) || 0);
+  if (!Number.isInteger(examId) || examId <= 0 || !Number.isInteger(schoolId) || schoolId <= 0) return res.status(400).json({ success: false, message: "Invalid exam or school context." });
+  if (!requestedReports.length || requestedReports.length > 25) return res.status(400).json({ success: false, message: "Tuma kundi halali la ripoti za wanafunzi 1 hadi 25." });
   try {
     const examQuery = await supabase.from("exams").select("id,school_id,exam_name,exam_type,term,start_date,end_date,academic_year_id,status").eq("id", examId).eq("school_id", schoolId).is("deleted_at", null).maybeSingle();
     if (examQuery.error) throw examQuery.error;
     if (!examQuery.data) return res.status(404).json({ success: false, message: "Examination not found in your school." });
-
-    const resultsQuery = await supabase.from("results")
-      .select("id,student_id,total_marks,average_marks,grade,division,position,remarks,approved,created_at", { count: "exact" })
-      .eq("exam_id", examId).eq("approved", true)
-      .order("student_id", { ascending: true })
-      .range(offset, offset + batchSize - 1);
-    if (resultsQuery.error) throw resultsQuery.error;
-    const approvedResults = resultsQuery.data || [];
-    const totalCount = Number(resultsQuery.count || 0);
-    if (!totalCount) return res.status(409).json({ success: false, message: "Hakuna matokeo yaliyoidhinishwa ya kuchapisha kwa wazazi." });
-    if (!approvedResults.length) return res.json({ success: true, published_count: 0, total_count: totalCount, has_more: false, next_offset: offset });
-
-    const studentIds = [...new Set(approvedResults.map(row => Number(row.student_id)).filter(Number.isInteger))];
-    const [studentsQuery, marksQuery] = await Promise.all([
+    // Result Analysis uses exam_question_marks first and exam_marks as its legacy fallback.
+    // results.approved is not the source of truth for these report forms.
+    const reportEntries = requestedReports.map(item => ({ studentId: Number(item?.student_id), report: item?.report }));
+    const studentIds = reportEntries.map(item => item.studentId);
+    if (studentIds.some(id => !Number.isInteger(id) || id <= 0) || new Set(studentIds).size !== studentIds.length) return res.status(422).json({ success: false, message: "Orodha ya wanafunzi ina ID isiyo sahihi au inayojirudia." });
+    const reportsValid = reportEntries.every(({ studentId, report }) => report && Number(report.id) === studentId && Array.isArray(report.subjects) && report.subjects.length > 0 && report.subjects.every(subject => subject && typeof subject.subject_name === "string" && subject.subject_name.trim()));
+    if (!reportsValid) return res.status(422).json({ success: false, message: "Report form data haijakamilika. Refresh Result Analysis kisha ujaribu tena." });
+    const [studentsQuery, questionMarksQuery, legacyMarksQuery, examSubjectsQuery] = await Promise.all([
       supabase.from("students").select("id,school_id").eq("school_id", schoolId).in("id", studentIds),
-      supabase.from("student_marks").select("id,student_id,subject_id,marks,grade,remarks,status,created_at").eq("exam_id", examId).in("student_id", studentIds),
+      supabase.from("exam_question_marks").select("id,exam_id,exam_subject_id,question_id,student_id,marks_obtained,is_selected,created_at").eq("exam_id", examId).in("student_id", studentIds),
+      supabase.from("exam_marks").select("id,exam_id,exam_subject_id,student_id,marks_obtained,grade,remark,created_at").eq("exam_id", examId).in("student_id", studentIds),
+      supabase.from("exam_subjects").select("id,subject_id,full_marks,pass_marks,class_id").eq("exam_id", examId),
     ]);
-    if (studentsQuery.error || marksQuery.error) throw studentsQuery.error || marksQuery.error;
+    for (const result of [studentsQuery, questionMarksQuery, legacyMarksQuery, examSubjectsQuery]) if (result.error) throw result.error;
     const validStudentIds = new Set((studentsQuery.data || []).map(row => Number(row.id)));
-    const subjectIds = [...new Set((marksQuery.data || []).map(row => Number(row.subject_id)).filter(Number.isInteger))];
+    const examSubjectIds = new Set((examSubjectsQuery.data || []).map(row => Number(row.id)));
+    const subjectIds = [...new Set((examSubjectsQuery.data || []).map(row => Number(row.subject_id)).filter(Number.isInteger))];
     const subjectsQuery = subjectIds.length ? await supabase.from("subjects").select("id,subject_name").in("id", subjectIds) : { data: [], error: null };
     if (subjectsQuery.error) throw subjectsQuery.error;
     const subjectMap = new Map((subjectsQuery.data || []).map(row => [String(row.id), row.subject_name]));
+    const examSubjectMap = new Map((examSubjectsQuery.data || []).map(row => [Number(row.id), row]));
     const marksByStudent = new Map();
-    for (const mark of marksQuery.data || []) {
-      const sid = Number(mark.student_id);
-      if (!validStudentIds.has(sid)) continue;
-      if (!marksByStudent.has(sid)) marksByStudent.set(sid, []);
-      marksByStudent.get(sid).push({ ...mark, subject_name: subjectMap.get(String(mark.subject_id)) || "Subject" });
-    }
-
-    const requestedReports = Array.isArray(req.body?.report_snapshots) ? req.body.report_snapshots : [];
-    const reportsByStudent = new Map(requestedReports.map(item => [String(item.student_id), item.report]));
-    const batchStudentKeys = approvedResults.map(row => String(row.student_id));
-    const reportBatchIsComplete = requestedReports.length === approvedResults.length
-      && batchStudentKeys.every(studentKey => {
-        const report = reportsByStudent.get(studentKey);
-        return report && Number(report.id) === Number(studentKey)
-          && Array.isArray(report.subjects)
-          && report.subjects.every(subject => subject && typeof subject.subject_name === "string");
-      });
-    if (!reportBatchIsComplete) {
-      return res.status(422).json({ success: false, message: "Report form data haijakamilika kwa kundi hili. Hakuna matokeo yaliyochapishwa; tafadhali refresh Result Analysis kisha ujaribu tena." });
-    }
+    const appendMark = (mark, source) => {
+      const studentId = Number(mark.student_id);
+      const examSubject = examSubjectMap.get(Number(mark.exam_subject_id));
+      if (!validStudentIds.has(studentId) || !examSubject) return;
+      if (!marksByStudent.has(studentId)) marksByStudent.set(studentId, []);
+      marksByStudent.get(studentId).push({ ...mark, source, subject_id: examSubject.subject_id, subject_name: subjectMap.get(String(examSubject.subject_id)) || "Subject" });
+    };
+    (questionMarksQuery.data || []).forEach(mark => appendMark(mark, "question"));
+    (legacyMarksQuery.data || []).forEach(mark => appendMark(mark, "legacy"));
+    const invalidStudent = studentIds.find(id => !validStudentIds.has(id));
+    if (invalidStudent) return res.status(403).json({ success: false, message: "Mwanafunzi mmoja au zaidi hayupo kwenye shule hii. Hakuna matokeo yaliyochapishwa." });
+    const withoutMarks = studentIds.filter(id => !(marksByStudent.get(id) || []).length);
+    if (withoutMarks.length) return res.status(409).json({ success: false, message: "Baadhi ya wanafunzi hawana alama zilizohifadhiwa kwa mtihani huu. Hakuna kundi lililochapishwa.", students_without_marks: withoutMarks });
     const publishedAt = new Date().toISOString();
-    const rows = approvedResults.filter(row => validStudentIds.has(Number(row.student_id))).map(result => {
-      const reportForm = reportsByStudent.get(String(result.student_id));
-      const savedMarks = marksByStudent.get(Number(result.student_id)) || [];
-      // Only accept a report form for the exact student in this approved batch.
-      // The raw approved result and marks remain separately stored as the source of truth.
-      const reportMatches = reportForm
-        && Number(reportForm.id) === Number(result.student_id)
-        && Array.isArray(reportForm.subjects)
-        && reportForm.subjects.every(subject => subject && typeof subject.subject_name === "string");
-      return {
-        school_id: schoolId, exam_id: examId, student_id: Number(result.student_id),
-        exam_snapshot: examQuery.data,
-        result_snapshot: reportMatches ? { ...result, report_form: reportForm } : result,
-        marks_snapshot: savedMarks,
-        subjects_snapshot: subjectIds.map(id => ({ id, subject_name: subjectMap.get(String(id)) || "Subject" })),
-        published_at: publishedAt, published_by: req.user.id,
-      };
-    });
-    if (!rows.length) return res.status(409).json({ success: false, message: "Hakuna wanafunzi halali wenye matokeo yaliyoidhinishwa." });
+    const rows = reportEntries.map(({ studentId, report }) => ({
+      school_id: schoolId, exam_id: examId, student_id: studentId, exam_snapshot: examQuery.data,
+      result_snapshot: { report_form: report }, marks_snapshot: marksByStudent.get(studentId) || [],
+      subjects_snapshot: (examSubjectsQuery.data || []).map(subject => ({ id: subject.subject_id, exam_subject_id: subject.id, subject_name: subjectMap.get(String(subject.subject_id)) || "Subject", full_marks: subject.full_marks, pass_marks: subject.pass_marks })),
+      published_at: publishedAt, published_by: req.user.id,
+    }));
     const saved = await supabase.from("parent_portal_result_snapshots").upsert(rows, { onConflict: "school_id,exam_id,student_id" });
     if (saved.error) throw saved.error;
-
-    const nextOffset = offset + approvedResults.length;
-    return res.json({ success: true, published_count: rows.length, total_count: totalCount, has_more: nextOffset < totalCount, next_offset: nextOffset, published_at: publishedAt, message: "Matokeo yaliyoidhinishwa yamechapishwa kwenye Parent Portal." });
+    const totalCount = Math.max(requestedTotal, offset + rows.length);
+    const nextOffset = offset + rows.length;
+    return res.json({ success: true, published_count: rows.length, total_count: totalCount, has_more: nextOffset < totalCount, next_offset: nextOffset, published_at: publishedAt, message: "Matokeo yaliyotengenezwa kwenye Result Analysis yamechapishwa kwenye Parent Portal." });
   } catch (error) {
     console.error("PARENT PORTAL RESULT PUBLISH ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to publish results to Parent Portal." });
