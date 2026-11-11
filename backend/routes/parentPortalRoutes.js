@@ -555,15 +555,15 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
   try {
     const settings = liveKitSettings();
     const current = await supabase.from("parent_portal_meetings")
-      .select("id,title,status").eq("school_id", schoolId).eq("status", "active")
-      .order("starts_at", { ascending: false }).limit(1).maybeSingle();
+      .select("id,title,status").eq("school_id", schoolId).eq("status", "scheduled").is("ends_at", null)
+      .lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (current.error) throw current.error;
     if (current.data) return res.status(409).json({ success: false, message: "Kuna mkutano mwingine ambao bado uko LIVE. Maliza mkutano huo kwanza.", meeting: current.data });
     const now = new Date().toISOString();
     const inserted = await supabase.from("parent_portal_meetings").insert({
       school_id: schoolId, class_id: null, title, description: description || null,
       starts_at: now, ends_at: null, meeting_url: null, meeting_provider: "LiveKit",
-      status: "active", created_by: req.user.id,
+      status: "scheduled", created_by: req.user.id,
     }).select("id,title,description,class_id,starts_at,ends_at,status").single();
     if (inserted.error) throw inserted.error;
     const meeting = inserted.data;
@@ -584,7 +584,7 @@ router.post("/staff/meetings/:id/token", authenticateUser, parentPortalStaffAcce
   try {
     const found = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status").eq("id", req.params.id)
-      .eq("school_id", schoolId).eq("status", "active").maybeSingle();
+      .eq("school_id", schoolId).eq("status", "scheduled").is("ends_at", null).lte("starts_at", new Date().toISOString()).maybeSingle();
     if (found.error) throw found.error;
     if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE kwa sasa." });
     const live = await issueParentMeetingToken({ schoolId, meetingId: found.data.id, identity: "staff-" + req.user.id, name: req.profile?.full_name || "School Admin" });
@@ -601,7 +601,7 @@ router.patch("/staff/meetings/:id/end", authenticateUser, parentPortalStaffAcces
   try {
     const endedAt = new Date().toISOString();
     const updated = await supabase.from("parent_portal_meetings").update({
-      status: "ended", ends_at: endedAt,
+      status: "completed", ends_at: endedAt,
     }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "active")
       .select("id,title,status,ends_at").maybeSingle();
     if (updated.error) throw updated.error;
@@ -696,8 +696,8 @@ router.get("/meetings/active", async (req, res) => {
     const classId = Number(student.current_class_id || 0);
     const result = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status")
-      .eq("school_id", school.id).eq("status", "active")
-      .is("class_id", null)
+      .eq("school_id", school.id).eq("status", "scheduled").is("ends_at", null)
+      .lte("starts_at", new Date().toISOString()).is("class_id", null)
       .order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (result.error) throw result.error;
     return res.json({ success: true, meeting: result.data || null });
@@ -713,8 +713,8 @@ router.post("/meetings/:id/token", async (req, res) => {
     const classId = Number(student.current_class_id || 0);
     const found = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status,class_id")
-      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "active")
-      .is("class_id", null).maybeSingle();
+      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").is("ends_at", null)
+      .lte("starts_at", new Date().toISOString()).is("class_id", null).maybeSingle();
     if (found.error) throw found.error;
     if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
     const name = account.username || fullName(student) || "Mzazi";
