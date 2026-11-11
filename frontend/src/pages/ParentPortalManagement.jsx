@@ -116,7 +116,7 @@ export default function ParentPortalManagement() {
     }
   };
   const activeMeeting = meetings.find((meeting) =>
-    meeting.status === "scheduled" && !meeting.ends_at && new Date(meeting.starts_at).getTime() <= Date.now()
+    meeting.status === "scheduled" && meeting.meeting_provider === "LiveKit" && !meeting.ends_at && new Date(meeting.starts_at).getTime() <= Date.now()
   ) || null;
   const startLiveMeeting = async (event) => {
     event.preventDefault();
