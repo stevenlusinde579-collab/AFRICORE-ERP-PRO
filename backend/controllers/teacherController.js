@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase.js";
+import { randomInt } from "node:crypto";
 import { sendSchoolSms } from "../utils/schoolSms.js";
 
 
@@ -772,17 +773,14 @@ export const createTeacher = async (
          * --------------------------------------------------------
          */
 
-        if (
-            !normalizedEmail &&
-            !normalizedPhone
-        ) {
+        if (!normalizedEmail) {
 
             return res.status(400).json({
 
                 success: false,
 
                 message:
-                    "Teacher or staff email or phone number is required to create a login account."
+                    "Email ya Staff ni lazima kwa username ya login. Weka email sahihi."
 
             });
         }
@@ -3053,6 +3051,87 @@ export const updateTeacher = async (
                 "Unable to update teacher."
 
         });
+    }
+};
+
+
+
+
+/**
+ * POST /api/teachers/:id/resend-credentials
+ * Reset the existing account password and resend credentials by school SMS.
+ */
+export const resendTeacherCredentials = async (req, res) => {
+    try {
+        const teacherId = Number(req.params.id);
+        if (!Number.isInteger(teacherId) || teacherId <= 0) {
+            return res.status(400).json({ success: false, message: "Staff ID si sahihi." });
+        }
+
+        const { data: teacher, error } = await supabase
+            .from("teachers")
+            .select("id,school_id,user_id,email,phone,status,first_name,last_name")
+            .eq("id", teacherId)
+            .maybeSingle();
+        if (error) throw error;
+        if (!teacher) return res.status(404).json({ success: false, message: "Staff hakupatikana." });
+
+        if (req.permission?.isSuperAdmin !== true) {
+            const { data: actor, error: actorError } = await supabase
+                .from("profiles").select("school_id").eq("id", req.user.id).maybeSingle();
+            if (actorError) throw actorError;
+            if (!actor?.school_id || Number(actor.school_id) !== Number(teacher.school_id)) {
+                return res.status(403).json({ success: false, message: "Huruhusiwi kutuma credentials za mtumishi wa shule nyingine." });
+            }
+        }
+
+        if (String(teacher.status || "Active").toLowerCase() !== "active") {
+            return res.status(409).json({ success: false, message: "Akaunti ya mtumishi haipo Active. I-activate kwanza." });
+        }
+        if (!teacher.user_id) return res.status(409).json({ success: false, message: "Staff huyu hana akaunti ya login iliyounganishwa." });
+
+        const username = String(teacher.email || "").trim().toLowerCase();
+        if (!username || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) {
+            return res.status(409).json({ success: false, message: "Email ya login haijawekwa. Rekebisha email ya Staff kwanza; username lazima iwe email." });
+        }
+        if (!teacher.phone) return res.status(409).json({ success: false, message: "Namba ya simu haijawekwa kwa mtumishi huyu." });
+
+        const temporaryPassword = `AfriCore@${randomInt(100000000, 1000000000)}!`;
+        const { data: updatedAuth, error: passwordError } = await supabase.auth.admin.updateUserById(
+            teacher.user_id,
+            { password: temporaryPassword, email: username }
+        );
+        if (passwordError || !updatedAuth?.user) {
+            throw passwordError || new Error("Imeshindikana kusasisha nenosiri la akaunti.");
+        }
+
+        const message = `AfriCore Login: User ${username} Pass ${temporaryPassword} https://africorepro.vercel.app`;
+        try {
+            const delivery = await sendSchoolSms({
+                schoolId: Number(teacher.school_id),
+                recipient: teacher.phone,
+                message
+            });
+            return res.json({
+                success: true,
+                password_reset: true,
+                username,
+                sms: { status: "sent", ...delivery },
+                message: "Nenosiri jipya limetengenezwa na credentials zimetumwa kwa SMS."
+            });
+        } catch (smsError) {
+            console.error("RESEND STAFF CREDENTIAL SMS ERROR:", smsError);
+            return res.status(502).json({
+                success: false,
+                password_reset: true,
+                username,
+                sms: { status: "failed" },
+                message: `Nenosiri limebadilishwa lakini SMS haikutumwa: ${smsError?.message || "Kagua NewHope SMS settings."} Bonyeza resend tena baada ya kurekebisha.`
+            });
+        }
+    } catch (error) {
+        console.error("RESEND STAFF CREDENTIALS ERROR:", error);
+        return res.status(500).json({ success: false, message: error?.message || "Imeshindikana kutuma credentials." });
     }
 };
 
