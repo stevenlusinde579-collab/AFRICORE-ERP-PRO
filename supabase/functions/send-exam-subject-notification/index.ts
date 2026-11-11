@@ -242,6 +242,7 @@ const sendSMS = async (
     body: JSON.stringify({
       recipient,
       message,
+      sender_id: credentials.sender_id,
     }),
   });
 
