@@ -3088,9 +3088,18 @@ export const resendTeacherCredentials = async (req, res) => {
         if (String(teacher.status || "Active").toLowerCase() !== "active") {
             return res.status(409).json({ success: false, message: "Akaunti ya mtumishi haipo Active. I-activate kwanza." });
         }
-        if (!teacher.user_id) return res.status(409).json({ success: false, message: "Staff huyu hana akaunti ya login iliyounganishwa." });
+        let authUserId = teacher.user_id;
+        if (!authUserId) {
+            const { data: linkedProfile, error: profileLookupError } = await supabase
+                .from("profiles").select("id").eq("teacher_id", teacher.id).maybeSingle();
+            if (profileLookupError) throw profileLookupError;
+            authUserId = linkedProfile?.id || null;
+        }
+        if (!authUserId) return res.status(409).json({ success: false, message: "Staff huyu hana akaunti ya login iliyounganishwa." });
 
-        const username = String(teacher.email || "").trim().toLowerCase();
+        const { data: authLookup, error: authLookupError } = await supabase.auth.admin.getUserById(authUserId);
+        if (authLookupError) throw authLookupError;
+        const username = String(teacher.email || authLookup?.user?.email || "").trim().toLowerCase();
         if (!username || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) {
             return res.status(409).json({ success: false, message: "Email ya login haijawekwa. Rekebisha email ya Staff kwanza; username lazima iwe email." });
         }
@@ -3098,7 +3107,7 @@ export const resendTeacherCredentials = async (req, res) => {
 
         const temporaryPassword = `AfriCore@${randomInt(100000000, 1000000000)}!`;
         const { data: updatedAuth, error: passwordError } = await supabase.auth.admin.updateUserById(
-            teacher.user_id,
+            authUserId,
             { password: temporaryPassword, email: username }
         );
         if (passwordError || !updatedAuth?.user) {
