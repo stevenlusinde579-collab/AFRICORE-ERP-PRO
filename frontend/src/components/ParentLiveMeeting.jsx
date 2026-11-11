@@ -22,10 +22,12 @@ function VideoTile({ participant, stream, local }) {
 
 export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = false, onEnd, onLeave, authToken = "" }) {
   const channelRef = useRef(null), localStreamRef = useRef(null), peersRef = useRef(new Map()), remoteStreamsRef = useRef(new Map()), pendingIceRef = useRef(new Map());
-  const identityRef = useRef(""), nameRef = useRef(""), mountedRef = useRef(false);
+  const identityRef = useRef(""), nameRef = useRef(""), mountedRef = useRef(false), onLeaveRef = useRef(onLeave);
   const [participants, setParticipants] = useState([]), [version, setVersion] = useState(0);
   const [cameraOn, setCameraOn] = useState(false), [micOn, setMicOn] = useState(false), [connecting, setConnecting] = useState(true);
   const [error, setError] = useState(""), [ending, setEnding] = useState(false), [roomState, setRoomState] = useState("Inaunganisha");
+
+  onLeaveRef.current = onLeave;
 
   const send = useCallback(async (event, payload) => {
     if (channelRef.current) await channelRef.current.send({ type: "broadcast", event, payload });
@@ -141,12 +143,12 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
         const rows = isAdmin ? (response.data?.meetings || []).filter(row => row.status === "scheduled" && !row.ends_at) : [response.data?.meeting].filter(Boolean);
         if (active && !rows.some(row => String(row.id) === String(meeting.id))) { setRoomState("Mkutano umemalizika"); onLeave?.(); }
       } catch (e) {
-        if (active && [401,403].includes(e?.response?.status)) { setError("Ruhusa ya mkutano imeisha. Ingia tena."); onLeave?.(); }
+        if (active && [401,403].includes(e?.response?.status)) { setError("Ruhusa ya mkutano imeisha. Ingia tena."); onLeaveRef.current?.(); }
       }
     };
     const timer = window.setInterval(check, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [meeting?.id, authToken, isAdmin, onLeave]);
+  }, [meeting?.id, authToken, isAdmin]);
 
   const toggleCamera = async () => { const t = localStreamRef.current?.getVideoTracks?.()[0]; if (!t) return; t.enabled = !t.enabled; setCameraOn(t.enabled); await send("media-state", { user_id: identityRef.current, camera_enabled: t.enabled }); };
   const toggleMic = async () => { const t = localStreamRef.current?.getAudioTracks?.()[0]; if (!t) return; t.enabled = !t.enabled; setMicOn(t.enabled); await send("media-state", { user_id: identityRef.current, mic_enabled: t.enabled }); };
