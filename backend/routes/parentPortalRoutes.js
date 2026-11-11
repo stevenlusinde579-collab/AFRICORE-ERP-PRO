@@ -551,7 +551,7 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
     if (current.data) return res.status(409).json({ success: false, message: "Kuna mkutano mwingine ambao bado uko LIVE. Maliza mkutano huo kwanza.", meeting: current.data });
 
     const now = new Date().toISOString();
-    const roomCode = "PP-" + crypto.randomBytes(5).toString("hex").toUpperCase();
+    const roomCode = "PP-" + crypto.randomBytes(12).toString("hex").toUpperCase();
     const roomResult = await supabase.from("video_rooms").insert({
       school_id: schoolId, room_code: roomCode, title,
       description: description || null, created_by: req.user.id,
@@ -570,7 +570,7 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
     meetingId = meetingResult.data.id;
     return res.json({
       success: true, meeting: { ...meetingResult.data, room_id: roomId },
-      roomId, identity: "staff-" + req.user.id,
+      roomId, roomCode: roomResult.data.room_code, identity: "staff-" + req.user.id,
       displayName: req.profile?.full_name || "School Admin",
     });
   } catch (error) {
@@ -591,10 +591,10 @@ router.post("/staff/meetings/:id/token", authenticateUser, parentPortalStaffAcce
     if (found.error) throw found.error;
     const roomId = parentMeetingRoomId(found.data);
     if (!found.data || !roomId) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE kwa sasa." });
-    const room = await supabase.from("video_rooms").select("id,school_id,created_by,status").eq("id", roomId).eq("school_id", schoolId).maybeSingle();
+    const room = await supabase.from("video_rooms").select("id,school_id,room_code,created_by,status").eq("id", roomId).eq("school_id", schoolId).maybeSingle();
     if (room.error) throw room.error;
     if (!room.data || ["ended","cancelled","canceled"].includes(String(room.data.status).toLowerCase())) return res.status(404).json({ success: false, message: "Chumba cha mkutano hakipo tena." });
-    return res.json({ success: true, meeting: { ...found.data, room_id: roomId }, roomId, identity: "staff-" + req.user.id, displayName: req.profile?.full_name || "School Admin" });
+    return res.json({ success: true, meeting: { ...found.data, room_id: roomId }, roomId, roomCode: room.data.room_code, identity: "staff-" + req.user.id, displayName: req.profile?.full_name || "School Admin" });
   } catch (error) {
     console.error("PARENT WEBRTC MEETING STAFF ACCESS ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Imeshindikana kuingia kwenye mkutano." });
@@ -716,7 +716,7 @@ router.get("/meetings/active", async (req, res) => {
     const meeting = result.data;
     const roomId = parentMeetingRoomId(meeting);
     if (!meeting || !roomId) return res.json({ success: true, meeting: null });
-    const room = await supabase.from("video_rooms").select("id,status").eq("id", roomId).eq("school_id", school.id).maybeSingle();
+    const room = await supabase.from("video_rooms").select("id,room_code,status").eq("id", roomId).eq("school_id", school.id).maybeSingle();
     if (room.error) throw room.error;
     if (!room.data || ["ended","cancelled","canceled"].includes(String(room.data.status).toLowerCase())) return res.json({ success: true, meeting: null });
     return res.json({ success: true, meeting: { id: meeting.id, title: meeting.title, description: meeting.description, starts_at: meeting.starts_at, status: meeting.status, class_id: meeting.class_id } });
@@ -745,7 +745,7 @@ router.post("/meetings/:id/token", async (req, res) => {
     return res.json({
       success: true,
       meeting: { id: found.data.id, title: found.data.title, description: found.data.description, starts_at: found.data.starts_at, status: found.data.status, class_id: found.data.class_id },
-      roomId, identity: "parent-" + account.id, displayName: name,
+      roomId, roomCode: room.data.room_code, identity: "parent-" + account.id, displayName: name,
     });
   } catch (error) {
     console.error("PARENT WEBRTC MEETING ACCESS ERROR:", error);
