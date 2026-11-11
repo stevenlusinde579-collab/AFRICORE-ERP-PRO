@@ -88,7 +88,8 @@ export default function AddHeadmaster() {
             setCreated({
                 school: selectedSchool?.school_name || "Shule iliyochaguliwa",
                 full_name: fullName.trim(),
-                ...credentials
+                ...credentials,
+                credential_sms: response?.data?.credential_sms || null
             });
         } catch (submitError) {
             setError(getError(submitError));
@@ -191,6 +192,9 @@ export default function AddHeadmaster() {
                         <div>
                             <h2 className="text-xl font-bold text-slate-900">Akaunti imeundwa kikamilifu</h2>
                             <p className="mt-1 text-sm text-slate-600">{created.full_name} sasa ameunganishwa na {created.school}.</p>
+                            {created.credential_sms?.status === "sent" && <p className="mt-2 text-sm font-semibold text-emerald-700">Login credentials zimetumwa kwa SMS.</p>}
+                            {created.credential_sms?.status === "failed" && <p className="mt-2 text-sm font-semibold text-amber-800">Akaunti imeundwa lakini SMS haikutumwa: {created.credential_sms.reason || "Kagua mipangilio ya NewHope ya shule."}</p>}
+                            {created.credential_sms?.status === "skipped" && <p className="mt-2 text-sm font-semibold text-amber-800">SMS haikutumwa kwa sababu namba ya simu haijawekwa.</p>}
                         </div>
                     </div>
                     <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
