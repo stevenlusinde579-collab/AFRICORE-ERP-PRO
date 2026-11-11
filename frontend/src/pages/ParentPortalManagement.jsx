@@ -116,14 +116,14 @@ export default function ParentPortalManagement() {
     }
   };
   const activeMeeting = meetings.find((meeting) =>
-    meeting.status === "scheduled" && meeting.meeting_provider === "LiveKit" && !meeting.ends_at && new Date(meeting.starts_at).getTime() <= Date.now()
+    meeting.status === "scheduled" && meeting.meeting_provider === "LiveKit" && !meeting.ends_at && String(meeting.class_id) === String(meetingClassId) && new Date(meeting.starts_at).getTime() <= Date.now()
   ) || null;
   const startLiveMeeting = async (event) => {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !meetingClassId) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await api.post("/parent-portal/staff/meetings/start", { title: title.trim() });
+      const response = await api.post("/parent-portal/staff/meetings/start", { title: title.trim(), class_id: Number(meetingClassId) });
       setLiveRoom({ meeting: response.data.meeting, connectionInfo: response.data });
       setTitle("");
       setNotice("Mkutano umeanzishwa. Wazazi wataona kitufe cha Join Meeting kwenye Parent Portal zao.");
@@ -366,7 +366,7 @@ export default function ParentPortalManagement() {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
                 <p className="text-xs font-bold uppercase tracking-wider text-violet-700">Live parent conference</p>
                 <h2 className="mt-1 text-xl font-extrabold">Create & Start Meeting</h2>
-                <p className="mt-1 text-sm text-slate-500">Weka kichwa cha mkutano kisha uanze. Wazazi wote wa shule wataona mkutano ukiwa LIVE na watajiunga kwa kitufe cha Join Meeting.</p>
+                <p className="mt-1 text-sm text-slate-500">Weka kichwa cha mkutano kisha uanze. Wazazi wa darasa ulilochagua wataona mkutano ukiwa LIVE na watajiunga kwa kitufe cha Join Meeting.</p>
                 {activeMeeting ? (
                   <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4">
                     <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-rose-700"><span className="h-2 w-2 animate-pulse rounded-full bg-rose-600"/> Meeting is LIVE</div>
@@ -377,13 +377,15 @@ export default function ParentPortalManagement() {
                 ) : (
                   <form onSubmit={startLiveMeeting} className="mt-5 space-y-3">
                     <label className="block text-sm font-semibold text-slate-700">Meeting Title<input required maxLength={180} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Mfano: Mkutano wa Wazazi – Muhula wa Pili" className="mt-2 w-full rounded-xl border border-slate-200 p-3"/></label>
-                    <button disabled={busy || !title.trim()} className="rounded-xl bg-violet-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inaanzisha..." : "Create Meeting & Start Live"}</button>
+                    <label className="block text-sm font-semibold text-slate-700">Select Class<select required value={meetingClassId} onChange={(e) => setMeetingClassId(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3"><option value="">-- Chagua darasa --</option>{orderedClasses.map((item) => <option key={item.id} value={item.id}>{item.class_name}</option>)}</select></label>
+                    <p className="text-xs text-slate-500">Mkutano huu utaonekana kwa wazazi wenye watoto katika darasa hili pekee.</p>
+                    <button disabled={busy || !title.trim() || !meetingClassId} className="rounded-xl bg-violet-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inaanzisha..." : "Create Meeting & Start Live"}</button>
                   </form>
                 )}
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
                 <h3 className="text-lg font-bold text-slate-900">Meeting status</h3>
-                <p className="mt-2 text-sm text-slate-500">{activeMeeting ? "Mkutano unaendelea. Wazazi wanaweza kujiunga sasa." : "Hakuna mkutano unaoendelea kwa sasa. Ukianzisha mkutano, wazazi wataona kitufe cha kujiunga."}</p>
+                <p className="mt-2 text-sm text-slate-500">{activeMeeting ? "Mkutano unaendelea. Wazazi wanaweza kujiunga sasa." : "Hakuna mkutano LIVE kwa darasa lililochaguliwa. Ukianzisha mkutano, wazazi wa darasa hilo wataona kitufe cha kujiunga."}</p>
                 <div className="mt-5 rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Meeting lifecycle</p><ol className="mt-3 space-y-2 text-sm text-slate-700"><li>1. Admin anaweka title na kuanzisha mkutano.</li><li>2. Wazazi wanaona LIVE na wanabonyeza Join Meeting.</li><li>3. Mkutano unaendelea hadi Admin abonyeze End Meeting.</li></ol></div>
               </div>
             </div>
