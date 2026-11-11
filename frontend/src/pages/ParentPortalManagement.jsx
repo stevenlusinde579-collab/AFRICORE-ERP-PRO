@@ -40,6 +40,7 @@ function classOrder(name) {
 export default function ParentPortalManagement() {
   const { schoolId } = useSchool();
   const [classes, setClasses] = useState([]);
+  const [meetingClasses, setMeetingClasses] = useState([]);
   const [parents, setParents] = useState([]);
   const [groupMembers, setGroupMembers] = useState([]);
   const [classId, setClassId] = useState("");
@@ -63,6 +64,10 @@ export default function ParentPortalManagement() {
   const orderedClasses = useMemo(
     () => [...classes].sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
     [classes]
+  );
+  const orderedMeetingClasses = useMemo(
+    () => [...meetingClasses].sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
+    [meetingClasses]
   );
   const parentStats = useMemo(() => {
     const total = new Set();
@@ -107,6 +112,16 @@ export default function ParentPortalManagement() {
       setBusy(false);
     }
   };
+  const loadMeetingClasses = async () => {
+    try {
+      const response = await api.get("/parent-portal/staff/meeting-classes");
+      const available = response.data?.classes || [];
+      setMeetingClasses(available);
+      setMeetingClassId((current) => available.some((item) => String(item.id) === String(current)) ? current : "");
+    } catch (e) {
+      setError(e.response?.data?.message || "Imeshindikana kupakia madarasa yenye wanafunzi.");
+    }
+  };
   const loadMeetings = async () => {
     try {
       const response = await api.get("/parent-portal/staff/meetings");
@@ -128,6 +143,7 @@ export default function ParentPortalManagement() {
       setTitle("");
       setNotice("Mkutano umeanzishwa. Wazazi wataona kitufe cha Join Meeting kwenye Parent Portal zao.");
       await loadMeetings();
+      await loadMeetingClasses();
     } catch (e) {
       setError(e.response?.data?.message || "Imeshindikana kuanzisha mkutano LIVE.");
       await loadMeetings();
@@ -174,6 +190,7 @@ export default function ParentPortalManagement() {
       .then(({ data }) => setParents(data?.parents || []))
       .catch((e) => setError(e.response?.data?.message || "Imeshindikana kupakia taarifa za wazazi."));
     loadMeetings();
+    loadMeetingClasses();
     loadSuggestions();
   }, [schoolId]);
 
@@ -377,9 +394,9 @@ export default function ParentPortalManagement() {
                 ) : (
                   <form onSubmit={startLiveMeeting} className="mt-5 space-y-3">
                     <label className="block text-sm font-semibold text-slate-700">Meeting Title<input required maxLength={180} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Mfano: Mkutano wa Wazazi – Muhula wa Pili" className="mt-2 w-full rounded-xl border border-slate-200 p-3"/></label>
-                    <label className="block text-sm font-semibold text-slate-700">Select Class<select required value={meetingClassId} onChange={(e) => setMeetingClassId(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3"><option value="">-- Chagua darasa --</option>{orderedClasses.map((item) => <option key={item.id} value={item.id}>{item.class_name}</option>)}</select></label>
-                    <p className="text-xs text-slate-500">Mkutano huu utaonekana kwa wazazi wenye watoto katika darasa hili pekee.</p>
-                    <button disabled={busy || !title.trim() || !meetingClassId} className="rounded-xl bg-violet-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inaanzisha..." : "Create Meeting & Start Live"}</button>
+                    <label className="block text-sm font-semibold text-slate-700">Select Class<select required value={meetingClassId} onChange={(e) => setMeetingClassId(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3"><option value="">-- Chagua darasa lenye wanafunzi --</option>{orderedMeetingClasses.map((item) => <option key={item.id} value={item.id}>{item.class_name} · {item.academic_year_name || "Mwaka haujaainishwa"} · {item.student_count} wanafunzi (ID {item.id})</option>)}</select></label>
+                    <p className="text-xs text-slate-500">Orodha hii ina madarasa yenye wanafunzi waliopangiwa kwa mwaka wa masomo unaotumika. Mkutano utaonekana kwa wazazi wa wanafunzi hao pekee.</p>
+                    <button disabled={busy || !title.trim() || !meetingClassId || !orderedMeetingClasses.some((item) => String(item.id) === String(meetingClassId))} className="rounded-xl bg-violet-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inaanzisha..." : "Create Meeting & Start Live"}</button>
                   </form>
                 )}
               </div>
