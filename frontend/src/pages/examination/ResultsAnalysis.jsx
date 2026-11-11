@@ -4381,9 +4381,11 @@ function getReportLevelLabel(levelType) {
     })[levelType] || "General Education";
 }
 
-function ReportHeader({ exam, title, subtitle }) {
-    const { showSchoolName, schoolName } = useSchool();
-    const brandName = showSchoolName && schoolName ? schoolName : "AfriCore ERP";
+function ReportHeader({ exam, title, subtitle, schoolNameOverride }) {
+    const { schoolName } = useSchool();
+    // Academic reports must identify the school; AfriCore is only a fallback
+    // when the school's own name is genuinely unavailable.
+    const brandName = schoolNameOverride || schoolName || "AfriCore ERP";
 
     return (
         <div className="text-center border-b-2 border-slate-800 pb-4 mb-5">
