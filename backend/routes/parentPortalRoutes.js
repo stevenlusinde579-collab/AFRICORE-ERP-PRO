@@ -441,6 +441,50 @@ router.get("/staff/classes", authenticateUser, parentPortalStaffAccess, async (r
   return res.json({ success: true, classes: data || [] });
 });
 
+// Meeting target list: only active classes that currently contain students.
+// This prevents selecting empty historical class records with duplicate names
+// (for example, Form 4 from a previous academic year).
+router.get("/staff/meeting-classes", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(403).json({ success: false, message: "School access is required." });
+  try {
+    let classQuery = supabase.from("classes")
+      .select("id,class_name,academic_year_id,is_active")
+      .eq("school_id", schoolId).eq("is_active", true).order("class_name");
+    if (!req.parentPortalScope.fullAccess) {
+      classQuery = classQuery.in("id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
+    }
+    const { data: classRows, error: classError } = await classQuery;
+    if (classError) throw classError;
+    const rows = classRows || [];
+    if (!rows.length) return res.json({ success: true, classes: [] });
+    const classIds = rows.map((row) => row.id);
+    const [studentResult, yearResult] = await Promise.all([
+      supabase.from("students").select("current_class_id").eq("school_id", schoolId).in("current_class_id", classIds).limit(10000),
+      supabase.from("academic_years").select("id,year_name").eq("school_id", schoolId),
+    ]);
+    if (studentResult.error) throw studentResult.error;
+    if (yearResult.error) throw yearResult.error;
+    const counts = new Map();
+    (studentResult.data || []).forEach((student) => {
+      const key = String(student.current_class_id);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const years = new Map((yearResult.data || []).map((year) => [String(year.id), year.year_name]));
+    const classes = rows
+      .filter((row) => (counts.get(String(row.id)) || 0) > 0)
+      .map((row) => ({
+        ...row,
+        academic_year_name: years.get(String(row.academic_year_id)) || null,
+        student_count: counts.get(String(row.id)) || 0,
+      }));
+    return res.json({ success: true, classes });
+  } catch (error) {
+    console.error("PARENT MEETING CLASS LIST ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kupakia madarasa yenye wanafunzi." });
+  }
+});
+
 router.get("/staff/parents", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   let query = supabase.from("students")
@@ -522,9 +566,13 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
   let roomId = null;
   let meetingId = null;
   try {
-    const classCheck = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+    const classCheck = await supabase.from("classes").select("id,is_active").eq("id", classId).eq("school_id", schoolId).maybeSingle();
     if (classCheck.error) throw classCheck.error;
     if (!classCheck.data) return res.status(404).json({ success: false, message: "Darasa ulilochagua halipo kwenye shule yako." });
+    if (classCheck.data.is_active === false) return res.status(409).json({ success: false, message: "Darasa hili halijawezeshwa kwa sasa." });
+    const assignedStudents = await supabase.from("students").select("id").eq("school_id", schoolId).eq("current_class_id", classId).limit(1);
+    if (assignedStudents.error) throw assignedStudents.error;
+    if (!assignedStudents.data?.length) return res.status(422).json({ success: false, message: "Hakuna mwanafunzi aliyepangiwa darasa hili. Chagua darasa lenye wanafunzi ili mkutano uwafikie wazazi." });
     const current = await supabase.from("parent_portal_meetings")
       .select("id,title,status").eq("school_id", schoolId).eq("class_id", classId).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: false }).limit(1).maybeSingle();
