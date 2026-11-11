@@ -496,9 +496,9 @@ async function loadParentPortalClassOptions(schoolId, allowedClassIds, { require
   });
   return [...unique.entries()].map(([key, row]) => ({
     ...row,
-    source_class_ids: classRows.filter((candidate) => labelKey(candidate.class_name) === key).map((candidate) => candidate.id),
+    source_class_ids: candidates.filter((candidate) => labelKey(candidate.class_name) === key).map((candidate) => candidate.id),
     academic_year_name: years.get(String(row.academic_year_id))?.year_name || null,
-    student_count: classRows.filter((candidate) => labelKey(candidate.class_name) === key)
+    student_count: candidates.filter((candidate) => labelKey(candidate.class_name) === key)
       .reduce((total, candidate) => total + (studentCounts.get(String(candidate.id)) || 0), 0),
   })).sort((a, b) => String(a.class_name || "").localeCompare(String(b.class_name || "")));
 }
