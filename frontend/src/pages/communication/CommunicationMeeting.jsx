@@ -2883,7 +2883,7 @@ const CommunicationMeeting = () => {
 
                 const channelName =
                     makeRoomChannelName(
-                        roomId
+                        roomData.room_code || roomId
                     );
 
                 currentUserIdRef.current =
