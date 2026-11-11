@@ -37,7 +37,7 @@ export default function HeadmasterProfile() {
 
     const saveEmail = async () => {
         setError(""); setNotice("");
-        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.trim())) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
             setError("Weka email sahihi; itatumika kama username ya Headmaster.");
             return;
         }
