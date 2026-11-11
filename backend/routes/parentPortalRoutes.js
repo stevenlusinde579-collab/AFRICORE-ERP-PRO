@@ -471,14 +471,14 @@ router.get("/staff/meeting-classes", authenticateUser, parentPortalStaffAccess, 
       counts.set(key, (counts.get(key) || 0) + 1);
     });
     const years = new Map((yearResult.data || []).map((year) => [String(year.id), year]));
-    const activeYear = (yearResult.data || []).find((year) => year.is_active === true) || null;
+    const activeYearIds = new Set((yearResult.data || []).filter((year) => year.is_active === true).map((year) => String(year.id)));
     const classes = rows
       .filter((row) => {
         const hasStudents = (counts.get(String(row.id)) || 0) > 0;
         const year = row.academic_year_id ? years.get(String(row.academic_year_id)) : null;
         // Prefer the school's active academic year. If the school has no active
         // year configured, keep occupied classes visible instead of hiding them.
-        const belongsToActiveYear = !activeYear || String(row.academic_year_id) === String(activeYear.id);
+        const belongsToActiveYear = activeYearIds.size === 0 || activeYearIds.has(String(row.academic_year_id));
         return hasStudents && belongsToActiveYear && (!row.academic_year_id || year);
       })
       .map((row) => ({
@@ -574,10 +574,15 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
   let roomId = null;
   let meetingId = null;
   try {
-    const classCheck = await supabase.from("classes").select("id,is_active").eq("id", classId).eq("school_id", schoolId).maybeSingle();
+    const classCheck = await supabase.from("classes").select("id,is_active,academic_year_id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
     if (classCheck.error) throw classCheck.error;
     if (!classCheck.data) return res.status(404).json({ success: false, message: "Darasa ulilochagua halipo kwenye shule yako." });
     if (classCheck.data.is_active === false) return res.status(409).json({ success: false, message: "Darasa hili halijawezeshwa kwa sasa." });
+    const activeYears = await supabase.from("academic_years").select("id").eq("school_id", schoolId).eq("is_active", true);
+    if (activeYears.error) throw activeYears.error;
+    if ((activeYears.data || []).length && !(activeYears.data || []).some((year) => String(year.id) === String(classCheck.data.academic_year_id))) {
+      return res.status(409).json({ success: false, message: "Chagua darasa la mwaka wa masomo unaotumika sasa." });
+    }
     const assignedStudents = await supabase.from("students").select("id").eq("school_id", schoolId).eq("current_class_id", classId).limit(1);
     if (assignedStudents.error) throw assignedStudents.error;
     if (!assignedStudents.data?.length) return res.status(422).json({ success: false, message: "Hakuna mwanafunzi aliyepangiwa darasa hili. Chagua darasa lenye wanafunzi ili mkutano uwafikie wazazi." });
