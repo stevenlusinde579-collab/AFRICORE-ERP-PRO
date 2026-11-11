@@ -603,7 +603,7 @@ router.post("/staff/meetings/:id/token", authenticateUser, parentPortalStaffAcce
   try {
     const found = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status").eq("id", req.params.id)
-      .eq("school_id", schoolId).eq("status", "scheduled").is("ends_at", null).lte("starts_at", new Date().toISOString()).maybeSingle();
+      .eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null).lte("starts_at", new Date().toISOString()).maybeSingle();
     if (found.error) throw found.error;
     if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE kwa sasa." });
     const live = await issueParentMeetingToken({ schoolId, meetingId: found.data.id, identity: "staff-" + req.user.id, name: req.profile?.full_name || "School Admin" });
@@ -620,13 +620,13 @@ router.patch("/staff/meetings/:id/end", authenticateUser, parentPortalStaffAcces
   try {
     const endedAt = new Date().toISOString();
     const current = await supabase.from("parent_portal_meetings").select("id")
-      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").maybeSingle();
+      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").maybeSingle();
     if (current.error) throw current.error;
     if (!current.data) return res.status(404).json({ success: false, message: "Mkutano huu haupo LIVE au tayari umemalizika." });
     await closeLiveKitParentRoom(schoolId, req.params.id);
     const updated = await supabase.from("parent_portal_meetings").update({
       status: "completed", ends_at: endedAt,
-    }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled")
+    }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit")
       .select("id,title,status,ends_at").maybeSingle();
     if (updated.error) throw updated.error;
     if (!updated.data) return res.status(409).json({ success: false, message: "Mkutano umebadilika. Refresh taarifa za mkutano." });
@@ -718,7 +718,7 @@ router.get("/meetings/active", async (req, res) => {
     const classId = Number(student.current_class_id || 0);
     const result = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status")
-      .eq("school_id", school.id).eq("status", "scheduled").is("ends_at", null)
+      .eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).is("class_id", null)
       .order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (result.error) throw result.error;
@@ -735,7 +735,7 @@ router.post("/meetings/:id/token", async (req, res) => {
     const classId = Number(student.current_class_id || 0);
     const found = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status,class_id")
-      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").is("ends_at", null)
+      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).is("class_id", null).maybeSingle();
     if (found.error) throw found.error;
     if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
