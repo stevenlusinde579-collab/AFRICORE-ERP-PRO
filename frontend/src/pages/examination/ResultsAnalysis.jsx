@@ -3141,9 +3141,30 @@ export default function ResultsAnalysis() {
                 let totalCount = null;
                 let keepPublishing = true;
                 while (keepPublishing) {
+                    const reportRows = [...(overallRankedStudents || [])]
+                        .sort((a, b) => Number(a.id) - Number(b.id))
+                        .slice(offset, offset + 20)
+                        .map(student => {
+                            const report = getStudentReport(student);
+                            const {
+                                parent_name: _parentName,
+                                parent_phone: _parentPhone,
+                                parent_email: _parentEmail,
+                                ...safeReport
+                            } = report;
+                            return {
+                                student_id: report.id,
+                                report: {
+                                    ...safeReport,
+                                    examGradingScales,
+                                    isCseeExam: isCseeClass(report.class_id),
+                                    isAlevel: isAlevelClass(report.class_id),
+                                },
+                            };
+                        });
                     const published = await api.post(
                         `/parent-portal/staff/exams/${exam?.id || examId}/publish-results`,
-                        { offset, limit: 20 },
+                        { offset, limit: 20, report_snapshots: reportRows },
                         { timeout: 60000 }
                     );
                     if (!published.data?.success) throw new Error(published.data?.message || "Parent Portal publication failed.");
