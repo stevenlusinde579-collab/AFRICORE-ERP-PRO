@@ -21,6 +21,7 @@ export default function SchoolOverview() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [school, setSchool] = useState(null);
+    const [headmasters, setHeadmasters] = useState([]);
     const [overview, setOverview] = useState({
         students: 0,
         staff: 0,
@@ -40,6 +41,9 @@ export default function SchoolOverview() {
             }
             setSchool(response.data.school);
             setOverview(response.data.overview);
+            const headmasterResponse = await api.get("/schools/headmasters");
+            const allHeadmasters = headmasterResponse?.data?.headmasters || [];
+            setHeadmasters(allHeadmasters.filter((item) => Number(item.school_id) === Number(id)));
         } catch (requestError) {
             setError(
                 requestError?.response?.data?.message ||
@@ -173,7 +177,19 @@ export default function SchoolOverview() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="font-bold text-slate-900">Maelezo ya hesabu</h2>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                    <div><h2 className="text-lg font-bold text-slate-900">Headmaster wa shule hii</h2><p className="text-sm text-slate-500">Tazama taarifa na utume tena login credentials.</p></div>
+                    {school?.is_active === true && headmasters.length === 0 && <button type="button" onClick={() => navigate(`/school-management/headmasters/add?school_id=${encodeURIComponent(id)}`)} className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">Add Headmaster</button>}
+                </div>
+                {headmasters.length === 0 ? <p className="text-sm text-slate-500">Hakuna Headmaster aliyeunganishwa na shule hii.</p> : headmasters.map((person) => (
+                    <div key={person.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
+                        <div><p className="font-semibold text-slate-900">{person.full_name}</p><p className="text-sm text-slate-600">{person.email || "Email haijawekwa"} • {person.phone || "Simu haijawekwa"}</p></div>
+                        <button type="button" onClick={() => navigate(`/school-management/headmasters/${person.id}`)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">View</button>
+                    </div>
+                ))}
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">\n                <h2 className="font-bold text-slate-900">Maelezo ya hesabu</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                     Jumla ya watumiaji inahesabiwa kwa kujumlisha idadi ya wanafunzi, Staff na Non-Staff wa shule hii pekee. Takwimu hupakiwa kutoka kwenye rekodi za shule husika na zinaweza kusasishwa kwa kubonyeza Refresh.
                 </p>

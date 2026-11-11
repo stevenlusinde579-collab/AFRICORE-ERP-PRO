@@ -403,8 +403,8 @@ export const createSchoolHeadmaster = async (req, res) => {
         if (fullName.length < 3) {
             return res.status(400).json({ success: false, message: "Jina kamili la Headmaster linahitajika." });
         }
-        if (!email && !phone) {
-            return res.status(400).json({ success: false, message: "Weka email au namba ya simu kwa ajili ya login." });
+        if (!email || !phone) {
+            return res.status(400).json({ success: false, message: "Email na namba ya simu vyote vinahitajika. Username ya login itakuwa email." });
         }
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ success: false, message: "Email si sahihi." });
@@ -519,6 +519,116 @@ export const createSchoolHeadmaster = async (req, res) => {
     }
 };
 
+
+
+
+
+/** Update an existing Headmaster's Auth email so email becomes the login username. */
+export const updateHeadmasterEmail = async (req, res) => {
+    try {
+        const profileId = String(req.params.profileId || "").trim();
+        const email = String(req.body?.email || "").trim().toLowerCase();
+        if (!profileId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ success: false, message: "Weka email sahihi ya Headmaster." });
+        }
+        const { data: profile, error: profileError } = await supabase
+            .from("profiles").select("id,role_id").eq("id", profileId).maybeSingle();
+        if (profileError) throw profileError;
+        if (!profile) return res.status(404).json({ success: false, message: "Headmaster hakupatikana." });
+
+        const { data: role, error: roleError } = await supabase
+            .from("roles").select("id").eq("role_name", "Headmaster").maybeSingle();
+        if (roleError) throw roleError;
+        const { data: roleAssignment, error: assignmentError } = await supabase
+            .from("profile_roles").select("profile_id").eq("profile_id", profileId)
+            .eq("role_id", role?.id || -1).limit(1).maybeSingle();
+        if (assignmentError) throw assignmentError;
+        if (!role || (Number(profile.role_id) !== Number(role.id) && !roleAssignment)) {
+            return res.status(403).json({ success: false, message: "Akaunti hii si ya Headmaster." });
+        }
+
+        const { data: updated, error: updateError } = await supabase.auth.admin.updateUserById(
+            profileId, { email, email_confirm: true }
+        );
+        if (updateError) throw updateError;
+        return res.json({ success: true, email: updated?.user?.email || email, message: "Email ya login imehifadhiwa. Username ya Headmaster sasa ni email hii." });
+    } catch (error) {
+        console.error("UPDATE HEADMASTER EMAIL ERROR:", error);
+        return res.status(400).json({ success: false, message: error?.message || "Imeshindikana kubadilisha email ya Headmaster." });
+    }
+};
+
+
+/**
+ * POST /api/schools/headmasters/:profileId/resend-credentials
+ * Super Admin only (router guard). Resets the same account, then sends school SMS.
+ */
+export const resendHeadmasterCredentials = async (req, res) => {
+    try {
+        const profileId = String(req.params.profileId || "").trim();
+        if (!profileId) return res.status(400).json({ success: false, message: "Headmaster ID inahitajika." });
+
+        const { data: profile, error: profileError } = await supabase
+            .from("profiles").select("id,full_name,phone,school_id,role_id")
+            .eq("id", profileId).maybeSingle();
+        if (profileError) throw profileError;
+        if (!profile) return res.status(404).json({ success: false, message: "Headmaster hakupatikana." });
+
+        const { data: role, error: roleError } = await supabase
+            .from("roles").select("id").eq("role_name", "Headmaster").maybeSingle();
+        if (roleError) throw roleError;
+        if (!role || Number(profile.role_id) !== Number(role.id)) {
+            const { data: activeRole, error: activeRoleError } = await supabase
+                .from("profile_roles").select("profile_id")
+                .eq("profile_id", profileId).eq("role_id", role?.id || -1)
+                .eq("is_active", true).limit(1).maybeSingle();
+            if (activeRoleError) throw activeRoleError;
+            if (!activeRole) return res.status(403).json({ success: false, message: "Akaunti hii haina role ya Headmaster." });
+        }
+
+        const { data: authResult, error: authLookupError } = await supabase.auth.admin.getUserById(profileId);
+        if (authLookupError) throw authLookupError;
+        const username = String(authResult?.user?.email || "").trim().toLowerCase();
+        if (!username || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) {
+            return res.status(409).json({ success: false, message: "Email ya login haijawekwa. Rekebisha email ya Headmaster kwanza; username lazima iwe email." });
+        }
+        if (!profile.phone) return res.status(409).json({ success: false, message: "Namba ya simu ya Headmaster haijawekwa." });
+        if (!profile.school_id) return res.status(409).json({ success: false, message: "Headmaster hajaunganishwa na shule." });
+
+        const { data: school, error: schoolError } = await supabase
+            .from("schools").select("id,is_active").eq("id", profile.school_id).maybeSingle();
+        if (schoolError) throw schoolError;
+        if (!school || school.is_active !== true) {
+            return res.status(409).json({ success: false, message: "Shule haipo Active. I-activate kwanza." });
+        }
+
+        const temporaryPassword = `AfriCore@${randomInt(100000000, 1000000000)}!`;
+        const { data: updatedAuth, error: passwordError } = await supabase.auth.admin.updateUserById(
+            profileId, { password: temporaryPassword, email: username }
+        );
+        if (passwordError || !updatedAuth?.user) throw passwordError || new Error("Imeshindikana kubadilisha password.");
+
+        try {
+            const delivery = await sendSchoolSms({
+                schoolId: Number(profile.school_id),
+                recipient: profile.phone,
+                message: `AfriCore Login: User ${username} Pass ${temporaryPassword} https://africorepro.vercel.app`
+            });
+            return res.json({ success: true, password_reset: true, username, sms: { status: "sent", ...delivery }, message: "Credentials mpya zimetumwa kwa SMS." });
+        } catch (smsError) {
+            console.error("RESEND HEADMASTER CREDENTIAL SMS ERROR:", smsError);
+            return res.status(502).json({
+                success: false, password_reset: true, username, sms: { status: "failed" },
+                message: `Password imebadilishwa lakini SMS haikutumwa: ${smsError?.message || "Kagua NewHope settings."} Jaribu resend tena baada ya kurekebisha.`
+            });
+        }
+    } catch (error) {
+        console.error("RESEND HEADMASTER CREDENTIALS ERROR:", error);
+        return res.status(500).json({ success: false, message: error?.message || "Imeshindikana kutuma credentials za Headmaster." });
+    }
+};
+
+
 /**
  * GET /api/schools/headmasters
  * Lists active Headmaster accounts for school assignment.
@@ -594,18 +704,19 @@ export const getHeadmasters = async (req, res) => {
 
         if (profilesError) throw profilesError;
 
-        const headmasters = (profiles || []).map((profile) => {
+        const headmasters = await Promise.all((profiles || []).map(async (profile) => {
             const roleRow = (roleRows || []).find(
                 (row) => row.profile_id === profile.id && row.is_active === true
             );
-
+            const { data: authData } = await supabase.auth.admin.getUserById(profile.id);
             return {
                 id: profile.id,
                 full_name: profile.full_name || "Headmaster",
+                email: authData?.user?.email || null,
                 phone: profile.phone || null,
                 school_id: roleRow?.school_id ?? profile.school_id ?? null
             };
-        });
+        }));
 
         return res.json({ success: true, headmasters });
     } catch (error) {

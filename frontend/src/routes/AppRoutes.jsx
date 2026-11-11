@@ -29,6 +29,7 @@ import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 import SchoolManagement from "../pages/school-management/SchoolManagement";
 import SchoolOverview from "../pages/school-management/SchoolOverview";
 import AddHeadmaster from "../pages/school-management/AddHeadmaster";
+import HeadmasterProfile from "../pages/school-management/HeadmasterProfile";
 
 import Students from "../pages/students/Students";
 import AddStudent from "../pages/students/AddStudent";
@@ -312,6 +313,10 @@ export default function AppRoutes() {
                     <Route
                         path="school-management/headmasters/add"
                         element={<AddHeadmaster />}
+                    />
+                    <Route
+                        path="school-management/headmasters/:profileId"
+                        element={<HeadmasterProfile />}
                     />
                     <Route
                         path="school-management/:id"

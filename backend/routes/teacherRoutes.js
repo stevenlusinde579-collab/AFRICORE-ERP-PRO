@@ -2,6 +2,7 @@ import express from "express";
 
 import {
     createTeacher,
+    resendTeacherCredentials,
     updateTeacher,
     deleteTeacher
 } from "../controllers/teacherController.js";
@@ -41,6 +42,13 @@ router.post(
  * UPDATE STAFF / NON-STAFF
  * ============================================================
  */
+
+router.post(
+    "/:id/resend-credentials",
+    authenticateUser,
+    requirePermission("edit_staff"),
+    resendTeacherCredentials
+);
 
 router.put(
     "/:id",
