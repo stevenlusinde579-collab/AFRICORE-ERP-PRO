@@ -433,6 +433,7 @@ export default function ResultsAnalysis() {
     const [bulkPublishMode, setBulkPublishMode] = useState("portal");
     const [bulkPublishing, setBulkPublishing] = useState(false);
     const [bulkPublishFeedback, setBulkPublishFeedback] = useState("");
+    const [missingMarksWarning, setMissingMarksWarning] = useState(null);
 
     const [exam, setExam] = useState(null);
     const [examSubjects, setExamSubjects] = useState([]);
@@ -3128,13 +3129,14 @@ export default function ResultsAnalysis() {
     }, [printReport, documentBrandName]);
 
 
-    const handleBulkPublishResults = async () => {
+    const handleBulkPublishResults = async (allowMissingMarks = false) => {
         if (!exam?.id && !examId) return;
         setBulkPublishing(true);
         setBulkPublishFeedback("");
         let portalCount = 0;
         let smsSent = 0;
         let smsFailed = 0;
+        let missingMarksCount = 0;
         try {
             if (bulkPublishMode === "portal" || bulkPublishMode === "both") {
                 let offset = 0;
@@ -3164,11 +3166,12 @@ export default function ResultsAnalysis() {
                         });
                     const published = await api.post(
                         `/parent-portal/staff/exams/${exam?.id || examId}/publish-results`,
-                        { offset, limit: 20, total_count: overallRankedStudents.length, report_snapshots: reportRows },
+                        { offset, limit: 20, total_count: overallRankedStudents.length, report_snapshots: reportRows, allow_missing_marks: allowMissingMarks },
                         { timeout: 60000 }
                     );
                     if (!published.data?.success) throw new Error(published.data?.message || "Parent Portal publication failed.");
                     portalCount += Number(published.data?.published_count || 0);
+                    missingMarksCount += Number(published.data?.missing_marks_count || 0);
                     totalCount = Number(published.data?.total_count || totalCount || 0);
                     offset = Number(published.data?.next_offset || offset);
                     keepPublishing = Boolean(published.data?.has_more);
@@ -3202,10 +3205,24 @@ export default function ResultsAnalysis() {
             }
             setBulkPublishFeedback([
                 portalCount ? `Parent Portal: ${portalCount} student result(s) published.` : "",
+                missingMarksCount ? `Warning: ${missingMarksCount} student(s) had no saved marks; their available report data was still published.` : "",
                 bulkPublishMode !== "portal" ? `SMS sent: ${smsSent}; failed or missing phone: ${smsFailed}.` : "",
             ].filter(Boolean).join(" "));
         } catch (publishError) {
-            setBulkPublishFeedback(publishError?.response?.data?.message || publishError.message || "Unable to publish examination results.");
+            const responseData = publishError?.response?.data;
+            if (
+                !allowMissingMarks &&
+                publishError?.response?.status === 409 &&
+                responseData?.code === "MISSING_STUDENT_MARKS"
+            ) {
+                const missingIds = new Set((responseData.students_without_marks || []).map(Number));
+                const missingStudents = (overallRankedStudents || [])
+                    .filter(student => missingIds.has(Number(student.id)))
+                    .map(student => ({ id: student.id, name: student.full_name || student.student_name || [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") || `Student #${student.id}` }));
+                setMissingMarksWarning({ message: responseData.message, students: missingStudents, count: missingIds.size });
+                return;
+            }
+            setBulkPublishFeedback(responseData?.message || publishError.message || "Unable to publish examination results.");
         } finally {
             setBulkPublishing(false);
         }
@@ -3506,6 +3523,33 @@ export default function ResultsAnalysis() {
                     </div>
                 </div>
 
+
+                {missingMarksWarning && (
+                    <div className="no-print fixed inset-0 z-[90] bg-slate-950/60 p-4 flex items-center justify-center">
+                        <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+                            <div className="flex items-start gap-3">
+                                <FaExclamationTriangle className="mt-1 text-amber-500 text-2xl shrink-0" />
+                                <div>
+                                    <h2 className="text-lg font-extrabold text-slate-900">Onyo: Baadhi ya wanafunzi hawana alama</h2>
+                                    <p className="mt-1 text-sm text-slate-600">{missingMarksWarning.message}</p>
+                                    <p className="mt-2 text-sm font-semibold text-slate-800">{missingMarksWarning.count} mwanafunzi/wanafunzi hawana alama zilizohifadhiwa.</p>
+                                </div>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-slate-700">
+                                {missingMarksWarning.students.length ? (
+                                    <ul className="list-disc pl-5 space-y-1">
+                                        {missingMarksWarning.students.map(student => <li key={student.id}>{student.name}</li>)}
+                                    </ul>
+                                ) : <p>Baadhi ya wanafunzi hawana alama. Orodha ya majina haikupatikana.</p>}
+                            </div>
+                            <p className="text-xs text-slate-500">Ukiendelea, mfumo utatuma report form zilizopo bila kutengeneza au kubadilisha alama ambazo hazijaingizwa.</p>
+                            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                                <button onClick={() => setMissingMarksWarning(null)} disabled={bulkPublishing} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700">Ghairi</button>
+                                <button onClick={() => { setMissingMarksWarning(null); handleBulkPublishResults(true); }} disabled={bulkPublishing} className="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Endelea kuchapisha</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {showBulkPublish && (
                     <div className="no-print fixed inset-0 z-[70] bg-slate-950/50 p-4 flex items-center justify-center">
