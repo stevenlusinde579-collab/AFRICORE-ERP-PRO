@@ -444,10 +444,10 @@ router.get("/staff/parents", authenticateUser, parentPortalStaffAccess, async (r
     parent_name: row.parent_name || row.guardian_name || "Not provided",
     phone: row.parent_phone || row.guardian_phone || "",
     email: row.parent_email || "",
+    class_id: row.current_class_id || null,
     class_name: classMap.get(String(row.current_class_id)) || "Unassigned",
   })) });
 });
-
 router.post("/staff/presence/heartbeat", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const classId = Number(req.body?.class_id);
