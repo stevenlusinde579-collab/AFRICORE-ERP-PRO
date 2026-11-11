@@ -613,7 +613,7 @@ export default function AddTeacher() {
       return false;
     }
 
-    if (!teacher.email?.trim() || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(teacher.email.trim())) {
+    if (!teacher.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teacher.email.trim())) {
       setMessage("Email sahihi ni lazima; itatumika kama username ya kuingia.");
       setMessageType("error");
       return false;
