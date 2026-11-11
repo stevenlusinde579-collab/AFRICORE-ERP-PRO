@@ -773,14 +773,14 @@ export const createTeacher = async (
          * --------------------------------------------------------
          */
 
-        if (!normalizedEmail) {
+        if (!normalizedEmail || !normalizedPhone) {
 
             return res.status(400).json({
 
                 success: false,
 
                 message:
-                    "Email ya Staff ni lazima kwa username ya login. Weka email sahihi."
+                    "Email na namba ya simu ya Staff vyote vinahitajika. Email itatumika kama username na simu kupokea SMS."
 
             });
         }
