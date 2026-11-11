@@ -836,6 +836,7 @@ export default function AddTeacher() {
       if (loginCredentials) {
         setCreatedAccount({
           ...loginCredentials,
+          credential_sms: response?.data?.credential_sms || null,
 
           login_email:
             loginCredentials.login_email ||
@@ -857,6 +858,7 @@ export default function AddTeacher() {
          * Fallback for older backend response format.
          */
         setCreatedAccount({
+          credential_sms: response?.data?.credential_sms || null,
           email:
             response?.data?.email ||
             null,
@@ -1773,9 +1775,17 @@ export default function AddTeacher() {
                   </h2>
 
                   <p className="text-sm text-green-700 mt-1">
-                    The following credentials should be given to
-                    the staff member for system login.
+                    Login credentials have been created. SMS delivery status is shown below.
                   </p>
+                  {createdAccount.credential_sms?.status === "sent" && (
+                    <p className="mt-2 text-sm font-semibold text-green-800">Login credentials sent by SMS.</p>
+                  )}
+                  {createdAccount.credential_sms?.status === "failed" && (
+                    <p className="mt-2 text-sm font-semibold text-amber-800">Account created, but SMS was not sent: {createdAccount.credential_sms.reason || "Check the school's NewHope SMS setup."}</p>
+                  )}
+                  {createdAccount.credential_sms?.status === "skipped" && (
+                    <p className="mt-2 text-sm font-semibold text-amber-800">SMS skipped: a valid staff phone number is required.</p>
+                  )}
                 </div>
 
               </div>
