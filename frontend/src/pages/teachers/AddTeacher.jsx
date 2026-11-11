@@ -613,6 +613,12 @@ export default function AddTeacher() {
       return false;
     }
 
+    if (!teacher.email?.trim() || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(teacher.email.trim())) {
+      setMessage("Email sahihi ni lazima; itatumika kama username ya kuingia.");
+      setMessageType("error");
+      return false;
+    }
+
     if (!teacher.gender) {
       setMessage(
         "Please select gender."
@@ -1236,6 +1242,7 @@ export default function AddTeacher() {
                 <input
                   type="email"
                   name="email"
+                  required
                   value={teacher.email}
                   onChange={handleChange}
                   placeholder="Email address"
