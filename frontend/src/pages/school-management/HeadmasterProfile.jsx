@@ -9,6 +9,8 @@ export default function HeadmasterProfile() {
     const [school, setSchool] = useState(null);
     const [loading, setLoading] = useState(true);
     const [resending, setResending] = useState(false);
+    const [savingEmail, setSavingEmail] = useState(false);
+    const [email, setEmail] = useState("");
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
 
@@ -24,7 +26,7 @@ export default function HeadmasterProfile() {
                 const found = (headmastersResponse?.data?.headmasters || []).find((item) => String(item.id) === String(profileId));
                 if (!found) throw new Error("Headmaster hakupatikana.");
                 const foundSchool = (schoolsResponse?.data?.schools || []).find((item) => Number(item.id) === Number(found.school_id));
-                if (active) { setHeadmaster(found); setSchool(foundSchool || null); setError(""); }
+                if (active) { setHeadmaster(found); setSchool(foundSchool || null); setEmail(found.email || ""); setError(""); }
             } catch (requestError) {
                 if (active) setError(requestError?.response?.data?.message || requestError?.message || "Imeshindikana kupakia taarifa za Headmaster.");
             } finally { if (active) setLoading(false); }
@@ -32,6 +34,24 @@ export default function HeadmasterProfile() {
         load();
         return () => { active = false; };
     }, [profileId]);
+
+    const saveEmail = async () => {
+        setError(""); setNotice("");
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.trim())) {
+            setError("Weka email sahihi; itatumika kama username ya Headmaster.");
+            return;
+        }
+        setSavingEmail(true);
+        try {
+            const response = await api.patch(`/schools/headmasters/${encodeURIComponent(profileId)}/email`, { email: email.trim() });
+            const savedEmail = response?.data?.email || email.trim();
+            setHeadmaster((current) => ({ ...current, email: savedEmail }));
+            setEmail(savedEmail);
+            setNotice(response?.data?.message || "Email ya login imehifadhiwa.");
+        } catch (requestError) {
+            setError(requestError?.response?.data?.message || requestError?.message || "Imeshindikana kuhifadhi email.");
+        } finally { setSavingEmail(false); }
+    };
 
     const resend = async () => {
         if (!headmaster) return;
@@ -62,7 +82,13 @@ export default function HeadmasterProfile() {
                 <h2 className="mb-4 text-lg font-bold">Taarifa za akaunti</h2>
                 <dl className="grid gap-4 sm:grid-cols-2">
                     <div><dt className="text-xs text-slate-500">Jina</dt><dd className="font-semibold">{headmaster.full_name}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Username / Login Email</dt><dd className="break-all font-semibold">{headmaster.email || "Email haijawekwa"}</dd></div>
+                    <div className="sm:col-span-2">
+                        <dt className="text-xs text-slate-500">Username / Login Email</dt>
+                        <dd className="mt-1 flex flex-col gap-2 sm:flex-row">
+                            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="headmaster@school.ac.tz" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            <button type="button" onClick={saveEmail} disabled={savingEmail || !email.trim()} className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingEmail ? "Inahifadhi..." : "Save Email"}</button>
+                        </dd>
+                    </div>
                     <div><dt className="text-xs text-slate-500">Namba ya simu ya SMS</dt><dd className="font-semibold">{headmaster.phone || "Haijawekwa"}</dd></div>
                     <div><dt className="text-xs text-slate-500">Shule</dt><dd className="font-semibold">{school?.school_name || "-"}</dd></div>
                 </dl>
