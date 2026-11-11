@@ -3,7 +3,9 @@ import api from "../services/api";
 import { useSchool } from "../context/SchoolContext";
 
 function normalizeParentIdentity(parent) {
-  const phone = String(parent.phone || "").replace(/\D/g, "");
+  let phone = String(parent.phone || "").replace(/\D/g, "");
+  if (phone.startsWith("0")) phone = "255" + phone.slice(1);
+  else if (/^[67]/.test(phone)) phone = "255" + phone;
   if (phone) return "phone:" + phone;
   const email = String(parent.email || "").trim().toLowerCase();
   if (email) return "email:" + email;
