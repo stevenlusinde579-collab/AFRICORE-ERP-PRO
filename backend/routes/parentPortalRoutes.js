@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { supabase } from "../config/supabase.js";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 import { requirePermission } from "../middleware/permissionMiddleware.js";
-import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+
 
 const router = express.Router();
 const loginAttempts = new Map();
@@ -68,16 +68,25 @@ function parentMeetingRoomName(schoolId, meetingId) {
   return "africore-parent-" + Number(schoolId) + "-" + String(meetingId).replace(/[^a-zA-Z0-9-]/g, "");
 }
 
+function liveKitJwt(apiKey, apiSecret, claims) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const header = encode({ alg: "HS256", typ: "JWT" });
+  const payload = encode(claims);
+  const unsigned = header + "." + payload;
+  const signature = crypto.createHmac("sha256", apiSecret).update(unsigned).digest("base64url");
+  return unsigned + "." + signature;
+}
+
 async function issueParentMeetingToken({ schoolId, meetingId, identity, name }) {
   const settings = liveKitSettings();
   const roomName = parentMeetingRoomName(schoolId, meetingId);
-  const token = new AccessToken(settings.apiKey, settings.apiSecret, {
-    identity: String(identity),
+  const now = Math.floor(Date.now() / 1000);
+  const token = liveKitJwt(settings.apiKey, settings.apiSecret, {
+    iss: settings.apiKey, sub: String(identity), nbf: now - 5, iat: now, exp: now + 6 * 60 * 60,
     name: String(name || "Mshiriki").slice(0, 120),
-    ttl: "6h",
+    video: { roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true },
   });
-  token.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true });
-  return { token: await token.toJwt(), serverUrl: settings.url, roomName };
+  return { token, serverUrl: settings.url, roomName };
 }
 
 function canAdministerParentMeetings(req) {
@@ -89,13 +98,20 @@ function canAdministerParentMeetings(req) {
 
 async function closeLiveKitParentRoom(schoolId, meetingId) {
   const settings = liveKitSettings();
-  const service = new RoomServiceClient(settings.host, settings.apiKey, settings.apiSecret);
-  try {
-    await service.deleteRoom(parentMeetingRoomName(schoolId, meetingId));
-  } catch (error) {
-    // A room that has not had any participants may not exist yet. The database
-    // status is authoritative and prevents new tokens after the meeting ends.
-    if (!/not found|does not exist|404/i.test(String(error?.message || error))) throw error;
+  const roomName = parentMeetingRoomName(schoolId, meetingId);
+  const now = Math.floor(Date.now() / 1000);
+  const token = liveKitJwt(settings.apiKey, settings.apiSecret, {
+    iss: settings.apiKey, sub: "africore-parent-admin", nbf: now - 5, iat: now, exp: now + 300,
+    video: { roomAdmin: true, room: roomName },
+  });
+  const response = await fetch(settings.host + "/twirp/livekit.RoomService/DeleteRoom", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ room: roomName }),
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => "");
+    throw new Error("LiveKit room could not be closed (HTTP " + response.status + "): " + detail.slice(0, 300));
   }
 }
 
