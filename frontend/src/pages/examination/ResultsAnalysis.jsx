@@ -3164,7 +3164,7 @@ export default function ResultsAnalysis() {
                         });
                     const published = await api.post(
                         `/parent-portal/staff/exams/${exam?.id || examId}/publish-results`,
-                        { offset, limit: 20, report_snapshots: reportRows },
+                        { offset, limit: 20, total_count: overallRankedStudents.length, report_snapshots: reportRows },
                         { timeout: 60000 }
                     );
                     if (!published.data?.success) throw new Error(published.data?.message || "Parent Portal publication failed.");
