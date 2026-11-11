@@ -892,11 +892,6 @@ router.get("/finance", async (req, res) => {
         .order("payment_date", { ascending: false }).limit(100),
     ]);
     if (charges.error || payments.error) throw charges.error || payments.error;
-    const examMap = new Map((exams.data || []).map(row => [String(row.id), row]));
-    for (const snapshot of publishedSnapshots.data || []) {
-      if (snapshot.exam_snapshot) examMap.set(String(snapshot.exam_id), { ...snapshot.exam_snapshot, id: snapshot.exam_id, published_at: snapshot.published_at, result_published: true });
-    }
-    const parentExams = [...examMap.values()].sort((a, b) => String(b.start_date || b.published_at || "").localeCompare(String(a.start_date || a.published_at || "")));
     const chargeRows = charges.data || [];
     return res.json({
       success: true,
@@ -931,6 +926,11 @@ router.get("/dashboard", async (req, res) => {
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
     ]);
     for (const result of [charges,payments,communications,announcements,meetings,exams,publishedSnapshots,attendance,suggestions]) if (result.error) throw result.error;
+    const examMap = new Map((exams.data || []).map(row => [String(row.id), row]));
+    for (const snapshot of publishedSnapshots.data || []) {
+      if (snapshot.exam_snapshot) examMap.set(String(snapshot.exam_id), { ...snapshot.exam_snapshot, id: snapshot.exam_id, published_at: snapshot.published_at, result_published: true });
+    }
+    const parentExams = [...examMap.values()].sort((a, b) => String(b.start_date || b.published_at || "").localeCompare(String(a.start_date || a.published_at || "")));
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
