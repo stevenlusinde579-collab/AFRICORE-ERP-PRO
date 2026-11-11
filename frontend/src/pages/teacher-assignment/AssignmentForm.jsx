@@ -187,11 +187,26 @@ setMessage("");
 
 
 
+const selectedTeacher = teachers.find(
+    item => String(item.id) === String(form.teacher_id)
+);
+
+if (!selectedTeacher?.school_id) {
+    setMessage("Shule ya mwalimu haijatambulika. Hakikisha mwalimu ameunganishwa na shule yake.");
+    setLoading(false);
+    return;
+}
+
+const assignmentPayload = {
+    teacher_id: Number(form.teacher_id),
+    subject_id: Number(form.subject_id),
+    class_id: Number(form.class_id),
+    school_id: Number(selectedTeacher.school_id)
+};
+
 const {error}=await supabase
-
-.from("teacher_assignments")
-
-.insert([form]);
+    .from("teacher_assignments")
+    .insert([assignmentPayload]);
 
 
 

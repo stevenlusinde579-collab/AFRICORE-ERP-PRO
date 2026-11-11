@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase.js";
+import { sendSchoolSms } from "../utils/schoolSms.js";
 
 
 /**
@@ -1348,6 +1349,29 @@ export const createTeacher = async (
 
         /**
          * --------------------------------------------------------
+         * SEND LOGIN CREDENTIALS BY SCHOOL SMS
+         * --------------------------------------------------------
+         * SMS delivery failure must not undo a successfully created account.
+         */
+        let credentialSms = { status: "skipped", reason: "Namba ya simu haijawekwa." };
+        if (normalizedPhone) {
+            const loginUsername = normalizedEmail || normalizedPhone;
+            const smsMessage = `AfriCore Login: User ${loginUsername} Pass ${temporaryPassword} https://africorepro.vercel.app`;
+            try {
+                const delivery = await sendSchoolSms({
+                    schoolId: Number(school_id),
+                    recipient: normalizedPhone,
+                    message: smsMessage
+                });
+                credentialSms = { status: "sent", ...delivery };
+            } catch (smsError) {
+                console.error("STAFF CREDENTIAL SMS ERROR:", smsError);
+                credentialSms = { status: "failed", reason: smsError?.message || "SMS haikutumwa." };
+            }
+        }
+
+        /**
+         * --------------------------------------------------------
          * SUCCESS
          * --------------------------------------------------------
          */
@@ -1399,16 +1423,12 @@ export const createTeacher = async (
                 normalizedStaffType,
 
             login_credentials: {
-
-                login_email:
-                    normalizedEmail,
-
-                login_phone:
-                    normalizedPhone,
-
-                temporary_password:
-                    temporaryPassword
-            }
+                login_email: normalizedEmail,
+                login_phone: normalizedPhone,
+                username: normalizedEmail || normalizedPhone,
+                temporary_password: temporaryPassword
+            },
+            credential_sms: credentialSms
 
         });
 
