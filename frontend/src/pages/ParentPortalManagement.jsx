@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
+import ParentLiveMeeting from "../components/ParentLiveMeeting";
 import { useSchool } from "../context/SchoolContext";
 
 function normalizeParentIdentity(parent) {
@@ -57,6 +58,7 @@ export default function ParentPortalManagement() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [liveRoom, setLiveRoom] = useState(null);
 
   const orderedClasses = useMemo(
     () => [...classes].sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
@@ -113,6 +115,44 @@ export default function ParentPortalManagement() {
       setError(e.response?.data?.message || "Imeshindikana kupakia mikutano.");
     }
   };
+  const activeMeeting = meetings.find((meeting) =>
+    meeting.status === "scheduled" && !meeting.ends_at && new Date(meeting.starts_at).getTime() <= Date.now()
+  ) || null;
+  const startLiveMeeting = async (event) => {
+    event.preventDefault();
+    if (!title.trim()) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await api.post("/parent-portal/staff/meetings/start", { title: title.trim() });
+      setLiveRoom({ meeting: response.data.meeting, connectionInfo: response.data });
+      setTitle("");
+      setNotice("Mkutano umeanzishwa. Wazazi wataona kitufe cha Join Meeting kwenye Parent Portal zao.");
+      await loadMeetings();
+    } catch (e) {
+      setError(e.response?.data?.message || "Imeshindikana kuanzisha mkutano LIVE.");
+      await loadMeetings();
+    } finally { setBusy(false); }
+  };
+  const joinLiveMeetingAsAdmin = async () => {
+    if (!activeMeeting) return;
+    setBusy(true); setError("");
+    try {
+      const response = await api.post("/parent-portal/staff/meetings/" + activeMeeting.id + "/token");
+      setLiveRoom({ meeting: response.data.meeting, connectionInfo: response.data });
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kujiunga na mkutano."); }
+    finally { setBusy(false); }
+  };
+  const endLiveMeeting = async () => {
+    if (!liveRoom?.meeting?.id) return;
+    setBusy(true); setError("");
+    try {
+      await api.patch("/parent-portal/staff/meetings/" + liveRoom.meeting.id + "/end");
+      setLiveRoom(null);
+      setNotice("Mkutano umemalizika. Wazazi hawawezi tena kujiunga.");
+      await loadMeetings();
+    } catch (e) { throw new Error(e.response?.data?.message || "Imeshindikana kumaliza mkutano."); }
+    finally { setBusy(false); }
+  };
   const loadChat = async (id = classId) => {
     if (!id) { setMessages([]); setGroupMembers([]); return; }
     try {
@@ -136,6 +176,12 @@ export default function ParentPortalManagement() {
     loadMeetings();
     loadSuggestions();
   }, [schoolId]);
+
+  useEffect(() => {
+    if (activeModule !== "video") return undefined;
+    const timer = window.setInterval(loadMeetings, 5000);
+    return () => window.clearInterval(timer);
+  }, [activeModule]);
 
   useEffect(() => {
     if (!classId || activeModule !== "chat") return undefined;
@@ -306,32 +352,44 @@ export default function ParentPortalManagement() {
       )}
 
       {activeModule === "video" && (
-        <section className="grid gap-6 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <p className="text-xs font-bold uppercase tracking-wider text-violet-700">Parent meetings</p>
-            <h2 className="mt-1 text-xl font-extrabold">Anzisha Video Conference</h2>
-            <p className="mt-1 text-sm text-slate-500">Panga mkutano wa wazazi wa darasa maalumu au shule nzima.</p>
-            <form onSubmit={createMeeting} className="mt-4 space-y-3">
-              <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Jina la mkutano" className="w-full rounded-xl border border-slate-200 p-3" />
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Maelezo ya mkutano" rows={3} className="w-full rounded-xl border border-slate-200 p-3" />
-              <select value={meetingClassId} onChange={(e) => setMeetingClassId(e.target.value)} className="w-full rounded-xl border border-slate-200 p-3"><option value="">Shule nzima / wazazi wote</option>{orderedClasses.map((x) => <option key={x.id} value={x.id}>{x.class_name}</option>)}</select>
-              <label className="block text-sm font-semibold">Muda wa kuanza<input required type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
-              <label className="block text-sm font-semibold">Muda wa kumaliza (hiari)<input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
-              <input value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="Video conference link (Zoom, Meet, LiveKit...)" className="w-full rounded-xl border border-slate-200 p-3" />
-              <button disabled={busy} className="rounded-xl bg-violet-700 px-5 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inahifadhi..." : "Hifadhi Mkutano"}</button>
-            </form>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <h3 className="text-lg font-bold">Mikutano iliyopangwa</h3>
-            <p className="mt-1 text-sm text-slate-500">Mikutano inayoonekana kwa wazazi waliolengwa.</p>
-            <div className="mt-4 space-y-3">
-              {meetings.map((m) => <article key={m.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><b>{m.title}</b><span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700">{m.status || "scheduled"}</span></div><p className="mt-2 text-sm text-slate-500">{new Date(m.starts_at).toLocaleString()}</p>{m.meeting_url && <a href={m.meeting_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold text-blue-700 underline">Fungua kiungo</a>}</article>)}
-              {!meetings.length && <p className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">Hakuna mikutano iliyopangwa.</p>}
+        <section className="space-y-5">
+          {liveRoom ? (
+            <ParentLiveMeeting
+              meeting={liveRoom.meeting}
+              connectionInfo={liveRoom.connectionInfo}
+              isAdmin
+              onEnd={endLiveMeeting}
+              onLeave={() => setLiveRoom(null)}
+            />
+          ) : (
+            <div className="grid gap-5 xl:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+                <p className="text-xs font-bold uppercase tracking-wider text-violet-700">Live parent conference</p>
+                <h2 className="mt-1 text-xl font-extrabold">Create & Start Meeting</h2>
+                <p className="mt-1 text-sm text-slate-500">Weka kichwa cha mkutano kisha uanze. Wazazi wote wa shule wataona mkutano ukiwa LIVE na watajiunga kwa kitufe cha Join Meeting.</p>
+                {activeMeeting ? (
+                  <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4">
+                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-rose-700"><span className="h-2 w-2 animate-pulse rounded-full bg-rose-600"/> Meeting is LIVE</div>
+                    <h3 className="mt-2 text-lg font-black text-slate-900">{activeMeeting.title}</h3>
+                    <p className="mt-1 text-xs text-slate-500">Ilianza {new Date(activeMeeting.starts_at).toLocaleString()}</p>
+                    <button type="button" disabled={busy} onClick={joinLiveMeetingAsAdmin} className="mt-4 rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? "Inaunganisha..." : "Join Meeting"}</button>
+                  </div>
+                ) : (
+                  <form onSubmit={startLiveMeeting} className="mt-5 space-y-3">
+                    <label className="block text-sm font-semibold text-slate-700">Meeting Title<input required maxLength={180} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Mfano: Mkutano wa Wazazi – Muhula wa Pili" className="mt-2 w-full rounded-xl border border-slate-200 p-3"/></label>
+                    <button disabled={busy || !title.trim()} className="rounded-xl bg-violet-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inaanzisha..." : "Create Meeting & Start Live"}</button>
+                  </form>
+                )}
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+                <h3 className="text-lg font-bold text-slate-900">Meeting status</h3>
+                <p className="mt-2 text-sm text-slate-500">{activeMeeting ? "Mkutano unaendelea. Wazazi wanaweza kujiunga sasa." : "Hakuna mkutano unaoendelea kwa sasa. Ukianzisha mkutano, wazazi wataona kitufe cha kujiunga."}</p>
+                <div className="mt-5 rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Meeting lifecycle</p><ol className="mt-3 space-y-2 text-sm text-slate-700"><li>1. Admin anaweka title na kuanzisha mkutano.</li><li>2. Wazazi wanaona LIVE na wanabonyeza Join Meeting.</li><li>3. Mkutano unaendelea hadi Admin abonyeze End Meeting.</li></ol></div>
+              </div>
             </div>
-          </div>
+          )}
         </section>
       )}
-
       {activeModule === "chat" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <div className="rounded-xl bg-slate-900 p-4 text-white"><p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Class communication</p><h2 className="mt-1 text-xl font-bold">Group Chat ya Wazazi</h2><p className="mt-1 text-sm text-slate-300">Chagua darasa. Kundi linaonyesha wazazi wa darasa hilo pamoja na watumishi waliopewa jukumu la darasa.</p></div>
