@@ -926,24 +926,27 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, exams, publishedSnapshots, attendance, suggestions] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, meetings, publishedSnapshots, attendance, suggestions] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
-      supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).is("deleted_at", null).order("start_date", { ascending: false }).limit(100),
-      supabase.from("parent_portal_result_snapshots").select("exam_id,exam_snapshot,published_at").eq("school_id", school.id).eq("student_id", student.id).order("published_at", { ascending: false }).limit(100),
+      // Only this authenticated student's published snapshots are eligible for the report dropdown.
+      // Do not expose the school's general exam catalogue to parent accounts.
+      supabase.from("parent_portal_result_snapshots").select("exam_id,exam_snapshot,result_snapshot,published_at").eq("school_id", school.id).eq("student_id", student.id).order("published_at", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,exams,publishedSnapshots,attendance,suggestions]) if (result.error) throw result.error;
-    const examMap = new Map((exams.data || []).map(row => [String(row.id), row]));
-    for (const snapshot of publishedSnapshots.data || []) {
-      if (snapshot.exam_snapshot) examMap.set(String(snapshot.exam_id), { ...snapshot.exam_snapshot, id: snapshot.exam_id, published_at: snapshot.published_at, result_published: true });
-    }
-    const parentExams = [...examMap.values()].sort((a, b) => String(b.start_date || b.published_at || "").localeCompare(String(a.start_date || a.published_at || "")));
+    for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions]) if (result.error) throw result.error;
+    const parentExams = (publishedSnapshots.data || [])
+      .filter(snapshot => {
+        const report = snapshot.result_snapshot?.report_form;
+        return Boolean(snapshot.exam_snapshot && report && Number(report.id) === Number(student.id) && Array.isArray(report.subjects) && report.subjects.length > 0);
+      })
+      .map(snapshot => ({ ...snapshot.exam_snapshot, id: snapshot.exam_id, published_at: snapshot.published_at, result_published: true }))
+      .sort((a, b) => String(b.start_date || b.published_at || "").localeCompare(String(a.start_date || a.published_at || "")));
     const chargeRows = charges.data || [];
     const totalCharged = chargeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const totalPaid = chargeRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
