@@ -3137,9 +3137,43 @@ export default function ResultsAnalysis() {
         let smsFailed = 0;
         try {
             if (bulkPublishMode === "portal" || bulkPublishMode === "both") {
-                const published = await api.post(`/parent-portal/staff/exams/${exam?.id || examId}/publish-results`);
-                portalCount = Number(published.data?.published_count || 0);
-                if (!published.data?.success) throw new Error(published.data?.message || "Parent Portal publication failed.");
+                let offset = 0;
+                let totalCount = null;
+                let keepPublishing = true;
+                while (keepPublishing) {
+                    const reportRows = [...(overallRankedStudents || [])]
+                        .sort((a, b) => Number(a.id) - Number(b.id))
+                        .slice(offset, offset + 20)
+                        .map(student => {
+                            const report = getStudentReport(student);
+                            const {
+                                parent_name: _parentName,
+                                parent_phone: _parentPhone,
+                                parent_email: _parentEmail,
+                                ...safeReport
+                            } = report;
+                            return {
+                                student_id: report.id,
+                                report: {
+                                    ...safeReport,
+                                    examGradingScales,
+                                    isCseeExam: isCseeClass(report.class_id),
+                                    isAlevel: isAlevelClass(report.class_id),
+                                },
+                            };
+                        });
+                    const published = await api.post(
+                        `/parent-portal/staff/exams/${exam?.id || examId}/publish-results`,
+                        { offset, limit: 20, report_snapshots: reportRows },
+                        { timeout: 60000 }
+                    );
+                    if (!published.data?.success) throw new Error(published.data?.message || "Parent Portal publication failed.");
+                    portalCount += Number(published.data?.published_count || 0);
+                    totalCount = Number(published.data?.total_count || totalCount || 0);
+                    offset = Number(published.data?.next_offset || offset);
+                    keepPublishing = Boolean(published.data?.has_more);
+                    setBulkPublishFeedback(`Parent Portal: ${portalCount} / ${totalCount} student results published...`);
+                }
             }
             if (bulkPublishMode === "sms" || bulkPublishMode === "both") {
                 const recipients = (overallRankedStudents || []).map(student => getStudentReport(student));
@@ -4308,7 +4342,7 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [] }) {
+export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [] }) {
     const levelType = getReportLevelType(exam, report);
     const levelLabel = getReportLevelLabel(levelType);
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
