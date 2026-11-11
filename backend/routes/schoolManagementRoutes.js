@@ -7,6 +7,7 @@ import {
     updateSchool,
     getHeadmasters,
     createSchoolHeadmaster,
+    resendHeadmasterCredentials,
     assignHeadmaster,
     getSchoolSmsSettings,
     saveSchoolSmsSettings
@@ -22,6 +23,7 @@ router.use(authenticateUser, requireSuperAdmin);
 
 router.get("/headmasters", getHeadmasters);
 router.post("/:id/headmasters", createSchoolHeadmaster);
+router.post("/headmasters/:profileId/resend-credentials", resendHeadmasterCredentials);
 router.patch("/headmasters/:profileId/school", assignHeadmaster);
 
 router.get("/:id/overview", getSchoolOverview);
