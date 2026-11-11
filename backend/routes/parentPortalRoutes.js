@@ -794,7 +794,14 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
     const invalidStudent = studentIds.find(id => !validStudentIds.has(id));
     if (invalidStudent) return res.status(403).json({ success: false, message: "Mwanafunzi mmoja au zaidi hayupo kwenye shule hii. Hakuna matokeo yaliyochapishwa." });
     const withoutMarks = studentIds.filter(id => !(marksByStudent.get(id) || []).length);
-    if (withoutMarks.length) return res.status(409).json({ success: false, message: "Baadhi ya wanafunzi hawana alama zilizohifadhiwa kwa mtihani huu. Hakuna kundi lililochapishwa.", students_without_marks: withoutMarks });
+    if (withoutMarks.length && req.body?.allow_missing_marks !== true) {
+      return res.status(409).json({
+        success: false,
+        code: "MISSING_STUDENT_MARKS",
+        message: "Baadhi ya wanafunzi hawana alama zilizohifadhiwa kwa mtihani huu. Unaweza kuendelea kuchapisha matokeo yaliyopo.",
+        students_without_marks: withoutMarks,
+      });
+    }
     const publishedAt = new Date().toISOString();
     const rows = reportEntries.map(({ studentId, report }) => ({
       school_id: schoolId, exam_id: examId, student_id: studentId, exam_snapshot: examQuery.data,
@@ -806,7 +813,7 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
     if (saved.error) throw saved.error;
     const totalCount = Math.max(requestedTotal, offset + rows.length);
     const nextOffset = offset + rows.length;
-    return res.json({ success: true, published_count: rows.length, total_count: totalCount, has_more: nextOffset < totalCount, next_offset: nextOffset, published_at: publishedAt, message: "Matokeo yaliyotengenezwa kwenye Result Analysis yamechapishwa kwenye Parent Portal." });
+    return res.json({ success: true, published_count: rows.length, total_count: totalCount, has_more: nextOffset < totalCount, next_offset: nextOffset, published_at: publishedAt, missing_marks_count: withoutMarks.length, students_without_marks: withoutMarks, message: "Matokeo yaliyotengenezwa kwenye Result Analysis yamechapishwa kwenye Parent Portal." });
   } catch (error) {
     console.error("PARENT PORTAL RESULT PUBLISH ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to publish results to Parent Portal." });
