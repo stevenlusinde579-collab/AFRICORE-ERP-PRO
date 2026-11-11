@@ -469,8 +469,8 @@ async function loadParentPortalClassOptions(schoolId, allowedClassIds, { require
 
   const romanToNumber = (value) => ({ i: "1", ii: "2", iii: "3", iv: "4", v: "5", vi: "6", vii: "7" }[value] || value);
   const labelKey = (value) => String(value || "").normalize("NFKC").toLowerCase()
-    .replace(/\\b(standard|std|form)\\s+(vii|vi|iv|iii|ii|i)\\b/g, (_match, level, roman) => level + " " + romanToNumber(roman))
-    .replace(/[_-]+/g, " ").replace(/\\s+/g, " ").trim();
+    .replace(/\b(standard|std|form)\s+(vii|vi|iv|iii|ii|i)\b/g, (_match, level, roman) => level + " " + romanToNumber(roman))
+    .replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 
   const preferred = (candidate, current) => {
     const candidateYear = activeYearIds.has(String(candidate.academic_year_id)) ? 1 : 0;
