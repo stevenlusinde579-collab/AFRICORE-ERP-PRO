@@ -783,8 +783,14 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
       if (!marksByStudent.has(studentId)) marksByStudent.set(studentId, []);
       marksByStudent.get(studentId).push({ ...mark, source, subject_id: examSubject.subject_id, subject_name: subjectMap.get(String(examSubject.subject_id)) || "Subject" });
     };
-    (questionMarksQuery.data || []).forEach(mark => appendMark(mark, "question"));
-    (legacyMarksQuery.data || []).forEach(mark => appendMark(mark, "legacy"));
+    const hasQuestionMarks = (questionMarksQuery.data || []).length > 0;
+    if (hasQuestionMarks) {
+      (questionMarksQuery.data || []).forEach(mark => appendMark(mark, "question"));
+    } else {
+      // Match Result Analysis exactly: legacy marks are a fallback, never merged
+      // with question-level marks, otherwise marks could be counted twice.
+      (legacyMarksQuery.data || []).forEach(mark => appendMark(mark, "legacy"));
+    }
     const invalidStudent = studentIds.find(id => !validStudentIds.has(id));
     if (invalidStudent) return res.status(403).json({ success: false, message: "Mwanafunzi mmoja au zaidi hayupo kwenye shule hii. Hakuna matokeo yaliyochapishwa." });
     const withoutMarks = studentIds.filter(id => !(marksByStudent.get(id) || []).length);
