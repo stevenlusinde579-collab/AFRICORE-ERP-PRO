@@ -572,7 +572,7 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
   try {
     liveKitSettings();
     const current = await supabase.from("parent_portal_meetings")
-      .select("id,title,status").eq("school_id", schoolId).eq("status", "scheduled").is("ends_at", null)
+      .select("id,title,status").eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (current.error) throw current.error;
     if (current.data) return res.status(409).json({ success: false, message: "Kuna mkutano mwingine ambao bado uko LIVE. Maliza mkutano huo kwanza.", meeting: current.data });
@@ -641,7 +641,7 @@ router.get("/staff/meetings", authenticateUser, parentPortalStaffAccess, async (
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId)) return res.status(403).json({ success: false, message: "School access is required." });
   let meetingsQuery = supabase.from("parent_portal_meetings")
-    .select("id,title,description,class_id,starts_at,ends_at,meeting_url,status")
+    .select("id,title,description,class_id,starts_at,ends_at,meeting_url,meeting_provider,status")
     .eq("school_id", schoolId).order("starts_at", { ascending: true }).limit(100);
   if (!req.parentPortalScope.fullAccess) meetingsQuery = meetingsQuery.in("class_id", req.parentPortalScope.classIds.length ? req.parentPortalScope.classIds : [-1]);
   const { data, error } = await meetingsQuery;
@@ -807,7 +807,7 @@ router.get("/dashboard", async (req, res) => {
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
+      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
       supabase.from("exams").select("id,exam_name,exam_type,term,start_date,end_date,status").eq("school_id", school.id).order("start_date", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
