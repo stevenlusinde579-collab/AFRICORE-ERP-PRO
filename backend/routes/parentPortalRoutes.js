@@ -48,45 +48,10 @@ function withPresence(members, schoolId, classId) {
 const scrypt = promisify(crypto.scrypt);
 
 
-function liveKitSettings() {
-  const url = String(process.env.LIVEKIT_URL || "").trim();
-  const apiKey = String(process.env.LIVEKIT_API_KEY || "").trim();
-  const apiSecret = String(process.env.LIVEKIT_API_SECRET || "").trim();
-  if (!url || !apiKey || !apiSecret) {
-    const error = new Error("LiveKit haijaunganishwa kwenye backend. Weka LIVEKIT_URL, LIVEKIT_API_KEY na LIVEKIT_API_SECRET kwenye Render.");
-    error.status = 503;
-    throw error;
-  }
-  let parsed;
-  try { parsed = new URL(url); } catch { throw Object.assign(new Error("LIVEKIT_URL si sahihi."), { status: 503 }); }
-  const host = parsed.protocol === "wss:" ? "https://" + parsed.host : parsed.protocol === "ws:" ? "http://" + parsed.host : url;
-  if (!/^https?:\/\//i.test(host)) throw Object.assign(new Error("LIVEKIT_URL lazima ianze na wss:// au https://."), { status: 503 });
-  return { url, host, apiKey, apiSecret };
-}
-
-function parentMeetingRoomName(schoolId, meetingId) {
-  return "africore-parent-" + Number(schoolId) + "-" + String(meetingId).replace(/[^a-zA-Z0-9-]/g, "");
-}
-
-function liveKitJwt(apiKey, apiSecret, claims) {
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const header = encode({ alg: "HS256", typ: "JWT" });
-  const payload = encode(claims);
-  const unsigned = header + "." + payload;
-  const signature = crypto.createHmac("sha256", apiSecret).update(unsigned).digest("base64url");
-  return unsigned + "." + signature;
-}
-
-async function issueParentMeetingToken({ schoolId, meetingId, identity, name }) {
-  const settings = liveKitSettings();
-  const roomName = parentMeetingRoomName(schoolId, meetingId);
-  const now = Math.floor(Date.now() / 1000);
-  const token = liveKitJwt(settings.apiKey, settings.apiSecret, {
-    iss: settings.apiKey, sub: String(identity), nbf: now - 5, iat: now, exp: now + 6 * 60 * 60,
-    name: String(name || "Mshiriki").slice(0, 120),
-    video: { roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true },
-  });
-  return { token, serverUrl: settings.url, roomName };
+const PARENT_MEETING_PROVIDER = "AfriCore WebRTC";
+function parentMeetingRoomId(meeting) {
+  const match = String(meeting?.meeting_url || "").match(/\/communication\/meeting\/(\d+)/);
+  return match ? Number(match[1]) : null;
 }
 
 function canAdministerParentMeetings(req) {
@@ -562,6 +527,9 @@ router.post("/staff/chat/:classId", authenticateUser, parentPortalStaffAccess, a
 
 // Live parent meetings: one school-wide live room at a time. Only school
 // leadership can start/end; class teachers and other scoped staff cannot.
+// Parent meetings use the same video_rooms + Supabase Realtime/WebRTC room
+// protocol as Communication > Meetings. Parent identities are scoped by the
+// Parent Portal bearer token and never inserted into auth-backed participant rows.
 router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const title = String(req.body?.title || "").trim().slice(0, 180);
@@ -570,35 +538,46 @@ router.post("/staff/meetings/start", authenticateUser, parentPortalStaffAccess, 
   if (!Number.isInteger(schoolId) || !title || !Number.isInteger(classId) || classId <= 0) return res.status(400).json({ success: false, message: "Weka kichwa cha mkutano na uchague darasa." });
   if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Ni uongozi wa shule pekee unaoweza kuanzisha mkutano wa wazazi." });
   if (!req.parentPortalScope.fullAccess && !req.parentPortalScope.classIds.includes(classId)) return res.status(403).json({ success: false, message: "Huna ruhusa ya kuanzisha mkutano kwa darasa hili." });
-  let createdMeetingId = null;
+  let roomId = null;
+  let meetingId = null;
   try {
-    liveKitSettings();
     const classCheck = await supabase.from("classes").select("id").eq("id", classId).eq("school_id", schoolId).maybeSingle();
     if (classCheck.error) throw classCheck.error;
     if (!classCheck.data) return res.status(404).json({ success: false, message: "Darasa ulilochagua halipo kwenye shule yako." });
     const current = await supabase.from("parent_portal_meetings")
-      .select("id,title,status").eq("school_id", schoolId).eq("class_id", classId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .select("id,title,status").eq("school_id", schoolId).eq("class_id", classId).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (current.error) throw current.error;
     if (current.data) return res.status(409).json({ success: false, message: "Kuna mkutano mwingine ambao bado uko LIVE. Maliza mkutano huo kwanza.", meeting: current.data });
+
     const now = new Date().toISOString();
-    const inserted = await supabase.from("parent_portal_meetings").insert({
+    const roomCode = "PP-" + crypto.randomBytes(5).toString("hex").toUpperCase();
+    const roomResult = await supabase.from("video_rooms").insert({
+      school_id: schoolId, room_code: roomCode, title,
+      description: description || null, created_by: req.user.id,
+      status: "live", scheduled_start: now, scheduled_end: null,
+    }).select("id,school_id,room_code,title,description,created_by,status,scheduled_start,scheduled_end,created_at,updated_at").single();
+    if (roomResult.error) throw roomResult.error;
+    roomId = roomResult.data.id;
+
+    const meetingResult = await supabase.from("parent_portal_meetings").insert({
       school_id: schoolId, class_id: classId, title, description: description || null,
-      starts_at: now, ends_at: null, meeting_url: null, meeting_provider: "LiveKit",
-      status: "scheduled", created_by: req.user.id,
-    }).select("id,title,description,class_id,starts_at,ends_at,status").single();
-    if (inserted.error) throw inserted.error;
-    const meeting = inserted.data;
-    createdMeetingId = meeting.id;
-    const live = await issueParentMeetingToken({
-      schoolId, meetingId: meeting.id, identity: "staff-" + req.user.id,
-      name: req.profile?.full_name || "School Admin",
+      starts_at: now, ends_at: null,
+      meeting_url: FRONTEND_URL + "/communication/meeting/" + roomId,
+      meeting_provider: PARENT_MEETING_PROVIDER, status: "scheduled", created_by: req.user.id,
+    }).select("id,title,description,class_id,starts_at,ends_at,status,meeting_provider,meeting_url").single();
+    if (meetingResult.error) throw meetingResult.error;
+    meetingId = meetingResult.data.id;
+    return res.json({
+      success: true, meeting: { ...meetingResult.data, room_id: roomId },
+      roomId, identity: "staff-" + req.user.id,
+      displayName: req.profile?.full_name || "School Admin",
     });
-    return res.json({ success: true, meeting, ...live });
   } catch (error) {
-    if (createdMeetingId) await supabase.from("parent_portal_meetings").update({ status: "completed", ends_at: new Date().toISOString() }).eq("id", createdMeetingId).eq("school_id", schoolId);
-    console.error("PARENT LIVE MEETING START ERROR:", error);
-    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kuanzisha mkutano." });
+    if (meetingId) await supabase.from("parent_portal_meetings").update({ status: "completed", ends_at: new Date().toISOString() }).eq("id", meetingId).eq("school_id", schoolId);
+    if (roomId) await supabase.from("video_rooms").update({ status: "ended", updated_at: new Date().toISOString() }).eq("id", roomId).eq("school_id", schoolId);
+    console.error("PARENT WEBRTC MEETING START ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Imeshindikana kuanzisha mkutano." });
   }
 });
 
@@ -607,15 +586,18 @@ router.post("/staff/meetings/:id/token", authenticateUser, parentPortalStaffAcce
   if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Huna ruhusa ya kuingia kama msimamizi wa mkutano." });
   try {
     const found = await supabase.from("parent_portal_meetings")
-      .select("id,title,description,starts_at,status").eq("id", req.params.id)
-      .eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null).lte("starts_at", new Date().toISOString()).maybeSingle();
+      .select("id,title,description,starts_at,status,meeting_url,meeting_provider")
+      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null).lte("starts_at", new Date().toISOString()).maybeSingle();
     if (found.error) throw found.error;
-    if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE kwa sasa." });
-    const live = await issueParentMeetingToken({ schoolId, meetingId: found.data.id, identity: "staff-" + req.user.id, name: req.profile?.full_name || "School Admin" });
-    return res.json({ success: true, meeting: found.data, ...live });
+    const roomId = parentMeetingRoomId(found.data);
+    if (!found.data || !roomId) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE kwa sasa." });
+    const room = await supabase.from("video_rooms").select("id,school_id,created_by,status").eq("id", roomId).eq("school_id", schoolId).maybeSingle();
+    if (room.error) throw room.error;
+    if (!room.data || ["ended","cancelled","canceled"].includes(String(room.data.status).toLowerCase())) return res.status(404).json({ success: false, message: "Chumba cha mkutano hakipo tena." });
+    return res.json({ success: true, meeting: { ...found.data, room_id: roomId }, roomId, identity: "staff-" + req.user.id, displayName: req.profile?.full_name || "School Admin" });
   } catch (error) {
-    console.error("PARENT LIVE MEETING STAFF TOKEN ERROR:", error);
-    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kuingia kwenye mkutano." });
+    console.error("PARENT WEBRTC MEETING STAFF ACCESS ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Imeshindikana kuingia kwenye mkutano." });
   }
 });
 
@@ -623,22 +605,25 @@ router.patch("/staff/meetings/:id/end", authenticateUser, parentPortalStaffAcces
   const schoolId = Number(req.profile?.school_id);
   if (!canAdministerParentMeetings(req)) return res.status(403).json({ success: false, message: "Ni uongozi wa shule pekee unaoweza kumaliza mkutano." });
   try {
-    const endedAt = new Date().toISOString();
-    const current = await supabase.from("parent_portal_meetings").select("id")
-      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit").maybeSingle();
+    const current = await supabase.from("parent_portal_meetings").select("id,meeting_url")
+      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).maybeSingle();
     if (current.error) throw current.error;
     if (!current.data) return res.status(404).json({ success: false, message: "Mkutano huu haupo LIVE au tayari umemalizika." });
-    await closeLiveKitParentRoom(schoolId, req.params.id);
-    const updated = await supabase.from("parent_portal_meetings").update({
-      status: "completed", ends_at: endedAt,
-    }).eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", "LiveKit")
+    const endedAt = new Date().toISOString();
+    const roomId = parentMeetingRoomId(current.data);
+    if (roomId) {
+      const roomUpdate = await supabase.from("video_rooms").update({ status: "ended", updated_at: endedAt }).eq("id", roomId).eq("school_id", schoolId);
+      if (roomUpdate.error) throw roomUpdate.error;
+    }
+    const updated = await supabase.from("parent_portal_meetings").update({ status: "completed", ends_at: endedAt })
+      .eq("id", req.params.id).eq("school_id", schoolId).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER)
       .select("id,title,status,ends_at").maybeSingle();
     if (updated.error) throw updated.error;
     if (!updated.data) return res.status(409).json({ success: false, message: "Mkutano umebadilika. Refresh taarifa za mkutano." });
     return res.json({ success: true, meeting: updated.data, message: "Mkutano umemalizika." });
   } catch (error) {
-    console.error("PARENT LIVE MEETING END ERROR:", error);
-    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kumaliza mkutano." });
+    console.error("PARENT WEBRTC MEETING END ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Imeshindikana kumaliza mkutano." });
   }
 });
 
@@ -723,14 +708,20 @@ router.get("/meetings/active", async (req, res) => {
     const classId = Number(student.current_class_id || 0);
     if (!Number.isInteger(classId) || classId <= 0) return res.json({ success: true, meeting: null });
     const result = await supabase.from("parent_portal_meetings")
-      .select("id,title,description,starts_at,status,class_id")
-      .eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .select("id,title,description,starts_at,status,class_id,meeting_url,meeting_provider")
+      .eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).eq("class_id", classId)
       .order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (result.error) throw result.error;
-    return res.json({ success: true, meeting: result.data || null });
+    const meeting = result.data;
+    const roomId = parentMeetingRoomId(meeting);
+    if (!meeting || !roomId) return res.json({ success: true, meeting: null });
+    const room = await supabase.from("video_rooms").select("id,status").eq("id", roomId).eq("school_id", school.id).maybeSingle();
+    if (room.error) throw room.error;
+    if (!room.data || ["ended","cancelled","canceled"].includes(String(room.data.status).toLowerCase())) return res.json({ success: true, meeting: null });
+    return res.json({ success: true, meeting: { id: meeting.id, title: meeting.title, description: meeting.description, starts_at: meeting.starts_at, status: meeting.status, class_id: meeting.class_id } });
   } catch (error) {
-    console.error("PARENT ACTIVE MEETING LOOKUP ERROR:", error);
+    console.error("PARENT ACTIVE WEBRTC MEETING LOOKUP ERROR:", error);
     return res.status(500).json({ success: false, message: "Imeshindikana kuangalia mkutano LIVE." });
   }
 });
@@ -741,20 +732,24 @@ router.post("/meetings/:id/token", async (req, res) => {
     const classId = Number(student.current_class_id || 0);
     if (!Number.isInteger(classId) || classId <= 0) return res.status(403).json({ success: false, message: "Mwanafunzi hajapangiwa darasa." });
     const found = await supabase.from("parent_portal_meetings")
-      .select("id,title,description,starts_at,status,class_id")
-      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", "LiveKit").is("ends_at", null)
+      .select("id,title,description,starts_at,status,class_id,meeting_url")
+      .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null)
       .lte("starts_at", new Date().toISOString()).eq("class_id", classId).maybeSingle();
     if (found.error) throw found.error;
-    if (!found.data) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
+    const roomId = parentMeetingRoomId(found.data);
+    if (!found.data || !roomId) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
+    const room = await supabase.from("video_rooms").select("id,status").eq("id", roomId).eq("school_id", school.id).maybeSingle();
+    if (room.error) throw room.error;
+    if (!room.data || ["ended","cancelled","canceled"].includes(String(room.data.status).toLowerCase())) return res.status(404).json({ success: false, message: "Mkutano huu umemalizika." });
     const name = account.username || fullName(student) || "Mzazi";
-    const live = await issueParentMeetingToken({
-      schoolId: school.id, meetingId: found.data.id,
-      identity: "parent-" + account.id, name,
+    return res.json({
+      success: true,
+      meeting: { id: found.data.id, title: found.data.title, description: found.data.description, starts_at: found.data.starts_at, status: found.data.status, class_id: found.data.class_id },
+      roomId, identity: "parent-" + account.id, displayName: name,
     });
-    return res.json({ success: true, meeting: found.data, ...live });
   } catch (error) {
-    console.error("PARENT LIVE MEETING TOKEN ERROR:", error);
-    return res.status(error.status || 500).json({ success: false, message: error.message || "Imeshindikana kujiunga na mkutano." });
+    console.error("PARENT WEBRTC MEETING ACCESS ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Imeshindikana kujiunga na mkutano." });
   }
 });
 
