@@ -780,9 +780,10 @@ router.post("/meetings/:id/token", async (req, res) => {
     if (found.error) throw found.error;
     const roomId = parentMeetingRoomId(found.data);
     if (!found.data || !roomId) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
-    const room = await supabase.from("video_rooms").select("id,status").eq("id", roomId).eq("school_id", school.id).maybeSingle();
+    const room = await supabase.from("video_rooms").select("id,room_code,status").eq("id", roomId).eq("school_id", school.id).maybeSingle();
     if (room.error) throw room.error;
     if (!room.data || ["ended","cancelled","canceled"].includes(String(room.data.status).toLowerCase())) return res.status(404).json({ success: false, message: "Mkutano huu umemalizika." });
+    if (!String(room.data.room_code || "").trim()) return res.status(409).json({ success: false, message: "Chumba hiki hakina room code. Tafadhali anzisha mkutano upya." });
     const name = account.username || fullName(student) || "Mzazi";
     return res.json({
       success: true,
