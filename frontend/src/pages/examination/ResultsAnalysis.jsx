@@ -3568,7 +3568,7 @@ export default function ResultsAnalysis() {
                             <p className="text-xs text-slate-500">Parent Portal will receive a separate result copy for each student. SMS is sent to each student's registered parent/guardian phone number. Individual send buttons remain available.</p>
                             <div className="flex justify-end gap-2">
                                 <button onClick={() => setShowBulkPublish(false)} disabled={bulkPublishing} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700">Close</button>
-                                <button onClick={handleBulkPublishResults} disabled={bulkPublishing} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold disabled:opacity-50">
+                                <button onClick={() => handleBulkPublishResults(false)} disabled={bulkPublishing} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold disabled:opacity-50">
                                     {bulkPublishing ? "Publishing..." : "Confirm & Publish"}
                                 </button>
                             </div>
