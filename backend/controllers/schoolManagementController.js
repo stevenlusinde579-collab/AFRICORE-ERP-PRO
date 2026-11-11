@@ -528,7 +528,7 @@ export const updateHeadmasterEmail = async (req, res) => {
     try {
         const profileId = String(req.params.profileId || "").trim();
         const email = String(req.body?.email || "").trim().toLowerCase();
-        if (!profileId || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+        if (!profileId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ success: false, message: "Weka email sahihi ya Headmaster." });
         }
         const { data: profile, error: profileError } = await supabase
