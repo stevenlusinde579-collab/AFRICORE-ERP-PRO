@@ -173,7 +173,7 @@ export default function AddHeadmaster() {
                         </div>
                         <div>
                             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><MdPhone /> Namba ya simu</label>
-                            <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className={inputClass} placeholder="0712345678" autoComplete="tel" />
+                            <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className={inputClass} required placeholder="0712345678" autoComplete="tel" />
                         </div>
                     </div>
 
