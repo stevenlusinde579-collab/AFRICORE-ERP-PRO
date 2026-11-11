@@ -276,6 +276,7 @@ async function sendNewHopeSmsWithCredentials(credentials, recipient, message) {
     body: JSON.stringify({
       recipient: `+${normalized}`,
       message,
+      sender_id: credentials.sender_id,
     }),
   });
 
