@@ -69,8 +69,8 @@ export default function AddHeadmaster() {
             setError("Jina kamili la Headmaster linahitajika.");
             return;
         }
-        if (!email.trim() && !phone.trim()) {
-            setError("Weka email au namba ya simu kwa ajili ya kuingia kwenye mfumo.");
+        if (!email.trim()) {
+            setError("Email ni lazima kwa username ya login ya Headmaster.");
             return;
         }
 
@@ -169,7 +169,7 @@ export default function AddHeadmaster() {
                     <div className="grid gap-5 sm:grid-cols-2">
                         <div>
                             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><MdEmail /> Email ya login</label>
-                            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} placeholder="headmaster@school.ac.tz" autoComplete="email" />
+                            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} required placeholder="headmaster@school.ac.tz" autoComplete="email" />
                         </div>
                         <div>
                             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><MdPhone /> Namba ya simu</label>
@@ -178,7 +178,7 @@ export default function AddHeadmaster() {
                     </div>
 
                     <p className="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">
-                        Email au simu angalau moja inahitajika. Mfumo utatengeneza password ya muda na kukuonyesha mara moja baada ya akaunti kuundwa.
+                        Email ni lazima na itatumika kama username ya kuingia. Namba ya simu itatumika kupokea credentials kwa SMS.
                     </p>
 
                     <button type="submit" disabled={saving || loadingSchools || schools.length === 0} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">
