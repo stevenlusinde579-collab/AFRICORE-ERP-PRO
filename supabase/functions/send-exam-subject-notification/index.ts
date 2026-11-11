@@ -579,7 +579,7 @@ const {
       // when the teachers record itself does not contain one.
       const profileIds = [
         ...new Set(
-          (teachers || []).map(teacher => teacher.user_id).filter(Boolean)
+          scopedTeachers.map(teacher => teacher.user_id).filter(Boolean)
         ),
       ];
       const profilePhones = new Map<string, string>();
@@ -621,7 +621,7 @@ const {
 
       for (
         const teacher of
-        teachers || []
+        scopedTeachers
       ) {
         if (
           String(
@@ -864,7 +864,7 @@ const {
           class:
             className,
           teachers_notified:
-            teacherIds.length,
+            scopedTeachers.length,
           results,
         }),
         {
