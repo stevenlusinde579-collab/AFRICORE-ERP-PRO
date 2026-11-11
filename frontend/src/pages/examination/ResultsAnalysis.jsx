@@ -4342,7 +4342,7 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [] }) {
+export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [] }) {
     const levelType = getReportLevelType(exam, report);
     const levelLabel = getReportLevelLabel(levelType);
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
