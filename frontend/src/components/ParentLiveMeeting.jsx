@@ -27,7 +27,7 @@ export default function ParentLiveMeeting({ meeting, connectionInfo, isAdmin = f
   const [cameraOn, setCameraOn] = useState(false), [micOn, setMicOn] = useState(false), [connecting, setConnecting] = useState(true);
   const [error, setError] = useState(""), [ending, setEnding] = useState(false), [roomState, setRoomState] = useState("Inaunganisha");
 
-  onLeaveRef.current = onLeave;
+  useEffect(() => { onLeaveRef.current = onLeave; }, [onLeave]);
 
   const send = useCallback(async (event, payload) => {
     if (channelRef.current) await channelRef.current.send({ type: "broadcast", event, payload });
