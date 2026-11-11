@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase.js";
 import { randomInt } from "node:crypto";
+import { sendSchoolSms } from "../utils/schoolSms.js";
 
 const SCHOOL_COLUMNS = [
     "id",
@@ -483,11 +484,29 @@ export const createSchoolHeadmaster = async (req, res) => {
         if (profileRoleError) throw profileRoleError;
         profileRoleCreated = true;
 
+        let credentialSms = { status: "skipped", reason: "Namba ya simu haijawekwa." };
+        if (phone) {
+            const loginUsername = email || phone;
+            const smsMessage = `AfriCore Login: User ${loginUsername} Pass ${temporaryPassword} https://africorepro.vercel.app`;
+            try {
+                const delivery = await sendSchoolSms({
+                    schoolId,
+                    recipient: phone,
+                    message: smsMessage
+                });
+                credentialSms = { status: "sent", ...delivery };
+            } catch (smsError) {
+                console.error("HEADMASTER CREDENTIAL SMS ERROR:", smsError);
+                credentialSms = { status: "failed", reason: smsError?.message || "SMS haikutumwa." };
+            }
+        }
+
         return res.status(201).json({
             success: true,
             message: `Akaunti ya Headmaster wa ${school.school_name} imeundwa kikamilifu.`,
             headmaster: { id: authUserId, full_name: fullName, email: email || null, phone: phone || null, school_id: schoolId, role_id: headmasterRole.id },
-            login_credentials: { login_email: email || null, login_phone: phone || null, temporary_password: temporaryPassword }
+            login_credentials: { login_email: email || null, login_phone: phone || null, username: email || phone, temporary_password: temporaryPassword },
+            credential_sms: credentialSms
         });
     } catch (error) {
         console.error("SCHOOL MANAGEMENT - CREATE HEADMASTER ERROR:", error);
