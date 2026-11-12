@@ -1,0 +1,304 @@
+import React, { useMemo, useState, useEffect } from "react";
+import { FaFileInvoiceDollar, FaPrint, FaSpinner } from "react-icons/fa";
+import { supabase } from "../../services/supabase";
+
+function money(value) {
+    return new Intl.NumberFormat("en-TZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function FeeReminderLetters({ school }) {
+    const [open, setOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [rows, setRows] = useState([]);
+    const [scope, setScope] = useState("student");
+    const [classId, setClassId] = useState("");
+    const [studentId, setStudentId] = useState("");
+    const [accountantName, setAccountantName] = useState("");
+    const [printing, setPrinting] = useState(false);
+
+    async function loadDebtors() {
+        setLoading(true);
+        setError("");
+        try {
+            const { data: { user } = {}, error: authError } = await supabase.auth.getUser();
+            if (authError) throw authError;
+            if (!user?.id) throw new Error("Tafadhali ingia tena kwenye mfumo.");
+            const { data: profile, error: profileError } = await supabase.from("profiles").select("school_id,full_name").eq("id", user.id).single();
+            if (profileError) throw profileError;
+            if (!profile?.school_id) throw new Error("Akaunti hii haijaunganishwa na shule.");
+            const scopedSchoolId = Number(profile.school_id);
+            setAccountantName(profile.full_name || "");
+
+            let charges = [];
+            const pageSize = 1000;
+            for (let offset = 0; ; offset += pageSize) {
+                const { data, error: chargeError } = await supabase.schema("finance").from("student_charges")
+                    .select("id,school_id,student_id,charge_date,academic_year_id,description,amount,paid_amount,balance,fee_item_id,due_date,invoice_number,status,term_number")
+                    .eq("school_id", scopedSchoolId).gt("balance", 0)
+                    .order("student_id", { ascending: true }).order("charge_date", { ascending: true })
+                    .range(offset, offset + pageSize - 1);
+                if (chargeError) throw chargeError;
+                const page = data || [];
+                charges = charges.concat(page);
+                if (page.length < pageSize) break;
+            }
+            if (!charges.length) {
+                setRows([]);
+                setStudentId("");
+                setClassId("");
+                return;
+            }
+
+            const unique = values => [...new Set(values.filter(value => value !== null && value !== undefined && value !== "").map(String))];
+            const studentIds = unique(charges.map(row => row.student_id));
+            const yearIds = unique(charges.map(row => row.academic_year_id));
+            const feeItemIds = unique(charges.map(row => row.fee_item_id));
+            async function fetchChunks(queryFactory, ids) {
+                const output = [];
+                for (let index = 0; index < ids.length; index += 200) {
+                    const chunk = ids.slice(index, index + 200);
+                    if (!chunk.length) continue;
+                    const { data, error: queryError } = await queryFactory(chunk);
+                    if (queryError) throw queryError;
+                    output.push(...(data || []));
+                }
+                return output;
+            }
+
+            const students = await fetchChunks(
+                chunk => supabase.from("students").select("id,school_id,admission_number,admission_no,first_name,middle_name,last_name,current_class_id,guardian_name,parent_name").eq("school_id", scopedSchoolId).in("id", chunk),
+                studentIds
+            );
+            const classIds = unique(students.map(student => student.current_class_id));
+            const [classes, years, feeItems] = await Promise.all([
+                fetchChunks(chunk => supabase.from("classes").select("id,school_id,class_name,academic_year_id").eq("school_id", scopedSchoolId).in("id", chunk), classIds),
+                fetchChunks(chunk => supabase.from("academic_years").select("id,school_id,year_name,term").eq("school_id", scopedSchoolId).in("id", chunk), yearIds),
+                fetchChunks(chunk => supabase.schema("finance").from("fee_items").select("id,school_id,item_name,item_code").eq("school_id", scopedSchoolId).in("id", chunk), feeItemIds)
+            ]);
+
+            const studentMap = new Map(students.map(row => [String(row.id), row]));
+            const classMap = new Map(classes.map(row => [String(row.id), row]));
+            const yearMap = new Map(years.map(row => [String(row.id), row]));
+            const feeMap = new Map(feeItems.map(row => [String(row.id), row]));
+            const enriched = charges.filter(charge => Number(charge.balance || 0) > 0).map(charge => {
+                const student = studentMap.get(String(charge.student_id));
+                if (!student) return null;
+                const classRow = classMap.get(String(student.current_class_id));
+                const year = yearMap.get(String(charge.academic_year_id));
+                const fee = feeMap.get(String(charge.fee_item_id));
+                return {
+                    ...charge,
+                    student,
+                    studentName: [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" "),
+                    admissionNumber: student.admission_number || student.admission_no || "-",
+                    classId: student.current_class_id ? String(student.current_class_id) : "",
+                    className: classRow?.class_name || "Darasa halijabainishwa",
+                    academicYearName: year?.year_name || "Mwaka haujabainishwa",
+                    feeName: fee?.item_name || charge.description || "Deni la shule",
+                    balance: Number(charge.balance || 0),
+                    amount: Number(charge.amount || 0),
+                    paidAmount: Number(charge.paid_amount || 0)
+                };
+            }).filter(Boolean);
+            setRows(enriched);
+            setStudentId(enriched[0]?.student_id ? String(enriched[0].student_id) : "");
+            setClassId(enriched[0]?.classId || "");
+        } catch (loadError) {
+            console.error("Fee reminder letters load error:", loadError);
+            setError(loadError?.message || "Imeshindikana kupata taarifa za madeni ya wanafunzi.");
+            setRows([]);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const students = useMemo(() => {
+        const map = new Map();
+        rows.forEach(row => {
+            const key = String(row.student_id);
+            if (!map.has(key)) map.set(key, { id: key, name: row.studentName, admissionNumber: row.admissionNumber, classId: row.classId, className: row.className });
+        });
+        return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }, [rows]);
+
+    const classes = useMemo(() => {
+        const map = new Map();
+        students.forEach(student => { if (student.classId) map.set(student.classId, student.className); });
+        return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    }, [students]);
+
+    const letters = useMemo(() => {
+        const allowed = new Set(students.filter(student => {
+            if (scope === "student") return student.id === String(studentId);
+            if (scope === "class") return student.classId === String(classId);
+            return true;
+        }).map(student => student.id));
+        const grouped = new Map();
+        rows.forEach(row => {
+            const id = String(row.student_id);
+            if (!allowed.has(id)) return;
+            if (!grouped.has(id)) grouped.set(id, { studentId: id, studentName: row.studentName, admissionNumber: row.admissionNumber, className: row.className, charges: [], totalAmount: 0, totalPaid: 0, totalBalance: 0 });
+            const letter = grouped.get(id);
+            letter.charges.push(row);
+            letter.totalAmount += row.amount;
+            letter.totalPaid += row.paidAmount;
+            letter.totalBalance += row.balance;
+        });
+        return [...grouped.values()].sort((a, b) => a.studentName.localeCompare(b.studentName));
+    }, [rows, students, scope, studentId, classId]);
+
+    function printLetters() {
+        if (!letters.length) return;
+        setPrinting(true);
+        document.body.classList.add("afri-fee-reminder-printing");
+        window.setTimeout(() => window.print(), 250);
+    }
+
+    useEffect(() => {
+        if (!printing) return undefined;
+        const afterPrint = () => {
+            document.body.classList.remove("afri-fee-reminder-printing");
+            setPrinting(false);
+        };
+        window.addEventListener("afterprint", afterPrint);
+        return () => window.removeEventListener("afterprint", afterPrint);
+    }, [printing]);
+
+    return (
+        <div className="my-5">
+            <div className="fee-reminder-screen">
+                <button type="button" onClick={async () => { setOpen(true); await loadDebtors(); }} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-700">
+                    <FaFileInvoiceDollar /> Barua za Makumbusho ya Ada
+                </button>
+                {open ? (
+                    <section className="mt-4 overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+                        <div className="flex flex-col gap-3 border-b border-amber-100 bg-amber-50 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <h2 className="text-lg font-extrabold text-slate-900">Barua za Makumbusho ya Ada</h2>
+                                <p className="mt-1 text-xs text-slate-600">Kila mwanafunzi atapata barua yake binafsi yenye taarifa halisi za deni.</p>
+                            </div>
+                            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">Funga</button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-3">
+                            <div>
+                                <label className="mb-2 block text-xs font-bold text-slate-600">Wigo wa barua</label>
+                                <select value={scope} onChange={event => setScope(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">
+                                    <option value="student">Mwanafunzi mmoja</option>
+                                    <option value="class">Darasa zima</option>
+                                    <option value="school">Shule nzima</option>
+                                </select>
+                            </div>
+                            {scope === "student" ? (
+                                <div>
+                                    <label className="mb-2 block text-xs font-bold text-slate-600">Chagua mwanafunzi</label>
+                                    <select value={studentId} onChange={event => setStudentId(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                                        {students.map(student => <option key={student.id} value={student.id}>{student.name} · {student.admissionNumber}</option>)}
+                                    </select>
+                                </div>
+                            ) : scope === "class" ? (
+                                <div>
+                                    <label className="mb-2 block text-xs font-bold text-slate-600">Chagua darasa</label>
+                                    <select value={classId} onChange={event => setClassId(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                                        {classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="rounded-xl bg-slate-50 px-4 py-3">
+                                    <p className="text-xs font-bold text-slate-500">Wanafunzi wenye madeni</p>
+                                    <p className="mt-1 text-xl font-extrabold text-slate-900">{students.length}</p>
+                                </div>
+                            )}
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                                <p className="text-xs font-bold text-slate-500">Barua zitakazochapishwa</p>
+                                <p className="mt-1 text-xl font-extrabold text-slate-900">{letters.length}</p>
+                                <p className="mt-1 text-xs text-slate-500">Jumla ya madeni: TZS {money(letters.reduce((sum, item) => sum + item.totalBalance, 0))}</p>
+                            </div>
+                        </div>
+                        {loading ? (
+                            <div className="flex items-center gap-3 px-5 pb-5 text-sm font-semibold text-slate-600"><FaSpinner className="animate-spin" /> Inakusanya madeni ya wanafunzi...</div>
+                        ) : error ? (
+                            <div className="mx-5 mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+                        ) : !rows.length ? (
+                            <div className="mx-5 mb-5 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">Hakuna mwanafunzi mwenye deni linalosalia kwa sasa.</div>
+                        ) : (
+                            <>
+                                <div className="mx-5 mb-5 overflow-x-auto rounded-xl border border-slate-100">
+                                    <table className="w-full min-w-[650px] text-left text-sm">
+                                        <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">Mwanafunzi</th><th className="px-4 py-3">Darasa</th><th className="px-4 py-3 text-right">Salio la deni</th></tr></thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {letters.slice(0, 12).map(item => (
+                                                <tr key={item.studentId}>
+                                                    <td className="px-4 py-3 font-semibold text-slate-800">{item.studentName}<span className="ml-2 text-xs font-normal text-slate-400">{item.admissionNumber}</span></td>
+                                                    <td className="px-4 py-3 text-slate-600">{item.className}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-amber-700">TZS {money(item.totalBalance)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    {letters.length > 12 ? <p className="px-4 py-2 text-xs text-slate-500">Inaonyesha wanafunzi 12 wa mwanzo; barua zitajumuisha wote {letters.length}.</p> : null}
+                                </div>
+                                <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <p className="text-xs text-slate-500">Kila barua itachapishwa kwenye ukurasa wake bila kuchanganya taarifa.</p>
+                                    <button type="button" disabled={!letters.length || loading} onClick={printLetters} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                                        <FaPrint /> Chapisha barua {letters.length}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </section>
+                ) : null}
+            </div>
+
+            <div className="fee-reminder-print-root">
+                {letters.map((letter, index) => (
+                    <article key={letter.studentId} className="fee-reminder-print-page mx-auto max-w-[180mm] px-2 py-4 text-[12px] leading-relaxed text-black">
+                        <header className="mb-8 flex items-center gap-4 border-b-2 border-black pb-4">
+                            {school?.logo ? <img src={school.logo} alt="" className="h-20 w-20 object-contain" /> : null}
+                            <div className="flex-1 text-center">
+                                <h1 className="text-xl font-extrabold uppercase">{school?.school_name || "SHULE"}</h1>
+                                {school?.registration_number ? <p className="text-[10px]">Usajili: {school.registration_number}</p> : null}
+                                <p className="text-[10px]">{[school?.address, school?.phone, school?.email].filter(Boolean).join(" · ")}</p>
+                            </div>
+                        </header>
+                        <div className="mb-5 flex justify-between gap-4">
+                            <p><strong>Kumb. Na:</strong> AFR/ADA/{letter.admissionNumber}/{new Date().getFullYear()}</p>
+                            <p><strong>Tarehe:</strong> {new Date().toLocaleDateString("sw-TZ", { day: "2-digit", month: "long", year: "numeric" })}</p>
+                        </div>
+                        <p className="mb-1">Kwa: Mzazi/Mlezi wa <strong>{letter.studentName}</strong></p>
+                        <p className="mb-5">Darasa: <strong>{letter.className}</strong> · Namba ya mwanafunzi: <strong>{letter.admissionNumber}</strong></p>
+                        <h2 className="mb-5 text-center text-sm font-extrabold underline">YAH: UKUMBUSHO WA MALIPO YA ADA NA MADENI YA SHULE</h2>
+                        <p className="mb-4">Ndugu Mzazi/Mlezi,</p>
+                        <p className="mb-4 text-justify">Uongozi wa {school?.school_name || "shule"} unapenda kukukumbusha kuwa mwanafunzi <strong>{letter.studentName}</strong> ana salio la deni la shule kama inavyooneshwa hapa chini. Tunaomba ulipie kiasi kilichobaki ili kuwezesha shughuli za utoaji wa huduma za elimu kuendelea vizuri.</p>
+                        <table className="mb-4 w-full border-collapse text-[10px]">
+                            <thead><tr><th className="border border-black px-2 py-2 text-left">Aina ya deni / Ada</th><th className="border border-black px-2 py-2 text-left">Mwaka</th><th className="border border-black px-2 py-2 text-right">Kiasi (TZS)</th><th className="border border-black px-2 py-2 text-right">Kilicholipwa</th><th className="border border-black px-2 py-2 text-right">Salio</th></tr></thead>
+                            <tbody>
+                                {letter.charges.map(charge => (
+                                    <tr key={charge.id}>
+                                        <td className="border border-black px-2 py-2">{charge.feeName}{charge.term_number ? " · Muhula " + charge.term_number : ""}</td>
+                                        <td className="border border-black px-2 py-2">{charge.academicYearName}</td>
+                                        <td className="border border-black px-2 py-2 text-right">{money(charge.amount)}</td>
+                                        <td className="border border-black px-2 py-2 text-right">{money(charge.paidAmount)}</td>
+                                        <td className="border border-black px-2 py-2 text-right font-bold">{money(charge.balance)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot><tr><td colSpan="2" className="border border-black px-2 py-2 text-right font-extrabold">JUMLA</td><td className="border border-black px-2 py-2 text-right font-extrabold">{money(letter.totalAmount)}</td><td className="border border-black px-2 py-2 text-right font-extrabold">{money(letter.totalPaid)}</td><td className="border border-black px-2 py-2 text-right font-extrabold">{money(letter.totalBalance)}</td></tr></tfoot>
+                        </table>
+                        <p className="mb-4">Hivyo, kiasi kinachodaiwa kwa sasa ni <strong>TZS {money(letter.totalBalance)}</strong>. Tunaomba ufanye malipo kupitia utaratibu rasmi wa shule na kuwasilisha uthibitisho wa malipo katika ofisi ya uhasibu.</p>
+                        <p className="mb-8">Kwa ufafanuzi zaidi kuhusu deni hili, tafadhali wasiliana na ofisi ya uhasibu ya shule. Tunakushukuru kwa ushirikiano wako.</p>
+                        <p className="mb-1">Wako katika huduma,</p>
+                        <div className="mt-10 w-64 border-t border-black pt-2">
+                            <p className="font-extrabold">{accountantName || "Muhasibu"}</p>
+                            <p className="text-[10px] font-semibold uppercase">Muhasibu wa Shule</p>
+                            <p className="mt-5 text-[10px]">Saini: __________________________</p>
+                        </div>
+                        <p className="mt-8 text-center text-[9px]">Barua hii imetengenezwa na mfumo wa AfriCore ERP PRO · {index + 1} / {letters.length}</p>
+                    </article>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+export default FeeReminderLetters;
