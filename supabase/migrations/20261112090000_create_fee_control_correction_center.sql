@@ -434,9 +434,10 @@ begin
                 v_lines
             );
 
+            -- balance is a GENERATED ALWAYS column (amount - paid_amount).
+            -- Update amount only; PostgreSQL recalculates balance automatically.
             update finance.student_charges
                set amount = v_item.proposed_amount,
-                   balance = greatest(v_item.proposed_amount - v_charge.paid_amount, 0),
                    status = case
                        when v_charge.paid_amount >= v_item.proposed_amount then 'paid'
                        when v_charge.paid_amount > 0 then 'partially_paid'
