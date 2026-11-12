@@ -26,6 +26,7 @@ export default function FeeControlCorrectionCenter() {
   const [itemsByRequest, setItemsByRequest] = useState({});
   const [students, setStudents] = useState({});
   const [feeItems, setFeeItems] = useState({});
+  const [setups, setSetups] = useState({});
   const [selected, setSelected] = useState({});
   const [reason, setReason] = useState("");
   const [search, setSearch] = useState("");
@@ -56,14 +57,15 @@ export default function FeeControlCorrectionCenter() {
       setProfile({ ...profileRow, user_id: authData.user.id });
       setRoles(scopedRoles);
 
-      const [yearResult, chargeResult, requestResult, studentResult, feeResult] = await Promise.all([
+      const [yearResult, chargeResult, requestResult, studentResult, feeResult, setupResult] = await Promise.all([
         supabase.from("academic_years").select("id,year_name,is_active").eq("school_id", schoolId).order("year_name", { ascending: false }),
         supabase.schema("finance").from("student_charges").select("id,school_id,student_id,academic_year_id,description,amount,paid_amount,balance,status,fee_item_id,term_number,payment_setup_id,created_at").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(2000),
         supabase.schema("finance").from("fee_correction_requests").select("id,school_id,academic_year_id,status,reason,requested_by,approved_by,approved_at,rejected_by,rejected_at,decision_note,created_at").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(200),
         supabase.from("students").select("id,school_id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id").eq("school_id", schoolId).limit(5000),
         supabase.schema("finance").from("fee_items").select("id,school_id,item_name,item_code").eq("school_id", schoolId),
+        supabase.schema("finance").from("student_payment_setups").select("id,school_id,student_id,academic_year_id,class_id,fee_item_id,setup_type,term_number,amount,status").eq("school_id", schoolId).eq("status", "active").limit(10000),
       ]);
-      for (const result of [yearResult, chargeResult, requestResult, studentResult, feeResult]) if (result.error) throw result.error;
+      for (const result of [yearResult, chargeResult, requestResult, studentResult, feeResult, setupResult]) if (result.error) throw result.error;
 
       const yearRows = yearResult.data || [];
       setYears(yearRows);
@@ -75,6 +77,7 @@ export default function FeeControlCorrectionCenter() {
       setRequests(requestResult.data || []);
       setStudents(Object.fromEntries((studentResult.data || []).map((s) => [String(s.id), s])));
       setFeeItems(Object.fromEntries((feeResult.data || []).map((f) => [String(f.id), f])));
+      setSetups(Object.fromEntries((setupResult.data || []).map((row) => [String(row.id), row])));
       const reqIds = (requestResult.data || []).map((r) => r.id);
       if (reqIds.length) {
         const { data: itemRows, error: itemError } = await supabase.schema("finance")
@@ -109,12 +112,37 @@ export default function FeeControlCorrectionCenter() {
     });
   }, [charges, yearId, search, students, feeItems]);
 
+  const outlierChargeIds = useMemo(() => {
+    const cohorts = new Map();
+    for (const charge of visibleCharges) {
+      const setup = setups[String(charge.payment_setup_id)];
+      if (!setup?.class_id || !charge.fee_item_id) continue;
+      const key = [charge.academic_year_id, setup.class_id, charge.fee_item_id, charge.term_number || 0].join(":");
+      const bucket = cohorts.get(key) || [];
+      bucket.push(charge);
+      cohorts.set(key, bucket);
+    }
+    const outliers = new Set();
+    for (const bucket of cohorts.values()) {
+      if (bucket.length < 3) continue;
+      const values = bucket.map((row) => Number(row.amount || 0)).filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+      if (values.length < 3) continue;
+      const mid = Math.floor(values.length / 2);
+      const median = values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+      for (const charge of bucket) {
+        const amount = Number(charge.amount || 0);
+        if (median > 0 && (amount >= median * 2.5 || amount <= median * 0.4)) outliers.add(charge.id);
+      }
+    }
+    return outliers;
+  }, [visibleCharges, setups]);
+
   const totals = useMemo(() => ({
     pending: requests.filter((r) => r.status === "pending").length,
     approved: requests.filter((r) => r.status === "approved").length,
     rejected: requests.filter((r) => r.status === "rejected").length,
-    risk: visibleCharges.filter((c) => Number(c.amount || 0) > 0 && Number(c.balance || 0) > 0).length,
-  }), [requests, visibleCharges]);
+    outliers: outlierChargeIds.size,
+  }), [requests, outlierChargeIds]);
 
   const updateSelected = (charge, value) => {
     setSelected((current) => {
@@ -199,13 +227,13 @@ export default function FeeControlCorrectionCenter() {
             ["Pending approvals", totals.pending, "text-amber-700"],
             ["Approved requests", totals.approved, "text-green-700"],
             ["Rejected requests", totals.rejected, "text-red-700"],
-            ["Linked fee charges", visibleCharges.length, "text-blue-700"],
+            ["Potential amount outliers", totals.outliers, totals.outliers ? "text-amber-700" : "text-green-700"],
           ].map(([label, value, color]) => <div key={label} className="bg-white border rounded-xl p-4"><div className="text-xs text-slate-500">{label}</div><div className={"text-2xl font-bold mt-1 " + color}>{value}</div></div>)}
         </div>
 
         <section className="bg-white border rounded-xl p-4 md:p-5 space-y-4">
           <div className="flex flex-wrap justify-between items-end gap-3">
-            <div><h2 className="font-bold text-lg text-slate-900">Fee charge review</h2><p className="text-xs text-slate-500">Only charges linked to a Payment Setup are eligible for controlled correction.</p></div>
+            <div><h2 className="font-bold text-lg text-slate-900">Fee charge review</h2><p className="text-xs text-slate-500">Only charges linked to a Payment Setup are eligible. Potential outliers are compared with the same school, academic year, class, fee item and term cohort.</p></div>
             <div className="flex flex-wrap gap-2">
               <select value={yearId} onChange={(e) => setYearId(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-white">
                 {years.map((year) => <option key={year.id} value={year.id}>{year.year_name || ("Year " + year.id)}</option>)}
@@ -225,7 +253,7 @@ export default function FeeControlCorrectionCenter() {
                   const pending = requests.some((r) => r.status === "pending" && (itemsByRequest[r.id] || []).some((i) => i.charge_id === charge.id));
                   return <tr key={charge.id} className="border-t">
                     <td className="p-3"><div className="font-semibold text-slate-900">{fullName(student)}</div><div className="text-xs text-slate-500">{student?.admission_number || student?.admission_no || "No admission number"}</div></td>
-                    <td className="p-3"><div>{fee?.item_name || charge.description || "Student fee"}</div><div className="text-xs text-slate-500">{charge.term_number ? "Term " + charge.term_number : "Annual"} · {dateLabel(charge.created_at)}</div></td>
+                    <td className="p-3"><div className="flex flex-wrap items-center gap-2">{fee?.item_name || charge.description || "Student fee"}{outlierChargeIds.has(charge.id) && <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">Review amount</span>}</div><div className="text-xs text-slate-500">{charge.term_number ? "Term " + charge.term_number : "Annual"} · {dateLabel(charge.created_at)}</div></td>
                     <td className="p-3 text-right tabular-nums">{fmtAmount(charge.amount)}</td>
                     <td className="p-3 text-right tabular-nums">{fmtAmount(charge.paid_amount)}</td>
                     <td className="p-3 text-right tabular-nums">{fmtAmount(charge.balance)}</td>
