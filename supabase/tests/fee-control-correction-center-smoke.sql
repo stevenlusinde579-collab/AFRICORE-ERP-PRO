@@ -34,7 +34,7 @@ begin
     end if;
 
     if position('only the headmaster or super admin' in v_approve) = 0
-       or position('requested_by = v_user_id' in v_approve) = 0 then
+       or position('v_request.requested_by = v_user_id' in v_approve) = 0 then
         raise exception 'Approval must be restricted and separated from requester';
     end if;
 
