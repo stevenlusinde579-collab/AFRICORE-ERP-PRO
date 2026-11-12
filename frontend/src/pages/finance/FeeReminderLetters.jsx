@@ -14,6 +14,7 @@ function FeeReminderLetters({ school }) {
     const [scope, setScope] = useState("student");
     const [classId, setClassId] = useState("");
     const [studentId, setStudentId] = useState("");
+    const [studentLimit, setStudentLimit] = useState("");
     const [accountantName, setAccountantName] = useState("");
     const [printing, setPrinting] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState("bank");
@@ -154,8 +155,12 @@ function FeeReminderLetters({ school }) {
             letter.totalPaid += row.paidAmount;
             letter.totalBalance += row.balance;
         });
-        return [...grouped.values()].sort((a, b) => a.studentName.localeCompare(b.studentName));
-    }, [rows, students, scope, studentId, classId]);
+        const sorted = [...grouped.values()].sort((a, b) => a.studentName.localeCompare(b.studentName));
+        const limit = Number(studentLimit);
+        return studentLimit !== "" && Number.isFinite(limit) && limit > 0
+            ? sorted.slice(0, Math.floor(limit))
+            : sorted;
+    }, [rows, students, scope, studentId, classId, studentLimit]);
 
     function printLetters() {
         if (!letters.length) return;
@@ -227,6 +232,11 @@ function FeeReminderLetters({ school }) {
                                     <p className="mt-1 text-xl font-extrabold text-slate-900">{students.length}</p>
                                 </div>
                             )}
+                            <div>
+                                <label className="mb-2 block text-xs font-bold text-slate-600">Idadi ya wanafunzi wa kuchapisha</label>
+                                <input type="number" min="1" max={scope === "student" ? 1 : (scope === "class" ? students.filter(student => student.classId === String(classId)).length : students.length)} value={studentLimit} onChange={event => setStudentLimit(event.target.value)} placeholder="Wote (acha wazi)" disabled={scope === "student"} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:bg-slate-100" />
+                                <p className="mt-1 text-[11px] text-slate-500">Acha wazi kuchapisha wote; ukiweka namba, mfumo utachapisha idadi hiyo kuanzia mwanzo wa orodha.</p>
+                            </div>
                             <div className="rounded-xl bg-slate-50 px-4 py-3">
                                 <p className="text-xs font-bold text-slate-500">Barua zitakazochapishwa</p>
                                 <p className="mt-1 text-xl font-extrabold text-slate-900">{letters.length}</p>
@@ -294,7 +304,7 @@ function FeeReminderLetters({ school }) {
 
             <style>{`
                 .fee-reminder-print-root { display: none; }
-                @page { size: A4 portrait; margin: 12mm; }
+                @page { size: A4 portrait; margin: 17mm 18mm 16mm; }
                 @media print {
                     html, body { width: 100% !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
                     body.afri-fee-reminder-printing * { visibility: hidden !important; }
@@ -302,7 +312,11 @@ function FeeReminderLetters({ school }) {
                     body.afri-fee-reminder-printing .fee-reminder-print-root * { visibility: visible !important; }
                     body.afri-fee-reminder-printing .fee-reminder-screen { display: none !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; width: 100% !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; color: #000 !important; background: #fff !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 100% !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; color: #000 !important; background: #fff !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page > * { max-width: 100% !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page p,
+                    body.afri-fee-reminder-printing .fee-reminder-print-page td,
+                    body.afri-fee-reminder-printing .fee-reminder-print-page th { overflow-wrap: anywhere; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page:last-child { break-after: auto; page-break-after: auto; }
                     body.afri-fee-reminder-printing table { width: 100% !important; border-collapse: collapse !important; }
                     body.afri-fee-reminder-printing tr { break-inside: avoid; page-break-inside: avoid; }
