@@ -12,6 +12,7 @@ import {
   FaClipboardList,
   FaCog,
   FaMoneyBillWave,
+  FaShieldAlt,
   FaComments,
   FaRobot,
   FaHandHoldingHeart,
@@ -220,6 +221,17 @@ function Sidebar({ profile }) {
       name: "Finance",
       path: "/finance",
       icon: <FaMoneyBillWave />,
+      roles: [
+        "super admin",
+        "headmaster",
+        "accountant"
+      ]
+    },
+
+    {
+      name: "Fee Control & Correction",
+      path: "/finance/fee-control",
+      icon: <FaShieldAlt />,
       roles: [
         "super admin",
         "headmaster",
