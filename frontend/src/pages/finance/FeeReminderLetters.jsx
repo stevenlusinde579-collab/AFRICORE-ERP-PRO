@@ -158,9 +158,18 @@ function FeeReminderLetters({ school }) {
 
     function printLetters() {
         if (!letters.length) return;
+        if (paymentMethod === "bank" && (!bankName.trim() || !bankAccountName.trim() || !bankAccountNumber.trim())) {
+            setError("Jaza jina la benki, jina la akaunti na namba ya akaunti kabla ya kuchapisha.");
+            return;
+        }
+        if (paymentMethod === "mobile" && (!mobileNetwork.trim() || !mobileNumber.trim() || !mobileRecipientName.trim())) {
+            setError("Jaza mtandao, namba ya simu na jina la mpokeaji kabla ya kuchapisha.");
+            return;
+        }
+        setError("");
         setPrinting(true);
         document.body.classList.add("afri-fee-reminder-printing");
-        window.setTimeout(() => window.print(), 250);
+        window.setTimeout(() => window.print(), 300);
     }
 
     useEffect(() => {
@@ -282,6 +291,23 @@ function FeeReminderLetters({ school }) {
                 ) : null}
             </div>
 
+            <style>{`
+                .fee-reminder-print-root { display: none; }
+                @page { size: A4 portrait; margin: 12mm; }
+                @media print {
+                    html, body { width: 100% !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
+                    body.afri-fee-reminder-printing * { visibility: hidden !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-root,
+                    body.afri-fee-reminder-printing .fee-reminder-print-root * { visibility: visible !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-screen { display: none !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; width: 100% !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; color: #000 !important; background: #fff !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page:last-child { break-after: auto; page-break-after: auto; }
+                    body.afri-fee-reminder-printing table { width: 100% !important; border-collapse: collapse !important; }
+                    body.afri-fee-reminder-printing tr { break-inside: avoid; page-break-inside: avoid; }
+                    body.afri-fee-reminder-printing img { max-height: 20mm !important; }
+                }
+            `}</style>
             <div className="fee-reminder-print-root">
                 {letters.map((letter, index) => (
                     <article key={letter.studentId} className="fee-reminder-print-page mx-auto max-w-[180mm] px-2 py-4 text-[12px] leading-relaxed text-black">
@@ -317,8 +343,27 @@ function FeeReminderLetters({ school }) {
                             </tbody>
                             <tfoot><tr><td colSpan="2" className="border border-black px-2 py-2 text-right font-extrabold">JUMLA</td><td className="border border-black px-2 py-2 text-right font-extrabold">{money(letter.totalAmount)}</td><td className="border border-black px-2 py-2 text-right font-extrabold">{money(letter.totalPaid)}</td><td className="border border-black px-2 py-2 text-right font-extrabold">{money(letter.totalBalance)}</td></tr></tfoot>
                         </table>
-                        <p className="mb-4">Hivyo, kiasi kinachodaiwa kwa sasa ni <strong>TZS {money(letter.totalBalance)}</strong>. Tunaomba ufanye malipo kupitia utaratibu rasmi wa shule na kuwasilisha uthibitisho wa malipo katika ofisi ya uhasibu.</p>
-                        <p className="mb-8">Kwa ufafanuzi zaidi kuhusu deni hili, tafadhali wasiliana na ofisi ya uhasibu ya shule. Tunakushukuru kwa ushirikiano wako.</p>
+                        <p className="mb-3">Hivyo, kiasi kinachodaiwa kwa sasa ni <strong>TZS {money(letter.totalBalance)}</strong>. Tunaomba ufanye malipo kupitia utaratibu rasmi wa shule na kuwasilisha uthibitisho wa malipo katika ofisi ya uhasibu.</p>
+                        <section className="mb-4 rounded border border-black p-3">
+                            <h3 className="mb-2 text-[11px] font-extrabold uppercase">Taarifa za kufanya malipo</h3>
+                            {paymentMethod === "bank" ? (
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                    <p><strong>Benki:</strong> {bankName}</p>
+                                    <p><strong>Jina la akaunti:</strong> {bankAccountName}</p>
+                                    <p className="col-span-2"><strong>Namba ya akaunti:</strong> {bankAccountNumber}</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                    <p><strong>Mtandao:</strong> {mobileNetwork}</p>
+                                    <p><strong>Namba ya simu:</strong> {mobileNumber}</p>
+                                    <p className="col-span-2"><strong>Jina la mpokeaji:</strong> {mobileRecipientName}</p>
+                                </div>
+                            )}
+                            <p className="mt-2 whitespace-pre-line"><strong>Maelekezo:</strong> {paymentInstructions}</p>
+                            <p className="mt-2 text-[10px] font-bold">Tafadhali tumia jina la mwanafunzi na namba yake ya usajili kama kumbukumbu ya malipo.</p>
+                        </section>
+                        <p className="mb-3">Taarifa za maendeleo ya mwanafunzi, mahudhurio, taarifa za fedha na matangazo ya shule zinapatikana pia kupitia Parent Portal. Mzazi/mlezi anashauriwa kuingia mara kwa mara kufuatilia taarifa hizo. Kwa msaada wa kuingia, wasiliana na ofisi ya shule.</p>
+                        <p className="mb-6">Kwa ufafanuzi zaidi kuhusu deni hili, tafadhali wasiliana na ofisi ya uhasibu ya shule. Tunakushukuru kwa ushirikiano wako.</p>
                         <p className="mb-1">Wako katika huduma,</p>
                         <div className="mt-10 w-64 border-t border-black pt-2">
                             <p className="font-extrabold">{accountantName || "Muhasibu"}</p>
