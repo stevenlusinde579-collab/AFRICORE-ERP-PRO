@@ -51,12 +51,6 @@ begin
      where id = auth.uid()
      limit 1;
 
-    if (v_profile_school is null or v_profile_school <> (
-        select school_id from finance.student_payment_setups where id = p_setup_id
-    )) and not public.is_current_user_super_admin() then
-        raise exception 'You are not authorized for this payment setup';
-    end if;
-
     if p_created_by is not null and p_created_by <> auth.uid() then
         raise exception 'Invalid created_by user';
     end if;
@@ -72,7 +66,8 @@ begin
         raise exception 'Payment setup not found';
     end if;
 
-    if s.school_id <> v_profile_school then
+    if (v_profile_school is null or v_profile_school <> s.school_id)
+       and not public.is_current_user_super_admin() then
         raise exception 'You are not authorized for this payment setup';
     end if;
 
