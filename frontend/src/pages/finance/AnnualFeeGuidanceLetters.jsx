@@ -92,6 +92,15 @@ export default function AnnualFeeGuidanceLetters({ school }) {
 
     const selectedYear = years.find(y => String(y.id) === String(yearId));
     const yearName = selectedYear?.year_name || "";
+    // Class records are stored per academic year. Never mix classes from other years.
+    // Older schools may still have legacy classes with a null academic_year_id;
+    // use those only when the selected year has no year-linked class records.
+    const visibleClasses = useMemo(() => {
+        const activeClasses = classes.filter(c => c.is_active !== false);
+        const yearClasses = activeClasses.filter(c => String(c.academic_year_id) === String(yearId));
+        const legacyClasses = activeClasses.filter(c => c.academic_year_id == null);
+        return yearClasses.length ? yearClasses : legacyClasses;
+    }, [classes, yearId]);
     const visibleStudents = useMemo(() => students.filter(s => !classId || String(s.current_class_id) === String(classId)), [students, classId]);
     const selectedRows = useMemo(() => students.filter(s => selectedStudents.includes(String(s.id))), [students, selectedStudents]);
     const validItems = items.filter(item => item.name.trim());
@@ -178,7 +187,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 </header>
                 {loading ? <div className="p-6 text-sm text-slate-600">Inapakia taarifa za shule...</div> : <>
                     <div className="grid gap-4 p-5 md:grid-cols-3">
-                        <label className="text-xs font-bold text-slate-600">Mwaka mpya wa masomo<select value={yearId} onChange={e => { setYearId(e.target.value); setSelectedStudents([]); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm">{years.map(y => <option key={y.id} value={y.id}>{y.year_name}</option>)}</select></label>
+                        <label className="text-xs font-bold text-slate-600">Mwaka mpya wa masomo<select value={yearId} onChange={e => { setYearId(e.target.value); setClassId(""); setSelectedStudents([]); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm">{years.map(y => <option key={y.id} value={y.id}>{y.year_name}</option>)}</select></label>
                         <label className="text-xs font-bold text-slate-600">Tarehe ya kufunga shule<input type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
                         <label className="text-xs font-bold text-slate-600">Tarehe ya kufungua shule<input type="date" value={reopeningDate} onChange={e => setReopeningDate(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
                     </div>
@@ -189,7 +198,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                             {items.map((item, index) => <div key={item.id} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-[1.5fr_0.8fr_1fr_0.7fr_0.7fr_0.7fr_auto] md:items-end">
                                 <label className="text-[11px] font-bold text-slate-600">Jina la ada/mchango<input value={item.name} onChange={e => updateItem(item.id, "name", e.target.value)} placeholder="Mf. Ada ya shule / Mahafali Form Four" className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" /></label>
                                 <label className="text-[11px] font-bold text-slate-600">Aina<select value={item.category} onChange={e => updateItem(item.id, "category", e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-normal"><option>Ada</option><option>Mchango</option></select></label>
-                                <label className="text-[11px] font-bold text-slate-600">Darasa husika<select value={item.classId} onChange={e => updateItem(item.id, "classId", e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-normal"><option value="">Shule nzima</option>{classes.map(c => <option key={c.id} value={c.id}>{c.class_name}</option>)}</select></label>
+                                <label className="text-[11px] font-bold text-slate-600">Darasa husika<select value={item.classId} onChange={e => updateItem(item.id, "classId", e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-normal"><option value="">Shule nzima</option>{visibleClasses.map(c => <option key={c.id} value={c.id}>{c.class_name}</option>)}</select></label>
                                 {["term1", "term2", "term3"].map((term, i) => <label key={term} className="text-[11px] font-bold text-slate-600">Muhula {i + 1}<input type="number" min="0" step="0.01" value={item[term]} onChange={e => updateItem(item.id, term, e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal" /></label>)}
                                 <button type="button" onClick={() => setItems(v => v.length > 1 ? v.filter(x => x.id !== item.id) : [blankItem()])} title="Ondoa kipengee" className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 px-3 text-red-600"><FaTrash /></button>
                             </div>)}
@@ -208,7 +217,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                     <div className="border-t border-slate-100 p-5">
                         <h3 className="font-extrabold text-slate-800">Chagua wazazi/wanafunzi wa kupewa barua</h3>
                         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_2fr]">
-                            <label className="text-xs font-bold text-slate-600">Chagua darasa (au shule nzima)<select value={classId} onChange={e => { setClassId(e.target.value); setSelectedStudents([]); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="">Shule nzima</option>{classes.map(c => <option key={c.id} value={c.id}>{c.class_name}</option>)}</select></label>
+                            <label className="text-xs font-bold text-slate-600">Chagua darasa (au shule nzima)<select value={classId} onChange={e => { setClassId(e.target.value); setSelectedStudents([]); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="">Shule nzima</option>{visibleClasses.map(c => <option key={c.id} value={c.id}>{c.class_name}</option>)}</select></label>
                             <div className="rounded-xl bg-slate-50 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-700">{selectedStudents.length} wamechaguliwa · {visibleStudents.length} wanafunzi kwenye orodha</span><button type="button" onClick={() => selectVisible(selectedStudents.length < visibleStudents.length)} className="text-xs font-bold text-indigo-700">{visibleStudents.every(s => selectedStudents.includes(String(s.id))) ? "Ondoa wote wanaoonekana" : "Chagua wote wanaoonekana"}</button></div><div className="mt-2 max-h-64 overflow-y-auto divide-y divide-slate-200">{visibleStudents.map(s => <label key={s.id} className="flex items-center gap-3 py-2 text-sm"><input type="checkbox" checked={selectedStudents.includes(String(s.id))} onChange={() => toggleStudent(s.id)} /><span className="font-semibold text-slate-800">{[s.first_name, s.middle_name, s.last_name].filter(Boolean).join(" ")}</span><span className="text-xs text-slate-500">{s.admission_number || s.admission_no || ""}</span></label>)}</div></div>
                         </div>
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Kila mwanafunzi atapata barua yake binafsi. Michango ya darasa maalumu itaonekana kwa wanafunzi wa darasa hilo tu.</p><button type="button" onClick={printLetters} disabled={!selectedStudents.length || !loadedSetupId} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-extrabold text-white disabled:opacity-50"><FaPrint /> Tengeneza / Chapisha barua {selectedStudents.length}</button></div>
