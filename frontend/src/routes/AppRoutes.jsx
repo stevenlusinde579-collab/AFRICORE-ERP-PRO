@@ -98,6 +98,7 @@ import AddExpense from "../pages/finance/AddExpense";
 import GeneralLedger from "../pages/finance/GeneralLedger";
 import FinancialStatements from "../pages/finance/FinancialStatements";
 import ClassFeeCollection from "../pages/finance/ClassFeeCollection";
+import FeeControlCorrectionCenter from "../pages/finance/FeeControlCorrectionCenter";
 import RecordReceivable from "../pages/finance/RecordReceivable";
 import RecordPayable from "../pages/finance/RecordPayable";
 
@@ -829,6 +830,11 @@ export default function AppRoutes() {
                     <Route
                         path="finance/class-fee-collection"
                         element={<ClassFeeCollection />}
+                    />
+
+                    <Route
+                        path="finance/fee-control"
+                        element={<FeeControlCorrectionCenter />}
                     />
                 </Route>
 
