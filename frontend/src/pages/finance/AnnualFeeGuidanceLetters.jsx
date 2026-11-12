@@ -136,11 +136,32 @@ export default function AnnualFeeGuidanceLetters({ school }) {
         if (!yearName) { setError("Mwaka wa masomo haujapatikana."); return; }
         setError("");
         document.body.classList.add("annual-guidance-printing");
-        window.setTimeout(() => window.print(), 100);
+        window.requestAnimationFrame(() => {
+            document.querySelectorAll(".annual-guidance-print-page").forEach(page => {
+                const content = page.querySelector(".annual-guidance-print-content");
+                if (!content) return;
+                content.style.transform = "none";
+                content.style.width = "100%";
+                const availableHeight = page.clientHeight;
+                const naturalHeight = content.scrollHeight;
+                const fitScale = naturalHeight > availableHeight ? availableHeight / naturalHeight : 1;
+                content.style.width = `${100 / fitScale}%`;
+                content.style.transform = `scale(${fitScale})`;
+                content.style.transformOrigin = "top left";
+            });
+            window.setTimeout(() => window.print(), 150);
+        });
     }
 
     useEffect(() => {
-        const afterPrint = () => document.body.classList.remove("annual-guidance-printing");
+        const afterPrint = () => {
+            document.body.classList.remove("annual-guidance-printing");
+            document.querySelectorAll(".annual-guidance-print-content").forEach(content => {
+                content.style.removeProperty("transform");
+                content.style.removeProperty("width");
+                content.style.removeProperty("transform-origin");
+            });
+        };
         window.addEventListener("afterprint", afterPrint);
         return () => window.removeEventListener("afterprint", afterPrint);
     }, []);
@@ -199,18 +220,25 @@ export default function AnnualFeeGuidanceLetters({ school }) {
         </div>
         <style>{`
             .annual-guidance-print-root { display:none; }
-            @page { size:A4 portrait; margin:12mm; }
+            @page { size:A4 portrait; margin:0 !important; }
             @media print {
+                html, body { width:210mm !important; min-height:0 !important; margin:0 !important; padding:0 !important; background:#fff !important; }
                 body.annual-guidance-printing * { visibility:hidden !important; }
                 body.annual-guidance-printing .annual-guidance-print-root,
                 body.annual-guidance-printing .annual-guidance-print-root * { visibility:visible !important; }
                 body.annual-guidance-printing .annual-guidance-screen { display:none !important; }
-                body.annual-guidance-printing .annual-guidance-print-root { display:block !important; position:absolute !important; inset:0 auto auto 0 !important; width:100% !important; }
-                .annual-guidance-print-page { break-after:page; page-break-after:always; color:#111 !important; font:10.5pt/1.45 Arial,sans-serif !important; }
-                .annual-guidance-print-page:last-child { break-after:auto; page-break-after:auto; }
-                .annual-guidance-print-page table { width:100%; border-collapse:collapse; margin:12px 0; font-size:9.5pt; }
-                .annual-guidance-print-page th,.annual-guidance-print-page td { border:1px solid #333; padding:6px; text-align:left; }
-                .annual-guidance-print-page .numeric { text-align:right; }
+                body.annual-guidance-printing .annual-guidance-print-root { display:block !important; position:static !important; box-sizing:border-box !important; width:210mm !important; max-width:210mm !important; margin:0 !important; padding:0 !important; }
+                body.annual-guidance-printing .annual-guidance-print-page { display:block !important; box-sizing:border-box !important; width:180mm !important; max-width:180mm !important; height:267mm !important; min-height:267mm !important; max-height:267mm !important; overflow:hidden !important; margin:15mm 0 15mm 15mm !important; padding:0 !important; position:relative !important; color:#000 !important; background:#fff !important; font:10px/1.28 Arial,sans-serif !important; break-after:page; page-break-after:always; }
+                body.annual-guidance-printing .annual-guidance-print-content { box-sizing:border-box !important; width:100%; }
+                body.annual-guidance-printing .annual-guidance-print-page header { margin-bottom:8px !important; padding-bottom:7px !important; }
+                body.annual-guidance-printing .annual-guidance-print-page p { margin-top:0 !important; margin-bottom:5px !important; }
+                body.annual-guidance-printing .annual-guidance-print-page h2 { margin-top:5px !important; margin-bottom:7px !important; }
+                body.annual-guidance-printing .annual-guidance-print-page table { width:100% !important; border-collapse:collapse !important; margin:5px 0 7px !important; font-size:10px !important; }
+                body.annual-guidance-printing .annual-guidance-print-page th,
+                body.annual-guidance-printing .annual-guidance-print-page td { border:1px solid #333 !important; padding:4px 5px !important; text-align:left; }
+                body.annual-guidance-printing .annual-guidance-print-page .numeric { text-align:right !important; }
+                body.annual-guidance-printing .annual-guidance-print-page:last-child { break-after:auto; page-break-after:auto; }
+                body.annual-guidance-printing .annual-guidance-print-page img { max-height:20mm !important; }
             }
         `}</style>
         <div className="annual-guidance-print-root">
@@ -219,6 +247,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 const totalsForStudent = studentTotals(student);
                 const className = classes.find(c => String(c.id) === String(student.current_class_id))?.class_name || "—";
                 return <article key={student.id} className="annual-guidance-print-page">
+                    <div className="annual-guidance-print-content">
                     <header style={{ display:"flex", alignItems:"center", gap:16, borderBottom:"2px solid #111", paddingBottom:12, marginBottom:18 }}>
                         {school?.logo && <img src={school.logo} alt="" style={{ width:70, height:70, objectFit:"contain" }} />}
                         <div style={{ flex:1, textAlign:"center" }}><h1 style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", margin:0 }}>{school?.school_name || "SHULE"}</h1>{school?.registration_number && <p style={{ margin:3, fontSize:10 }}>Usajili: {school.registration_number}</p>}<p style={{ margin:3, fontSize:10 }}>{[school?.address, school?.phone, school?.email].filter(Boolean).join(" · ")}</p></div>
@@ -234,6 +263,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                     <p style={{ textAlign:"justify" }}>{extraMessage}</p><p>Tunawashukuru kwa kuendelea kushirikiana nasi katika kuhakikisha mwanafunzi anapata mazingira bora ya kujifunzia.</p>
                     <p>Wako katika huduma,</p><div style={{ marginTop:35, width:250, borderTop:"1px solid #111", paddingTop:8 }}><strong>{accountantName || "Muhasibu"}</strong><p style={{ margin:3 }}>Muhasibu wa Shule</p>{accountantPhone && <p style={{ margin:3 }}>Simu: {accountantPhone}</p>}<p style={{ marginTop:15 }}>Saini: ________________________</p></div>
                     <p style={{ textAlign:"center", fontSize:9, marginTop:24 }}>Barua ya mwongozo wa maandalizi ya malipo · {index+1} / {selectedRows.length}</p>
+                    </div>
                 </article>;
             })}
         </div>
