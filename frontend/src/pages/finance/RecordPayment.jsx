@@ -2212,175 +2212,124 @@ const RecordPayment = () => {
         setSuccess("");
 
         if (!user?.id) {
-            setError(
-                "User session haijapatikana."
-            );
+            setError("User session haijapatikana.");
             return;
         }
 
         if (!schoolId) {
-            setError(
-                "School haijapatikana."
-            );
+            setError("School haijapatikana.");
             return;
         }
+
+        // Bulk setup must target every selected student, not only
+        // the currently active student shown in the details panel.
+        const targetStudentIds = [
+            ...new Set(
+                (selectedStudentIds || [])
+                    .map((id) => Number(id))
+                    .filter((id) => Number.isInteger(id) && id > 0)
+            ),
+        ];
+
+        if (!targetStudentIds.length && selectedStudentId) {
+            targetStudentIds.push(Number(selectedStudentId));
+        }
+
+        if (!targetStudentIds.length) {
+            setError("Chagua angalau mwanafunzi mmoja kwanza.");
+            return;
+        }
+
+        // Validate that every selected student belongs to this school
+        // and the currently selected class before creating any charges.
+        const selectedRows = targetStudentIds.map((id) =>
+            students.find((student) => Number(student.id) === id)
+        );
 
         if (
-            !selectedStudentId
+            selectedRows.some(
+                (student) =>
+                    !student ||
+                    Number(student.school_id) !== Number(schoolId) ||
+                    Number(student.current_class_id) !== Number(selectedClassId)
+            )
         ) {
-            setError(
-                "Chagua student kwanza."
-            );
+            setError("Baadhi ya wanafunzi waliochaguliwa hawapo kwenye shule au darasa lililochaguliwa. Hakuna setup iliyohifadhiwa.");
             return;
         }
 
-        if (
-            !selectedAcademicYearId
-        ) {
-            setError(
-                "Chagua academic year."
-            );
+        if (!selectedAcademicYearId) {
+            setError("Chagua academic year.");
             return;
         }
 
-        if (
-            !selectedClassId
-        ) {
-            setError(
-                "Chagua class."
-            );
+        if (!selectedClassId) {
+            setError("Chagua class.");
             return;
         }
 
-        const setupType =
-            normalize(
-                setupForm.setupType
-            );
-
-        const term1 =
-            numberValue(
-                setupForm.tuitionTerm1
-            );
-
-        const term2 =
-            numberValue(
-                setupForm.tuitionTerm2
-            );
-
-        const otherFees =
-            numberValue(
-                setupForm.otherFeeAmount
-            );
-
-        const otherFeeTerm =
-            Number(setupForm.otherFeeTerm || 1);
+        const setupType = normalize(setupForm.setupType);
+        const term1 = numberValue(setupForm.tuitionTerm1);
+        const term2 = numberValue(setupForm.tuitionTerm2);
+        const otherFees = numberValue(setupForm.otherFeeAmount);
+        const otherFeeTerm = Number(setupForm.otherFeeTerm || 1);
 
         const shouldSaveTuition =
-            setupType ===
-                "tuition" ||
-            setupType ===
-                "both";
-
+            setupType === "tuition" || setupType === "both";
         const shouldSaveOther =
-            setupType ===
-                "other" ||
-            setupType ===
-                "both";
+            setupType === "other" || setupType === "both";
 
-        if (
-            !shouldSaveTuition &&
-            !shouldSaveOther
-        ) {
-            setError(
-                "Chagua aina ya Payment Setup."
-            );
+        if (!shouldSaveTuition && !shouldSaveOther) {
+            setError("Chagua aina ya Payment Setup.");
             return;
         }
 
-        if (
-            shouldSaveTuition &&
-            term1 <= 0 &&
-            term2 <= 0
-        ) {
-            setError(
-                "Weka kiasi cha Tuition Term 1 au Term 2."
-            );
+        if (shouldSaveTuition && term1 <= 0 && term2 <= 0) {
+            setError("Weka kiasi cha Tuition Term 1 au Term 2.");
             return;
         }
 
-        if (
-            shouldSaveOther &&
-            ![1, 2, 3].includes(otherFeeTerm)
-        ) {
-            setError(
-                "Chagua term sahihi kwa Other Fee."
-            );
+        if (shouldSaveOther && ![1, 2, 3].includes(otherFeeTerm)) {
+            setError("Chagua term sahihi kwa Other Fee.");
             return;
         }
 
-        if (
-            shouldSaveOther &&
-            otherFees <= 0
-        ) {
-            setError(
-                "Weka kiasi cha Other Fee."
-            );
+        if (shouldSaveOther && otherFees <= 0) {
+            setError("Weka kiasi cha Other Fee.");
             return;
         }
 
         setIsSavingSetup(true);
 
         try {
-            const financeSetup =
-                await ensureRequiredFeeItems(
-                    schoolId,
-                    user.id
-                );
+            const financeSetup = await ensureRequiredFeeItems(schoolId, user.id);
+            const tuition = financeSetup.tuition;
+            const other = financeSetup.other;
 
-            const tuition =
-                financeSetup.tuition;
-
-            const other =
-                financeSetup.other;
-
-            if (
-                shouldSaveTuition &&
-                !tuition?.id
-            ) {
-                throw new Error(
-                    "Tuition Fee setup haijapatikana."
-                );
+            if (shouldSaveTuition && !tuition?.id) {
+                throw new Error("Tuition Fee setup haijapatikana.");
             }
 
-            if (
-                shouldSaveOther &&
-                !other?.id
-            ) {
-                throw new Error(
-                    "Other Fee setup haijapatikana."
-                );
+            if (shouldSaveOther && !other?.id) {
+                throw new Error("Other Fee setup haijapatikana.");
             }
 
-            const otherFeesPayload =
-                shouldSaveOther
-                    ? [
-                          {
-                              fee_item_id:
-                                  other.id,
-                              term_number:
-                                  otherFeeTerm,
-                              amount:
-                                  otherFees,
-                          },
-                      ]
-                    : [];
+            const otherFeesPayload = shouldSaveOther
+                ? [{
+                    fee_item_id: other.id,
+                    term_number: otherFeeTerm,
+                    amount: otherFees,
+                }]
+                : [];
 
-            // Statistical safety check: compare the resulting total setup
-            // with the same school's class/year/fee/term cohort. This warns
-            // about likely extra-zero or under-entry mistakes before saving.
+            // Compare proposed amounts against students outside this
+            // selection so identical bulk amounts are checked fairly.
+            const selectedIdSet = new Set(targetStudentIds.map(String));
             const amountWarnings = [];
+
             const inspectSetupAmount = async ({ feeItemId, termNumber, addedAmount, label }) => {
                 if (!feeItemId || numberValue(addedAmount) <= 0) return;
+
                 const { data: cohortRows, error: cohortError } = await supabase
                     .schema("finance")
                     .from("student_payment_setups")
@@ -2391,25 +2340,31 @@ const RecordPayment = () => {
                     .eq("fee_item_id", feeItemId)
                     .eq("term_number", Number(termNumber))
                     .eq("status", "active");
+
                 if (cohortError) throw cohortError;
 
                 const rows = cohortRows || [];
                 const peerAmounts = rows
-                    .filter((row) => String(row.student_id) !== String(selectedStudentId))
+                    .filter((row) => !selectedIdSet.has(String(row.student_id)))
                     .map((row) => numberValue(row.amount));
+
                 if (peerAmounts.length < 3) return;
 
-                const previousForStudent = rows
-                    .filter((row) => String(row.student_id) === String(selectedStudentId))
-                    .reduce((sum, row) => sum + numberValue(row.amount), 0);
-                const proposedTotal = previousForStudent + numberValue(addedAmount);
                 const median = medianAmount(peerAmounts);
                 if (!median) return;
 
-                if (proposedTotal >= median * 2.5 || proposedTotal <= median * 0.4) {
+                const unusualStudents = targetStudentIds.filter((studentId) => {
+                    const previousForStudent = rows
+                        .filter((row) => Number(row.student_id) === studentId)
+                        .reduce((sum, row) => sum + numberValue(row.amount), 0);
+                    const proposedTotal = previousForStudent + numberValue(addedAmount);
+                    return proposedTotal >= median * 2.5 || proposedTotal <= median * 0.4;
+                });
+
+                if (unusualStudents.length) {
                     amountWarnings.push(
-                        label + ": resulting total " + money(proposedTotal) +
-                        " is unusually different from the class median " + money(median)
+                        label + ": amount for " + unusualStudents.length +
+                        " selected student(s) differs unusually from the class median " + money(median)
                     );
                 }
             };
@@ -2447,90 +2402,78 @@ const RecordPayment = () => {
                 if (!confirmed) return;
             }
 
-            const {
-                data,
-                error: saveError,
-            } = await supabase
-                .schema("finance")
-                .rpc(
-                    "save_student_payment_setup",
-                    {
-                        p_school_id:
-                            Number(
-                                schoolId
-                            ),
+            // save_student_payment_setup is a single-student RPC.
+            // Execute it once for EACH selected student with the same
+            // amounts, while keeping each student's ledger separate.
+            const savedStudentIds = [];
+            const failedStudents = [];
 
-                        p_student_id:
-                            Number(
-                                selectedStudentId
-                            ),
+            for (const studentId of targetStudentIds) {
+                const { error: saveError } = await supabase
+                    .schema("finance")
+                    .rpc("save_student_payment_setup", {
+                        p_school_id: Number(schoolId),
+                        p_student_id: Number(studentId),
+                        p_academic_year_id: Number(selectedAcademicYearId),
+                        p_class_id: Number(selectedClassId),
+                        p_created_by: user.id,
+                        p_tuition_fee_item_id: shouldSaveTuition ? tuition.id : null,
+                        p_tuition_term_1: shouldSaveTuition ? term1 : 0,
+                        p_tuition_term_2: shouldSaveTuition ? term2 : 0,
+                        p_other_fees: otherFeesPayload,
+                    });
 
-                        p_academic_year_id:
-                            Number(
-                                selectedAcademicYearId
-                            ),
-
-                        p_class_id:
-                            Number(
-                                selectedClassId
-                            ),
-
-                        p_created_by:
-                            user.id,
-
-                        p_tuition_fee_item_id:
-                            shouldSaveTuition
-                                ? tuition.id
-                                : null,
-
-                        p_tuition_term_1:
-                            shouldSaveTuition
-                                ? term1
-                                : 0,
-
-                        p_tuition_term_2:
-                            shouldSaveTuition
-                                ? term2
-                                : 0,
-
-                        p_other_fees:
-                            otherFeesPayload,
-                    }
-                );
-
-            if (saveError) {
-                throw saveError;
+                if (saveError) {
+                    const student = students.find((row) => Number(row.id) === studentId);
+                    failedStudents.push({
+                        id: studentId,
+                        name: studentName(student) || ("Student ID " + studentId),
+                        reason: saveError.message || "Save failed",
+                    });
+                } else {
+                    savedStudentIds.push(studentId);
+                }
             }
 
-            setStudentSetups(
-                data || []
-            );
+            // Refresh the active student's finance panel after the bulk run.
+            const activeStudentId = targetStudentIds.includes(Number(selectedStudentId))
+                ? Number(selectedStudentId)
+                : targetStudentIds[0];
 
-            setSetupForm(
-                EMPTY_SETUP
-            );
+            setSelectedStudentId(String(activeStudentId));
+            await loadStudentSetups(activeStudentId, selectedAcademicYearId);
 
-            setPaymentForm(
-                EMPTY_PAYMENT
-            );
+            if (savedStudentIds.length > 0) {
+                setPaymentForm(EMPTY_PAYMENT);
+            }
 
-            await loadStudentSetups(
-                selectedStudentId,
-                selectedAcademicYearId
-            );
+            if (failedStudents.length) {
+                const failureSummary = failedStudents
+                    .map((item) => item.name + " (" + item.reason + ")")
+                    .join("; ");
 
-            setSuccess(
-                "Payment setup imehifadhiwa kikamilifu."
-            );
+                if (savedStudentIds.length) {
+                    setSuccess(
+                        "Setup imehifadhiwa kwa wanafunzi " + savedStudentIds.length +
+                        " kati ya " + targetStudentIds.length + "."
+                    );
+                }
+
+                setError(
+                    "Wanafunzi ambao hawakupata setup: " + failureSummary
+                );
+            } else {
+                setSetupForm(EMPTY_SETUP);
+                setSuccess(
+                    "Payment setup imehifadhiwa kwa wanafunzi wote " +
+                    savedStudentIds.length + ". Kila mwanafunzi amewekewa kiasi kamili kivyake."
+                );
+            }
         } catch (saveError) {
-            console.error(
-                "Save payment setup error:",
-                saveError
-            );
-
+            console.error("Save payment setup error:", saveError);
             setError(
                 saveError?.message ||
-                    "Imeshindikana kuhifadhi Payment Setup."
+                "Imeshindikana kuhifadhi Payment Setup."
             );
         } finally {
             setIsSavingSetup(false);
