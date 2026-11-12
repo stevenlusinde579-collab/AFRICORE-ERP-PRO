@@ -1728,8 +1728,8 @@ const RecordPayment = () => {
             }
 
             return setup.term_number
-                ? \`\${feeName} - Term \${setup.term_number}\`
-                : \`\${feeName} (term not assigned)\`;
+                ? `${feeName} - Term ${setup.term_number}`
+                : `${feeName} (term not assigned)`;
         },
         []
     );
