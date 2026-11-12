@@ -84,7 +84,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
             setReopeningDate(data?.reopening_date || "");
             setIntro(data?.intro_message || DEFAULT_MESSAGE);
             setExtraMessage(data?.extra_message || "Tafadhali zingatieni ratiba ya malipo ya kila muhula kama ilivyooneshwa. Kwa ufafanuzi zaidi, wasiliana na ofisi ya uhasibu ya shule.");
-            setAccountantName(data?.accountant_name || "");
+            setAccountantName(current => data?.accountant_name || current);
             setAccountantPhone(data?.accountant_phone || "");
         })();
         return () => { active = false; };
