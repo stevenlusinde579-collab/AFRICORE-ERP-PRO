@@ -48,6 +48,13 @@ begin
         raise exception 'Approved corrections must post accounting journals';
     end if;
 
+    if position('from finance.parties' in v_approve) = 0
+       or position('party_type = ''student''::finance.party_type' in v_approve) = 0
+       or position('''party_id'', v_party_id' in v_approve) = 0
+       or position('''party_id'', v_charge.student_id' in v_approve) > 0 then
+        raise exception 'Journal party_id must use finance.parties.id, never public.students.id';
+    end if;
+
     if position('old_amount' in v_approve) = 0
        or position('paid_amount' in v_approve) = 0
        or position('the person who requested a correction cannot approve the same request' in v_approve) = 0 then
