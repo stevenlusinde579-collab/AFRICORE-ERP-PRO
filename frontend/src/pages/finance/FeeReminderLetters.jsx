@@ -16,6 +16,7 @@ function FeeReminderLetters({ school }) {
     const [studentId, setStudentId] = useState("");
     const [studentLimit, setStudentLimit] = useState("");
     const [accountantName, setAccountantName] = useState("");
+    const [accountantPhone, setAccountantPhone] = useState("");
     const [printing, setPrinting] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState("bank");
     const [bankName, setBankName] = useState("");
@@ -263,6 +264,9 @@ function FeeReminderLetters({ school }) {
                                     <label className="text-xs font-bold text-slate-600">Jina la mpokeaji<input value={mobileRecipientName} onChange={event => setMobileRecipientName(event.target.value)} placeholder="Jina linaloonekana kwa mpokeaji" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
                                 </div>
                             )}
+                            <label className="mt-3 block text-xs font-bold text-slate-600">Namba ya simu ya muhasibu
+                                <input type="tel" value={accountantPhone} onChange={event => setAccountantPhone(event.target.value)} placeholder="Mf. 07XX XXX XXX" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" />
+                            </label>
                             <label className="mt-3 block text-xs font-bold text-slate-600">Maelekezo ya malipo kwa mzazi/mlezi
                                 <textarea value={paymentInstructions} onChange={event => setPaymentInstructions(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal" />
                             </label>
@@ -387,6 +391,7 @@ function FeeReminderLetters({ school }) {
                         <div className="mt-10 w-64 border-t border-black pt-2">
                             <p className="font-extrabold">{accountantName || "Muhasibu"}</p>
                             <p className="text-[10px] font-semibold uppercase">Muhasibu wa Shule</p>
+                            {accountantPhone.trim() ? <p className="mt-1 text-[10px]"><strong>Simu:</strong> {accountantPhone.trim()}</p> : null}
                             <p className="mt-5 text-[10px]">Saini: __________________________</p>
                         </div>
                         <p className="mt-8 text-center text-[9px]">Barua hii imetengenezwa na mfumo wa AfriCore ERP PRO · {index + 1} / {letters.length}</p>
