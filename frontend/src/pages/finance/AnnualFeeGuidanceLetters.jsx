@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FaCalendarAlt, FaFileInvoiceDollar, FaPlus, FaPrint, FaSave, FaTrash } from "react-icons/fa";
+import { FaFileInvoiceDollar, FaPlus, FaPrint, FaSave, FaTrash } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 
 const money = value => new Intl.NumberFormat("en-TZ", { maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -84,6 +84,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
             setReopeningDate(data?.reopening_date || "");
             setIntro(data?.intro_message || DEFAULT_MESSAGE);
             setExtraMessage(data?.extra_message || "Tafadhali zingatieni ratiba ya malipo ya kila muhula kama ilivyooneshwa. Kwa ufafanuzi zaidi, wasiliana na ofisi ya uhasibu ya shule.");
+            setAccountantName(data?.accountant_name || "");
             setAccountantPhone(data?.accountant_phone || "");
         })();
         return () => { active = false; };
@@ -173,7 +174,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                             </div>)}
                         </div>
                         <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm md:grid-cols-4">
-                            <div><p className="text-xs text-slate-500">Jumla Muhula 1</p><strong>TZS {money(totals.term1)}</strong></div><div><p className="text-xs text-slate-500">Jumla Muhula 2</p><strong>TZS {money(totals.term2)}</strong></div><div><p className="text-xs text-slate-500">Jumla Muhula 3</p><strong>TZS {money(totals.term3)}</strong></div><div><p className="text-xs text-slate-500">Jumla ya mwaka (shule nzima)</p><strong>TZS {money(annualTotal)}</strong></div>
+                            <div><p className="text-xs text-slate-500">Jumla Muhula 1</p><strong>TZS {money(totals.term1)}</strong></div><div><p className="text-xs text-slate-500">Jumla Muhula 2</p><strong>TZS {money(totals.term2)}</strong></div><div><p className="text-xs text-slate-500">Jumla Muhula 3</p><strong>TZS {money(totals.term3)}</strong></div><div><p className="text-xs text-slate-500">Jumla ya vipengee vilivyowekwa</p><strong>TZS {money(annualTotal)}</strong></div>
                         </div>
                     </div>
                     <div className="grid gap-4 px-5 pb-5 md:grid-cols-2">
