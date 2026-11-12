@@ -1036,14 +1036,10 @@ const RecordPayment = () => {
 
         return students.filter(
             (student) => {
+                // Never expose or select students until a class is chosen.
                 const matchesClass =
-                    !selectedClassId ||
-                    String(
-                        student.current_class_id
-                    ) ===
-                        String(
-                            selectedClassId
-                        );
+                    Boolean(selectedClassId) &&
+                    String(student.current_class_id) === String(selectedClassId);
 
                 if (!matchesClass) {
                     return false;
@@ -2221,6 +2217,18 @@ const RecordPayment = () => {
             return;
         }
 
+        // Academic year and class are mandatory before any student
+        // can be targeted. Do this before validating the selected rows.
+        if (!selectedAcademicYearId) {
+            setError("Chagua Academic Year kwanza.");
+            return;
+        }
+
+        if (!selectedClassId) {
+            setError("Chagua darasa kwanza kabla ya kuchagua wanafunzi au kuhifadhi Payment Setup.");
+            return;
+        }
+
         // Bulk setup must target every selected student, not only
         // the currently active student shown in the details panel.
         const targetStudentIds = [
@@ -2255,16 +2263,6 @@ const RecordPayment = () => {
             )
         ) {
             setError("Baadhi ya wanafunzi waliochaguliwa hawapo kwenye shule au darasa lililochaguliwa. Hakuna setup iliyohifadhiwa.");
-            return;
-        }
-
-        if (!selectedAcademicYearId) {
-            setError("Chagua academic year.");
-            return;
-        }
-
-        if (!selectedClassId) {
-            setError("Chagua class.");
             return;
         }
 
@@ -3959,7 +3957,10 @@ const RecordPayment = () => {
                                     <button
                                         type="submit"
                                         disabled={
-                                            isSavingSetup
+                                            isSavingSetup ||
+                                            !selectedAcademicYearId ||
+                                            !selectedClassId ||
+                                            selectedStudentCount === 0
                                         }
                                         className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition font-bold"
                                     >
