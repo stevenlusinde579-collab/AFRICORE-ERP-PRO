@@ -16,6 +16,14 @@ function FeeReminderLetters({ school }) {
     const [studentId, setStudentId] = useState("");
     const [accountantName, setAccountantName] = useState("");
     const [printing, setPrinting] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState("bank");
+    const [bankName, setBankName] = useState("");
+    const [bankAccountName, setBankAccountName] = useState("");
+    const [bankAccountNumber, setBankAccountNumber] = useState("");
+    const [mobileNetwork, setMobileNetwork] = useState("");
+    const [mobileNumber, setMobileNumber] = useState("");
+    const [mobileRecipientName, setMobileRecipientName] = useState("");
+    const [paymentInstructions, setPaymentInstructions] = useState("Baada ya kufanya malipo, hifadhi risiti/ujumbe wa muamala na uwasilishe uthibitisho katika ofisi ya uhasibu ya shule. Tafadhali hakikisha jina la mwanafunzi na namba yake ya usajili vinaonekana kwenye kumbukumbu ya malipo.");
 
     async function loadDebtors() {
         setLoading(true);
@@ -91,7 +99,7 @@ function FeeReminderLetters({ school }) {
                     ...charge,
                     student,
                     studentName: [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" "),
-                    admissionNumber: student.admission_number || student.admission_no || "-",
+                    admissionNumber: student.admission_number || student.admission_no || "-",\n                    guardianName: student.guardian_name || student.parent_name || "",
                     classId: student.current_class_id ? String(student.current_class_id) : "",
                     className: classRow?.class_name || "Darasa halijabainishwa",
                     academicYearName: year?.year_name || "Mwaka haujabainishwa",
@@ -138,7 +146,7 @@ function FeeReminderLetters({ school }) {
         rows.forEach(row => {
             const id = String(row.student_id);
             if (!allowed.has(id)) return;
-            if (!grouped.has(id)) grouped.set(id, { studentId: id, studentName: row.studentName, admissionNumber: row.admissionNumber, className: row.className, charges: [], totalAmount: 0, totalPaid: 0, totalBalance: 0 });
+            if (!grouped.has(id)) grouped.set(id, { studentId: id, studentName: row.studentName, admissionNumber: row.admissionNumber, guardianName: row.guardianName || "", className: row.className, charges: [], totalAmount: 0, totalPaid: 0, totalBalance: 0 });
             const letter = grouped.get(id);
             letter.charges.push(row);
             letter.totalAmount += row.amount;
@@ -215,6 +223,30 @@ function FeeReminderLetters({ school }) {
                                 <p className="mt-1 text-xs text-slate-500">Jumla ya madeni: TZS {money(letters.reduce((sum, item) => sum + item.totalBalance, 0))}</p>
                             </div>
                         </div>
+                        <div className="mx-5 mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                            <h3 className="text-sm font-extrabold text-slate-900">Mipangilio ya malipo itakayoonekana kwenye barua</h3>
+                            <p className="mt-1 text-xs text-slate-600">Weka taarifa sahihi za akaunti ya shule. Taarifa hizi zitaonekana kwenye kila barua itakayochapishwa.</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <button type="button" onClick={() => setPaymentMethod("bank")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "bank" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Benki</button>
+                                <button type="button" onClick={() => setPaymentMethod("mobile")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "mobile" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Simu</button>
+                            </div>
+                            {paymentMethod === "bank" ? (
+                                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                    <label className="text-xs font-bold text-slate-600">Jina la benki<input value={bankName} onChange={event => setBankName(event.target.value)} placeholder="Mf. CRDB / NMB" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Jina la akaunti<input value={bankAccountName} onChange={event => setBankAccountName(event.target.value)} placeholder="Jina la akaunti ya shule" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Namba ya akaunti<input value={bankAccountNumber} onChange={event => setBankAccountNumber(event.target.value)} placeholder="Namba ya akaunti" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                </div>
+                            ) : (
+                                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                    <label className="text-xs font-bold text-slate-600">Mtandao wa simu<input value={mobileNetwork} onChange={event => setMobileNetwork(event.target.value)} placeholder="Mf. M-Pesa / Airtel Money / Tigo Pesa" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Namba ya simu<input value={mobileNumber} onChange={event => setMobileNumber(event.target.value)} placeholder="Namba ya kupokea malipo" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Jina la mpokeaji<input value={mobileRecipientName} onChange={event => setMobileRecipientName(event.target.value)} placeholder="Jina linaloonekana kwa mpokeaji" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                </div>
+                            )}
+                            <label className="mt-3 block text-xs font-bold text-slate-600">Maelekezo ya malipo kwa mzazi/mlezi
+                                <textarea value={paymentInstructions} onChange={event => setPaymentInstructions(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal" />
+                            </label>
+                        </div>
                         {loading ? (
                             <div className="flex items-center gap-3 px-5 pb-5 text-sm font-semibold text-slate-600"><FaSpinner className="animate-spin" /> Inakusanya madeni ya wanafunzi...</div>
                         ) : error ? (
@@ -265,7 +297,7 @@ function FeeReminderLetters({ school }) {
                             <p><strong>Kumb. Na:</strong> AFR/ADA/{letter.admissionNumber}/{new Date().getFullYear()}</p>
                             <p><strong>Tarehe:</strong> {new Date().toLocaleDateString("sw-TZ", { day: "2-digit", month: "long", year: "numeric" })}</p>
                         </div>
-                        <p className="mb-1">Kwa: Mzazi/Mlezi wa <strong>{letter.studentName}</strong></p>
+                        <p className="mb-1">Kwa: <strong>{letter.guardianName || "Mzazi/Mlezi"}</strong></p>\n                        <p className="mb-1">Mzazi/Mlezi wa: <strong>{letter.studentName}</strong></p>
                         <p className="mb-5">Darasa: <strong>{letter.className}</strong> · Namba ya mwanafunzi: <strong>{letter.admissionNumber}</strong></p>
                         <h2 className="mb-5 text-center text-sm font-extrabold underline">YAH: UKUMBUSHO WA MALIPO YA ADA NA MADENI YA SHULE</h2>
                         <p className="mb-4">Ndugu Mzazi/Mlezi,</p>
