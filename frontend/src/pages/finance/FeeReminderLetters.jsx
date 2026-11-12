@@ -304,15 +304,16 @@ function FeeReminderLetters({ school }) {
 
             <style>{`
                 .fee-reminder-print-root { display: none; }
-                @page { size: A4 portrait; margin: 20mm; }
+                /* Reserve the A4 margins ourselves so browser print-margin settings cannot stretch the letter to the paper edges. */
+                @page { size: A4 portrait; margin: 0 !important; }
                 @media print {
-                    html, body { width: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
+                    html, body { width: 210mm !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
                     body.afri-fee-reminder-printing * { visibility: hidden !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-root,
                     body.afri-fee-reminder-printing .fee-reminder-print-root * { visibility: visible !important; }
                     body.afri-fee-reminder-printing .fee-reminder-screen { display: none !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: static !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: auto !important; max-width: none !important; min-height: 257mm !important; margin: 0 !important; padding: 0 !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.6 !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: static !important; width: 210mm !important; margin: 0 !important; padding: 0 !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 170mm !important; max-width: 170mm !important; min-height: 257mm !important; margin: 20mm auto !important; padding: 0 !important; position: relative !important; left: 0 !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.6 !important; break-after: page; page-break-after: always; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page > * { max-width: 100% !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page p,
                     body.afri-fee-reminder-printing .fee-reminder-print-page td,
