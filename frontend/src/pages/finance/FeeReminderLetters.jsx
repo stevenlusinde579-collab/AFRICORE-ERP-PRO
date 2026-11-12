@@ -176,13 +176,32 @@ function FeeReminderLetters({ school }) {
         setError("");
         setPrinting(true);
         document.body.classList.add("afri-fee-reminder-printing");
-        window.setTimeout(() => window.print(), 300);
+        window.requestAnimationFrame(() => {
+            document.querySelectorAll(".fee-reminder-print-page").forEach(page => {
+                const content = page.querySelector(".fee-reminder-print-content");
+                if (!content) return;
+                content.style.transform = "none";
+                content.style.width = "100%";
+                const availableHeight = page.clientHeight;
+                const naturalHeight = content.scrollHeight;
+                const fitScale = naturalHeight > availableHeight ? availableHeight / naturalHeight : 1;
+                content.style.width = `${100 / fitScale}%`;
+                content.style.transform = `scale(${fitScale})`;
+                content.style.transformOrigin = "top left";
+            });
+            window.setTimeout(() => window.print(), 150);
+        });
     }
 
     useEffect(() => {
         if (!printing) return undefined;
         const afterPrint = () => {
             document.body.classList.remove("afri-fee-reminder-printing");
+            document.querySelectorAll(".fee-reminder-print-content").forEach(content => {
+                content.style.removeProperty("transform");
+                content.style.removeProperty("width");
+                content.style.removeProperty("transform-origin");
+            });
             setPrinting(false);
         };
         window.addEventListener("afterprint", afterPrint);
@@ -317,7 +336,20 @@ function FeeReminderLetters({ school }) {
                     body.afri-fee-reminder-printing .fee-reminder-print-root * { visibility: visible !important; }
                     body.afri-fee-reminder-printing .fee-reminder-screen { display: none !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: static !important; box-sizing: border-box !important; width: 210mm !important; max-width: 210mm !important; margin: 0 !important; padding: 0 !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 170mm !important; max-width: 170mm !important; min-height: 257mm !important; margin: 20mm 0 20mm 20mm !important; padding: 0 !important; position: relative !important; left: auto !important; right: auto !important; transform: none !important; float: none !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.6 !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 180mm !important; max-width: 180mm !important; height: 267mm !important; min-height: 267mm !important; max-height: 267mm !important; overflow: hidden !important; margin: 15mm 0 15mm 15mm !important; padding: 0 !important; position: relative !important; left: auto !important; right: auto !important; transform: none !important; float: none !important; color: #000 !important; background: #fff !important; font-size: 10px !important; line-height: 1.28 !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-content { box-sizing: border-box !important; width: 100%; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page header { margin-bottom: 8px !important; padding-bottom: 7px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page p { margin-top: 0 !important; margin-bottom: 5px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page h2 { margin-top: 5px !important; margin-bottom: 7px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page h3 { margin-bottom: 5px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page table { margin-top: 5px !important; margin-bottom: 7px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page th,
+                    body.afri-fee-reminder-printing .fee-reminder-print-page td { padding: 4px 5px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page section { margin-top: 5px !important; margin-bottom: 7px !important; padding: 7px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page .mt-10 { margin-top: 9px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page .mt-8 { margin-top: 6px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page .mt-5 { margin-top: 6px !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page .mb-6 { margin-bottom: 7px !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page > * { max-width: 100% !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page p,
                     body.afri-fee-reminder-printing .fee-reminder-print-page td,
@@ -333,6 +365,7 @@ function FeeReminderLetters({ school }) {
             <div className="fee-reminder-print-root">
                 {letters.map((letter, index) => (
                     <article key={letter.studentId} className="fee-reminder-print-page text-[13px] leading-relaxed text-black">
+                        <div className="fee-reminder-print-content">
                         <header className="mb-8 flex items-center gap-4 border-b-2 border-black pb-4">
                             {school?.logo ? <img src={school.logo} alt="" className="h-20 w-20 object-contain" /> : null}
                             <div className="flex-1 text-center">
@@ -395,6 +428,7 @@ function FeeReminderLetters({ school }) {
                             <p className="mt-5 text-[10px]">Saini: __________________________</p>
                         </div>
                         <p className="mt-8 text-center text-[9px]">Barua hii imetengenezwa na mfumo wa AfriCore ERP PRO · {index + 1} / {letters.length}</p>
+                        </div>
                     </article>
                 ))}
             </div>
