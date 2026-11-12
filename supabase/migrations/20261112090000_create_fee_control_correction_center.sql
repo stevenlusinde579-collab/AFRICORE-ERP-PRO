@@ -213,6 +213,22 @@ begin
             raise exception 'The linked Payment Setup could not be verified';
         end if;
 
+        if round(v_setup.amount, 2) <> round(v_charge.amount, 2) then
+            raise exception 'The saved Payment Setup and student charge do not match. Reconcile the existing fee record before requesting a correction';
+        end if;
+
+        if exists (
+            select 1
+              from finance.fee_correction_request_items pending_item
+              join finance.fee_correction_requests pending_request
+                on pending_request.id = pending_item.request_id
+             where pending_item.school_id = p_school_id
+               and pending_item.charge_id = v_charge.id
+               and pending_request.status = 'pending'
+        ) then
+            raise exception 'This fee charge already has a pending correction request';
+        end if;
+
         if round(v_new_amount, 2) = round(v_charge.amount, 2) then
             raise exception 'A selected correction has no amount change';
         end if;
