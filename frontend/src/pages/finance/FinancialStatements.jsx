@@ -23,6 +23,7 @@ import {
 } from "react-router-dom";
 
 import { supabase } from "../../services/supabase";
+import FeeReminderLetters from "./FeeReminderLetters";
 
 
 // ============================================================
@@ -1625,6 +1626,8 @@ function FinancialStatements() {
                     </div>
                 </div>
 
+
+                <FeeReminderLetters school={school} />
 
                 {/* =================================================
                     ERROR
