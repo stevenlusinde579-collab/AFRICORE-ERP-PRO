@@ -29,7 +29,7 @@ begin
         raise exception 'Only Accountant/Super Admin may submit a correction';
     end if;
 
-    if position('proposed_amount < v_charge.paid_amount' in v_submit) = 0 then
+    if position('v_new_amount < v_charge.paid_amount' in v_submit) = 0 then
         raise exception 'Corrections below paid amounts must be blocked';
     end if;
 
@@ -50,7 +50,7 @@ begin
 
     if position('old_amount' in v_approve) = 0
        or position('paid_amount' in v_approve) = 0
-       or position('fee correction was submitted' in v_approve) > 0 then
+       or position('the person who requested a correction cannot approve the same request' in v_approve) = 0 then
         raise exception 'Approval must retain stale-data and payment checks';
     end if;
 
