@@ -24,6 +24,7 @@ import {
 
 import { supabase } from "../../services/supabase";
 import FeeReminderLetters from "./FeeReminderLetters";
+import AnnualFeeGuidanceLetters from "./AnnualFeeGuidanceLetters";
 
 
 // ============================================================
@@ -1628,6 +1629,7 @@ function FinancialStatements() {
 
 
                 <FeeReminderLetters school={school} />
+                <AnnualFeeGuidanceLetters school={school} />
 
                 {/* =================================================
                     ERROR
