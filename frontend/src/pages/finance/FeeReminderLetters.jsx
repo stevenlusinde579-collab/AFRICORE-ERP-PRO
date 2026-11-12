@@ -312,7 +312,7 @@ function FeeReminderLetters({ school }) {
                     body.afri-fee-reminder-printing .fee-reminder-print-root * { visibility: visible !important; }
                     body.afri-fee-reminder-printing .fee-reminder-screen { display: none !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 210mm !important; margin: 0 !important; padding: 0 !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 210mm !important; max-width: none !important; min-height: 297mm !important; margin: 0 !important; padding: 18mm 20mm 18mm !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.55 !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 170mm !important; max-width: 170mm !important; min-height: 257mm !important; margin: 20mm auto 0 !important; padding: 0 !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.6 !important; break-after: page; page-break-after: always; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page > * { max-width: 100% !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page p,
                     body.afri-fee-reminder-printing .fee-reminder-print-page td,
