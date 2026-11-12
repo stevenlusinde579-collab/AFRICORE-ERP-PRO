@@ -257,7 +257,7 @@ async function sendCredentialSms(student, account, sentBy = null) {
     const response = await fetch("https://sms.newhope.co.tz/v1/sms/send/", {
       method: "POST",
       headers: { Authorization: "ApiKey " + credentials.api_key + ":" + credentials.secret_key, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ recipient: "+" + phone, message, sender_id: credentials.sender_id }),
+      body: JSON.stringify({ recipient: "+" + phone, message, sender_id: "NewHope" }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result?.message || result?.detail || result?.error || "NewHope SMS HTTP " + response.status);
