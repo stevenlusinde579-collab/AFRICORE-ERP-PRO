@@ -33,6 +33,11 @@ begin
         raise exception 'Corrections below paid amounts must be blocked';
     end if;
 
+    if position('the saved payment setup and student charge do not match' in v_submit) = 0
+       or position('already has a pending correction request' in v_submit) = 0 then
+        raise exception 'Correction requests must reject stale setup links and duplicate pending requests';
+    end if;
+
     if position('only the headmaster or super admin' in v_approve) = 0
        or position('v_request.requested_by = v_user_id' in v_approve) = 0 then
         raise exception 'Approval must be restricted and separated from requester';
@@ -61,7 +66,7 @@ begin
        and table_name = 'student_charges'
        and column_name = 'balance';
 
-    if v_balance_generated <> 'ALWAYS' then
+    if v_balance_generated is distinct from 'ALWAYS' then
         raise exception 'Expected student charge balance to remain generated';
     end if;
 
