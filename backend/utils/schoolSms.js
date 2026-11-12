@@ -44,7 +44,9 @@ export async function sendSchoolSms({ schoolId, recipient, message }) {
         body: JSON.stringify({
             recipient: phone,
             message: String(message).trim(),
-            sender_id: data.sender_id,
+            // NewHope Demo credentials require the provider demo sender label exactly as documented.
+            // Live API keys are bound to their approved Sender ID by NewHope and ignore this field.
+            sender_id: "NewHope",
         }),
     });
 

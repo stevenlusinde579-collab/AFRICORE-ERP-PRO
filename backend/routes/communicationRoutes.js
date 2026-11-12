@@ -276,7 +276,8 @@ async function sendNewHopeSmsWithCredentials(credentials, recipient, message) {
     body: JSON.stringify({
       recipient: `+${normalized}`,
       message,
-      sender_id: credentials.sender_id,
+      // Demo API keys require the exact provider sender label. Live keys are bound to their approved Sender ID.
+      sender_id: "NewHope",
     }),
   });
 
