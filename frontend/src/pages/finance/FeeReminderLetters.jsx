@@ -312,8 +312,8 @@ function FeeReminderLetters({ school }) {
                     body.afri-fee-reminder-printing .fee-reminder-print-root,
                     body.afri-fee-reminder-printing .fee-reminder-print-root * { visibility: visible !important; }
                     body.afri-fee-reminder-printing .fee-reminder-screen { display: none !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: static !important; width: 210mm !important; margin: 0 !important; padding: 0 !important; }
-                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 170mm !important; max-width: 170mm !important; min-height: 257mm !important; margin: 20mm auto !important; padding: 0 !important; position: relative !important; left: 0 !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.6 !important; break-after: page; page-break-after: always; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-root { display: block !important; position: static !important; box-sizing: border-box !important; width: 210mm !important; max-width: 210mm !important; margin: 0 !important; padding: 0 !important; }
+                    body.afri-fee-reminder-printing .fee-reminder-print-page { display: block !important; box-sizing: border-box !important; width: 170mm !important; max-width: 170mm !important; min-height: 257mm !important; margin: 20mm 0 20mm 20mm !important; padding: 0 !important; position: relative !important; left: auto !important; right: auto !important; transform: none !important; float: none !important; color: #000 !important; background: #fff !important; font-size: 13px !important; line-height: 1.6 !important; break-after: page; page-break-after: always; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page > * { max-width: 100% !important; }
                     body.afri-fee-reminder-printing .fee-reminder-print-page p,
                     body.afri-fee-reminder-printing .fee-reminder-print-page td,
@@ -328,7 +328,7 @@ function FeeReminderLetters({ school }) {
             `}</style>
             <div className="fee-reminder-print-root">
                 {letters.map((letter, index) => (
-                    <article key={letter.studentId} className="fee-reminder-print-page mx-auto max-w-[180mm] px-2 py-4 text-[13px] leading-relaxed text-black">
+                    <article key={letter.studentId} className="fee-reminder-print-page text-[13px] leading-relaxed text-black">
                         <header className="mb-8 flex items-center gap-4 border-b-2 border-black pb-4">
                             {school?.logo ? <img src={school.logo} alt="" className="h-20 w-20 object-contain" /> : null}
                             <div className="flex-1 text-center">
