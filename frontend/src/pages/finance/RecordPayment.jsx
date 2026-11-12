@@ -109,6 +109,7 @@ const EMPTY_SETUP = {
     setupType: "tuition",
     tuitionTerm1: "",
     tuitionTerm2: "",
+    otherFeeTerm: "1",
     otherFeeAmount: "",
 };
 
@@ -2257,6 +2258,9 @@ const RecordPayment = () => {
                 setupForm.otherFeeAmount
             );
 
+        const otherFeeTerm =
+            Number(setupForm.otherFeeTerm || 1);
+
         const shouldSaveTuition =
             setupType ===
                 "tuition" ||
@@ -2286,6 +2290,16 @@ const RecordPayment = () => {
         ) {
             setError(
                 "Weka kiasi cha Tuition Term 1 au Term 2."
+            );
+            return;
+        }
+
+        if (
+            shouldSaveOther &&
+            ![1, 2, 3].includes(otherFeeTerm)
+        ) {
+            setError(
+                "Chagua term sahihi kwa Other Fee."
             );
             return;
         }
@@ -2339,6 +2353,8 @@ const RecordPayment = () => {
                           {
                               fee_item_id:
                                   other.id,
+                              term_number:
+                                  otherFeeTerm,
                               amount:
                                   otherFees,
                           },
@@ -3832,6 +3848,31 @@ const RecordPayment = () => {
                                                 }
                                                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
                                             />
+                                        </div>
+                                    )}
+
+
+                                    {/* Other Fee Term */}
+                                    {(setupForm.setupType ===
+                                        "other" ||
+                                        setupForm.setupType ===
+                                            "both") && (
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-400 mb-2">
+                                                Other Fee Term
+                                            </label>
+
+                                            <select
+                                                name="otherFeeTerm"
+                                                value={setupForm.otherFeeTerm}
+                                                onChange={handleSetupChange}
+                                                disabled={isSavingSetup}
+                                                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                                            >
+                                                <option value="1">Term 1</option>
+                                                <option value="2">Term 2</option>
+                                                <option value="3">Term 3</option>
+                                            </select>
                                         </div>
                                     )}
 
