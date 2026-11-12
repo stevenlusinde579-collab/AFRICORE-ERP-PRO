@@ -2440,9 +2440,9 @@ const RecordPayment = () => {
 
             if (amountWarnings.length) {
                 const confirmed = window.confirm(
-                    "FEE AMOUNT WARNING\\n\\n" +
-                    amountWarnings.join("\\n") +
-                    "\\n\\nThis is a statistical warning, not an automatic rejection. Confirm that the amounts are correct before continuing."
+                    "FEE AMOUNT WARNING\n\n" +
+                    amountWarnings.join("\n") +
+                    "\n\nThis is a statistical warning, not an automatic rejection. Confirm that the amounts are correct before continuing."
                 );
                 if (!confirmed) return;
             }
