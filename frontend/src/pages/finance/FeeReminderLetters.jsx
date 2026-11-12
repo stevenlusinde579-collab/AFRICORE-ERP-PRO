@@ -99,7 +99,8 @@ function FeeReminderLetters({ school }) {
                     ...charge,
                     student,
                     studentName: [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" "),
-                    admissionNumber: student.admission_number || student.admission_no || "-",\n                    guardianName: student.guardian_name || student.parent_name || "",
+                    admissionNumber: student.admission_number || student.admission_no || "-",
+                    guardianName: student.guardian_name || student.parent_name || "",
                     classId: student.current_class_id ? String(student.current_class_id) : "",
                     className: classRow?.class_name || "Darasa halijabainishwa",
                     academicYearName: year?.year_name || "Mwaka haujabainishwa",
@@ -323,7 +324,8 @@ function FeeReminderLetters({ school }) {
                             <p><strong>Kumb. Na:</strong> AFR/ADA/{letter.admissionNumber}/{new Date().getFullYear()}</p>
                             <p><strong>Tarehe:</strong> {new Date().toLocaleDateString("sw-TZ", { day: "2-digit", month: "long", year: "numeric" })}</p>
                         </div>
-                        <p className="mb-1">Kwa: <strong>{letter.guardianName || "Mzazi/Mlezi"}</strong></p>\n                        <p className="mb-1">Mzazi/Mlezi wa: <strong>{letter.studentName}</strong></p>
+                        <p className="mb-1">Kwa: <strong>{letter.guardianName || "Mzazi/Mlezi"}</strong></p>
+                        <p className="mb-1">Mzazi/Mlezi wa: <strong>{letter.studentName}</strong></p>
                         <p className="mb-5">Darasa: <strong>{letter.className}</strong> · Namba ya mwanafunzi: <strong>{letter.admissionNumber}</strong></p>
                         <h2 className="mb-5 text-center text-sm font-extrabold underline">YAH: UKUMBUSHO WA MALIPO YA ADA NA MADENI YA SHULE</h2>
                         <p className="mb-4">Ndugu Mzazi/Mlezi,</p>
