@@ -1433,10 +1433,19 @@ const RecordPayment = () => {
                         return false;
                     }
 
-                    return (
-                        type ===
-                        "other"
-                    );
+                    if (type === "other") {
+                        const selectedTerm =
+                            Number(
+                                String(paymentForm.paymentTerm).replace("term_", "")
+                            );
+
+                        return (
+                            Number(setup.term_number || 0) === selectedTerm ||
+                            (setup.term_number == null && selectedTerm === 1)
+                        );
+                    }
+
+                    return false;
                 }
             );
         }, [
@@ -1718,7 +1727,9 @@ const RecordPayment = () => {
                 return `${feeName} - Term ${setup.term_number}`;
             }
 
-            return feeName;
+            return setup.term_number
+                ? \`\${feeName} - Term \${setup.term_number}\`
+                : \`\${feeName} (term not assigned)\`;
         },
         []
     );
@@ -2106,11 +2117,7 @@ const RecordPayment = () => {
                     ...current,
                     paymentFor:
                         value,
-                    paymentTerm:
-                        value ===
-                        "tuition"
-                            ? "term_1"
-                            : "",
+                    paymentTerm: "term_1",
                     setupId: "",
                     amount: "",
                 })
@@ -2632,8 +2639,18 @@ const RecordPayment = () => {
         if (
             paymentForm.paymentFor ===
                 "other" &&
-            setupType !==
-                "other"
+            (
+                setupType !== "other" ||
+                (
+                    selectedSetup.term_number != null &&
+                    Number(selectedSetup.term_number) !==
+                        Number(String(paymentForm.paymentTerm).replace("term_", ""))
+                ) ||
+                (
+                    selectedSetup.term_number == null &&
+                    paymentForm.paymentTerm !== "term_1"
+                )
+            )
         ) {
             setError(
                 "Malipo ya Other Fee lazima yaendane na Other Fee setup."
@@ -4208,8 +4225,9 @@ const RecordPayment = () => {
 
 
                                     {/* Term */}
-                                    {paymentForm.paymentFor ===
-                                        "tuition" && (
+                                    {(paymentForm.paymentFor ===
+                                        "tuition" ||
+                                        paymentForm.paymentFor === "other") && (
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-400 mb-2">
                                                 Term
@@ -4236,6 +4254,12 @@ const RecordPayment = () => {
                                                 <option value="term_2">
                                                     Term 2
                                                 </option>
+
+                                                {paymentForm.paymentFor === "other" && (
+                                                    <option value="term_3">
+                                                        Term 3
+                                                    </option>
+                                                )}
                                             </select>
                                         </div>
                                     )}
