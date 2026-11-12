@@ -44,6 +44,13 @@ const money = (value) =>
         maximumFractionDigits: 0,
     }).format(numberValue(value));
 
+const medianAmount = (values) => {
+    const sorted = values.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+    if (!sorted.length) return 0;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
 const normalize = (value) =>
     String(value || "")
         .trim()
@@ -2367,6 +2374,78 @@ const RecordPayment = () => {
                           },
                       ]
                     : [];
+
+            // Statistical safety check: compare the resulting total setup
+            // with the same school's class/year/fee/term cohort. This warns
+            // about likely extra-zero or under-entry mistakes before saving.
+            const amountWarnings = [];
+            const inspectSetupAmount = async ({ feeItemId, termNumber, addedAmount, label }) => {
+                if (!feeItemId || numberValue(addedAmount) <= 0) return;
+                const { data: cohortRows, error: cohortError } = await supabase
+                    .schema("finance")
+                    .from("student_payment_setups")
+                    .select("student_id,amount")
+                    .eq("school_id", Number(schoolId))
+                    .eq("academic_year_id", Number(selectedAcademicYearId))
+                    .eq("class_id", Number(selectedClassId))
+                    .eq("fee_item_id", feeItemId)
+                    .eq("term_number", Number(termNumber))
+                    .eq("status", "active");
+                if (cohortError) throw cohortError;
+
+                const rows = cohortRows || [];
+                const peerAmounts = rows
+                    .filter((row) => String(row.student_id) !== String(selectedStudentId))
+                    .map((row) => numberValue(row.amount));
+                if (peerAmounts.length < 3) return;
+
+                const previousForStudent = rows
+                    .filter((row) => String(row.student_id) === String(selectedStudentId))
+                    .reduce((sum, row) => sum + numberValue(row.amount), 0);
+                const proposedTotal = previousForStudent + numberValue(addedAmount);
+                const median = medianAmount(peerAmounts);
+                if (!median) return;
+
+                if (proposedTotal >= median * 2.5 || proposedTotal <= median * 0.4) {
+                    amountWarnings.push(
+                        label + ": resulting total " + money(proposedTotal) +
+                        " is unusually different from the class median " + money(median)
+                    );
+                }
+            };
+
+            if (shouldSaveTuition) {
+                await inspectSetupAmount({
+                    feeItemId: tuition.id,
+                    termNumber: 1,
+                    addedAmount: term1,
+                    label: "Tuition Term 1",
+                });
+                await inspectSetupAmount({
+                    feeItemId: tuition.id,
+                    termNumber: 2,
+                    addedAmount: term2,
+                    label: "Tuition Term 2",
+                });
+            }
+
+            if (shouldSaveOther) {
+                await inspectSetupAmount({
+                    feeItemId: other.id,
+                    termNumber: otherFeeTerm,
+                    addedAmount: otherFees,
+                    label: "Other Fee Term " + otherFeeTerm,
+                });
+            }
+
+            if (amountWarnings.length) {
+                const confirmed = window.confirm(
+                    "FEE AMOUNT WARNING\\n\\n" +
+                    amountWarnings.join("\\n") +
+                    "\\n\\nThis is a statistical warning, not an automatic rejection. Confirm that the amounts are correct before continuing."
+                );
+                if (!confirmed) return;
+            }
 
             const {
                 data,
