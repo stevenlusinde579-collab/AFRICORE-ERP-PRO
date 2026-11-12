@@ -57,7 +57,7 @@ export default function FeeControlCorrectionCenter() {
       setRoles(scopedRoles);
 
       const [yearResult, chargeResult, requestResult, studentResult, feeResult] = await Promise.all([
-        supabase.from("academic_years").select("id,year_name,academic_year,is_active").eq("school_id", schoolId).order("year_name", { ascending: false }),
+        supabase.from("academic_years").select("id,year_name,is_active").eq("school_id", schoolId).order("year_name", { ascending: false }),
         supabase.schema("finance").from("student_charges").select("id,school_id,student_id,academic_year_id,description,amount,paid_amount,balance,status,fee_item_id,term_number,payment_setup_id,created_at").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(2000),
         supabase.schema("finance").from("fee_correction_requests").select("id,school_id,academic_year_id,status,reason,requested_by,approved_by,approved_at,rejected_by,rejected_at,decision_note,created_at").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(200),
         supabase.from("students").select("id,school_id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id").eq("school_id", schoolId).limit(5000),
@@ -208,7 +208,7 @@ export default function FeeControlCorrectionCenter() {
             <div><h2 className="font-bold text-lg text-slate-900">Fee charge review</h2><p className="text-xs text-slate-500">Only charges linked to a Payment Setup are eligible for controlled correction.</p></div>
             <div className="flex flex-wrap gap-2">
               <select value={yearId} onChange={(e) => setYearId(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-white">
-                {years.map((year) => <option key={year.id} value={year.id}>{year.year_name || year.academic_year || ("Year " + year.id)}</option>)}
+                {years.map((year) => <option key={year.id} value={year.id}>{year.year_name || ("Year " + year.id)}</option>)}
               </select>
               <div className="relative"><FaSearch className="absolute left-3 top-3 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student, admission or fee" className="border rounded-lg pl-9 pr-3 py-2 text-sm w-64 max-w-full" /></div>
             </div>
