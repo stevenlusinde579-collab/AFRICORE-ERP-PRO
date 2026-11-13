@@ -146,6 +146,11 @@ function FeeReminderLetters({ school }) {
         }
     }
 
+    const selectPaymentType = (type) => {
+        const account = cashAccounts.find(item => item.account_type === (type === "bank" ? "bank" : "mobile_money"));
+        if (account) selectCashAccount(account.id);
+    };
+
     const selectCashAccount = (accountId) => {
         setSelectedCashAccountId(String(accountId || ""));
         const account = cashAccounts.find(item => String(item.id) === String(accountId));
@@ -329,8 +334,8 @@ function FeeReminderLetters({ school }) {
                             <p className="mt-1 text-xs text-slate-600">Weka taarifa sahihi za akaunti ya shule. Taarifa hizi zitaonekana kwenye kila barua itakayochapishwa.</p>
                             <div className="mt-3">{cashAccounts.length > 1 ? <label className="block text-xs font-bold text-slate-600">Chagua akaunti ya shule iliyosajiliwa kwenye Finance<select value={selectedCashAccountId} onChange={event => selectCashAccount(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{cashAccounts.map(account=><option key={account.id} value={account.id}>{account.account_type === "bank" ? "Benki" : "Simu"} · {account.provider_name || ""} · {account.account_name} · {account.account_number || "Namba haijawekwa"}</option>)}</select></label> : cashAccounts.length === 1 ? <p className="text-xs font-semibold text-emerald-700">Akaunti imechaguliwa moja kwa moja: {cashAccounts[0].provider_name || ""} · {cashAccounts[0].account_name}</p> : <p className="text-xs text-amber-700">Hakuna akaunti hai ya Benki au Mobile Money iliyosajiliwa Finance kwa shule hii. Sajili akaunti kwanza kwenye Cash & Financial Accounts.</p>}</div>
                             <div className="mt-3 flex flex-wrap gap-2">
-                                <button type="button" onClick={() => setPaymentMethod("bank")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "bank" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Benki</button>
-                                <button type="button" onClick={() => setPaymentMethod("mobile")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "mobile" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Simu</button>
+                                <button type="button" onClick={() => selectPaymentType("bank")} disabled={!cashAccounts.some(account => account.account_type === "bank")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "bank" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Benki</button>
+                                <button type="button" onClick={() => selectPaymentType("mobile")} disabled={!cashAccounts.some(account => account.account_type === "mobile_money")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "mobile" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Simu</button>
                             </div>
                             {paymentMethod === "bank" ? (
                                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
