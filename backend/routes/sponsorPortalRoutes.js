@@ -3,7 +3,6 @@ import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { supabase } from "../config/supabase.js";
 import { authenticateUser } from "../middleware/authMiddleware.js";
-import { requirePermission } from "../middleware/permissionMiddleware.js";
 
 const router = express.Router();
 const scrypt = promisify(crypto.scrypt);
@@ -56,13 +55,18 @@ async function sendSupervisorSms(schoolId, phoneValue, username, password, cente
   return { status: result?.status || "sent", provider_message_id: result?.id || result?.message_id || null };
 }
 function staffScope(req, res, next) {
+  const roleNames = (req.access?.roles || []).map((role) => String(role.role_name || "").trim().toLowerCase());
+  const canManageSponsors = req.access?.isSuperAdmin === true || roleNames.some((name) =>
+    ["super admin", "headmaster", "deputy headmaster", "academic master", "accountant"].includes(name)
+  );
+  if (!canManageSponsors) return res.status(403).json({ success: false, message: "Huna ruhusa ya kusimamia Sponsor Centres." });
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(403).json({ success: false, message: "Akaunti haina shule iliyochaguliwa." });
   req.sponsorSchoolId = schoolId;
   next();
 }
 
-router.use("/management", authenticateUser, requirePermission("view_students"), staffScope);
+router.use("/management", authenticateUser, staffScope);
 
 router.get("/management/students", async (req, res) => {
   try {
