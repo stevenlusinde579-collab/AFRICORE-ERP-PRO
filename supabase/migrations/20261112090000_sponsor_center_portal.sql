@@ -3,7 +3,7 @@
 -- school and sponsor-centre assignment. No accounting tables are changed.
 create table if not exists public.sponsor_organizations (
   id uuid primary key default gen_random_uuid(),
-  school_id bigint not null,
+  school_id bigint not null references public.schools(id) on delete cascade,
   sponsor_name text not null,
   sponsor_phone text not null,
   is_active boolean not null default true,
@@ -37,9 +37,9 @@ create table if not exists public.sponsor_center_students (
   id uuid primary key default gen_random_uuid(),
   school_id bigint not null,
   center_id uuid not null references public.sponsor_centers(id) on delete cascade,
-  student_id bigint not null,
+  student_id bigint not null references public.students(id) on delete cascade,
   assigned_at timestamptz not null default now(),
-  assigned_by uuid,
+  assigned_by uuid references auth.users(id) on delete set null,
   unique (center_id, student_id)
 );
 
