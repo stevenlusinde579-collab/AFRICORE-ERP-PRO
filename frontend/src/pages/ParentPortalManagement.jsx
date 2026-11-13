@@ -90,9 +90,28 @@ export default function ParentPortalManagement() {
   const [busy, setBusy] = useState(false);
   const [liveRoom, setLiveRoom] = useState(null);
   const [sponsorStudents, setSponsorStudents] = useState([]);
+  const [sponsorSelectionMode, setSponsorSelectionMode] = useState("");
+  const [sponsorSelectedClasses, setSponsorSelectedClasses] = useState([]);
   const [sponsorCenters, setSponsorCenters] = useState([]);
   const [selectedSponsorCenter, setSelectedSponsorCenter] = useState(null);
   const [sponsorForm, setSponsorForm] = useState({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
+
+  const sponsorClassOptions = useMemo(() => {
+    const unique = new Map();
+    sponsorStudents.forEach((student) => {
+      const label = String(student.class_name || "Unassigned").trim() || "Unassigned";
+      const key = normalizeClassLabel(label) || label.toLowerCase();
+      if (!unique.has(key)) unique.set(key, label);
+    });
+    return [...unique.entries()].sort((a, b) => classOrder(a[1]) - classOrder(b[1]) || a[1].localeCompare(b[1]));
+  }, [sponsorStudents]);
+  const visibleSponsorStudents = useMemo(() => {
+    if (!sponsorSelectionMode) return [];
+    if (sponsorSelectionMode === "school") return sponsorStudents;
+    if (!sponsorSelectedClasses.length) return [];
+    const selected = new Set(sponsorSelectedClasses);
+    return sponsorStudents.filter((student) => selected.has(normalizeClassLabel(student.class_name || "Unassigned")));
+  }, [sponsorStudents, sponsorSelectionMode, sponsorSelectedClasses]);
 
   const orderedClasses = useMemo(
     () => uniqueClassOptions(classes).sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
@@ -374,12 +393,58 @@ export default function ParentPortalManagement() {
               <label className="text-sm font-semibold">Supervisor / Manager Name<input required value={sponsorForm.supervisor_name} onChange={(e)=>updateSponsorForm("supervisor_name",e.target.value)} placeholder="Full name" className="mt-1 w-full rounded-xl border p-3"/></label>
               <label className="text-sm font-semibold">Supervisor Phone<input required value={sponsorForm.supervisor_phone} onChange={(e)=>updateSponsorForm("supervisor_phone",e.target.value)} placeholder="0712345678" className="mt-1 w-full rounded-xl border p-3"/></label>
               <label className="text-sm font-semibold">Supervisor Email / Username<input required type="email" value={sponsorForm.supervisor_email} onChange={(e)=>updateSponsorForm("supervisor_email",e.target.value)} placeholder="manager@example.com" className="mt-1 w-full rounded-xl border p-3"/></label>
-              <label className="md:col-span-2 text-sm font-semibold">Assign Students — Select multiple students from any class
-                <select required multiple value={sponsorForm.student_ids.map(String)} onChange={(e)=>updateSponsorForm("student_ids",Array.from(e.target.selectedOptions).map(o=>Number(o.value)))} className="mt-1 h-56 w-full rounded-xl border bg-white p-3">
-                  {sponsorStudents.map((student)=><option key={student.id} value={student.id}>{student.name} · {student.admission_number || "—"} · {student.class_name}</option>)}
-                </select>
-                <span className="mt-1 block text-xs font-normal text-slate-500">Tumia Ctrl (Windows) kuchagua wanafunzi wengi. Uteuzi huu unaweza kuwa na madarasa tofauti.</span>
-              </label>
+              <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Chagua kundi la wanafunzi</p>
+                  <p className="mt-1 text-xs text-slate-500">Wanafunzi wataonekana baada ya kuchagua kundi unalotaka.</p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-semibold">
+                    <input type="radio" name="sponsor-student-scope" checked={sponsorSelectionMode === "school"} onChange={() => { setSponsorSelectionMode("school"); setSponsorSelectedClasses([]); }} />
+                    Shule nzima
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-semibold">
+                    <input type="radio" name="sponsor-student-scope" checked={sponsorSelectionMode === "classes"} onChange={() => { setSponsorSelectionMode("classes"); setSponsorSelectedClasses([]); }} />
+                    Chagua kwa madarasa
+                  </label>
+                </div>
+                {sponsorSelectionMode === "classes" && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-semibold text-slate-800">Chagua darasa (unaweza kuchagua madarasa zaidi ya moja)
+                      <select multiple value={sponsorSelectedClasses} onChange={(e) => setSponsorSelectedClasses(Array.from(e.target.selectedOptions).map((option) => option.value))} className="mt-1 h-32 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+                        {sponsorClassOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                      </select>
+                    </label>
+                    <p className="mt-1 text-xs text-slate-500">Madarasa yanayofanana yameunganishwa ili yasijirudie kwenye orodha.</p>
+                  </div>
+                )}
+                {sponsorSelectionMode && (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">Wanafunzi wa kundi lililochaguliwa</p>
+                        <p className="text-xs text-slate-500">{visibleSponsorStudents.length} wanafunzi · {sponsorForm.student_ids.length} wamechaguliwa kwa sasa</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" disabled={!visibleSponsorStudents.length} onClick={() => updateSponsorForm("student_ids", [...new Set([...sponsorForm.student_ids, ...visibleSponsorStudents.map((student) => Number(student.id))])])} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Chagua wote</button>
+                        <button type="button" disabled={!visibleSponsorStudents.length} onClick={() => { const visibleIds = new Set(visibleSponsorStudents.map((student) => Number(student.id))); updateSponsorForm("student_ids", sponsorForm.student_ids.filter((id) => !visibleIds.has(Number(id)))); }} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">Ondoa kundi hili</button>
+                      </div>
+                    </div>
+                    {visibleSponsorStudents.length ? (
+                      <div className="mt-3 max-h-80 space-y-1 overflow-y-auto">
+                        {visibleSponsorStudents.map((student) => {
+                          const checked = sponsorForm.student_ids.includes(Number(student.id));
+                          return <label key={student.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-slate-50">
+                            <input type="checkbox" checked={checked} onChange={(e) => updateSponsorForm("student_ids", e.target.checked ? [...new Set([...sponsorForm.student_ids, Number(student.id)])] : sponsorForm.student_ids.filter((id) => Number(id) !== Number(student.id)))} />
+                            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-800">{student.name}</span><span className="block text-xs text-slate-500">{student.admission_number || "—"} · {student.class_name || "Darasa halijawekwa"}</span></span>
+                          </label>;
+                        })}
+                      </div>
+                    ) : <p className="py-8 text-center text-sm text-slate-500">{sponsorSelectionMode === "classes" ? "Chagua darasa moja au zaidi ili kuona wanafunzi." : "Hakuna wanafunzi waliopatikana kwa shule hii."}</p>}
+                  </div>
+                )}
+                {!sponsorSelectionMode && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Chagua kwanza “Shule nzima” au “Chagua kwa madarasa” ili kuonyesha orodha ya wanafunzi.</p>}
+              </div>
               <div className="md:col-span-2"><button disabled={busy || !sponsorForm.student_ids.length} className="rounded-xl bg-blue-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inahifadhi..." : "Create Center & Send Login Credentials"}</button></div>
             </form>
           </div>
