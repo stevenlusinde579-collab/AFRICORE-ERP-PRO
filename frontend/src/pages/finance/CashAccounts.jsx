@@ -50,6 +50,8 @@ function CashAccounts() {
                     .eq("school_id", profile.school_id)
                     .eq("account_type", "asset")
                     .eq("is_active", true)
+                    .eq("allow_manual_posting", true)
+                    .eq("is_control_account", false)
                     .order("account_code", { ascending: true }),
             ]);
             if (accountError) throw accountError;
@@ -185,15 +187,15 @@ function CashAccounts() {
                             <input value={form.accountNumber} onChange={(e) => setForm((v) => ({ ...v, accountNumber: e.target.value }))} placeholder="Account number or merchant number" className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3" />
                         </label>
                         <label className="text-sm space-y-1 md:col-span-2">
-                            <span className="text-slate-300">Linked Chart of Accounts (Asset)</span>
+                            <span className="text-slate-300">Linked Chart of Accounts (Postable Asset)</span>
                             <select value={form.chartOfAccountId} onChange={(e) => setForm((v) => ({ ...v, chartOfAccountId: e.target.value }))} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3" required>
-                                <option value="">Select an active asset account</option>
+                                <option value="">Select an active, postable Asset account</option>
                                 {chartAccounts.map((account) => <option key={account.id} value={account.id}>{account.account_code} — {account.account_name}{account.allow_manual_posting ? "" : " (manual posting disabled)"}</option>)}
                             </select>
-                            <span className="block text-xs text-slate-500">Tumia Chart of Accounts ya aina Asset inayolingana na benki, mobile money au cash. Akaunti ya receivables si mbadala wa bank/cash.</span>
+                            <span className="block text-xs text-slate-500">Tumia Asset account inayoruhusu manual posting na si control account. Usichague Student Receivables kwa ajili ya bank/cash.</span>
                         </label>
                     </div>
-                    {chartAccounts.length === 0 && <p className="text-xs text-amber-300">Hakuna active Asset account iliyosajiliwa. Ongeza kwanza Bank/Cash Asset kwenye Chart of Accounts.</p>}
+                    {chartAccounts.length === 0 && <p className="text-xs text-amber-300">Hakuna active, postable Asset account iliyosajiliwa. Ongeza kwanza Bank/Cash Asset kwenye Chart of Accounts; usitumie Student Receivables.</p>}
                     <button disabled={saving || chartAccounts.length === 0} className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-5 py-3 font-semibold text-sm">
                         {saving ? "Saving..." : editingId ? "Update Account" : "Save Financial Account"}
                     </button>
