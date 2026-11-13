@@ -885,11 +885,32 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
 });
 
 
+router.get("/staff/letters/context", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!Number.isInteger(schoolId)) return res.status(400).json({ success:false, message:"Akaunti hii haijaunganishwa na shule." });
+  try {
+    const [schoolResult, roleResult] = await Promise.all([
+      supabase.from("schools").select("id,school_name,address,phone,email,logo").eq("id",schoolId).maybeSingle(),
+      supabase.from("roles").select("role_name").eq("id",req.profile?.role_id).maybeSingle(),
+    ]);
+    if (schoolResult.error) throw schoolResult.error;
+    if (!schoolResult.data) return res.status(404).json({ success:false, message:"Shule haijapatikana." });
+    return res.json({
+      success:true,
+      school:schoolResult.data,
+      author:{ full_name:req.profile.full_name || "", phone:req.profile.phone || "", role_name:roleResult.data?.role_name || "" },
+    });
+  } catch(error) {
+    console.error("PARENT PORTAL LETTER CONTEXT ERROR:",error);
+    return res.status(500).json({ success:false, message:"Imeshindikana kupata taarifa za barua." });
+  }
+});
+
 router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const type = String(req.body?.letter_type || "");
   const entries = Array.isArray(req.body?.letters) ? req.body.letters : [];
-  if (!Number.isInteger(schoolId) || !["fee_reminder","annual_fee_guidance"].includes(type) || !entries.length || entries.length > 500) {
+  if (!Number.isInteger(schoolId) || !["fee_reminder","annual_fee_guidance","official_letter"].includes(type) || !entries.length || entries.length > 500) {
     return res.status(400).json({ success:false, message:"Taarifa za barua hazijakamilika." });
   }
   try {
@@ -903,7 +924,7 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
     if ((valid.data || []).length !== ids.length) return res.status(403).json({success:false,message:"Mwanafunzi hayupo kwenye shule yako."});
     const rows = entries.map(entry => ({
       school_id:schoolId, student_id:Number(entry.student_id), letter_type:type,
-      title:String(entry.title || (type === "fee_reminder" ? "Barua ya Makumbusho ya Ada" : "Barua za Mwongozo wa Ada za Mwaka Mpya")).slice(0,180),
+      title:String(entry.title || (type === "fee_reminder" ? "Barua ya Makumbusho ya Ada" : type === "annual_fee_guidance" ? "Barua za Mwongozo wa Ada za Mwaka Mpya" : "Official Letter")).slice(0,180),
       payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
       published_by:req.user.id, published_at:new Date().toISOString()
     }));
