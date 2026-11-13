@@ -2121,6 +2121,16 @@ const RecordPayment = () => {
             return;
         }
 
+        if (name === "paymentMethod") {
+            setPaymentForm((current) => ({
+                ...current,
+                paymentMethod: value,
+                financialAccountId: "",
+                providerName: "",
+            }));
+            return;
+        }
+
         setPaymentForm(
             (current) => ({
                 ...current,
@@ -2753,6 +2763,16 @@ const RecordPayment = () => {
             // STEP 3:
             // RECORD ACTUAL PAYMENT
             // ------------------------------------------------
+
+            const financialAccount = financialAccounts.find(
+                (account) =>
+                    String(account.id) ===
+                    String(paymentForm.financialAccountId)
+            );
+
+            if (!financialAccount) {
+                throw new Error("Chagua Financial Account sahihi kabla ya kuhifadhi malipo.");
+            }
 
             const {
                 data: paymentResult,
@@ -4441,6 +4461,7 @@ const RecordPayment = () => {
                                         <input
                                             type="text"
                                             name="providerName"
+                                            readOnly
                                             value={
                                                 paymentForm.providerName
                                             }
