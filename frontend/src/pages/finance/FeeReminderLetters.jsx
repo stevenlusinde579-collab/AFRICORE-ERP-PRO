@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { FaFileInvoiceDollar, FaPrint, FaSpinner } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 
 function money(value) {
     return new Intl.NumberFormat("en-TZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -18,6 +19,8 @@ function FeeReminderLetters({ school }) {
     const [accountantName, setAccountantName] = useState("");
     const [accountantPhone, setAccountantPhone] = useState("");
     const [printing, setPrinting] = useState(false);
+    const [publishing, setPublishing] = useState(false);
+    const [publishNotice, setPublishNotice] = useState("");
     const [paymentMethod, setPaymentMethod] = useState("bank");
     const [bankName, setBankName] = useState("");
     const [bankAccountName, setBankAccountName] = useState("");
@@ -162,6 +165,32 @@ function FeeReminderLetters({ school }) {
             ? sorted.slice(0, Math.floor(limit))
             : sorted;
     }, [rows, students, scope, studentId, classId, studentLimit]);
+
+    async function publishLetters() {
+        if (!letters.length) return;
+        if (paymentMethod === "bank" && (!bankName.trim() || !bankAccountName.trim() || !bankAccountNumber.trim())) { setError("Jaza taarifa za benki kabla ya kuchapisha."); return; }
+        if (paymentMethod === "mobile" && (!mobileNetwork.trim() || !mobileNumber.trim() || !mobileRecipientName.trim())) { setError("Jaza taarifa za malipo ya simu kabla ya kuchapisha."); return; }
+        setPublishing(true); setError(""); setPublishNotice("");
+        try {
+            const entries = letters.map(letter => ({
+                student_id: Number(letter.studentId),
+                title: "Barua ya Makumbusho ya Ada",
+                payload: {
+                    student: { name: letter.studentName, admission_number: letter.admissionNumber, guardian_name: letter.guardianName || "Mzazi/Mlezi", class_name: letter.className },
+                    school: { name: school?.school_name || "Shule", logo: school?.logo || null, address: school?.address || "", phone: school?.phone || "", email: school?.email || "" },
+                    reference: "AFR/ADA/"+letter.admissionNumber+"/"+new Date().getFullYear(),
+                    charges: letter.charges.map(x=>({fee_name:x.feeName,academic_year_name:x.academicYearName,amount:x.amount,paid_amount:x.paidAmount,balance:x.balance,term_number:x.term_number})),
+                    total_amount:letter.totalAmount,total_paid:letter.totalPaid,total_balance:letter.totalBalance,
+                    payment_method:paymentMethod,bank_name:bankName,bank_account_name:bankAccountName,bank_account_number:bankAccountNumber,
+                    mobile_network:mobileNetwork,mobile_number:mobileNumber,mobile_recipient_name:mobileRecipientName,
+                    payment_instructions:paymentInstructions,accountant_name:accountantName,accountant_phone:accountantPhone
+                }
+            }));
+            const response=await api.post("/parent-portal/staff/letters/publish",{letter_type:"fee_reminder",letters:entries});
+            setPublishNotice(response.data?.message || "Barua zimechapishwa kwenye Parent Portal.");
+        } catch(e) { setError(e.response?.data?.message || "Imeshindikana kuchapisha barua kwenye Parent Portal."); }
+        finally { setPublishing(false); }
+    }
 
     function printLetters() {
         if (!letters.length) return;
@@ -314,10 +343,10 @@ function FeeReminderLetters({ school }) {
                                     {letters.length > 12 ? <p className="px-4 py-2 text-xs text-slate-500">Inaonyesha wanafunzi 12 wa mwanzo; barua zitajumuisha wote {letters.length}.</p> : null}
                                 </div>
                                 <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <p className="text-xs text-slate-500">Kila barua itachapishwa kwenye ukurasa wake bila kuchanganya taarifa.</p>
+                                    <p className="text-xs text-slate-500">Kila barua itachapishwa kwenye ukurasa wake bila kuchanganya taarifa.</p>{publishNotice && <p className="text-sm font-semibold text-emerald-700">{publishNotice}</p>}
                                     <button type="button" disabled={!letters.length || loading} onClick={printLetters} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
                                         <FaPrint /> Chapisha barua {letters.length}
-                                    </button>
+                                    </button><button type="button" disabled={!letters.length || loading || publishing} onClick={publishLetters} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">{publishing ? "Inachapisha..." : "Publish to Parental Portal"}</button>
                                 </div>
                             </>
                         )}
