@@ -1065,6 +1065,7 @@ router.get("/results/:examId", async (req, res) => {
 });
 
 router.post("/change-password", async (req, res) => {
+  if (req.parent?.account?.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor password reset is managed by the school office." });
   const currentPassword = String(req.body?.current_password || "");
   const newPassword = String(req.body?.new_password || "");
   if (!currentPassword || newPassword.length < 8) return res.status(400).json({ success: false, message: "Enter your current password and a new password of at least 8 characters." });
