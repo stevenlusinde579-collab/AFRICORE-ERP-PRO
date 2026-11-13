@@ -1086,6 +1086,7 @@ router.post("/change-password", async (req, res) => {
 });
 
 router.post("/suggestions", async (req, res) => {
+  if (req.parent?.account?.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor accounts cannot submit parent-only suggestions." });
   const message = String(req.body?.suggestion || "").trim();
   const category = String(req.body?.category || "General").trim().slice(0, 80) || "General";
   if (message.length < 5 || message.length > 4000) return res.status(400).json({ success: false, message: "Suggestion must contain between 5 and 4000 characters." });
@@ -1106,7 +1107,7 @@ router.post("/chat", async (req, res) => {
   if (classRow.error || !classRow.data) return res.status(403).json({ success: false, message: "Student's current class is not available in this school." });
   const { data, error } = await supabase.from("parent_portal_chat_messages").insert({
     school_id: school.id, class_id: student.current_class_id, student_id: student.id,
-    parent_account_id: req.parent.account.id, sender_type: "parent", sender_name: "Mzazi wa " + fullName(student), message,
+    parent_account_id: req.parent.account.is_sponsor ? null : req.parent.account.id, sender_type: "parent", sender_name: (req.parent.account.is_sponsor ? "Sponsor wa " : "Mzazi wa ") + fullName(student), message,
   }).select("id,sender_type,sender_name,message,created_at").single();
   if (error) return res.status(500).json({ success: false, message: "Unable to send class message." });
   return res.json({ success: true, message: data });
