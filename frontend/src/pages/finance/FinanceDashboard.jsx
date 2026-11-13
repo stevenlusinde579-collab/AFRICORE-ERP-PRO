@@ -1356,7 +1356,7 @@ function FinanceDashboard() {
                         </div>
 
                         <span className="text-xs font-semibold text-slate-400">
-                            8 modules
+                            9 modules
                         </span>
 
                     </div>
@@ -1395,6 +1395,23 @@ function FinanceDashboard() {
                                 Manage financial accounts.
                             </p>
 
+                        </button>
+
+
+                        {/* CASH & FINANCIAL ACCOUNTS */}
+                        <button
+                            type="button"
+                            onClick={() => navigate("/finance/cash-accounts")}
+                            className="group bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-violet-300 hover:shadow-md transition"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                                    <FaWallet />
+                                </div>
+                                <FaArrowRight className="text-slate-300 group-hover:text-violet-600 transition" />
+                            </div>
+                            <h3 className="font-bold text-slate-900 mt-4">Cash & Financial Accounts</h3>
+                            <p className="text-xs text-slate-500 mt-1">Register bank, cash and mobile money accounts for receiving payments.</p>
                         </button>
 
 
