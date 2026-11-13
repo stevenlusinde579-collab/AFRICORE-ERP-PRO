@@ -16,6 +16,7 @@ function CashAccounts() {
     const [schoolId, setSchoolId] = useState(null);
     const [accounts, setAccounts] = useState([]);
     const [chartAccounts, setChartAccounts] = useState([]);
+    const [globalProviders, setGlobalProviders] = useState([]);
     const [form, setForm] = useState(EMPTY_FORM);
     const [editingId, setEditingId] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -40,7 +41,7 @@ function CashAccounts() {
             if (!profile?.school_id) throw new Error("School ID ya mtumiaji haijapatikana.");
             setSchoolId(Number(profile.school_id));
 
-            const [{ data: accountRows, error: accountError }, { data: chartRows, error: chartError }] = await Promise.all([
+            const [{ data: accountRows, error: accountError }, { data: chartRows, error: chartError }, { data: providerRows, error: providerError }] = await Promise.all([
                 supabase.schema("finance").from("cash_accounts")
                     .select("id,school_id,account_name,account_type,provider_name,account_number,chart_of_account_id,opening_balance,current_balance,is_active")
                     .eq("school_id", profile.school_id)
@@ -180,7 +181,7 @@ function CashAccounts() {
                         </label>
                         <label className="text-sm space-y-1">
                             <span className="text-slate-300">Bank / Mobile Provider</span>
-                            <input value={form.providerName} onChange={(e) => setForm((v) => ({ ...v, providerName: e.target.value }))} placeholder="CRDB, NMB, M-Pesa, Airtel Money, Mixx by Yas..." className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3" />
+                            <select value={form.providerName} onChange={(e) => setForm((v) => ({ ...v, providerName: e.target.value }))} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3"><option value="">Select provider</option>{globalProviders.filter((provider) => provider.provider_type === form.accountType || (form.accountType === "cash" && provider.provider_type === "cash")).map((provider) => <option key={provider.id} value={provider.provider_name}>{provider.provider_name}</option>)}</select>
                         </label>
                         <label className="text-sm space-y-1">
                             <span className="text-slate-300">Account / Till / Phone Number</span>
@@ -206,13 +207,13 @@ function CashAccounts() {
                     {loading ? <p className="p-6 text-sm text-slate-400">Loading accounts...</p> : accounts.length === 0 ? <p className="p-6 text-sm text-slate-400">No financial accounts registered for this school yet.</p> : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
-                                <thead className="bg-slate-950 text-slate-400"><tr><th className="text-left p-3">Account</th><th className="text-left p-3">Type</th><th className="text-left p-3">Provider / Number</th><th className="text-left p-3">Status</th><th className="text-right p-3">Actions</th></tr></thead>
+                                <thead className="bg-slate-950 text-slate-400"><tr><th className="text-left p-3">Account</th><th className="text-left p-3">Type</th><th className="text-left p-3">Provider / Number</th><th className="text-right p-3">Current Balance</th><th className="text-left p-3">Status</th><th className="text-right p-3">Actions</th></tr></thead>
                                 <tbody>{accounts.map((account) => (
                                     <tr key={account.id} className="border-t border-slate-800">
                                         <td className="p-3"><div className="font-medium">{account.account_name}</div><div className="text-xs text-slate-500">{chartAccounts.find((a) => a.id === account.chart_of_account_id)?.account_name || "Linked asset account"}</div></td>
                                         <td className="p-3 capitalize">{account.account_type === "mobile_money" ? "Mobile Money" : account.account_type}</td>
                                         <td className="p-3">{account.provider_name || "—"}<div className="text-xs text-slate-500">{account.account_number || ""}</div></td>
-                                        <td className="p-3"><span className={account.is_active ? "text-emerald-400" : "text-slate-500"}>{account.is_active ? "Active" : "Inactive"}</span></td>
+                                        <td className="p-3 text-right font-semibold tabular-nums">{new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(account.current_balance || 0))}</td>\n                                        <td className="p-3"><span className={account.is_active ? "text-emerald-400" : "text-slate-500"}>{account.is_active ? "Active" : "Inactive"}</span></td>
                                         <td className="p-3 text-right whitespace-nowrap"><button type="button" onClick={() => startEdit(account)} className="inline-flex items-center gap-1 mr-3 text-blue-300 hover:text-blue-200"><FaEdit /> Edit</button><button type="button" onClick={() => toggleActive(account)} className="text-xs text-amber-300 hover:text-amber-200">{account.is_active ? "Deactivate" : "Activate"}</button></td>
                                     </tr>
                                 ))}</tbody>
