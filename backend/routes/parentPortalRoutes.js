@@ -204,7 +204,7 @@ async function parentPortalStaffAccess(req, res, next) {
 
 async function parentAuth(req, res, next) {
   try {
-    const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     const claims = verifyToken(token);
     if (!claims?.school_id || !claims?.student_id) {
       return res.status(401).json({ success: false, message: "Parent Portal session expired. Please sign in again." });
