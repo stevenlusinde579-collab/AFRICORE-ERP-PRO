@@ -2116,7 +2116,7 @@ const RecordPayment = () => {
             setPaymentForm((current) => ({
                 ...current,
                 financialAccountId: value,
-                providerName: selectedAccount?.provider_name || current.providerName || "",
+                providerName: selectedAccount?.provider_name || "",
             }));
             return;
         }
