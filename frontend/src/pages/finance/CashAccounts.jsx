@@ -86,6 +86,7 @@ function CashAccounts() {
         setSuccess("");
         if (!schoolId) return setError("School ID haijapatikana.");
         if (!form.accountName.trim()) return setError("Weka jina la financial account.");
+        if (!form.providerName.trim()) return setError("Chagua bank, mobile money provider au Cash kutoka kwenye orodha ya mfumo.");
         if (!form.chartOfAccountId) return setError("Chagua Chart of Accounts inayolingana na akaunti hii.");
 
         setSaving(true);
@@ -188,7 +189,7 @@ function CashAccounts() {
                         </label>
                         <label className="text-sm space-y-1">
                             <span className="text-slate-300">Bank / Mobile Provider</span>
-                            <select value={form.providerName} onChange={(e) => setForm((v) => ({ ...v, providerName: e.target.value }))} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3"><option value="">Select provider</option>{globalProviders.filter((provider) => provider.provider_type === form.accountType || (form.accountType === "cash" && provider.provider_type === "cash")).map((provider) => <option key={provider.id} value={provider.provider_name}>{provider.provider_name}</option>)}</select>
+                            <select value={form.providerName} onChange={(e) => setForm((v) => ({ ...v, providerName: e.target.value }))} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3" required><option value="">Select provider</option>{globalProviders.filter((provider) => provider.provider_type === form.accountType || (form.accountType === "cash" && provider.provider_type === "cash")).map((provider) => <option key={provider.id} value={provider.provider_name}>{provider.provider_name}</option>)}</select>
                         </label>
                         <label className="text-sm space-y-1">
                             <span className="text-slate-300">Account / Till / Phone Number</span>
