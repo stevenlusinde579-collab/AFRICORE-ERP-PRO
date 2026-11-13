@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import ParentLiveMeeting from "../components/ParentLiveMeeting";
 import { useSchool } from "../context/SchoolContext";
+import { useRole } from "../context/RoleContext";
 
 function normalizeParentIdentity(parent) {
   let phone = String(parent.phone || "").replace(/\D/g, "");
@@ -65,6 +66,8 @@ function classOrder(name) {
 
 export default function ParentPortalManagement() {
   const { schoolId } = useSchool();
+  const { selectedRoleName, selectedRoleId } = useRole();
+  const canManageSponsorCentres = [1, 2, 3, 4].includes(Number(selectedRoleId)) || String(selectedRoleName || "").trim().toLowerCase() === "accountant";
   const [classes, setClasses] = useState([]);
   const [meetingClasses, setMeetingClasses] = useState([]);
   const [parents, setParents] = useState([]);
@@ -255,8 +258,8 @@ export default function ParentPortalManagement() {
     loadMeetings();
     loadMeetingClasses();
     loadSuggestions();
-    loadSponsorData();
-  }, [schoolId]);
+    if (canManageSponsorCentres) loadSponsorData();
+  }, [schoolId, canManageSponsorCentres]);
 
   useEffect(() => {
     if (activeModule !== "video") return undefined;
@@ -318,7 +321,7 @@ export default function ParentPortalManagement() {
     { id: "feedback", icon: "💬", title: "Maoni ya Wazazi", description: "Pokea, fuatilia na jibu maoni ya wazazi.", count: suggestions.length, countLabel: "Maoni", accent: "from-amber-500 to-orange-600" },
     { id: "chat", icon: "👥", title: "Group Chat", description: "Wasiliana na wazazi na walimu kwa kila darasa.", count: classes.length, countLabel: "Madarasa", accent: "from-emerald-600 to-teal-700" },
     { id: "parents", icon: "🏫", title: "Wazazi wa Shule", description: "Angalia idadi ya wazazi/walezi kwa kila darasa.", count: parentStats.total, countLabel: "Wazazi/walezi", accent: "from-blue-600 to-cyan-700" },
-    { id: "sponsors", icon: "🤝", title: "Sponsors & Centres", description: "Sajili sponsor, vituo, wasimamizi na wanafunzi wao.", count: sponsorCenters.length, countLabel: "Vituo", accent: "from-cyan-600 to-blue-800" },
+    ...(canManageSponsorCentres ? [{ id: "sponsors", icon: "🤝", title: "Sponsors & Centres", description: "Sajili sponsor, vituo, wasimamizi na wanafunzi wao.", count: sponsorCenters.length, countLabel: "Vituo", accent: "from-cyan-600 to-blue-800" }] : []),
   ];
 
   return (
