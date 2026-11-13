@@ -50,16 +50,31 @@ function FeeReminderLetters({ school }) {
                 .eq("school_id", scopedSchoolId).eq("is_active", true).in("account_type", ["bank", "mobile_money"]).order("account_name");
             if (accountError) throw accountError;
             setCashAccounts(accountRows || []);
-            const preferredAccount = (accountRows || []).find(account => account.account_type === "bank") || (accountRows || []).find(account => account.account_type === "mobile_money");
+            const normalizedAccounts = (accountRows || []).filter(account =>
+                ["bank", "mobile_money"].includes(String(account.account_type || "").trim().toLowerCase())
+            );
+            setCashAccounts(normalizedAccounts);
+            const preferredAccount = normalizedAccounts.find(account => account.account_type === "bank") || normalizedAccounts[0];
             if (preferredAccount) {
                 setSelectedCashAccountId(String(preferredAccount.id));
                 if (preferredAccount.account_type === "bank") {
-                    setPaymentMethod("bank"); setBankName(preferredAccount.provider_name || "");
-                    setBankAccountName(preferredAccount.account_name || ""); setBankAccountNumber(preferredAccount.account_number || "");
+                    setPaymentMethod("bank");
+                    setBankName(preferredAccount.provider_name || "");
+                    setBankAccountName(preferredAccount.account_name || "");
+                    setBankAccountNumber(preferredAccount.account_number || "");
+                    setMobileNetwork(""); setMobileNumber(""); setMobileRecipientName("");
                 } else {
-                    setPaymentMethod("mobile"); setMobileNetwork(preferredAccount.provider_name || "");
-                    setMobileRecipientName(preferredAccount.account_name || ""); setMobileNumber(preferredAccount.account_number || "");
+                    setPaymentMethod("mobile");
+                    setMobileNetwork(preferredAccount.provider_name || "");
+                    setMobileRecipientName(preferredAccount.account_name || "");
+                    setMobileNumber(preferredAccount.account_number || "");
+                    setBankName(""); setBankAccountName(""); setBankAccountNumber("");
                 }
+            } else {
+                setSelectedCashAccountId("");
+                setPaymentMethod("bank");
+                setBankName(""); setBankAccountName(""); setBankAccountNumber("");
+                setMobileNetwork(""); setMobileNumber(""); setMobileRecipientName("");
             }
 
             let charges = [];
@@ -146,21 +161,45 @@ function FeeReminderLetters({ school }) {
         }
     }
 
+    const accountsForPaymentType = useMemo(
+        () => cashAccounts.filter(account => account.account_type === (paymentMethod === "bank" ? "bank" : "mobile_money")),
+        [cashAccounts, paymentMethod]
+    );
+
     const selectPaymentType = (type) => {
-        const account = cashAccounts.find(item => item.account_type === (type === "bank" ? "bank" : "mobile_money"));
-        if (account) selectCashAccount(account.id);
+        const nextMethod = type === "bank" ? "bank" : "mobile";
+        const nextAccounts = cashAccounts.filter(account => account.account_type === (nextMethod === "bank" ? "bank" : "mobile_money"));
+        setPaymentMethod(nextMethod);
+        const currentlySelected = nextAccounts.find(account => String(account.id) === String(selectedCashAccountId));
+        const account = currentlySelected || nextAccounts[0];
+        if (account) {
+            selectCashAccount(account.id);
+        } else {
+            setSelectedCashAccountId("");
+            setBankName(""); setBankAccountName(""); setBankAccountNumber("");
+            setMobileNetwork(""); setMobileNumber(""); setMobileRecipientName("");
+        }
     };
 
     const selectCashAccount = (accountId) => {
-        setSelectedCashAccountId(String(accountId || ""));
         const account = cashAccounts.find(item => String(item.id) === String(accountId));
-        if (!account) return;
+        if (!account) {
+            setSelectedCashAccountId("");
+            return;
+        }
+        setSelectedCashAccountId(String(account.id));
         if (account.account_type === "bank") {
-            setPaymentMethod("bank"); setBankName(account.provider_name || "");
-            setBankAccountName(account.account_name || ""); setBankAccountNumber(account.account_number || "");
-        } else {
-            setPaymentMethod("mobile"); setMobileNetwork(account.provider_name || "");
-            setMobileRecipientName(account.account_name || ""); setMobileNumber(account.account_number || "");
+            setPaymentMethod("bank");
+            setBankName(account.provider_name || "");
+            setBankAccountName(account.account_name || "");
+            setBankAccountNumber(account.account_number || "");
+            setMobileNetwork(""); setMobileNumber(""); setMobileRecipientName("");
+        } else if (account.account_type === "mobile_money") {
+            setPaymentMethod("mobile");
+            setMobileNetwork(account.provider_name || "");
+            setMobileRecipientName(account.account_name || "");
+            setMobileNumber(account.account_number || "");
+            setBankName(""); setBankAccountName(""); setBankAccountNumber("");
         }
     };
 
@@ -332,7 +371,19 @@ function FeeReminderLetters({ school }) {
                         <div className="mx-5 mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
                             <h3 className="text-sm font-extrabold text-slate-900">Mipangilio ya malipo itakayoonekana kwenye barua</h3>
                             <p className="mt-1 text-xs text-slate-600">Weka taarifa sahihi za akaunti ya shule. Taarifa hizi zitaonekana kwenye kila barua itakayochapishwa.</p>
-                            <div className="mt-3">{cashAccounts.length > 1 ? <label className="block text-xs font-bold text-slate-600">Chagua akaunti ya shule iliyosajiliwa kwenye Finance<select value={selectedCashAccountId} onChange={event => selectCashAccount(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{cashAccounts.map(account=><option key={account.id} value={account.id}>{account.account_type === "bank" ? "Benki" : "Simu"} · {account.provider_name || ""} · {account.account_name} · {account.account_number || "Namba haijawekwa"}</option>)}</select></label> : cashAccounts.length === 1 ? <p className="text-xs font-semibold text-emerald-700">Akaunti imechaguliwa moja kwa moja: {cashAccounts[0].provider_name || ""} · {cashAccounts[0].account_name}</p> : <p className="text-xs text-amber-700">Hakuna akaunti hai ya Benki au Mobile Money iliyosajiliwa Finance kwa shule hii. Sajili akaunti kwanza kwenye Cash & Financial Accounts.</p>}</div>
+                            <div className="mt-3">
+                                {accountsForPaymentType.length > 1 ? (
+                                    <label className="block text-xs font-bold text-slate-600">Chagua akaunti ya {paymentMethod === "bank" ? "benki" : "Mobile Money"} iliyosajiliwa kwenye Finance
+                                        <select value={selectedCashAccountId} onChange={event => selectCashAccount(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+                                            {accountsForPaymentType.map(account => <option key={account.id} value={account.id}>{account.provider_name || ""} · {account.account_name} · {account.account_number || "Namba haijawekwa"}</option>)}
+                                        </select>
+                                    </label>
+                                ) : accountsForPaymentType.length === 1 ? (
+                                    <p className="text-xs font-semibold text-emerald-700">Akaunti imechaguliwa moja kwa moja: {accountsForPaymentType[0].provider_name || ""} · {accountsForPaymentType[0].account_name} · {accountsForPaymentType[0].account_number || "Namba haijawekwa"}</p>
+                                ) : (
+                                    <p className="text-xs text-amber-700">Hakuna akaunti hai ya {paymentMethod === "bank" ? "Benki" : "Mobile Money"} iliyosajiliwa kwa shule hii kwenye Cash & Financial Accounts.</p>
+                                )}
+                            </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 <button type="button" onClick={() => selectPaymentType("bank")} disabled={!cashAccounts.some(account => account.account_type === "bank")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "bank" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Benki</button>
                                 <button type="button" onClick={() => selectPaymentType("mobile")} disabled={!cashAccounts.some(account => account.account_type === "mobile_money")} className={`rounded-lg px-4 py-2 text-xs font-bold ${paymentMethod === "mobile" ? "bg-indigo-700 text-white" : "border border-slate-300 bg-white text-slate-700"}`}>Malipo kwa Simu</button>
