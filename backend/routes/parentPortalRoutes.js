@@ -885,14 +885,42 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
 });
 
 
+router.get("/staff/letters/context", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  if (!Number.isInteger(schoolId)) return res.status(400).json({ success:false, message:"Akaunti hii haijaunganishwa na shule." });
+  try {
+    const schoolResult = await supabase.from("schools")
+      .select("id,school_name,address,phone,email,logo")
+      .eq("id",schoolId).maybeSingle();
+    if (schoolResult.error) throw schoolResult.error;
+    if (!schoolResult.data) return res.status(404).json({ success:false, message:"Shule haijapatikana." });
+    return res.json({
+      success:true,
+      school:schoolResult.data,
+      author:{ full_name:req.profile.full_name || "", phone:req.profile.phone || "", role_name:(req.access?.roles || []).map(role => role.role_name).filter(Boolean).join(" / ") || "" },
+    });
+  } catch(error) {
+    console.error("PARENT PORTAL LETTER CONTEXT ERROR:",error);
+    return res.status(500).json({ success:false, message:"Imeshindikana kupata taarifa za barua." });
+  }
+});
+
 router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
   const type = String(req.body?.letter_type || "");
   const entries = Array.isArray(req.body?.letters) ? req.body.letters : [];
-  if (!Number.isInteger(schoolId) || !["fee_reminder","annual_fee_guidance"].includes(type) || !entries.length || entries.length > 500) {
+  if (!Number.isInteger(schoolId) || !["fee_reminder","annual_fee_guidance","official_letter"].includes(type) || !entries.length || entries.length > 500) {
     return res.status(400).json({ success:false, message:"Taarifa za barua hazijakamilika." });
   }
   try {
+    if (type === "official_letter" && entries.some(entry => {
+      const payload = entry?.payload || {};
+      return !String(payload.subject || "").trim() || String(payload.subject || "").length > 180 ||
+        !String(payload.body || "").trim() || String(payload.body || "").length > 12000 ||
+        String(payload.sender_address || "").length > 1200 || String(payload.recipient_address || "").length > 1200 ||
+        String(payload.author_name || "").length > 160 || String(payload.author_title || "").length > 160 ||
+        String(payload.author_phone || "").length > 40;
+    })) return res.status(400).json({ success:false, message:"Maudhui ya barua hayajakamilika au yamezidi urefu unaoruhusiwa." });
     const ids = [...new Set(entries.map(x => Number(x?.student_id)))];
     if (ids.some(id => !Number.isInteger(id) || id <= 0)) return res.status(400).json({success:false,message:"Mwanafunzi wa barua si sahihi."});
     if (!req.parentPortalScope.fullAccess && ids.some(id => !req.parentPortalScope.studentIds.includes(id))) {
@@ -903,7 +931,7 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
     if ((valid.data || []).length !== ids.length) return res.status(403).json({success:false,message:"Mwanafunzi hayupo kwenye shule yako."});
     const rows = entries.map(entry => ({
       school_id:schoolId, student_id:Number(entry.student_id), letter_type:type,
-      title:String(entry.title || (type === "fee_reminder" ? "Barua ya Makumbusho ya Ada" : "Barua za Mwongozo wa Ada za Mwaka Mpya")).slice(0,180),
+      title:String(entry.title || (type === "fee_reminder" ? "Barua ya Makumbusho ya Ada" : type === "annual_fee_guidance" ? "Barua za Mwongozo wa Ada za Mwaka Mpya" : "Official Letter")).slice(0,180),
       payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
       published_by:req.user.id, published_at:new Date().toISOString()
     }));

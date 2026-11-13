@@ -41,7 +41,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 const { data: { user }, error: authError } = await supabase.auth.getUser();
                 if (authError) throw authError;
                 if (!user?.id) throw new Error("Tafadhali ingia tena kwenye mfumo.");
-                const { data: profile, error: profileError } = await supabase.from("profiles").select("school_id,full_name").eq("id", user.id).single();
+                const { data: profile, error: profileError } = await supabase.from("profiles").select("school_id,full_name,phone").eq("id", user.id).single();
                 if (profileError) throw profileError;
                 if (!profile?.school_id) throw new Error("Akaunti hii haijaunganishwa na shule.");
                 const sid = Number(profile.school_id);
@@ -56,6 +56,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 if (!active) return;
                 setSchoolId(sid);
                 setAccountantName(profile.full_name || "");
+                setAccountantPhone(profile.phone || "");
                 setYears(yearResult.data || []);
                 setClasses(classResult.data || []);
                 setStudents((studentResult.data || []).filter(s => !s.student_status || !["left", "withdrawn", "transferred", "inactive"].includes(String(s.student_status).toLowerCase())));
@@ -94,7 +95,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
             setIntro(data?.intro_message || DEFAULT_MESSAGE);
             setExtraMessage(data?.extra_message || "Tafadhali zingatieni ratiba ya malipo ya kila muhula kama ilivyooneshwa. Kwa ufafanuzi zaidi, wasiliana na ofisi ya uhasibu ya shule.");
             setAccountantName(current => data?.accountant_name || current);
-            setAccountantPhone(data?.accountant_phone || "");
+            setAccountantPhone(current => current || data?.accountant_phone || "");
         })();
         return () => { active = false; };
     }, [open, schoolId, yearId]);
@@ -251,7 +252,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                         <label className="text-xs font-bold text-slate-600">Ujumbe wa shukrani na utangulizi<textarea rows={4} value={intro} onChange={e => setIntro(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm font-normal" /></label>
                         <label className="text-xs font-bold text-slate-600">Ujumbe wa mwisho / maelekezo<textarea rows={4} value={extraMessage} onChange={e => setExtraMessage(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm font-normal" /></label>
                         <label className="text-xs font-bold text-slate-600">Jina la muhasibu<input value={accountantName} onChange={e => setAccountantName(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label>
-                        <label className="text-xs font-bold text-slate-600">Simu ya muhasibu<input value={accountantPhone} onChange={e => setAccountantPhone(e.target.value)} placeholder="07XX XXX XXX" className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label>
+                        <label className="text-xs font-bold text-slate-600">Simu ya muhasibu<input value={accountantPhone} readOnly placeholder="Namba iliyohifadhiwa kwenye profile ya muhasibu" className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label>
                     </div>
                     <div className="border-t border-slate-100 px-5 py-4"><button type="button" onClick={saveSetup} disabled={saving || !yearId} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white disabled:opacity-50"><FaSave /> {saving ? "Inahifadhi..." : "Hifadhi Setup ya Barua"}</button>{notice && <p className="mt-3 text-sm font-semibold text-emerald-700">{notice}</p>}</div>
                     <div className="border-t border-slate-100 p-5">
