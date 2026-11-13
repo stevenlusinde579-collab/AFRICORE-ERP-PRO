@@ -55,7 +55,6 @@ create table if not exists public.sponsor_portal_accounts (
   username text not null,
   password_hash text not null,
   password_salt text not null,
-  password_encrypted text not null,
   is_active boolean not null default true,
   last_login_at timestamptz,
   created_at timestamptz not null default now(),
