@@ -1544,8 +1544,8 @@ const RecordPayment = () => {
                         identity.includes("nmb") ||
                         identity.includes("nbc") ||
                         identity.includes("exim") ||
-                        identity.includes(" stanbic") ||
-                        identity.includes(" absa");
+                        identity.includes("stanbic") ||
+                        identity.includes("absa");
                 }
 
                 if (method === "mobile_money") {
