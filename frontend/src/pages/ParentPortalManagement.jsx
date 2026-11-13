@@ -94,6 +94,7 @@ export default function ParentPortalManagement() {
   const [sponsorSelectedClasses, setSponsorSelectedClasses] = useState([]);
   const [sponsorCenters, setSponsorCenters] = useState([]);
   const [selectedSponsorCenter, setSelectedSponsorCenter] = useState(null);
+  const [createdSponsorCredentials, setCreatedSponsorCredentials] = useState(null);
   const [sponsorForm, setSponsorForm] = useState({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
 
   const sponsorClassOptions = useMemo(() => {
@@ -158,6 +159,7 @@ export default function ParentPortalManagement() {
     try {
       const response = await api.post("/sponsor-portal/management/centers", sponsorForm);
       setNotice(response.data?.message || "Kituo kimehifadhiwa.");
+      setCreatedSponsorCredentials({ centerName: sponsorForm.center_name, username: response.data?.username || sponsorForm.supervisor_email, password: response.data?.temporary_password || "", smsSent: response.data?.sms?.status !== "failed", smsError: response.data?.sms?.error || "" });
       setSponsorForm({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
       await loadSponsorData();
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kuhifadhi kituo."); }
@@ -448,6 +450,24 @@ export default function ParentPortalManagement() {
               <div className="md:col-span-2"><button disabled={busy || !sponsorForm.student_ids.length} className="rounded-xl bg-blue-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inahifadhi..." : "Create Center & Send Login Credentials"}</button></div>
             </form>
           </div>
+          {createdSponsorCredentials && (
+            <div role="status" className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Sponsor login credentials</p><h2 className="mt-1 text-lg font-extrabold text-emerald-950">Kituo kimehifadhiwa: {createdSponsorCredentials.centerName}</h2><p className="mt-1 text-sm text-emerald-800">{createdSponsorCredentials.smsSent ? "Credentials zimetumwa kwa SMS kwa msimamizi. Unaweza pia kuzinakili hapa." : "Akaunti imeundwa lakini SMS haikutumwa. Tumia taarifa hizi au bonyeza Resend Credentials."}</p></div>
+                <button type="button" onClick={() => setCreatedSponsorCredentials(null)} className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-900">Close</button>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-emerald-200 bg-white p-3"><p className="text-xs font-semibold text-slate-500">Username</p><p className="mt-1 break-all font-mono text-base font-bold text-slate-900">{createdSponsorCredentials.username}</p></div>
+                <div className="rounded-xl border border-emerald-200 bg-white p-3"><p className="text-xs font-semibold text-slate-500">Temporary Password</p><p className="mt-1 break-all font-mono text-base font-bold text-slate-900">{createdSponsorCredentials.password || "Haikurudishwa na seva. Tumia Resend Credentials."}</p></div>
+              </div>
+              {createdSponsorCredentials.smsError && <p className="mt-3 text-sm text-amber-800">SMS: {createdSponsorCredentials.smsError}</p>}
+              <p className="mt-3 text-xs text-emerald-900">Hifadhi au nakili password hii sasa. Ukifunga paneli, password hii haitaonekana tena hapa; unaweza kutengeneza nyingine kupitia View → Resend Credentials.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={!createdSponsorCredentials.password} onClick={() => navigator.clipboard?.writeText("Username: " + createdSponsorCredentials.username + "\nPassword: " + createdSponsorCredentials.password)} className="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">Copy Credentials</button>
+                <button type="button" onClick={() => setCreatedSponsorCredentials(null)} className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-900">Close</button>
+              </div>
+            </div>
+          )}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <h2 className="text-xl font-extrabold">Registered Sponsors & Centres</h2>
             <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm">
