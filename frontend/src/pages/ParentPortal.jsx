@@ -101,6 +101,24 @@ export default function ParentPortal() {
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kufungua taarifa za mwanafunzi."); }
     finally { setBusy(false); }
   };
+  const returnToPortalDashboard = () => {
+    if (data?.portal_type === "Sponsor") {
+      // End only the selected-student session; keep the Sponsor Manager session alive.
+      sessionStorage.removeItem(TOKEN_KEY);
+      setToken("");
+      setData(null);
+      setLoginStudent(null);
+      setActiveTab("overview");
+      setPortalHome(true);
+      setShowSponsorStudents(false);
+      setError("");
+      setNotice("");
+      return;
+    }
+    setPortalHome(true);
+    setActiveTab("overview");
+    setError("");
+  };
   const signOut = () => {
     sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem("africore_sponsor_portal_token");
     sessionStorage.removeItem("africore_sponsor_students"); sessionStorage.removeItem("africore_sponsor_center");
@@ -282,7 +300,7 @@ export default function ParentPortal() {
   const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-800">
-      <header className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-2xl"/><div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-6"><div><div className="text-xl font-black tracking-tight">{student.school_name || "Shule"} <span className="text-cyan-300">{data.portal_type === "Sponsor" ? "SPONSOR PORTAL" : "PARENT PORTAL"}</span></div><p className="mt-3 text-xs text-blue-200">{data.portal_type === "Sponsor" ? (data.sponsor_center_name || "Sponsor Centre") + " · Taarifa za wanafunzi waliopangiwa" : "Taarifa za mwanafunzi · Mawasiliano ya shule · Maendeleo ya kitaaluma"}</p></div><div className="flex gap-2"><button onClick={()=>setPortalHome(true)} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Dashboard</button><button onClick={signOut} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Toka</button></div></div></header>
+      <header className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-2xl"/><div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-6"><div><div className="text-xl font-black tracking-tight">{student.school_name || "Shule"} <span className="text-cyan-300">{data.portal_type === "Sponsor" ? "SPONSOR PORTAL" : "PARENT PORTAL"}</span></div><p className="mt-3 text-xs text-blue-200">{data.portal_type === "Sponsor" ? (data.sponsor_center_name || "Sponsor Centre") + " · Taarifa za wanafunzi waliopangiwa" : "Taarifa za mwanafunzi · Mawasiliano ya shule · Maendeleo ya kitaaluma"}</p></div><div className="flex gap-2"><button onClick={returnToPortalDashboard} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Dashboard</button><button onClick={signOut} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Toka</button></div></div></header>
       <main className="mx-auto max-w-7xl px-4 py-7 md:px-6">
         {notice && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
         {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
