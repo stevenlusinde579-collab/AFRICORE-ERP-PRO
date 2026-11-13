@@ -11,6 +11,7 @@ function Layout() {
     fullName: "",
     avatarUrl: "",
   });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -69,13 +70,25 @@ function Layout() {
   }, [user, authLoading]);
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <Sidebar profile={profile} />
+    <div className="flex min-h-screen w-full overflow-x-hidden bg-gray-100">
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-[2px] md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+      <Sidebar
+        profile={profile}
+        mobileOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+      />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar profile={profile} />
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <Topbar profile={profile} onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="flex-1 p-6">
+        <main className="min-w-0 w-full flex-1 overflow-x-hidden px-3 py-4 sm:px-6 sm:py-6">
           <Outlet />
         </main>
       </div>
