@@ -2109,6 +2109,18 @@ const RecordPayment = () => {
             return;
         }
 
+        if (name === "financialAccountId") {
+            const selectedAccount = financialAccounts.find(
+                (account) => String(account.id) === String(value)
+            );
+            setPaymentForm((current) => ({
+                ...current,
+                financialAccountId: value,
+                providerName: selectedAccount?.provider_name || current.providerName || "",
+            }));
+            return;
+        }
+
         setPaymentForm(
             (current) => ({
                 ...current,
@@ -2779,6 +2791,7 @@ const RecordPayment = () => {
 
                         p_provider_name:
                             paymentForm.providerName?.trim() ||
+                            financialAccount.provider_name ||
                             null,
 
                         p_reference_number:
