@@ -136,7 +136,7 @@ router.post("/management/centers", async (req, res) => {
     let sms;
     try { sms = await sendSupervisorSms(schoolId, supervisorPhone, email, temporaryPassword, centerName); }
     catch (smsError) { sms = { status: "failed", error: smsError.message }; }
-    return res.status(201).json({ success: true, center_id: created.data.id, username: email, sms, message: sms.status === "failed" ? "Kituo na akaunti vimeundwa lakini SMS haikutumwa. Tumia View → Resend Credentials." : "Kituo kimeundwa na credentials zimetumwa kwa SMS." });
+    return res.status(201).json({ success: true, center_id: created.data.id, username: email, temporary_password: temporaryPassword, sms, message: sms.status === "failed" ? "Kituo na akaunti vimeundwa lakini SMS haikutumwa. Tumia View → Resend Credentials." : "Kituo kimeundwa na credentials zimetumwa kwa SMS." });
   } catch (e) {
     console.error("SPONSOR CENTER CREATE ERROR:", e);
     return res.status(500).json({ success: false, message: e.message || "Imeshindikana kuunda kituo." });
