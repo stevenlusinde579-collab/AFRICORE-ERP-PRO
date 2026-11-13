@@ -75,7 +75,10 @@ export default function ParentPortal() {
     api.get("/parent-portal/schools").then((r) => setSchools(r.data?.schools || [])).catch(() => setError("Imeshindikana kupata orodha ya shule."));
   }, []);
   useEffect(() => { if (token && !mustChangePassword) loadDashboard(token); }, [token, mustChangePassword]);
-  useEffect(() => {\n    if (!token || mustChangePassword) return undefined;\n    const timer = window.setInterval(() => loadNotifications(token), 10000);\n    return () => window.clearInterval(timer);
+  useEffect(() => {
+    if (!token || mustChangePassword) return undefined;
+    const timer = window.setInterval(() => loadNotifications(token), 10000);
+    return () => window.clearInterval(timer);
   }, [token, mustChangePassword]);
 
   const signIn = async (event) => {
@@ -452,7 +455,8 @@ function NotificationBadge({count}) {
   const value = Math.max(0, Number(count || 0));
   if (!value) return null;
   return <span aria-label={value + " unread notifications"} className="ml-1 inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white">{value > 99 ? "99+" : value}</span>;
-}\nfunction Summary({title,value}) { return <div className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">{title}</p><p className="mt-2 text-xl font-black text-slate-900">{value}</p></div>; }
+}
+function Summary({title,value}) { return <div className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">{title}</p><p className="mt-2 text-xl font-black text-slate-900">{value}</p></div>; }
 function attendanceBucket(status) {
   const value = String(status || "").toLowerCase();
   if (value.includes("present") || value.includes("attended") || value.includes("po")) return "present";
