@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FaFileInvoiceDollar, FaPlus, FaPrint, FaSave, FaTrash } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
+import api from "../../services/api";
 
 const money = value => new Intl.NumberFormat("en-TZ", { maximumFractionDigits: 2 }).format(Number(value || 0));
 const blankItem = () => ({ id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: "", category: "Ada", classId: "", term1: "0", term2: "0", term3: "0" });
@@ -10,6 +11,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [publishing, setPublishing] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const [schoolId, setSchoolId] = useState(null);
@@ -151,6 +153,32 @@ export default function AnnualFeeGuidanceLetters({ school }) {
     const applicableItems = student => validItems.filter(item => !item.classId || String(item.classId) === String(student.current_class_id));
     const studentTotals = student => applicableItems(student).reduce((sum, item) => ({ term1: sum.term1 + Number(item.term1 || 0), term2: sum.term2 + Number(item.term2 || 0), term3: sum.term3 + Number(item.term3 || 0) }), { term1: 0, term2: 0, term3: 0 });
 
+    async function publishLetters() {
+        if (!selectedRows.length || !yearName) { setError("Chagua wanafunzi na mwaka wa masomo kwanza."); return; }
+        setPublishing(true); setError(""); setNotice("");
+        try {
+            const letters = selectedRows.map(student => {
+                const applicable = applicableItems(student);
+                const totalsForStudent = studentTotals(student);
+                return {
+                    student_id: Number(student.id),
+                    title: "Barua za Mwongozo wa Ada za Mwaka Mpya",
+                    payload: {
+                        student: { name: [student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" "), admission_number: student.admission_number || student.admission_no || "—", guardian_name: student.guardian_name || student.parent_name || "Mzazi/Mlezi", class_name: classes.find(x=>String(x.id)===String(student.current_class_id))?.class_name || "—" },
+                        school: { name: school?.school_name || "Shule", logo: school?.logo || null, address: school?.address || "", phone: school?.phone || "", email: school?.email || "" },
+                        year_name: yearName, items: applicable.map(x=>({name:x.name,category:x.category,term1:Number(x.term1||0),term2:Number(x.term2||0),term3:Number(x.term3||0)})),
+                        totals: totalsForStudent, closing_date: closingDate, reopening_date: reopeningDate,
+                        intro, extra_message: extraMessage, accountant_name: accountantName, accountant_phone: accountantPhone,
+                        reference: "AFR/MWONGOZO/"+(student.admission_number || student.admission_no || student.id)+"/"+new Date().getFullYear()
+                    }
+                };
+            });
+            const response = await api.post("/parent-portal/staff/letters/publish",{letter_type:"annual_fee_guidance",letters});
+            setNotice(response.data?.message || "Barua zimechapishwa kwenye Parent Portal.");
+        } catch(e) { setError(e.response?.data?.message || "Imeshindikana kuchapisha barua kwenye Parent Portal."); }
+        finally { setPublishing(false); }
+    }
+
     function printLetters() {
         if (!selectedRows.length) { setError("Chagua angalau mwanafunzi mmoja wa kutengenezea barua."); return; }
         if (!yearName) { setError("Mwaka wa masomo haujapatikana."); return; }
@@ -232,7 +260,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                             <label className="text-xs font-bold text-slate-600">Chagua darasa (au shule nzima)<select value={classId} onChange={e => { setClassId(e.target.value); setSelectedStudents([]); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="">Shule nzima</option>{visibleClasses.map(c => <option key={c.id} value={c.id}>{c.class_name}</option>)}</select></label>
                             <div className="rounded-xl bg-slate-50 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-700">{selectedStudents.length} wamechaguliwa · {visibleStudents.length} wanafunzi kwenye orodha</span><button type="button" onClick={() => selectVisible(selectedStudents.length < visibleStudents.length)} className="text-xs font-bold text-indigo-700">{visibleStudents.every(s => selectedStudents.includes(String(s.id))) ? "Ondoa wote wanaoonekana" : "Chagua wote wanaoonekana"}</button></div><div className="mt-2 max-h-64 overflow-y-auto divide-y divide-slate-200">{visibleStudents.map(s => <label key={s.id} className="flex items-center gap-3 py-2 text-sm"><input type="checkbox" checked={selectedStudents.includes(String(s.id))} onChange={() => toggleStudent(s.id)} /><span className="font-semibold text-slate-800">{[s.first_name, s.middle_name, s.last_name].filter(Boolean).join(" ")}</span><span className="text-xs text-slate-500">{s.admission_number || s.admission_no || ""}</span></label>)}</div></div>
                         </div>
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Kila mwanafunzi atapata barua yake binafsi. Michango ya darasa maalumu itaonekana kwa wanafunzi wa darasa hilo tu.</p><button type="button" onClick={printLetters} disabled={!selectedStudents.length || !loadedSetupId} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-extrabold text-white disabled:opacity-50"><FaPrint /> Tengeneza / Chapisha barua {selectedStudents.length}</button></div>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Kila mwanafunzi atapata barua yake binafsi. Michango ya darasa maalumu itaonekana kwa wanafunzi wa darasa hilo tu.</p><button type="button" onClick={printLetters} disabled={!selectedStudents.length || !loadedSetupId} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-extrabold text-white disabled:opacity-50"><FaPrint /> Tengeneza / Chapisha barua {selectedStudents.length}</button><button type="button" onClick={publishLetters} disabled={!selectedStudents.length || !loadedSetupId || publishing} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:opacity-50">{publishing ? "Inachapisha..." : "Publish to Parental Portal"}</button></div>
                         {!loadedSetupId && <p className="mt-2 text-xs font-semibold text-amber-700">Hifadhi setup kwanza ndipo uweze kutengeneza barua.</p>}
                     </div>
                 </>}
