@@ -46,7 +46,7 @@ const normalizeRole = (roleName) => {
    SIDEBAR
 ========================================================= */
 
-function Sidebar({ profile }) {
+function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
   const {
     loadingRoles = true,
     selectedRoleName = "",
@@ -56,6 +56,8 @@ function Sidebar({ profile }) {
     roles: availableRoles = [],
   } = useRole();
 
+
+  const sidebarClassName = `fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[86vw] shrink-0 flex-col overflow-y-auto bg-slate-900 p-4 text-white shadow-2xl transition-transform duration-300 md:sticky md:top-0 md:z-20 md:h-screen md:w-64 md:max-w-none md:translate-x-0 md:shadow-none md:p-5 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`;
 
   /* =======================================================
      CURRENT ROLE
@@ -392,7 +394,7 @@ function Sidebar({ profile }) {
 
   if (loadingRoles) {
     return (
-      <aside className="w-64 min-h-screen bg-slate-900 text-white p-5">
+      <aside className={sidebarClassName}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold">
             AfriCore ERP PRO
@@ -422,7 +424,7 @@ function Sidebar({ profile }) {
 
   if (!selectedRoleName && !superAdmin) {
     return (
-      <aside className="w-64 min-h-screen bg-slate-900 text-white p-5">
+      <aside className={sidebarClassName}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold">
             AfriCore ERP PRO
@@ -456,7 +458,7 @@ function Sidebar({ profile }) {
   ======================================================= */
 
   return (
-    <aside className="w-64 min-h-screen bg-slate-900 text-white p-5">
+    <aside className={sidebarClassName}>
 
       {/* BRAND */}
       <div className="mb-8">
@@ -507,6 +509,7 @@ function Sidebar({ profile }) {
           <NavLink
             key={item.name}
             to={item.path}
+            onClick={onClose}
             className={({ isActive }) => `
               flex items-center gap-3
               px-4 py-3
