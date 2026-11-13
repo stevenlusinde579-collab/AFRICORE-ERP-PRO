@@ -889,16 +889,16 @@ router.get("/staff/letters/context", authenticateUser, parentPortalStaffAccess, 
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId)) return res.status(400).json({ success:false, message:"Akaunti hii haijaunganishwa na shule." });
   try {
-    const [schoolResult, roleResult] = await Promise.all([
+    const [schoolResult] = await Promise.all([
       supabase.from("schools").select("id,school_name,address,phone,email,logo").eq("id",schoolId).maybeSingle(),
-      supabase.from("roles").select("role_name").eq("id",req.profile?.role_id).maybeSingle(),
+      Promise.resolve({ data: null, error: null }),
     ]);
     if (schoolResult.error) throw schoolResult.error;
     if (!schoolResult.data) return res.status(404).json({ success:false, message:"Shule haijapatikana." });
     return res.json({
       success:true,
       school:schoolResult.data,
-      author:{ full_name:req.profile.full_name || "", phone:req.profile.phone || "", role_name:roleResult.data?.role_name || "" },
+      author:{ full_name:req.profile.full_name || "", phone:req.profile.phone || "", role_name:(req.access?.roles || []).map(role => role.role_name).filter(Boolean).join(" / ") || "" },
     });
   } catch(error) {
     console.error("PARENT PORTAL LETTER CONTEXT ERROR:",error);
