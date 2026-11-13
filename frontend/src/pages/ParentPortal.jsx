@@ -44,11 +44,21 @@ export default function ParentPortal() {
   const [notificationCounts, setNotificationCounts] = useState({});
   const authConfig = useMemo(() => ({ headers: { Authorization: "Bearer " + token } }), [token]);
 
-  const loadNotifications = async (activeToken = token) => {\n    if (!activeToken) return;\n    try { const response = await api.get("/parent-portal/notifications", { headers: { Authorization: "Bearer " + activeToken } }); setNotificationCounts(response.data?.counts || {}); } catch (e) { console.warn("Parent portal notifications unavailable:", e?.response?.data?.message || e?.message); }\n  };\n  const openPortalSection = async (tab) => {\n    setActiveTab(tab); setPortalHome(false);\n    if (token) { try { await api.post("/parent-portal/notifications/read", { section: tab }, authConfig); setNotificationCounts((current) => ({ ...current, [tab]: 0 })); } catch (e) { console.warn("Could not mark portal section as read:", e?.message); } }\n  };\n\n  const loadDashboard = async (activeToken = token) => {
+  const loadNotifications = async (activeToken = token) => {
+    if (!activeToken) return;
+    try { const response = await api.get("/parent-portal/notifications", { headers: { Authorization: "Bearer " + activeToken } }); setNotificationCounts(response.data?.counts || {}); } catch (e) { console.warn("Parent portal notifications unavailable:", e?.response?.data?.message || e?.message); }
+  };
+  const openPortalSection = async (tab) => {
+    setActiveTab(tab); setPortalHome(false);
+    if (token) { try { await api.post("/parent-portal/notifications/read", { section: tab }, authConfig); setNotificationCounts((current) => ({ ...current, [tab]: 0 })); } catch (e) { console.warn("Could not mark portal section as read:", e?.message); } }
+  };
+
+  const loadDashboard = async (activeToken = token) => {
     if (!activeToken) return;
     try {
       const response = await api.get("/parent-portal/dashboard", { headers: { Authorization: "Bearer " + activeToken } });
-      setData(response.data);\n      loadNotifications(activeToken);
+      setData(response.data);
+      loadNotifications(activeToken);
       setGroupMembers(response.data?.group_members || []);
       const availableExams = Array.isArray(response.data?.exams) ? response.data.exams : [];
       const firstAvailableExam = availableExams[0]?.id ? String(availableExams[0].id) : "";
@@ -64,7 +74,9 @@ export default function ParentPortal() {
   useEffect(() => {
     api.get("/parent-portal/schools").then((r) => setSchools(r.data?.schools || [])).catch(() => setError("Imeshindikana kupata orodha ya shule."));
   }, []);
-  useEffect(() => { if (token && !mustChangePassword) loadDashboard(token); }, [token, mustChangePassword]);\n  useEffect(() => {\n    if (!token || mustChangePassword) return undefined;\n    const timer = window.setInterval(() => loadNotifications(token), 10000);\n    return () => window.clearInterval(timer);\n  }, [token, mustChangePassword]);
+  useEffect(() => { if (token && !mustChangePassword) loadDashboard(token); }, [token, mustChangePassword]);
+  useEffect(() => {\n    if (!token || mustChangePassword) return undefined;\n    const timer = window.setInterval(() => loadNotifications(token), 10000);\n    return () => window.clearInterval(timer);
+  }, [token, mustChangePassword]);
 
   const signIn = async (event) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
