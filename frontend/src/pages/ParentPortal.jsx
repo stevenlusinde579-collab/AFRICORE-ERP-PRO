@@ -127,6 +127,9 @@ export default function ParentPortal() {
     setSelectedExam(""); setResultData(null); setMustChangePassword(false); setActiveTab("overview"); setLoginMode("parent"); setPortalHome(true); setShowSponsorStudents(false);
   };
 
+  const printPublishedLetter = () => { document.body.classList.add("afri-parent-letter-printing"); window.setTimeout(() => window.print(), 80); };
+  useEffect(() => { const cleanup = () => document.body.classList.remove("afri-parent-letter-printing"); window.addEventListener("afterprint", cleanup); return () => window.removeEventListener("afterprint", cleanup); }, []);
+
   const loadResults = async (examId) => {
     setSelectedExam(examId); setResultData(null);
     if (!examId) return;
@@ -389,9 +392,20 @@ export default function ParentPortal() {
             </div>)}
             {!publishedLetters.length&&<div className="p-6"><EmptyState title="Hakuna barua zilizochapishwa" detail="Barua za mwanafunzi huyu zitaonekana hapa baada ya shule kuchagua Publish to Parent Portal."/></div>}
           </div>
+          <style>{`
+            @media print {
+              body.afri-parent-letter-printing * { visibility: hidden !important; }
+              body.afri-parent-letter-printing [role="dialog"],
+              body.afri-parent-letter-printing [role="dialog"] * { visibility: visible !important; }
+              body.afri-parent-letter-printing [role="dialog"] { position: fixed !important; inset: 0 !important; display: block !important; padding: 0 !important; background: #fff !important; }
+              body.afri-parent-letter-printing .published-letter-view { width: 100% !important; max-width: none !important; max-height: none !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+              body.afri-parent-letter-printing .published-letter-modal-actions { display: none !important; }
+              body.afri-parent-letter-printing .published-letter-view > div:last-child { overflow: visible !important; padding: 0 !important; }
+            }
+          `}</style>
           {selectedPublishedLetter && (()=>{const letter=selectedPublishedLetter;const p=letter.payload||{};const s=p.student||{};const schoolInfo=p.school||{};const official=letter.letter_type==="official_letter";const guidance=letter.letter_type==="annual_fee_guidance";return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={letter.title}>
-            <div className="flex max-h-[95vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b bg-slate-50 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{official?"Official Letter":guidance?"Annual Fee Guidance":"Fee Reminder"}</p><h3 className="font-extrabold text-slate-900">{letter.title}</h3></div><div className="flex gap-2"><button type="button" onClick={()=>window.print()} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold">Print</button><button type="button" onClick={()=>setSelectedPublishedLetter(null)} className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Close</button></div></div>
+            <div className="published-letter-view flex max-h-[95vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="published-letter-modal-actions flex items-center justify-between gap-3 border-b bg-slate-50 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{official?"Official Letter":guidance?"Annual Fee Guidance":"Fee Reminder"}</p><h3 className="font-extrabold text-slate-900">{letter.title}</h3></div><div className="flex gap-2"><button type="button" onClick={printPublishedLetter} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold">Print</button><button type="button" onClick={()=>setSelectedPublishedLetter(null)} className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Close</button></div></div>
               <div className="overflow-y-auto p-6 text-sm text-slate-800">
                 <header className="mb-5 border-b-2 border-slate-800 pb-4 text-center">{schoolInfo.logo&&<img src={schoolInfo.logo} alt="" className="mx-auto mb-2 h-14 w-14 object-contain"/>}<h4 className="font-black uppercase">{schoolInfo.name||student.school_name}</h4><p className="text-xs text-slate-500">{[schoolInfo.address,schoolInfo.phone,schoolInfo.email].filter(Boolean).join(" · ")}</p></header>
                 {official?<><div className="grid gap-3 text-xs sm:grid-cols-2"><p><b>Kumb. Na:</b> {p.reference||"—"}</p><p><b>Tarehe:</b> {p.date||dateText(letter.published_at)}</p><p className="whitespace-pre-wrap"><b>Kwa:</b> {p.recipient_name||"Mzazi/Mlezi"}{"\n"}{p.recipient_address||""}</p><p className="whitespace-pre-wrap"><b>Kutoka:</b> {p.sender_address||""}</p></div><h4 className="my-6 text-center font-extrabold underline">YAH: {p.subject||letter.title}</h4><div className="whitespace-pre-wrap text-justify leading-7">{p.body}</div><div className="mt-8"><p>Wako katika huduma,</p><div className="mt-12 w-72 border-t border-slate-800 pt-2"><b>{p.author_name}</b><p>{p.author_title}</p><p className="mt-1">Simu: {p.author_phone}</p><p className="mt-7">Saini: ______________________________</p></div></div></>:<><div className="grid gap-1 text-xs sm:grid-cols-2"><p><b>Kumb. Na:</b> {p.reference||"—"}</p><p><b>Tarehe:</b> {dateText(letter.published_at)}</p><p><b>Kwa:</b> {s.guardian_name||"Mzazi/Mlezi"}</p><p><b>Mwanafunzi:</b> {s.name||student.name}</p><p><b>Namba:</b> {s.admission_number||student.admission_number}</p><p><b>Darasa:</b> {s.class_name||student.class_name}</p></div>
