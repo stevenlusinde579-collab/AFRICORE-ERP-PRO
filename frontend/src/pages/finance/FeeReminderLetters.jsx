@@ -18,6 +18,7 @@ function FeeReminderLetters({ school }) {
     const [studentLimit, setStudentLimit] = useState("");
     const [accountantName, setAccountantName] = useState("");
     const [cashAccounts, setCashAccounts] = useState([]);
+    const [paymentProviders, setPaymentProviders] = useState([]);
     const [selectedCashAccountId, setSelectedCashAccountId] = useState("");
     const [accountantPhone, setAccountantPhone] = useState("");
     const [printing, setPrinting] = useState(false);
@@ -45,10 +46,19 @@ function FeeReminderLetters({ school }) {
             const scopedSchoolId = Number(profile.school_id);
             setAccountantName(profile.full_name || "");
             setAccountantPhone(profile.phone || "");
-            const { data: accountRows, error: accountError } = await supabase.schema("finance").from("cash_accounts")
-                .select("id,school_id,account_name,account_type,provider_name,account_number,is_active")
-                .eq("school_id", scopedSchoolId).eq("is_active", true).in("account_type", ["bank", "mobile_money"]).order("account_name");
+            const [{ data: accountRows, error: accountError }, { data: providerRows, error: providerError }] = await Promise.all([
+                supabase.schema("finance").from("cash_accounts")
+                    .select("id,school_id,account_name,account_type,provider_name,account_number,is_active")
+                    .eq("school_id", scopedSchoolId).eq("is_active", true)
+                    .in("account_type", ["bank", "mobile_money"]).order("account_name"),
+                supabase.schema("finance").from("payment_providers")
+                    .select("provider_name,provider_type,sort_order")
+                    .eq("is_active", true).in("provider_type", ["bank", "mobile_money"])
+                    .order("sort_order").order("provider_name")
+            ]);
             if (accountError) throw accountError;
+            if (providerError) throw providerError;
+            setPaymentProviders(providerRows || []);
             const normalizedAccounts = (accountRows || []).filter(account =>
                 ["bank", "mobile_money"].includes(String(account.account_type || "").trim().toLowerCase())
             );
@@ -371,16 +381,15 @@ function FeeReminderLetters({ school }) {
                             <h3 className="text-sm font-extrabold text-slate-900">Mipangilio ya malipo itakayoonekana kwenye barua</h3>
                             <p className="mt-1 text-xs text-slate-600">Weka taarifa sahihi za akaunti ya shule. Taarifa hizi zitaonekana kwenye kila barua itakayochapishwa.</p>
                             <div className="mt-3">
-                                {accountsForPaymentType.length > 1 ? (
+                                {accountsForPaymentType.length > 0 ? (
                                     <label className="block text-xs font-bold text-slate-600">Chagua akaunti ya {paymentMethod === "bank" ? "benki" : "Mobile Money"} iliyosajiliwa kwenye Finance
                                         <select value={selectedCashAccountId} onChange={event => selectCashAccount(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+                                            <option value="">-- Chagua akaunti --</option>
                                             {accountsForPaymentType.map(account => <option key={account.id} value={account.id}>{account.provider_name || ""} · {account.account_name} · {account.account_number || "Namba haijawekwa"}</option>)}
                                         </select>
                                     </label>
-                                ) : accountsForPaymentType.length === 1 ? (
-                                    <p className="text-xs font-semibold text-emerald-700">Akaunti imechaguliwa moja kwa moja: {accountsForPaymentType[0].provider_name || ""} · {accountsForPaymentType[0].account_name} · {accountsForPaymentType[0].account_number || "Namba haijawekwa"}</p>
                                 ) : (
-                                    <p className="text-xs text-amber-700">Hakuna akaunti hai ya {paymentMethod === "bank" ? "Benki" : "Mobile Money"} iliyosajiliwa kwa shule hii kwenye Cash & Financial Accounts.</p>
+                                    <p className="text-xs text-amber-700">Hakuna akaunti hai ya {paymentMethod === "bank" ? "Benki" : "Mobile Money"} iliyosajiliwa kwa shule hii kwenye Cash & Financial Accounts. Jaza taarifa hapa chini.</p>
                                 )}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -389,15 +398,27 @@ function FeeReminderLetters({ school }) {
                             </div>
                             {paymentMethod === "bank" ? (
                                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                                    <label className="text-xs font-bold text-slate-600">Jina la benki<input value={bankName} readOnly={Boolean(selectedCashAccountId)} onChange={event => setBankName(event.target.value)} placeholder="Mf. CRDB / NMB" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
-                                    <label className="text-xs font-bold text-slate-600">Jina la akaunti<input value={bankAccountName} readOnly={Boolean(selectedCashAccountId)} onChange={event => setBankAccountName(event.target.value)} placeholder="Jina la akaunti ya shule" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
-                                    <label className="text-xs font-bold text-slate-600">Namba ya akaunti<input value={bankAccountNumber} readOnly={Boolean(selectedCashAccountId)} onChange={event => setBankAccountNumber(event.target.value)} placeholder="Namba ya akaunti" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Jina la benki
+                                        <select value={bankName} onChange={event => setBankName(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal">
+                                            <option value="">Chagua benki</option>
+                                            {paymentProviders.filter(provider => provider.provider_type === "bank").map(provider => <option key={provider.provider_name} value={provider.provider_name}>{provider.provider_name}</option>)}
+                                            {!paymentProviders.some(provider => provider.provider_type === "bank" && provider.provider_name === bankName) && bankName ? <option value={bankName}>{bankName}</option> : null}
+                                        </select>
+                                    </label>
+                                    <label className="text-xs font-bold text-slate-600">Jina la akaunti<input value={bankAccountName} onChange={event => setBankAccountName(event.target.value)} placeholder="Jina la akaunti ya shule" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Namba ya akaunti<input value={bankAccountNumber} onChange={event => setBankAccountNumber(event.target.value)} placeholder="Namba ya akaunti" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
                                 </div>
                             ) : (
                                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                                    <label className="text-xs font-bold text-slate-600">Mtandao wa simu<input value={mobileNetwork} readOnly={Boolean(selectedCashAccountId)} onChange={event => setMobileNetwork(event.target.value)} placeholder="Mf. M-Pesa / Airtel Money / Tigo Pesa" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
-                                    <label className="text-xs font-bold text-slate-600">Namba ya simu<input value={mobileNumber} readOnly={Boolean(selectedCashAccountId)} onChange={event => setMobileNumber(event.target.value)} placeholder="Namba ya kupokea malipo" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
-                                    <label className="text-xs font-bold text-slate-600">Jina la mpokeaji<input value={mobileRecipientName} readOnly={Boolean(selectedCashAccountId)} onChange={event => setMobileRecipientName(event.target.value)} placeholder="Jina linaloonekana kwa mpokeaji" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Mtandao wa simu
+                                        <select value={mobileNetwork} onChange={event => setMobileNetwork(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal">
+                                            <option value="">Chagua mtandao</option>
+                                            {paymentProviders.filter(provider => provider.provider_type === "mobile_money").map(provider => <option key={provider.provider_name} value={provider.provider_name}>{provider.provider_name}</option>)}
+                                            {!paymentProviders.some(provider => provider.provider_type === "mobile_money" && provider.provider_name === mobileNetwork) && mobileNetwork ? <option value={mobileNetwork}>{mobileNetwork}</option> : null}
+                                        </select>
+                                    </label>
+                                    <label className="text-xs font-bold text-slate-600">Namba ya simu<input value={mobileNumber} onChange={event => setMobileNumber(event.target.value)} placeholder="Namba ya kupokea malipo" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
+                                    <label className="text-xs font-bold text-slate-600">Jina la mpokeaji<input value={mobileRecipientName} onChange={event => setMobileRecipientName(event.target.value)} placeholder="Jina linaloonekana kwa mpokeaji" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal" /></label>
                                 </div>
                             )}
                             <label className="mt-3 block text-xs font-bold text-slate-600">Namba ya simu ya muhasibu
