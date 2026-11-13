@@ -83,7 +83,9 @@ router.get("/management/students", async (req, res) => {
 
 router.get("/management/centers", async (req, res) => {
   try {
-    const { data: centers, error } = await supabase.from("sponsor_centers").select("id,sponsor_id,center_name,supervisor_name,supervisor_phone,supervisor_email,is_active,created_at").eq("school_id", req.sponsorSchoolId).order("center_name");
+    const { data: centers, error } = await supabase.from("sponsor_centers")
+      .select("id,sponsor_id,center_name,supervisor_name,supervisor_phone,supervisor_email,is_active,created_at")
+      .eq("school_id", req.sponsorSchoolId).order("center_name");
     if (error) throw error;
     const ids = (centers || []).map(c => c.id);
     const [sponsors, assignments, accounts] = await Promise.all([
@@ -92,12 +94,36 @@ router.get("/management/centers", async (req, res) => {
       ids.length ? supabase.from("sponsor_portal_accounts").select("center_id,username,is_active,last_login_at").eq("school_id", req.sponsorSchoolId).in("center_id", ids) : Promise.resolve({ data: [] }),
     ]);
     for (const r of [sponsors, assignments, accounts]) if (r.error) throw r.error;
+    const assignedRows = assignments.data || [];
+    const studentIds = [...new Set(assignedRows.map(a => Number(a.student_id)).filter(Number.isInteger))];
+    const [students, classes] = await Promise.all([
+      studentIds.length ? supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id").eq("school_id", req.sponsorSchoolId).in("id", studentIds) : Promise.resolve({ data: [] }),
+      Promise.resolve(null),
+    ]);
+    if (students.error) throw students.error;
+    const classIds = [...new Set((students.data || []).map(s => s.current_class_id).filter(Boolean))];
+    const classResult = classIds.length ? await supabase.from("classes").select("id,class_name").eq("school_id", req.sponsorSchoolId).in("id", classIds) : { data: [] };
+    if (classResult.error) throw classResult.error;
+    const classMap = new Map((classResult.data || []).map(row => [String(row.id), row.class_name]));
+    const studentMap = new Map((students.data || []).map(s => [Number(s.id), {
+      id: s.id, name: fullName(s), admission_number: s.admission_number || s.admission_no || "—",
+      class_name: classMap.get(String(s.current_class_id)) || "—",
+    }]));
     const sponsorMap = new Map((sponsors.data || []).map(s => [s.id, s]));
     const accountMap = new Map((accounts.data || []).map(a => [a.center_id, a]));
-    return res.json({ success: true, centers: (centers || []).map(c => ({ ...c, sponsor: sponsorMap.get(c.sponsor_id) || null, student_count: (assignments.data || []).filter(a => a.center_id === c.id).length, account: accountMap.get(c.id) || null })) });
+    const assignmentMap = new Map();
+    for (const row of assignedRows) {
+      if (!assignmentMap.has(row.center_id)) assignmentMap.set(row.center_id, []);
+      const student = studentMap.get(Number(row.student_id));
+      if (student) assignmentMap.get(row.center_id).push(student);
+    }
+    return res.json({ success: true, centers: (centers || []).map(center => {
+      const assignedStudents = (assignmentMap.get(center.id) || []).sort((a,b) => a.name.localeCompare(b.name));
+      return { ...center, sponsor: sponsorMap.get(center.sponsor_id) || null, student_count: assignedStudents.length,
+        students: assignedStudents, account: accountMap.get(center.id) || null };
+    }) });
   } catch (e) { return res.status(500).json({ success: false, message: e.message || "Imeshindikana kupakia vituo." }); }
 });
-
 router.post("/management/centers", async (req, res) => {
   const schoolId = req.sponsorSchoolId;
   const sponsorName = String(req.body?.sponsor_name || "").trim();
@@ -140,6 +166,100 @@ router.post("/management/centers", async (req, res) => {
   } catch (e) {
     console.error("SPONSOR CENTER CREATE ERROR:", e);
     return res.status(500).json({ success: false, message: e.message || "Imeshindikana kuunda kituo." });
+  }
+});
+
+router.patch("/management/centers/:centerId", async (req, res) => {
+  const schoolId = req.sponsorSchoolId;
+  const centerId = String(req.params.centerId || "");
+  const sponsorName = String(req.body?.sponsor_name || "").trim();
+  const sponsorPhone = normalizePhone(req.body?.sponsor_phone);
+  const centerName = String(req.body?.center_name || "").trim();
+  const supervisorName = String(req.body?.supervisor_name || "").trim();
+  const supervisorPhoneRaw = String(req.body?.supervisor_phone || "").trim();
+  const supervisorPhone = normalizePhone(supervisorPhoneRaw);
+  const email = String(req.body?.supervisor_email || "").trim().toLowerCase();
+  const studentIds = [...new Set((Array.isArray(req.body?.student_ids) ? req.body.student_ids : []).map(Number).filter(n => Number.isInteger(n) && n > 0))];
+  if (!centerId || !sponsorName || !sponsorPhone || !centerName || !supervisorName || !supervisorPhone || !/^\S+@\S+\.\S+$/.test(email)) {
+    return res.status(400).json({ success: false, message: "Jaza jina na simu ya Sponsor, jina la kituo, jina/simu/email ya Manager kwa usahihi." });
+  }
+  try {
+    const { data: center, error: centerError } = await supabase.from("sponsor_centers")
+      .select("id,sponsor_id,center_name,supervisor_name,supervisor_phone,supervisor_email")
+      .eq("id", centerId).eq("school_id", schoolId).maybeSingle();
+    if (centerError) throw centerError;
+    if (!center) return res.status(404).json({ success: false, message: "Kituo hakipo kwenye shule hii." });
+
+    const [accountResult, validStudents, duplicateCenter, duplicateAccount] = await Promise.all([
+      supabase.from("sponsor_portal_accounts").select("id,username").eq("school_id", schoolId).eq("center_id", centerId).maybeSingle(),
+      studentIds.length ? supabase.from("students").select("id").eq("school_id", schoolId).in("id", studentIds) : Promise.resolve({ data: [] }),
+      supabase.from("sponsor_centers").select("id").eq("school_id", schoolId).eq("supervisor_email", email).neq("id", centerId).maybeSingle(),
+      supabase.from("sponsor_portal_accounts").select("id").eq("school_id", schoolId).eq("username", email).neq("center_id", centerId).maybeSingle(),
+    ]);
+    for (const result of [accountResult, validStudents, duplicateCenter, duplicateAccount]) if (result.error) throw result.error;
+    if (!accountResult.data) return res.status(409).json({ success: false, message: "Akaunti ya Sponsor Manager haipo kwa kituo hiki." });
+    if ((validStudents.data || []).length !== studentIds.length) return res.status(400).json({ success: false, message: "Baadhi ya wanafunzi hawapo kwenye shule hii." });
+    if (duplicateCenter.data || duplicateAccount.data) return res.status(409).json({ success: false, message: "Email hii tayari inatumika na Sponsor Manager mwingine kwenye shule hii." });
+
+    const managerChanged =
+      supervisorName !== center.supervisor_name ||
+      supervisorPhone !== center.supervisor_phone ||
+      email !== String(center.supervisor_email || "").toLowerCase();
+    let temporaryPassword = null;
+    let sms = null;
+    if (managerChanged) temporaryPassword = "AfriCore@" + crypto.randomInt(100000, 1000000) + "!";
+    const sponsorUpdate = await supabase.from("sponsor_organizations")
+      .update({ sponsor_name: sponsorName, sponsor_phone: sponsorPhone, updated_at: new Date().toISOString() })
+      .eq("id", center.sponsor_id).eq("school_id", schoolId);
+    if (sponsorUpdate.error) throw sponsorUpdate.error;
+
+    const centerUpdate = await supabase.from("sponsor_centers").update({
+      center_name: centerName, supervisor_name: supervisorName, supervisor_phone: supervisorPhone,
+      supervisor_email: email, updated_at: new Date().toISOString(),
+    }).eq("id", centerId).eq("school_id", schoolId);
+    if (centerUpdate.error) throw centerUpdate.error;
+
+    if (managerChanged) {
+      const hashed = await hashPassword(temporaryPassword);
+      const accountUpdate = await supabase.from("sponsor_portal_accounts").update({
+        username: email, password_hash: hashed.hash, password_salt: hashed.salt, updated_at: new Date().toISOString(),
+      }).eq("id", accountResult.data.id).eq("school_id", schoolId);
+      if (accountUpdate.error) throw accountUpdate.error;
+      try {
+        sms = await sendSupervisorSms(schoolId, supervisorPhoneRaw, email, temporaryPassword, centerName);
+      } catch (smsError) {
+        sms = { status: "failed", error: smsError.message };
+      }
+    }
+
+    const existingResult = await supabase.from("sponsor_center_students").select("student_id")
+      .eq("school_id", schoolId).eq("center_id", centerId);
+    if (existingResult.error) throw existingResult.error;
+    const existingIds = new Set((existingResult.data || []).map(row => Number(row.student_id)));
+    const nextIds = new Set(studentIds);
+    const toAdd = studentIds.filter(id => !existingIds.has(id));
+    const toRemove = [...existingIds].filter(id => !nextIds.has(id));
+    if (toAdd.length) {
+      const inserted = await supabase.from("sponsor_center_students").insert(toAdd.map(student_id => ({
+        school_id: schoolId, center_id: centerId, student_id, assigned_by: req.user.id,
+      })));
+      if (inserted.error) throw inserted.error;
+    }
+    if (toRemove.length) {
+      const removed = await supabase.from("sponsor_center_students").delete()
+        .eq("school_id", schoolId).eq("center_id", centerId).in("student_id", toRemove);
+      if (removed.error) throw removed.error;
+    }
+    return res.json({
+      success: true, manager_credentials_reset: managerChanged,
+      username: managerChanged ? email : null, temporary_password: temporaryPassword, sms,
+      message: managerChanged
+        ? (sms?.status === "failed" ? "Taarifa zimehifadhiwa na credentials mpya zimetengenezwa, lakini SMS haikutumwa. Nakili password mpya au tumia Resend Credentials." : "Taarifa zimehifadhiwa. Kwa sababu taarifa za Manager zimebadilika, credentials mpya zimetengenezwa na kutumwa kwa SMS.")
+        : "Mabadiliko yamehifadhiwa. Credentials za Sponsor Manager hazijabadilishwa.",
+    });
+  } catch (e) {
+    console.error("SPONSOR CENTER UPDATE ERROR:", e);
+    return res.status(500).json({ success: false, message: e.message || "Imeshindikana kusasisha Sponsor Centre." });
   }
 });
 
