@@ -20,9 +20,9 @@ export default function PaymentProviderSetup() {
     try {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth?.user?.id) throw new Error("User session haijapatikana.");
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("role_id").eq("id", auth.user.id).maybeSingle();
-      if (profileError) throw profileError;
-      if (Number(profile?.role_id) !== 1) throw new Error("Ni SuperAdmin pekee anayeruhusiwa kusimamia orodha hii.");
+      const { data: isSuperAdmin, error: roleError } = await supabase.rpc("is_current_user_super_admin");
+      if (roleError) throw roleError;
+      if (isSuperAdmin !== true) throw new Error("Ni SuperAdmin pekee anayeruhusiwa kusimamia orodha hii.");
       const { data, error: queryError } = await supabase.schema("finance").from("payment_providers").select("*").order("sort_order").order("provider_name");
       if (queryError) throw queryError;
       setRows(data || []);
