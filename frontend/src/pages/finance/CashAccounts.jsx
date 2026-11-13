@@ -176,7 +176,7 @@ function CashAccounts() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <label className="text-sm space-y-1">
                             <span className="text-slate-300">Account Type</span>
-                            <select value={form.accountType} onChange={(e) => setForm((v) => ({ ...v, accountType: e.target.value }))} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3">
+                            <select value={form.accountType} onChange={(e) => setForm((v) => ({ ...v, accountType: e.target.value, providerName: "" }))} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-3">
                                 <option value="bank">Bank</option>
                                 <option value="mobile_money">Mobile Money</option>
                                 <option value="cash">Cash</option>
@@ -220,7 +220,8 @@ function CashAccounts() {
                                         <td className="p-3"><div className="font-medium">{account.account_name}</div><div className="text-xs text-slate-500">{chartAccounts.find((a) => a.id === account.chart_of_account_id)?.account_name || "Linked asset account"}</div></td>
                                         <td className="p-3 capitalize">{account.account_type === "mobile_money" ? "Mobile Money" : account.account_type}</td>
                                         <td className="p-3">{account.provider_name || "—"}<div className="text-xs text-slate-500">{account.account_number || ""}</div></td>
-                                        <td className="p-3 text-right font-semibold tabular-nums">{new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(account.current_balance || 0))}</td>\n                                        <td className="p-3"><span className={account.is_active ? "text-emerald-400" : "text-slate-500"}>{account.is_active ? "Active" : "Inactive"}</span></td>
+                                        <td className="p-3 text-right font-semibold tabular-nums">{new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(account.current_balance || 0))}</td>
+                                        <td className="p-3"><span className={account.is_active ? "text-emerald-400" : "text-slate-500"}>{account.is_active ? "Active" : "Inactive"}</span></td>
                                         <td className="p-3 text-right whitespace-nowrap"><button type="button" onClick={() => startEdit(account)} className="inline-flex items-center gap-1 mr-3 text-blue-300 hover:text-blue-200"><FaEdit /> Edit</button><button type="button" onClick={() => toggleActive(account)} className="text-xs text-amber-300 hover:text-amber-200">{account.is_active ? "Deactivate" : "Activate"}</button></td>
                                     </tr>
                                 ))}</tbody>
