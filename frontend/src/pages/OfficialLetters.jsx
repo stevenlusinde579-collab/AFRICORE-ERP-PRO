@@ -13,6 +13,7 @@ export default function OfficialLetters() {
   const [body, setBody] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [authorTitle, setAuthorTitle] = useState("");
+  const [customAuthorTitle, setCustomAuthorTitle] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -35,7 +36,10 @@ export default function OfficialLetters() {
         setSenderAddress(ctx.school?.address || "");
         setAuthorName(ctx.author?.full_name || "");
         setPhone(ctx.author?.phone || "");
-        setAuthorTitle(ctx.author?.role_name || "");
+        const currentRole = String(ctx.author?.role_name || "").trim();
+        const titleOptions = ["Headmaster", "Deputy Headmaster", "Academic Master", "Accountant", "School Administrator", "Class Teacher", "Subject Teacher", "Secretary", "Teacher"];
+        if (titleOptions.includes(currentRole)) setAuthorTitle(currentRole);
+        else { setAuthorTitle("Other"); setCustomAuthorTitle(currentRole); }
       } catch (e) {
         if (active) setError(e.response?.data?.message || "Imeshindikana kupakia taarifa za shule na wapokeaji.");
       } finally {
@@ -61,7 +65,7 @@ export default function OfficialLetters() {
     subject: subject.trim(),
     body: body.trim(),
     author_name: authorName.trim(),
-    author_title: authorTitle.trim(),
+    author_title: (authorTitle === "Other" ? customAuthorTitle : authorTitle).trim(),
     author_phone: phone.trim(),
     student: {
       name: recipient.student_name,
@@ -78,7 +82,7 @@ export default function OfficialLetters() {
     if (!selectedIds.length) return "Chagua angalau mwanafunzi mmoja wa kumwandikia barua.";
     if (!senderAddress.trim() || !recipientAddress.trim()) return "Jaza anwani ya mwandishi na ya mwandikiwa.";
     if (!subject.trim() || !body.trim()) return "Jaza YAH na maudhui ya barua.";
-    if (!authorName.trim() || !authorTitle.trim() || !phone.trim()) return "Jaza jina, cheo na namba ya simu ya mwandishi.";
+    if (!authorName.trim() || !(authorTitle === "Other" ? customAuthorTitle.trim() : authorTitle.trim()) || !phone.trim()) return "Jaza jina, cheo na namba ya simu ya mwandishi.";
     return "";
   };
 
@@ -148,7 +152,10 @@ export default function OfficialLetters() {
                 <input value={authorName} onChange={(e)=>setAuthorName(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal" />
               </label>
               <label className="block text-xs font-bold text-slate-600">Cheo
-                <input value={authorTitle} onChange={(e)=>setAuthorTitle(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal" placeholder="Mfano: Mkuu wa Shule" />
+                <select value={authorTitle} onChange={(e)=>setAuthorTitle(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-normal">
+                  {["Headmaster", "Deputy Headmaster", "Academic Master", "Accountant", "School Administrator", "Class Teacher", "Subject Teacher", "Secretary", "Teacher", "Other"].map((title)=><option key={title} value={title}>{title}</option>)}
+                </select>
+                {authorTitle === "Other" && <input value={customAuthorTitle} onChange={(e)=>setCustomAuthorTitle(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal" placeholder="Enter other title" />}
               </label>
             </div>
             <label className="block text-xs font-bold text-slate-600">Namba ya simu
@@ -185,7 +192,7 @@ export default function OfficialLetters() {
           <div className="mt-5 whitespace-pre-wrap text-justify text-sm leading-7">{body}</div>
           <p className="mt-5 text-sm">Wako katika huduma,</p>
           <div className="mt-14 w-72 border-t border-black pt-2 text-sm">
-            <p className="font-bold">{authorName}</p><p>{authorTitle}</p><p className="mt-1">Simu: {phone}</p><p className="mt-8">Saini: ______________________________</p>
+            <p className="font-bold">{authorName}</p><p>{authorTitle === "Other" ? customAuthorTitle : authorTitle}</p><p className="mt-1">Simu: {phone}</p><p className="mt-8">Saini: ______________________________</p>
           </div>
           <p className="mt-8 text-center text-[9px] text-slate-500">{context?.school?.school_name || "AfriCore ERP PRO"} · Barua rasmi · {index + 1}/{selectedRecipients.length}</p>
         </article>)}

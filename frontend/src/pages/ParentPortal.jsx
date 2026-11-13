@@ -41,13 +41,24 @@ export default function ParentPortal() {
   const [liveRoom, setLiveRoom] = useState(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [notificationCounts, setNotificationCounts] = useState({});
   const authConfig = useMemo(() => ({ headers: { Authorization: "Bearer " + token } }), [token]);
+
+  const loadNotifications = async (activeToken = token) => {
+    if (!activeToken) return;
+    try { const response = await api.get("/parent-portal/notifications", { headers: { Authorization: "Bearer " + activeToken } }); setNotificationCounts(response.data?.counts || {}); } catch (e) { console.warn("Parent portal notifications unavailable:", e?.response?.data?.message || e?.message); }
+  };
+  const openPortalSection = async (tab) => {
+    setActiveTab(tab); setPortalHome(false);
+    if (token && ["reports", "results", "finance", "communication", "chat", "attendance"].includes(tab)) { try { await api.post("/parent-portal/notifications/read", { section: tab }, authConfig); setNotificationCounts((current) => ({ ...current, [tab]: 0 })); } catch (e) { console.warn("Could not mark portal section as read:", e?.message); } }
+  };
 
   const loadDashboard = async (activeToken = token) => {
     if (!activeToken) return;
     try {
       const response = await api.get("/parent-portal/dashboard", { headers: { Authorization: "Bearer " + activeToken } });
       setData(response.data);
+      loadNotifications(activeToken);
       setGroupMembers(response.data?.group_members || []);
       const availableExams = Array.isArray(response.data?.exams) ? response.data.exams : [];
       const firstAvailableExam = availableExams[0]?.id ? String(availableExams[0].id) : "";
@@ -64,6 +75,11 @@ export default function ParentPortal() {
     api.get("/parent-portal/schools").then((r) => setSchools(r.data?.schools || [])).catch(() => setError("Imeshindikana kupata orodha ya shule."));
   }, []);
   useEffect(() => { if (token && !mustChangePassword) loadDashboard(token); }, [token, mustChangePassword]);
+  useEffect(() => {
+    if (!token || mustChangePassword) return undefined;
+    const timer = window.setInterval(() => loadNotifications(token), 10000);
+    return () => window.clearInterval(timer);
+  }, [token, mustChangePassword]);
 
   const signIn = async (event) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
@@ -296,7 +312,7 @@ export default function ParentPortal() {
         <div className="mb-6"><p className="text-sm text-slate-500">Dashboard</p><h2 className="text-2xl font-black">Muhtasari wa mzazi</h2><p className="mt-1 text-sm text-slate-500">Fuatilia taarifa za mtoto wako kupitia sehemu zilizo hapa chini.</p></div>
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">My Child</p><h3 className="mt-2 text-xl font-black">{student.name}</h3><p className="mt-1 text-sm text-slate-500">{student.admission_number || "—"} · {student.class_name || "Darasa halijaainishwa"}</p><button type="button" onClick={()=>setPortalHome(false)} className="mt-4 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-bold text-white">View Child Information →</button></section>
         <div className="grid gap-4 sm:grid-cols-3"><Summary title="Ada zilizopangiwa" value={money(finance.total_charged)}/><Summary title="Zilizolipwa" value={money(finance.total_paid)}/><Summary title="Salio" value={money(finance.balance)}/></div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[["finance","Finance","Angalia ada, malipo na salio."],["results","Matokeo","Fuatilia matokeo ya mitihani."],["attendance","Mahudhurio","Angalia mahudhurio ya mwanafunzi."],["communication","Mawasiliano","Pata taarifa kutoka shuleni."],["chat","Group Chat","Wasiliana na shule na kundi husika."],["video","Video Conference","Jiunge na mikutano ya shule."],["suggestions","Maoni","Tuma maoni kwa uongozi wa shule."],["reports","Reports","Soma barua rasmi zilizochapishwa na shule."]].map(([tab,label,description])=><button key={tab} type="button" onClick={()=>{setActiveTab(tab);setPortalHome(false);}} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50"><b className="block">{label}</b><span className="mt-1 block text-sm text-slate-500">{description}</span></button>)}</div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[["finance","Finance","Angalia ada, malipo na salio."],["results","Matokeo","Fuatilia matokeo ya mitihani."],["attendance","Mahudhurio","Angalia mahudhurio ya mwanafunzi."],["communication","Mawasiliano","Pata taarifa kutoka shuleni."],["chat","Group Chat","Wasiliana na shule na kundi husika."],["video","Video Conference","Jiunge na mikutano ya shule."],["suggestions","Maoni","Tuma maoni kwa uongozi wa shule."],["reports","Reports","Soma barua rasmi zilizochapishwa na shule."]].map(([tab,label,description])=><button key={tab} type="button" onClick={()=>openPortalSection(tab)} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50"><b className="flex items-center justify-between gap-2">{label}<NotificationBadge count={notificationCounts[tab] || 0}/></b><span className="mt-1 block text-sm text-slate-500">{description}</span></button>)}</div>
       </main>
     </div>
   );
@@ -314,7 +330,7 @@ export default function ParentPortal() {
         {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
         {data.must_change_password && <form onSubmit={changePassword} className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-5"><h2 className="font-bold text-amber-900">Badilisha password ya awali</h2><p className="mt-1 text-sm text-amber-800">Kwa usalama, unatakiwa kubadilisha admission number kabla ya kuendelea kutumia portal.</p><div className="mt-3 grid gap-3 md:grid-cols-3"><input type="password" required value={currentPassword} onChange={(e)=>setCurrentPassword(e.target.value)} placeholder="Password ya sasa" className="rounded-lg border p-3"/><input type="password" required minLength={8} value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} placeholder="Password mpya (angalau herufi 8)" className="rounded-lg border p-3"/><button disabled={busy} className="rounded-lg bg-amber-700 p-3 font-bold text-white">Badilisha password</button></div></form>}
         <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-slate-500">Mwanafunzi</p><h1 className="text-2xl font-black">{student.name}</h1><p className="mt-1 text-sm text-slate-500">{student.admission_number} · {student.class_name}</p></div><div className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">{student.status || "Active"}</div></div></section>
-        <nav className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">{tabs.map(([key,label])=><button key={key} onClick={()=>setActiveTab(key)} className={"rounded-xl px-4 py-2.5 text-sm font-semibold transition "+(activeTab===key?"bg-blue-700 text-white shadow":"text-slate-600 hover:bg-slate-100")}>{label}</button>)}</nav>
+        <nav className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">{tabs.map(([key,label])=><button key={key} onClick={()=>openPortalSection(key)} className={"rounded-xl px-4 py-2.5 text-sm font-semibold transition "+(activeTab===key?"bg-blue-700 text-white shadow":"text-slate-600 hover:bg-slate-100")}>{label}<NotificationBadge count={notificationCounts[key] || 0}/></button>)}</nav>
         {activeTab==="overview" && <div className="space-y-4">
           {liveMeeting && <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm"><div className="min-w-0"><div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-rose-700"><span className="h-2 w-2 animate-pulse rounded-full bg-rose-600"/> Mkutano LIVE sasa</div><h2 className="mt-2 text-lg font-black text-slate-900">{liveMeeting.title}</h2><p className="mt-1 text-xs text-slate-600">Uongozi wa shule unaendesha mkutano huu sasa.</p></div><button type="button" disabled={busy} onClick={() => joinParentLiveMeeting(liveMeeting)} className="shrink-0 rounded-xl bg-rose-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-rose-700 disabled:opacity-50">{busy ? "Inaingia..." : "Join Meeting"}</button></section>}
           <div className="grid gap-4 md:grid-cols-3"><Summary title="Ada zilizopangiwa" value={money(finance.total_charged)}/><Summary title="Zilizolipwa" value={money(finance.total_paid)}/><Summary title="Salio" value={money(finance.balance)}/></div>
@@ -384,11 +400,11 @@ export default function ParentPortal() {
           </section>
         </div>}
         {activeTab==="reports" && <section className="space-y-4">
-          <div className="rounded-2xl bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 p-6 text-white"><p className="text-xs font-bold uppercase tracking-widest text-cyan-300">Parent & Sponsor Portal</p><h2 className="mt-2 text-2xl font-black">Reports & Letters</h2><p className="mt-2 text-sm text-blue-100">Barua rasmi zilizochapishwa na shule kwa mwanafunzi huyu.</p><p className="mt-3 text-xs text-blue-200">{student.name} · {student.admission_number || "—"} · {student.class_name || "—"}</p></div>
+          <div className="rounded-2xl bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 p-6 text-white"><p className="text-xs font-bold uppercase tracking-widest text-cyan-300">Parent & Sponsor Portal</p><h2 className="mt-2 flex items-center gap-3 text-2xl font-black">Reports & Letters <NotificationBadge count={notificationCounts.reports || 0}/></h2><p className="mt-2 text-sm text-blue-100">Barua rasmi zilizochapishwa na shule kwa mwanafunzi huyu.</p><p className="mt-3 text-xs text-blue-200">{student.name} · {student.admission_number || "—"} · {student.class_name || "—"}</p></div>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {publishedLetters.map(letter=><div key={letter.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 last:border-b-0">
               <div className="min-w-0"><p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">{letter.letter_type==="official_letter"?"Official Letter":letter.letter_type==="annual_fee_guidance"?"Annual Fee Guidance":"Fee Reminder"}</p><h3 className="mt-1 truncate font-extrabold text-slate-900">{letter.title}</h3><p className="mt-1 text-xs text-slate-500">Imechapishwa: {dateText(letter.published_at)}</p></div>
-              <button type="button" onClick={()=>setSelectedPublishedLetter(letter)} className="shrink-0 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">View</button>
+              <button type="button" onClick={async ()=>{setSelectedPublishedLetter(letter);try{await api.post("/parent-portal/notifications/read",{section:"reports"},authConfig);setNotificationCounts((current)=>({...current,reports:0}));}catch(e){console.warn("Could not mark reports as read:",e?.message);}}} className="shrink-0 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">View</button>
             </div>)}
             {!publishedLetters.length&&<div className="p-6"><EmptyState title="Hakuna barua zilizochapishwa" detail="Barua za mwanafunzi huyu zitaonekana hapa baada ya shule kuchagua Publish to Parent Portal."/></div>}
           </div>
@@ -434,6 +450,11 @@ export default function ParentPortal() {
       </main>
     </div>
   );
+}
+function NotificationBadge({count}) {
+  const value = Math.max(0, Number(count || 0));
+  if (!value) return null;
+  return <span aria-label={value + " unread notifications"} className="ml-1 inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white">{value > 99 ? "99+" : value}</span>;
 }
 function Summary({title,value}) { return <div className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">{title}</p><p className="mt-2 text-xl font-black text-slate-900">{value}</p></div>; }
 function attendanceBucket(status) {
