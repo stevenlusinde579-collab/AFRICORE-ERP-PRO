@@ -14,6 +14,10 @@ export default function ParentPortal() {
   const [schoolId, setSchoolId] = useState(searchParams.get("school") || "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loginMode, setLoginMode] = useState("parent");
+  const [sponsorToken, setSponsorToken] = useState(sessionStorage.getItem("africore_sponsor_portal_token") || "");
+  const [sponsorStudents, setSponsorStudents] = useState(() => { try { return JSON.parse(sessionStorage.getItem("africore_sponsor_students") || "[]"); } catch { return []; } });
+  const [sponsorCenter, setSponsorCenter] = useState(() => { try { return JSON.parse(sessionStorage.getItem("africore_sponsor_center") || "null"); } catch { return null; } });
   const [token, setToken] = useState(sessionStorage.getItem(TOKEN_KEY) || "");
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [loginStudent, setLoginStudent] = useState(null);
@@ -59,17 +63,42 @@ export default function ParentPortal() {
   const signIn = async (event) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
-      const response = await api.post("/parent-portal/login", { school_id: schoolId, username, password });
-      sessionStorage.setItem(TOKEN_KEY, response.data.token);
-      setLoginStudent(response.data.student || null);
-      setMustChangePassword(Boolean(response.data.must_change_password));
-      setToken(response.data.token);
-      setPassword("");
-      setNotice(response.data.must_change_password ? "Umeingia. Badilisha password ya awali ili kuendelea." : "Umeingia kwenye Parent Portal.");
+      if (loginMode === "sponsor") {
+        const response = await api.post("/sponsor-portal/login", { school_id: schoolId, username, password });
+        sessionStorage.setItem("africore_sponsor_portal_token", response.data.token);
+        sessionStorage.setItem("africore_sponsor_students", JSON.stringify(response.data.students || []));
+        sessionStorage.setItem("africore_sponsor_center", JSON.stringify(response.data.center || null));
+        setSponsorToken(response.data.token); setSponsorStudents(response.data.students || []); setSponsorCenter(response.data.center || null);
+        setPassword(""); setNotice("Umeingia kama Sponsor. Chagua mwanafunzi unayetaka kuona taarifa zake.");
+      } else {
+        const response = await api.post("/parent-portal/login", { school_id: schoolId, username, password });
+        sessionStorage.setItem(TOKEN_KEY, response.data.token);
+        setLoginStudent(response.data.student || null);
+        setMustChangePassword(Boolean(response.data.must_change_password));
+        setToken(response.data.token);
+        setPassword("");
+        setNotice(response.data.must_change_password ? "Umeingia. Badilisha password ya awali ili kuendelea." : "Umeingia kwenye Parent Portal.");
+      }
     } catch (e) { setError(e.response?.data?.message || "Username au password si sahihi."); }
     finally { setBusy(false); }
   };
-  const signOut = () => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); setData(null); setLoginStudent(null); setSelectedExam(""); setResultData(null); setMustChangePassword(false); setActiveTab("overview"); };
+  const chooseSponsorStudent = async (student) => {
+    setBusy(true); setError("");
+    try {
+      const response = await api.post("/sponsor-portal/select-student", { student_id: student.id }, { headers: { Authorization: "Bearer " + sponsorToken } });
+      sessionStorage.setItem(TOKEN_KEY, response.data.token);
+      setLoginStudent(response.data.student || student);
+      setToken(response.data.token);
+      setNotice("Unaangalia taarifa za " + student.name + ".");
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kufungua taarifa za mwanafunzi."); }
+    finally { setBusy(false); }
+  };
+  const signOut = () => {
+    sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem("africore_sponsor_portal_token");
+    sessionStorage.removeItem("africore_sponsor_students"); sessionStorage.removeItem("africore_sponsor_center");
+    setToken(""); setSponsorToken(""); setSponsorStudents([]); setSponsorCenter(null); setData(null); setLoginStudent(null);
+    setSelectedExam(""); setResultData(null); setMustChangePassword(false); setActiveTab("overview"); setLoginMode("parent");
+  };
 
   const loadResults = async (examId) => {
     setSelectedExam(examId); setResultData(null);
@@ -167,19 +196,28 @@ export default function ParentPortal() {
     finally { setBusy(false); }
   };
 
+  if (!token && sponsorStudents.length > 0 && sponsorToken) return (
+    <div className="min-h-screen bg-slate-950 px-4 py-12 flex items-center justify-center"><div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-700">Sponsor Portal</p><h1 className="mt-1 text-2xl font-black">{sponsorCenter?.name || "Kituo chako"}</h1><p className="text-sm text-slate-500">Chagua mwanafunzi kuona taarifa zake.</p></div><button onClick={signOut} className="rounded-xl border px-4 py-2 text-sm font-semibold">Toka</button></div>
+      {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">{sponsorStudents.map((student)=><button key={student.id} disabled={busy} onClick={()=>chooseSponsorStudent(student)} className="rounded-xl border border-slate-200 p-4 text-left hover:border-blue-400 hover:bg-blue-50"><b className="block">{student.name}</b><span className="mt-1 block text-xs text-slate-500">{student.admission_number || "—"} · {student.class_name}</span></button>)}</div>
+      {!sponsorStudents.length && <p className="mt-5 text-sm text-slate-500">Hakuna wanafunzi waliopangiwa kituo hiki.</p>}
+    </div></div>
+  );
   if (!token) return (
     <div className="min-h-screen bg-slate-950 px-4 py-12 flex items-center justify-center">
       <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
         <a href="/" className="text-sm font-bold text-blue-700">← AfriCore PRO</a>
-        <div className="mt-6 text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100 text-3xl">👨‍👩‍👧</div><h1 className="mt-4 text-3xl font-black text-slate-900">Parent Portal</h1><p className="mt-2 text-slate-500">Fuatilia maendeleo na taarifa za mwanafunzi wako.</p></div>
+        <div className="mt-6 text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100 text-3xl">{loginMode === "parent" ? "👨‍👩‍👧" : "🏫"}</div><h1 className="mt-4 text-3xl font-black text-slate-900">{loginMode === "parent" ? "Parent Portal" : "Sponsor Portal"}</h1><p className="mt-2 text-slate-500">{loginMode === "parent" ? "Fuatilia maendeleo na taarifa za mwanafunzi wako." : "Ingia kuona wanafunzi waliopangiwa kituo chako."}</p></div>
+        <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1"><button type="button" onClick={()=>{setLoginMode("parent");setError("");}} className={"rounded-lg p-2 text-sm font-bold "+(loginMode==="parent"?"bg-white shadow":"text-slate-500")}>Login as Parent</button><button type="button" onClick={()=>{setLoginMode("sponsor");setError("");}} className={"rounded-lg p-2 text-sm font-bold "+(loginMode==="sponsor"?"bg-white shadow":"text-slate-500")}>Login as Sponsor</button></div>
         {error && <div className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         <form onSubmit={signIn} className="mt-6 space-y-4">
           <label className="block text-sm font-semibold text-slate-700">Shule<select required value={schoolId} onChange={(e)=>setSchoolId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3"><option value="">Chagua shule</option>{schools.map((s)=><option key={s.id} value={s.id}>{s.school_name}</option>)}</select></label>
-          <label className="block text-sm font-semibold text-slate-700">Username — Jina kamili la mwanafunzi<input required value={username} onChange={(e)=>setUsername(e.target.value)} autoComplete="username" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder="Mfano: Amina John Peter"/></label>
-          <label className="block text-sm font-semibold text-slate-700">Password — Admission Number<input required type="password" value={password} onChange={(e)=>setPassword(e.target.value)} autoComplete="current-password" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder="Admission Number"/></label>
-          <button disabled={busy} className="w-full rounded-xl bg-blue-700 p-3 font-bold text-white disabled:opacity-60">{busy ? "Inaingia..." : "Ingia Parent Portal"}</button>
+          <label className="block text-sm font-semibold text-slate-700">{loginMode === "parent" ? "Username — Jina kamili la mwanafunzi" : "Username — Email ya msimamizi"}<input required value={username} onChange={(e)=>setUsername(e.target.value)} autoComplete="username" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder={loginMode === "parent" ? "Mfano: Amina John Peter" : "name@example.com"}/></label>
+          <label className="block text-sm font-semibold text-slate-700">Password<input required type="password" value={password} onChange={(e)=>setPassword(e.target.value)} autoComplete="current-password" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder={loginMode === "parent" ? "Admission Number" : "Password ya Sponsor"}/></label>
+          <button disabled={busy} className="w-full rounded-xl bg-blue-700 p-3 font-bold text-white disabled:opacity-60">{busy ? "Inaingia..." : loginMode === "parent" ? "Ingia Parent Portal" : "Ingia Sponsor Portal"}</button>
         </form>
-        <p className="mt-5 text-xs leading-relaxed text-slate-500">Kila mwanafunzi ana akaunti yake. Ikiwa hujapokea SMS ya kuingia, wasiliana na ofisi ya shule ili watume tena taarifa zako.</p>
+        {loginMode === "parent" && <p className="mt-5 text-xs leading-relaxed text-slate-500">Kila mwanafunzi ana akaunti yake. Ikiwa hujapokea SMS ya kuingia, wasiliana na ofisi ya shule ili watume tena taarifa zako.</p>}
       </div>
     </div>
   );
@@ -201,7 +239,7 @@ export default function ParentPortal() {
   );
 
   if (!data) return <div className="min-h-screen bg-slate-50 p-10 text-center">Inapakia Parent Portal...</div>;
-  const tabs = [["overview","Muhtasari"],["finance","Finance"],["results","Matokeo"],["communication","Mawasiliano"],["video","Video Conference"],["chat","Group Chat"],["attendance","Mahudhurio"],["suggestions","Maoni"]];
+  const tabs = [["overview","Muhtasari"],["finance","Finance"],["results","Matokeo"],["communication","Mawasiliano"],["video","Video Conference"],["chat","Group Chat"],["attendance","Mahudhurio"],...(data.portal_type === "Sponsor" ? [] : [["suggestions","Maoni"]])];
   const { student, finance } = data;
   const attendanceRows = Array.isArray(data.attendance) ? data.attendance : [];
   const attendanceStats = attendanceRows.reduce((stats, row) => { stats[attendanceBucket(row.status)] += 1; return stats; }, { present: 0, absent: 0, late: 0, other: 0 });
@@ -209,7 +247,7 @@ export default function ParentPortal() {
   const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-800">
-      <header className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-2xl"/><div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-6"><div><div className="text-xl font-black tracking-tight">{student.school_name || "Shule"} <span className="text-cyan-300">PARENT PORTAL</span></div><p className="mt-3 text-xs text-blue-200">Taarifa za mwanafunzi · Mawasiliano ya shule · Maendeleo ya kitaaluma</p></div><button onClick={signOut} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Toka</button></div></header>
+      <header className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-2xl"/><div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-6"><div><div className="text-xl font-black tracking-tight">{student.school_name || "Shule"} <span className="text-cyan-300">{data.portal_type === "Sponsor" ? "SPONSOR PORTAL" : "PARENT PORTAL"}</span></div><p className="mt-3 text-xs text-blue-200">{data.portal_type === "Sponsor" ? (data.sponsor_center_name || "Sponsor Centre") + " · Taarifa za wanafunzi waliopangiwa" : "Taarifa za mwanafunzi · Mawasiliano ya shule · Maendeleo ya kitaaluma"}</p></div><button onClick={signOut} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Toka</button></div></header>
       <main className="mx-auto max-w-7xl px-4 py-7 md:px-6">
         {notice && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
         {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}

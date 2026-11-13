@@ -206,18 +206,42 @@ async function parentAuth(req, res, next) {
   try {
     const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     const claims = verifyToken(token);
-    if (!claims?.account_id || !claims?.student_id || !claims?.school_id) {
+    if (!claims?.school_id || !claims?.student_id) {
       return res.status(401).json({ success: false, message: "Parent Portal session expired. Please sign in again." });
     }
-    const { data: account, error } = await supabase.from("parent_portal_accounts")
-      .select("id,student_id,school_id,username,must_change_password,is_active")
-      .eq("id", claims.account_id).eq("student_id", claims.student_id).eq("school_id", claims.school_id)
-      .maybeSingle();
-    if (error || !account || !account.is_active) return res.status(401).json({ success: false, message: "Parent Portal account is unavailable." });
+
+    let account;
+    if (claims.sponsor_account_id && claims.sponsor_center_id) {
+      const { data: sponsorAccount, error: sponsorError } = await supabase.from("sponsor_portal_accounts")
+        .select("id,school_id,center_id,username,is_active")
+        .eq("id", claims.sponsor_account_id).eq("school_id", claims.school_id)
+        .eq("center_id", claims.sponsor_center_id).eq("is_active", true).maybeSingle();
+      if (sponsorError || !sponsorAccount || !claims.sponsor_student_id || Number(claims.student_id) !== Number(claims.sponsor_student_id)) {
+        return res.status(401).json({ success: false, message: "Sponsor session is unavailable." });
+      }
+      const { data: assignment, error: assignmentError } = await supabase.from("sponsor_center_students")
+        .select("student_id").eq("school_id", sponsorAccount.school_id)
+        .eq("center_id", sponsorAccount.center_id).eq("student_id", sponsorAccount && claims.student_id).maybeSingle();
+      if (assignmentError || !assignment) return res.status(403).json({ success: false, message: "Mwanafunzi huyu hajapangiwa kituo chako." });
+      const { data: center, error: centerError } = await supabase.from("sponsor_centers")
+        .select("id,center_name,is_active").eq("id", sponsorAccount.center_id).eq("school_id", sponsorAccount.school_id).maybeSingle();
+      if (centerError || !center || !center.is_active) return res.status(403).json({ success: false, message: "Kituo hiki hakitumiki." });
+      account = { id: sponsorAccount.id, student_id: Number(claims.student_id), school_id: Number(claims.school_id), username: sponsorAccount.username, must_change_password: false, is_active: true, sponsor_center_id: center.id, sponsor_center_name: center.center_name, is_sponsor: true };
+    } else {
+      if (!claims.account_id) return res.status(401).json({ success: false, message: "Parent Portal session expired. Please sign in again." });
+      const { data: parentAccount, error } = await supabase.from("parent_portal_accounts")
+        .select("id,student_id,school_id,username,must_change_password,is_active")
+        .eq("id", claims.account_id).eq("student_id", claims.student_id).eq("school_id", claims.school_id)
+        .maybeSingle();
+      if (error || !parentAccount || !parentAccount.is_active) return res.status(401).json({ success: false, message: "Parent Portal account is unavailable." });
+      account = parentAccount;
+    }
+
     const student = await loadStudent(account.student_id, account.school_id);
     if (!student) return res.status(403).json({ success: false, message: "Student is no longer available in this school." });
     const { data: school, error: schoolError } = await supabase.from("schools").select("id,school_name,is_active").eq("id", account.school_id).maybeSingle();
     if (schoolError || !school || school.is_active !== true) return res.status(403).json({ success: false, message: "This school is inactive. Please contact the school administrator." });
+    if (String(student.status || student.student_status || "Active").toLowerCase() === "inactive") return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
     req.parent = { account, student, school };
     if (account.must_change_password && !["/change-password", "/logout"].includes(req.path)) {
       return res.status(403).json({ success: false, code: "PARENT_PASSWORD_CHANGE_REQUIRED", message: "Badilisha password yako ya awali kwanza." });
@@ -1003,6 +1027,8 @@ router.get("/dashboard", async (req, res) => {
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
       exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
+      portal_type: req.parent.account.is_sponsor ? "Sponsor" : "Parent",
+      sponsor_center_name: req.parent.account.sponsor_center_name || null,
     });
   } catch (error) {
     console.error("PARENT DASHBOARD ERROR:", error);
@@ -1042,6 +1068,7 @@ router.get("/results/:examId", async (req, res) => {
 });
 
 router.post("/change-password", async (req, res) => {
+  if (req.parent?.account?.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor password reset is managed by the school office." });
   const currentPassword = String(req.body?.current_password || "");
   const newPassword = String(req.body?.new_password || "");
   if (!currentPassword || newPassword.length < 8) return res.status(400).json({ success: false, message: "Enter your current password and a new password of at least 8 characters." });
@@ -1059,6 +1086,7 @@ router.post("/change-password", async (req, res) => {
 });
 
 router.post("/suggestions", async (req, res) => {
+  if (req.parent?.account?.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor accounts cannot submit parent-only suggestions." });
   const message = String(req.body?.suggestion || "").trim();
   const category = String(req.body?.category || "General").trim().slice(0, 80) || "General";
   if (message.length < 5 || message.length > 4000) return res.status(400).json({ success: false, message: "Suggestion must contain between 5 and 4000 characters." });
@@ -1079,7 +1107,7 @@ router.post("/chat", async (req, res) => {
   if (classRow.error || !classRow.data) return res.status(403).json({ success: false, message: "Student's current class is not available in this school." });
   const { data, error } = await supabase.from("parent_portal_chat_messages").insert({
     school_id: school.id, class_id: student.current_class_id, student_id: student.id,
-    parent_account_id: req.parent.account.id, sender_type: "parent", sender_name: "Mzazi wa " + fullName(student), message,
+    parent_account_id: req.parent.account.is_sponsor ? null : req.parent.account.id, sender_type: "parent", sender_name: (req.parent.account.is_sponsor ? "Sponsor wa " : "Mzazi wa ") + fullName(student), message,
   }).select("id,sender_type,sender_name,message,created_at").single();
   if (error) return res.status(500).json({ success: false, message: "Unable to send class message." });
   return res.json({ success: true, message: data });
