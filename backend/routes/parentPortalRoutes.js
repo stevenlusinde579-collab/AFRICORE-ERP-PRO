@@ -889,10 +889,9 @@ router.get("/staff/letters/context", authenticateUser, parentPortalStaffAccess, 
   const schoolId = Number(req.profile?.school_id);
   if (!Number.isInteger(schoolId)) return res.status(400).json({ success:false, message:"Akaunti hii haijaunganishwa na shule." });
   try {
-    const [schoolResult] = await Promise.all([
-      supabase.from("schools").select("id,school_name,address,phone,email,logo").eq("id",schoolId).maybeSingle(),
-      Promise.resolve({ data: null, error: null }),
-    ]);
+    const schoolResult = await supabase.from("schools")
+      .select("id,school_name,address,phone,email,logo")
+      .eq("id",schoolId).maybeSingle();
     if (schoolResult.error) throw schoolResult.error;
     if (!schoolResult.data) return res.status(404).json({ success:false, message:"Shule haijapatikana." });
     return res.json({
@@ -914,6 +913,14 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
     return res.status(400).json({ success:false, message:"Taarifa za barua hazijakamilika." });
   }
   try {
+    if (type === "official_letter" && entries.some(entry => {
+      const payload = entry?.payload || {};
+      return !String(payload.subject || "").trim() || String(payload.subject || "").length > 180 ||
+        !String(payload.body || "").trim() || String(payload.body || "").length > 12000 ||
+        String(payload.sender_address || "").length > 1200 || String(payload.recipient_address || "").length > 1200 ||
+        String(payload.author_name || "").length > 160 || String(payload.author_title || "").length > 160 ||
+        String(payload.author_phone || "").length > 40;
+    })) return res.status(400).json({ success:false, message:"Maudhui ya barua hayajakamilika au yamezidi urefu unaoruhusiwa." });
     const ids = [...new Set(entries.map(x => Number(x?.student_id)))];
     if (ids.some(id => !Number.isInteger(id) || id <= 0)) return res.status(400).json({success:false,message:"Mwanafunzi wa barua si sahihi."});
     if (!req.parentPortalScope.fullAccess && ids.some(id => !req.parentPortalScope.studentIds.includes(id))) {
