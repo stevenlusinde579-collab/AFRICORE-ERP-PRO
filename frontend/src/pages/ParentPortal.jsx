@@ -22,6 +22,8 @@ export default function ParentPortal() {
   const [sponsorCenter, setSponsorCenter] = useState(() => { try { return JSON.parse(sessionStorage.getItem("africore_sponsor_center") || "null"); } catch { return null; } });
   const [token, setToken] = useState(sessionStorage.getItem(TOKEN_KEY) || "");
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [portalHome, setPortalHome] = useState(true);
+  const [showSponsorStudents, setShowSponsorStudents] = useState(false);
   const [loginStudent, setLoginStudent] = useState(null);
   const [data, setData] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
@@ -71,11 +73,13 @@ export default function ParentPortal() {
         sessionStorage.setItem("africore_sponsor_students", JSON.stringify(response.data.students || []));
         sessionStorage.setItem("africore_sponsor_center", JSON.stringify(response.data.center || null));
         setSponsorToken(response.data.token); setSponsorStudents(response.data.students || []); setSponsorCenter(response.data.center || null);
+        setPortalHome(true); setShowSponsorStudents(false);
         setPassword(""); setShowPassword(false); setNotice("Umeingia kama Sponsor. Chagua mwanafunzi unayetaka kuona taarifa zake.");
       } else {
         const response = await api.post("/parent-portal/login", { school_id: schoolId, username, password });
         sessionStorage.setItem(TOKEN_KEY, response.data.token);
         setLoginStudent(response.data.student || null);
+        setPortalHome(true);
         setMustChangePassword(Boolean(response.data.must_change_password));
         setToken(response.data.token);
         setPassword("");
@@ -91,6 +95,7 @@ export default function ParentPortal() {
       const response = await api.post("/sponsor-portal/select-student", { student_id: student.id }, { headers: { Authorization: "Bearer " + sponsorToken } });
       sessionStorage.setItem(TOKEN_KEY, response.data.token);
       setLoginStudent(response.data.student || student);
+      setPortalHome(false);
       setToken(response.data.token);
       setNotice("Unaangalia taarifa za " + student.name + ".");
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kufungua taarifa za mwanafunzi."); }
@@ -100,7 +105,7 @@ export default function ParentPortal() {
     sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem("africore_sponsor_portal_token");
     sessionStorage.removeItem("africore_sponsor_students"); sessionStorage.removeItem("africore_sponsor_center");
     setToken(""); setSponsorToken(""); setSponsorStudents([]); setSponsorCenter(null); setData(null); setLoginStudent(null);
-    setSelectedExam(""); setResultData(null); setMustChangePassword(false); setActiveTab("overview"); setLoginMode("parent");
+    setSelectedExam(""); setResultData(null); setMustChangePassword(false); setActiveTab("overview"); setLoginMode("parent"); setPortalHome(true); setShowSponsorStudents(false);
   };
 
   const loadResults = async (examId) => {
@@ -199,13 +204,20 @@ export default function ParentPortal() {
     finally { setBusy(false); }
   };
 
-  if (!token && sponsorStudents.length > 0 && sponsorToken) return (
-    <div className="min-h-screen bg-slate-950 px-4 py-12 flex items-center justify-center"><div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-2xl">
-      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-700">Sponsor Portal</p><h1 className="mt-1 text-2xl font-black">{sponsorCenter?.name || "Kituo chako"}</h1><p className="text-sm text-slate-500">Chagua mwanafunzi kuona taarifa zake.</p></div><button onClick={signOut} className="rounded-xl border px-4 py-2 text-sm font-semibold">Toka</button></div>
-      {error && <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">{sponsorStudents.map((student)=><button key={student.id} disabled={busy} onClick={()=>chooseSponsorStudent(student)} className="rounded-xl border border-slate-200 p-4 text-left hover:border-blue-400 hover:bg-blue-50"><b className="block">{student.name}</b><span className="mt-1 block text-xs text-slate-500">{student.admission_number || "—"} · {student.class_name}</span></button>)}</div>
-      {!sponsorStudents.length && <p className="mt-5 text-sm text-slate-500">Hakuna wanafunzi waliopangiwa kituo hiki.</p>}
-    </div></div>
+  if (!token && sponsorToken) return (
+    <div className="min-h-screen bg-[#f4f7fb] text-slate-800">
+      <header className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-6 md:px-6"><div><p className="text-xs font-bold uppercase tracking-widest text-cyan-300">Sponsor Portal</p><h1 className="mt-1 text-2xl font-black">{sponsorCenter?.name || "Sponsor Centre"}</h1><p className="mt-1 text-sm text-blue-200">Karibu kwenye dashibodi ya kituo chako.</p></div><button onClick={signOut} className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold hover:bg-white/10">Toka</button></div></header>
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {!showSponsorStudents ? <><div className="mb-6"><p className="text-sm text-slate-500">Dashboard</p><h2 className="text-2xl font-black">Muhtasari wa Sponsor Centre</h2><p className="mt-1 text-sm text-slate-500">Taarifa za wanafunzi waliopangiwa kituo hiki.</p></div>
+          <div className="grid gap-4 sm:grid-cols-2"><div className="rounded-2xl border bg-white p-6 shadow-sm"><p className="text-sm font-semibold text-slate-500">Jumla ya wanafunzi</p><p className="mt-2 text-4xl font-black text-blue-800">{sponsorStudents.length}</p></div><div className="rounded-2xl border bg-white p-6 shadow-sm"><p className="text-sm font-semibold text-slate-500">Sponsor Centre</p><p className="mt-2 text-xl font-black">{sponsorCenter?.name || "Kituo chako"}</p></div></div>
+          <button type="button" onClick={()=>setShowSponsorStudents(true)} className="mt-6 rounded-xl bg-blue-700 px-6 py-3 font-bold text-white shadow-sm hover:bg-blue-800">My Students <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5">{sponsorStudents.length}</span></button>
+        </> : <><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-slate-500">Sponsor Portal</p><h2 className="text-2xl font-black">My Students</h2><p className="mt-1 text-sm text-slate-500">Chagua mwanafunzi kufungua taarifa zake.</p></div><button type="button" onClick={()=>setShowSponsorStudents(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold">← Dashboard</button></div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{sponsorStudents.map((student)=><button key={student.id} disabled={busy} onClick={()=>chooseSponsorStudent(student)} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-400 hover:bg-blue-50"><b className="block">{student.name}</b><span className="mt-1 block text-xs text-slate-500">{student.admission_number || "—"} · {student.class_name}</span><span className="mt-3 inline-block text-xs font-bold text-blue-700">{busy ? "Inafungua..." : "View Student →"}</span></button>)}</div>
+          {!sponsorStudents.length && <p className="mt-5 rounded-xl bg-white p-6 text-sm text-slate-500">Hakuna wanafunzi waliopangiwa kituo hiki.</p>}
+        </>}
+      </main>
+    </div>
   );
   if (!token) return (
     <div className="min-h-screen bg-slate-950 px-4 py-12 flex items-center justify-center">
@@ -249,6 +261,19 @@ export default function ParentPortal() {
   );
 
   if (!data) return <div className="min-h-screen bg-slate-50 p-10 text-center">Inapakia Parent Portal...</div>;
+  if (portalHome && !mustChangePassword) return (
+    <div className="min-h-screen bg-[#f4f7fb] text-slate-800">
+      <header className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-6 md:px-6"><div><p className="text-xs font-bold uppercase tracking-widest text-cyan-300">Parent Portal</p><h1 className="mt-1 text-2xl font-black">{student.school_name || "Shule"}</h1><p className="mt-1 text-sm text-blue-200">Karibu, {student.name}</p></div><button onClick={signOut} className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold hover:bg-white/10">Toka</button></div></header>
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        {notice && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
+        {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
+        <div className="mb-6"><p className="text-sm text-slate-500">Dashboard</p><h2 className="text-2xl font-black">Muhtasari wa mzazi</h2><p className="mt-1 text-sm text-slate-500">Fuatilia taarifa za mtoto wako kupitia sehemu zilizo hapa chini.</p></div>
+        <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">My Child</p><h3 className="mt-2 text-xl font-black">{student.name}</h3><p className="mt-1 text-sm text-slate-500">{student.admission_number || "—"} · {student.class_name || "Darasa halijaainishwa"}</p><button type="button" onClick={()=>setPortalHome(false)} className="mt-4 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-bold text-white">View Child Information →</button></section>
+        <div className="grid gap-4 sm:grid-cols-3"><Summary title="Ada zilizopangiwa" value={money(finance.total_charged)}/><Summary title="Zilizolipwa" value={money(finance.total_paid)}/><Summary title="Salio" value={money(finance.balance)}/></div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[["finance","Finance","Angalia ada, malipo na salio."],["results","Matokeo","Fuatilia matokeo ya mitihani."],["attendance","Mahudhurio","Angalia mahudhurio ya mwanafunzi."],["communication","Mawasiliano","Pata taarifa kutoka shuleni."],["chat","Group Chat","Wasiliana na shule na kundi husika."],["video","Video Conference","Jiunge na mikutano ya shule."],["suggestions","Maoni","Tuma maoni kwa uongozi wa shule."]].map(([tab,label,description])=><button key={tab} type="button" onClick={()=>{setActiveTab(tab);setPortalHome(false);}} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50"><b className="block">{label}</b><span className="mt-1 block text-sm text-slate-500">{description}</span></button>)}</div>
+      </main>
+    </div>
+  );
   const tabs = [["overview","Muhtasari"],["finance","Finance"],["results","Matokeo"],["communication","Mawasiliano"],["video","Video Conference"],["chat","Group Chat"],["attendance","Mahudhurio"],...(data.portal_type === "Sponsor" ? [] : [["suggestions","Maoni"]])];
   const { student, finance } = data;
   const attendanceRows = Array.isArray(data.attendance) ? data.attendance : [];
@@ -257,7 +282,7 @@ export default function ParentPortal() {
   const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-800">
-      <header className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-2xl"/><div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-6"><div><div className="text-xl font-black tracking-tight">{student.school_name || "Shule"} <span className="text-cyan-300">{data.portal_type === "Sponsor" ? "SPONSOR PORTAL" : "PARENT PORTAL"}</span></div><p className="mt-3 text-xs text-blue-200">{data.portal_type === "Sponsor" ? (data.sponsor_center_name || "Sponsor Centre") + " · Taarifa za wanafunzi waliopangiwa" : "Taarifa za mwanafunzi · Mawasiliano ya shule · Maendeleo ya kitaaluma"}</p></div><button onClick={signOut} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Toka</button></div></header>
+      <header className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-2xl"/><div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-6"><div><div className="text-xl font-black tracking-tight">{student.school_name || "Shule"} <span className="text-cyan-300">{data.portal_type === "Sponsor" ? "SPONSOR PORTAL" : "PARENT PORTAL"}</span></div><p className="mt-3 text-xs text-blue-200">{data.portal_type === "Sponsor" ? (data.sponsor_center_name || "Sponsor Centre") + " · Taarifa za wanafunzi waliopangiwa" : "Taarifa za mwanafunzi · Mawasiliano ya shule · Maendeleo ya kitaaluma"}</p></div><div className="flex gap-2"><button onClick={()=>setPortalHome(true)} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Dashboard</button><button onClick={signOut} className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20">Toka</button></div></div></header>
       <main className="mx-auto max-w-7xl px-4 py-7 md:px-6">
         {notice && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
         {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
