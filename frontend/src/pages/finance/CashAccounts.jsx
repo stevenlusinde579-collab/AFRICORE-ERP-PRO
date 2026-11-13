@@ -54,11 +54,18 @@ function CashAccounts() {
                     .eq("allow_manual_posting", true)
                     .eq("is_control_account", false)
                     .order("account_code", { ascending: true }),
+                supabase.schema("finance").from("payment_providers")
+                    .select("id,provider_name,provider_type,is_active,sort_order")
+                    .eq("is_active", true)
+                    .order("sort_order", { ascending: true })
+                    .order("provider_name", { ascending: true }),
             ]);
             if (accountError) throw accountError;
             if (chartError) throw chartError;
+            if (providerError) throw providerError;
             setAccounts(accountRows || []);
             setChartAccounts(chartRows || []);
+            setGlobalProviders(providerRows || []);
         } catch (err) {
             setError(err.message || "Imeshindikana kupakia financial accounts.");
         } finally {
