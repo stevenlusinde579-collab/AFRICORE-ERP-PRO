@@ -884,6 +884,38 @@ router.post("/staff/exams/:examId/publish-results", authenticateUser, requirePer
   }
 });
 
+
+router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const type = String(req.body?.letter_type || "");
+  const entries = Array.isArray(req.body?.letters) ? req.body.letters : [];
+  if (!Number.isInteger(schoolId) || !["fee_reminder","annual_fee_guidance"].includes(type) || !entries.length || entries.length > 500) {
+    return res.status(400).json({ success:false, message:"Taarifa za barua hazijakamilika." });
+  }
+  try {
+    const ids = [...new Set(entries.map(x => Number(x?.student_id)))];
+    if (ids.some(id => !Number.isInteger(id) || id <= 0)) return res.status(400).json({success:false,message:"Mwanafunzi wa barua si sahihi."});
+    if (!req.parentPortalScope.fullAccess && ids.some(id => !req.parentPortalScope.studentIds.includes(id))) {
+      return res.status(403).json({success:false,message:"Huna ruhusa ya kuchapisha barua kwa mwanafunzi mmoja au zaidi."});
+    }
+    const valid = await supabase.from("students").select("id").eq("school_id",schoolId).in("id",ids);
+    if (valid.error) throw valid.error;
+    if ((valid.data || []).length !== ids.length) return res.status(403).json({success:false,message:"Mwanafunzi hayupo kwenye shule yako."});
+    const rows = entries.map(entry => ({
+      school_id:schoolId, student_id:Number(entry.student_id), letter_type:type,
+      title:String(entry.title || (type === "fee_reminder" ? "Barua ya Makumbusho ya Ada" : "Barua za Mwongozo wa Ada za Mwaka Mpya")).slice(0,180),
+      payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
+      published_by:req.user.id, published_at:new Date().toISOString()
+    }));
+    const saved=await supabase.from("parent_portal_published_letters").insert(rows).select("id");
+    if(saved.error) throw saved.error;
+    return res.json({success:true,published_count:saved.data?.length || rows.length,message:"Barua zimechapishwa kwenye Parent Portal."});
+  } catch(error) {
+    console.error("PARENT PORTAL LETTER PUBLISH ERROR:",error);
+    return res.status(500).json({success:false,message:error.message || "Imeshindikana kuchapisha barua."});
+  }
+});
+
 router.use(parentAuth);
 
 
@@ -990,7 +1022,7 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, publishedSnapshots, attendance, suggestions] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, meetings, publishedSnapshots, attendance, suggestions, publishedLetters] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
@@ -1002,8 +1034,9 @@ router.get("/dashboard", async (req, res) => {
       supabase.from("parent_portal_result_snapshots").select("exam_id,exam_snapshot,result_snapshot,published_at").eq("school_id", school.id).eq("student_id", student.id).order("published_at", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
+      supabase.from("parent_portal_published_letters").select("id,letter_type,title,payload,published_at").eq("school_id",school.id).eq("student_id",student.id).order("published_at",{ascending:false}).limit(100),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions]) if (result.error) throw result.error;
+    for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions,publishedLetters]) if (result.error) throw result.error;
     const parentExams = (publishedSnapshots.data || [])
       .filter(snapshot => {
         const report = snapshot.result_snapshot?.report_form;
@@ -1025,7 +1058,7 @@ router.get("/dashboard", async (req, res) => {
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
-      exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
+      exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], published_letters: publishedLetters.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
       portal_type: req.parent.account.is_sponsor ? "Sponsor" : "Parent",
       sponsor_center_name: req.parent.account.sponsor_center_name || null,
