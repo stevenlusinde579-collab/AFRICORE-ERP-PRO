@@ -94,6 +94,7 @@ import Finance from "../pages/finance/Finance";
 import FinanceDashboard from "../pages/finance/FinanceDashboard";
 import ChartOfAccounts from "../pages/finance/ChartOfAccounts";
 import CashAccounts from "../pages/finance/CashAccounts";
+import PaymentProviderSetup from "../pages/finance/PaymentProviderSetup";
 import RecordPayment from "../pages/finance/RecordPayment";
 import AddExpense from "../pages/finance/AddExpense";
 import GeneralLedger from "../pages/finance/GeneralLedger";
@@ -303,6 +304,20 @@ export default function AppRoutes() {
                     path="dashboard"
                     element={<Dashboard />}
                 />
+
+                {/* GLOBAL PAYMENT PROVIDERS — SUPER ADMIN ONLY */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1]}
+                        />
+                    }
+                >
+                    <Route
+                        path="system/payment-providers"
+                        element={<PaymentProviderSetup />}
+                    />
+                </Route>
 
                 {/* SCHOOL MANAGEMENT — SUPER ADMIN ONLY */}
                 <Route
