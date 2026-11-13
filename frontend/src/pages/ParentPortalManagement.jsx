@@ -86,6 +86,10 @@ export default function ParentPortalManagement() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [liveRoom, setLiveRoom] = useState(null);
+  const [sponsorStudents, setSponsorStudents] = useState([]);
+  const [sponsorCenters, setSponsorCenters] = useState([]);
+  const [selectedSponsorCenter, setSelectedSponsorCenter] = useState(null);
+  const [sponsorForm, setSponsorForm] = useState({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
 
   const orderedClasses = useMemo(
     () => uniqueClassOptions(classes).sort((a, b) => classOrder(a.class_name) - classOrder(b.class_name) || String(a.class_name).localeCompare(String(b.class_name))),
@@ -114,6 +118,39 @@ export default function ParentPortalManagement() {
       })),
     };
   }, [parents, orderedClasses]);
+
+
+  const loadSponsorData = async () => {
+    try {
+      const [studentsResponse, centersResponse] = await Promise.all([
+        api.get("/sponsor-portal/management/students"),
+        api.get("/sponsor-portal/management/centers"),
+      ]);
+      setSponsorStudents(studentsResponse.data?.students || []);
+      setSponsorCenters(centersResponse.data?.centers || []);
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kupakia taarifa za Sponsor na vituo."); }
+  };
+  const updateSponsorForm = (field, value) => setSponsorForm((current) => ({ ...current, [field]: value }));
+  const createSponsorCenter = async (event) => {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await api.post("/sponsor-portal/management/centers", sponsorForm);
+      setNotice(response.data?.message || "Kituo kimehifadhiwa.");
+      setSponsorForm({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
+      await loadSponsorData();
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kuhifadhi kituo."); }
+    finally { setBusy(false); }
+  };
+  const resendSponsorCredentials = async (center) => {
+    if (!center?.id) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await api.post("/sponsor-portal/management/centers/" + center.id + "/resend");
+      setNotice(response.data?.message || "Credentials zimetumwa kwa SMS.");
+      await loadSponsorData();
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kutuma credentials."); }
+    finally { setBusy(false); }
+  };
 
   const loadSuggestions = async () => {
     try {
@@ -218,6 +255,7 @@ export default function ParentPortalManagement() {
     loadMeetings();
     loadMeetingClasses();
     loadSuggestions();
+    loadSponsorData();
   }, [schoolId]);
 
   useEffect(() => {
@@ -280,6 +318,7 @@ export default function ParentPortalManagement() {
     { id: "feedback", icon: "💬", title: "Maoni ya Wazazi", description: "Pokea, fuatilia na jibu maoni ya wazazi.", count: suggestions.length, countLabel: "Maoni", accent: "from-amber-500 to-orange-600" },
     { id: "chat", icon: "👥", title: "Group Chat", description: "Wasiliana na wazazi na walimu kwa kila darasa.", count: classes.length, countLabel: "Madarasa", accent: "from-emerald-600 to-teal-700" },
     { id: "parents", icon: "🏫", title: "Wazazi wa Shule", description: "Angalia idadi ya wazazi/walezi kwa kila darasa.", count: parentStats.total, countLabel: "Wazazi/walezi", accent: "from-blue-600 to-cyan-700" },
+    { id: "sponsors", icon: "🤝", title: "Sponsors & Centres", description: "Sajili sponsor, vituo, wasimamizi na wanafunzi wao.", count: sponsorCenters.length, countLabel: "Vituo", accent: "from-cyan-600 to-blue-800" },
   ];
 
   return (
@@ -319,6 +358,43 @@ export default function ParentPortalManagement() {
 
       {notice && <div role="status" className="rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
+
+
+      {activeModule === "sponsors" && (
+        <section className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-cyan-700">Sponsor administration</p><h2 className="mt-1 text-xl font-extrabold">Sajili Sponsor na Kituo</h2><p className="mt-1 text-sm text-slate-500">Wanafunzi wanaweza kuchaguliwa kutoka madarasa tofauti ya shule hii.</p></div><button type="button" onClick={loadSponsorData} className="rounded-lg border px-4 py-2 text-sm font-semibold">Refresh</button></div>
+            <form onSubmit={createSponsorCenter} className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="text-sm font-semibold">Sponsor Name<input required value={sponsorForm.sponsor_name} onChange={(e)=>updateSponsorForm("sponsor_name",e.target.value)} placeholder="Sponsor / Organization name" className="mt-1 w-full rounded-xl border p-3"/></label>
+              <label className="text-sm font-semibold">Sponsor Phone<input required value={sponsorForm.sponsor_phone} onChange={(e)=>updateSponsorForm("sponsor_phone",e.target.value)} placeholder="0712345678" className="mt-1 w-full rounded-xl border p-3"/></label>
+              <label className="text-sm font-semibold">Center Name<input required value={sponsorForm.center_name} onChange={(e)=>updateSponsorForm("center_name",e.target.value)} placeholder="Center name" className="mt-1 w-full rounded-xl border p-3"/></label>
+              <label className="text-sm font-semibold">Supervisor / Manager Name<input required value={sponsorForm.supervisor_name} onChange={(e)=>updateSponsorForm("supervisor_name",e.target.value)} placeholder="Full name" className="mt-1 w-full rounded-xl border p-3"/></label>
+              <label className="text-sm font-semibold">Supervisor Phone<input required value={sponsorForm.supervisor_phone} onChange={(e)=>updateSponsorForm("supervisor_phone",e.target.value)} placeholder="0712345678" className="mt-1 w-full rounded-xl border p-3"/></label>
+              <label className="text-sm font-semibold">Supervisor Email / Username<input required type="email" value={sponsorForm.supervisor_email} onChange={(e)=>updateSponsorForm("supervisor_email",e.target.value)} placeholder="manager@example.com" className="mt-1 w-full rounded-xl border p-3"/></label>
+              <label className="md:col-span-2 text-sm font-semibold">Assign Students — Select multiple students from any class
+                <select required multiple value={sponsorForm.student_ids.map(String)} onChange={(e)=>updateSponsorForm("student_ids",Array.from(e.target.selectedOptions).map(o=>Number(o.value)))} className="mt-1 h-56 w-full rounded-xl border bg-white p-3">
+                  {sponsorStudents.map((student)=><option key={student.id} value={student.id}>{student.name} · {student.admission_number || "—"} · {student.class_name}</option>)}
+                </select>
+                <span className="mt-1 block text-xs font-normal text-slate-500">Tumia Ctrl (Windows) kuchagua wanafunzi wengi. Uteuzi huu unaweza kuwa na madarasa tofauti.</span>
+              </label>
+              <div className="md:col-span-2"><button disabled={busy || !sponsorForm.student_ids.length} className="rounded-xl bg-blue-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy ? "Inahifadhi..." : "Create Center & Send Login Credentials"}</button></div>
+            </form>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <h2 className="text-xl font-extrabold">Registered Sponsors & Centres</h2>
+            <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Sponsor</th><th className="p-3">Center</th><th className="p-3">Supervisor</th><th className="p-3">Phone</th><th className="p-3">Students</th><th className="p-3">Username</th><th className="p-3">Credentials</th></tr></thead>
+              <tbody>{sponsorCenters.map((center)=><tr key={center.id} className="border-t border-slate-100"><td className="p-3"><b>{center.sponsor?.sponsor_name || "—"}</b><small className="block text-slate-500">{center.sponsor?.sponsor_phone || ""}</small></td><td className="p-3 font-semibold">{center.center_name}</td><td className="p-3">{center.supervisor_name}<small className="block text-slate-500">{center.supervisor_email}</small></td><td className="p-3">{center.supervisor_phone}</td><td className="p-3">{center.student_count}</td><td className="p-3">{center.account?.username || center.supervisor_email}</td><td className="p-3"><button type="button" onClick={()=>setSelectedSponsorCenter(center)} className="rounded-lg border border-blue-200 px-3 py-1.5 font-semibold text-blue-700 hover:bg-blue-50">View</button></td></tr>)}</tbody>
+            </table>{!sponsorCenters.length && <p className="p-6 text-center text-sm text-slate-500">Hakuna Sponsor Centre iliyosajiliwa.</p>}</div>
+          </div>
+          {selectedSponsorCenter && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Sponsor account details</p><h3 className="mt-1 text-lg font-extrabold">{selectedSponsorCenter.center_name}</h3></div><button type="button" onClick={()=>setSelectedSponsorCenter(null)} className="rounded-lg border bg-white px-3 py-1.5 text-sm font-semibold">Close</button></div>
+            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><p><b>Sponsor:</b> {selectedSponsorCenter.sponsor?.sponsor_name || "—"}</p><p><b>Supervisor:</b> {selectedSponsorCenter.supervisor_name}</p><p><b>Phone:</b> {selectedSponsorCenter.supervisor_phone}</p><p><b>Email / Username:</b> {selectedSponsorCenter.account?.username || selectedSponsorCenter.supervisor_email}</p><p><b>Assigned students:</b> {selectedSponsorCenter.student_count}</p><p><b>Account status:</b> {selectedSponsorCenter.account?.is_active ? "Active" : "Not active"}</p></div>
+            <p className="mt-3 text-xs text-slate-600">Kwa usalama, password ya zamani haihifadhiwi katika mfumo. Resend Credentials itatengeneza password mpya na kuituma kwa simu ya msimamizi.</p>
+            <button type="button" disabled={busy || !selectedSponsorCenter.account?.is_active} onClick={()=>resendSponsorCredentials(selectedSponsorCenter)} className="mt-4 rounded-xl bg-blue-700 px-5 py-2.5 font-bold text-white disabled:opacity-50">{busy ? "Inatuma..." : "Resend Credentials"}</button>
+          </div>}
+        </section>
+      )}
 
       {activeModule === "parents" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
