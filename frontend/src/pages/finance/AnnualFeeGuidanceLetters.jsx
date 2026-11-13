@@ -17,6 +17,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
     const [classes, setClasses] = useState([]);
     const [students, setStudents] = useState([]);
     const [yearId, setYearId] = useState("");
+    const [currentAcademicYearId, setCurrentAcademicYearId] = useState("");
     const [classId, setClassId] = useState("");
     const [selectedStudents, setSelectedStudents] = useState([]);
     const [items, setItems] = useState([blankItem()]);
@@ -57,7 +58,13 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 setClasses(classResult.data || []);
                 setStudents((studentResult.data || []).filter(s => !s.student_status || !["left", "withdrawn", "transferred", "inactive"].includes(String(s.student_status).toLowerCase())));
                 const activeYear = (yearResult.data || []).find(y => y.is_active) || (yearResult.data || [])[0];
-                if (activeYear) setYearId(String(activeYear.id));
+                if (activeYear) {
+                    setCurrentAcademicYearId(String(activeYear.id));
+                    setYearId(String(activeYear.id));
+                } else {
+                    setCurrentAcademicYearId("");
+                    setYearId("");
+                }
             } catch (e) {
                 if (active) setError(e?.message || "Imeshindikana kupakia taarifa za shule.");
             } finally {
@@ -92,17 +99,21 @@ export default function AnnualFeeGuidanceLetters({ school }) {
 
     const selectedYear = years.find(y => String(y.id) === String(yearId));
     const yearName = selectedYear?.year_name || "";
-    // Class records are stored per academic year. Never mix classes from other years.
-    // Older schools may still have legacy classes with a null academic_year_id;
-    // use those only when the selected year has no year-linked class records.
+    // The selected target year is for the letter only. Recipient enrollment stays
+    // tied to the school's currently active academic year until School Settings changes it.
     const visibleClasses = useMemo(() => {
         const activeClasses = classes.filter(c => c.is_active !== false);
-        const yearClasses = activeClasses.filter(c => String(c.academic_year_id) === String(yearId));
+        const currentYearClasses = activeClasses.filter(c => String(c.academic_year_id) === String(currentAcademicYearId));
         const legacyClasses = activeClasses.filter(c => c.academic_year_id == null);
-        return yearClasses.length ? yearClasses : legacyClasses;
-    }, [classes, yearId]);
-    const visibleStudents = useMemo(() => students.filter(s => !classId || String(s.current_class_id) === String(classId)), [students, classId]);
-    const selectedRows = useMemo(() => students.filter(s => selectedStudents.includes(String(s.id))), [students, selectedStudents]);
+        return currentYearClasses.length ? currentYearClasses : legacyClasses;
+    }, [classes, currentAcademicYearId]);
+    const currentYearClassIds = useMemo(() => new Set(visibleClasses.map(c => String(c.id))), [visibleClasses]);
+    const currentYearStudents = useMemo(() => students.filter(s =>
+        String(s.academic_year_id) === String(currentAcademicYearId) ||
+        (s.academic_year_id == null && currentYearClassIds.has(String(s.current_class_id)))
+    ), [students, currentAcademicYearId, currentYearClassIds]);
+    const visibleStudents = useMemo(() => currentYearStudents.filter(s => !classId || String(s.current_class_id) === String(classId)), [currentYearStudents, classId]);
+    const selectedRows = useMemo(() => currentYearStudents.filter(s => selectedStudents.includes(String(s.id))), [currentYearStudents, selectedStudents]);
     const validItems = items.filter(item => item.name.trim());
     const totals = useMemo(() => validItems.reduce((sum, item) => ({ term1: sum.term1 + Number(item.term1 || 0), term2: sum.term2 + Number(item.term2 || 0), term3: sum.term3 + Number(item.term3 || 0) }), { term1: 0, term2: 0, term3: 0 }), [validItems]);
     const annualTotal = totals.term1 + totals.term2 + totals.term3;
@@ -188,6 +199,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 {loading ? <div className="p-6 text-sm text-slate-600">Inapakia taarifa za shule...</div> : <>
                     <div className="grid gap-4 p-5 md:grid-cols-3">
                         <label className="text-xs font-bold text-slate-600">Mwaka mpya wa masomo<select value={yearId} onChange={e => { setYearId(e.target.value); setClassId(""); setSelectedStudents([]); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm">{years.map(y => <option key={y.id} value={y.id}>{y.year_name}</option>)}</select></label>
+                        <p className="mt-1 text-[11px] leading-5 text-slate-500 md:col-span-2">Wanafunzi na madarasa yanachukuliwa kutoka mwaka wa sasa wa shule ({years.find(y => String(y.id) === String(currentAcademicYearId))?.year_name || "—"}). Mwaka mpya uliochaguliwa unaonekana kwenye barua tu; hauhamishi wanafunzi wala kubadilisha mwaka hai wa shule.</p>
                         <label className="text-xs font-bold text-slate-600">Tarehe ya kufunga shule<input type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
                         <label className="text-xs font-bold text-slate-600">Tarehe ya kufungua shule<input type="date" value={reopeningDate} onChange={e => setReopeningDate(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
                     </div>
