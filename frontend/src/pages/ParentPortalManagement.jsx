@@ -3,6 +3,7 @@ import api from "../services/api";
 import ParentLiveMeeting from "../components/ParentLiveMeeting";
 import { useSchool } from "../context/SchoolContext";
 import { useRole } from "../context/RoleContext";
+import OfficialLetters from "./OfficialLetters";
 
 function normalizeParentIdentity(parent) {
   let phone = String(parent.phone || "").replace(/\D/g, "");
@@ -380,6 +381,7 @@ export default function ParentPortalManagement() {
   const modules = [
     { id: "video", icon: "🎥", title: "Video Conference", description: "Anzisha au ratibu mkutano wa wazazi.", count: meetings.length, countLabel: "Mikutano", accent: "from-violet-600 to-indigo-700" },
     { id: "feedback", icon: "💬", title: "Maoni ya Wazazi", description: "Pokea, fuatilia na jibu maoni ya wazazi.", count: suggestions.length, countLabel: "Maoni", accent: "from-amber-500 to-orange-600" },
+    { id: "official-letters", icon: "📄", title: "Official Letters", description: "Andaa, chapisha na tuma barua rasmi zisizo za fedha kwa wazazi na sponsors.", count: 0, countLabel: "Barua", accent: "from-indigo-600 to-blue-800" },
     { id: "chat", icon: "👥", title: "Group Chat", description: "Wasiliana na wazazi na walimu kwa kila darasa.", count: classes.length, countLabel: "Madarasa", accent: "from-emerald-600 to-teal-700" },
     { id: "parents", icon: "🏫", title: "Wazazi wa Shule", description: "Angalia idadi ya wazazi/walezi kwa kila darasa.", count: parentStats.total, countLabel: "Wazazi/walezi", accent: "from-blue-600 to-cyan-700" },
     ...(canManageSponsorCentres ? [{ id: "sponsors", icon: "🤝", title: "Sponsors & Centres", description: "Sajili sponsor, vituo, wasimamizi na wanafunzi wao.", count: sponsorCenters.length, countLabel: "Vituo", accent: "from-cyan-600 to-blue-800" }] : []),
@@ -423,6 +425,8 @@ export default function ParentPortalManagement() {
       {notice && <div role="status" className="rounded-xl bg-emerald-50 p-3 text-emerald-800">{notice}</div>}
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</div>}
 
+
+      {activeModule === "official-letters" && <OfficialLetters />}
 
       {activeModule === "sponsors" && (
         <section className="space-y-5">
