@@ -49,7 +49,6 @@ function FeeReminderLetters({ school }) {
                 .select("id,school_id,account_name,account_type,provider_name,account_number,is_active")
                 .eq("school_id", scopedSchoolId).eq("is_active", true).in("account_type", ["bank", "mobile_money"]).order("account_name");
             if (accountError) throw accountError;
-            setCashAccounts(accountRows || []);
             const normalizedAccounts = (accountRows || []).filter(account =>
                 ["bank", "mobile_money"].includes(String(account.account_type || "").trim().toLowerCase())
             );
