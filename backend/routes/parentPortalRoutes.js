@@ -241,6 +241,7 @@ async function parentAuth(req, res, next) {
     if (!student) return res.status(403).json({ success: false, message: "Student is no longer available in this school." });
     const { data: school, error: schoolError } = await supabase.from("schools").select("id,school_name,is_active").eq("id", account.school_id).maybeSingle();
     if (schoolError || !school || school.is_active !== true) return res.status(403).json({ success: false, message: "This school is inactive. Please contact the school administrator." });
+    if (String(student.status || student.student_status || "Active").toLowerCase() === "inactive") return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
     req.parent = { account, student, school };
     if (account.must_change_password && !["/change-password", "/logout"].includes(req.path)) {
       return res.status(403).json({ success: false, code: "PARENT_PASSWORD_CHANGE_REQUIRED", message: "Badilisha password yako ya awali kwanza." });
@@ -1026,6 +1027,8 @@ router.get("/dashboard", async (req, res) => {
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
       exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
+      portal_type: req.parent.account.is_sponsor ? "Sponsor" : "Parent",
+      sponsor_center_name: req.parent.account.sponsor_center_name || null,
     });
   } catch (error) {
     console.error("PARENT DASHBOARD ERROR:", error);
