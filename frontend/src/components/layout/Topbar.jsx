@@ -66,7 +66,7 @@ function Topbar({ profile, onMenuClick }) {
           aria-label="Log out"
         >
           <LogOut size={16} />
-          <span className="hidden xs:inline">
+          <span className="hidden sm:inline">
             {loggingOut ? "Logging out..." : "Logout"}
           </span>
         </button>
