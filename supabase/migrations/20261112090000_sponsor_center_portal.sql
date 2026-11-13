@@ -17,7 +17,7 @@ create index if not exists sponsor_organizations_school_idx
 
 create table if not exists public.sponsor_centers (
   id uuid primary key default gen_random_uuid(),
-  school_id bigint not null,
+  school_id bigint not null references public.schools(id) on delete cascade,
   sponsor_id uuid not null references public.sponsor_organizations(id) on delete cascade,
   center_name text not null,
   supervisor_name text not null,
@@ -35,7 +35,7 @@ create index if not exists sponsor_centers_school_idx
 
 create table if not exists public.sponsor_center_students (
   id uuid primary key default gen_random_uuid(),
-  school_id bigint not null,
+  school_id bigint not null references public.schools(id) on delete cascade,
   center_id uuid not null references public.sponsor_centers(id) on delete cascade,
   student_id bigint not null references public.students(id) on delete cascade,
   assigned_at timestamptz not null default now(),
@@ -50,7 +50,7 @@ create index if not exists sponsor_center_students_school_student_idx
 
 create table if not exists public.sponsor_portal_accounts (
   id uuid primary key default gen_random_uuid(),
-  school_id bigint not null,
+  school_id bigint not null references public.schools(id) on delete cascade,
   center_id uuid not null references public.sponsor_centers(id) on delete cascade,
   username text not null,
   password_hash text not null,
