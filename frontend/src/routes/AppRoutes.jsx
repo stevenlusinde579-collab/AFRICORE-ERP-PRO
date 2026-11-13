@@ -93,6 +93,7 @@ import ExamPrintingUnit from "../pages/examination/ExamPrintingUnit";
 import Finance from "../pages/finance/Finance";
 import FinanceDashboard from "../pages/finance/FinanceDashboard";
 import ChartOfAccounts from "../pages/finance/ChartOfAccounts";
+import CashAccounts from "../pages/finance/CashAccounts";
 import RecordPayment from "../pages/finance/RecordPayment";
 import AddExpense from "../pages/finance/AddExpense";
 import GeneralLedger from "../pages/finance/GeneralLedger";
@@ -855,6 +856,11 @@ export default function AppRoutes() {
                     <Route
                         path="finance/chart-of-accounts"
                         element={<ChartOfAccounts />}
+                    />
+
+                    <Route
+                        path="finance/cash-accounts"
+                        element={<CashAccounts />}
                     />
 
                     <Route
