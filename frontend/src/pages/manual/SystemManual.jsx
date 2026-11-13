@@ -718,8 +718,8 @@ export default function SystemManual() {
 
                 <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setActiveTab("modules")} className={\`rounded-xl px-4 py-2.5 text-sm font-bold \${activeTab === "modules" ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}\`}>{copy.modules}</button>
-                        <button type="button" onClick={() => setActiveTab("roles")} className={\`rounded-xl px-4 py-2.5 text-sm font-bold \${activeTab === "roles" ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}\`}>{copy.roles}</button>
+                        <button type="button" onClick={() => setActiveTab("modules")} className={`rounded-xl px-4 py-2.5 text-sm font-bold ${activeTab === "modules" ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`}>{copy.modules}</button>
+                        <button type="button" onClick={() => setActiveTab("roles")} className={`rounded-xl px-4 py-2.5 text-sm font-bold ${activeTab === "roles" ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`}>{copy.roles}</button>
                     </div>
                     <label className="relative block w-full sm:max-w-md">
                         <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -735,7 +735,7 @@ export default function SystemManual() {
                                 <article key={module.id} id={module.id} className="scroll-mt-28 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                                     <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-white to-blue-50 p-5 sm:flex-row sm:items-center sm:p-7">
                                         <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-2xl text-blue-800"><Icon /></span>
-                                        <div className="flex-1"><p className="text-xs font-extrabold uppercase tracking-wider text-blue-700">{isSw ? \`MODULI \${index + 1}\` : \`MODULE \${index + 1}\`}</p><h2 className="mt-1 text-xl font-black sm:text-2xl">{module.title[lang]}</h2><p className="mt-2 leading-7 text-slate-600">{module.intro[lang]}</p></div>
+                                        <div className="flex-1"><p className="text-xs font-extrabold uppercase tracking-wider text-blue-700">{isSw ? `MODULI ${index + 1}` : `MODULE ${index + 1}`}</p><h2 className="mt-1 text-xl font-black sm:text-2xl">{module.title[lang]}</h2><p className="mt-2 leading-7 text-slate-600">{module.intro[lang]}</p></div>
                                     </div>
                                     <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.1fr_0.9fr]">
                                         <div>
