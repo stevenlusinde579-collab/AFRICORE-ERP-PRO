@@ -278,7 +278,11 @@ export default function ParentPortal() {
     </div>
   );
 
-  if (!data) return <div className="min-h-screen bg-slate-50 p-10 text-center">Inapakia Parent Portal...</div>;
+  if (!data) return <div className="min-h-screen bg-slate-50 p-10 text-center"><p className="font-semibold text-slate-700">Inapakia Parent Portal...</p>{error && <div className="mx-auto mt-4 max-w-lg rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}</div>;
+  // Prepare portal data before rendering either dashboard or student details.
+  // The parent dashboard also uses these values, so declaring them below the
+  // dashboard branch caused a temporal-dead-zone runtime error and a blank page.
+  const { student = loginStudent || {}, finance = {} } = data || {};
   if (portalHome && !mustChangePassword) return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-800">
       <header className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 text-white"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-6 md:px-6"><div><p className="text-xs font-bold uppercase tracking-widest text-cyan-300">Parent Portal</p><h1 className="mt-1 text-2xl font-black">{student.school_name || "Shule"}</h1><p className="mt-1 text-sm text-blue-200">Karibu, {student.name}</p></div><button onClick={signOut} className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold hover:bg-white/10">Toka</button></div></header>
@@ -293,7 +297,6 @@ export default function ParentPortal() {
     </div>
   );
   const tabs = [["overview","Muhtasari"],["finance","Finance"],["results","Matokeo"],["communication","Mawasiliano"],["video","Video Conference"],["chat","Group Chat"],["attendance","Mahudhurio"],...(data.portal_type === "Sponsor" ? [] : [["suggestions","Maoni"]])];
-  const { student, finance } = data;
   const attendanceRows = Array.isArray(data.attendance) ? data.attendance : [];
   const attendanceStats = attendanceRows.reduce((stats, row) => { stats[attendanceBucket(row.status)] += 1; return stats; }, { present: 0, absent: 0, late: 0, other: 0 });
   const attendanceRate = attendanceRows.length ? Math.round(((attendanceStats.present + attendanceStats.late) / attendanceRows.length) * 100) : 0;
