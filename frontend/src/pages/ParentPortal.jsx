@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import ParentLiveMeeting from "../components/ParentLiveMeeting";
@@ -14,6 +15,7 @@ export default function ParentPortal() {
   const [schoolId, setSchoolId] = useState(searchParams.get("school") || "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loginMode, setLoginMode] = useState("parent");
   const [sponsorToken, setSponsorToken] = useState(sessionStorage.getItem("africore_sponsor_portal_token") || "");
   const [sponsorStudents, setSponsorStudents] = useState(() => { try { return JSON.parse(sessionStorage.getItem("africore_sponsor_students") || "[]"); } catch { return []; } });
@@ -69,7 +71,7 @@ export default function ParentPortal() {
         sessionStorage.setItem("africore_sponsor_students", JSON.stringify(response.data.students || []));
         sessionStorage.setItem("africore_sponsor_center", JSON.stringify(response.data.center || null));
         setSponsorToken(response.data.token); setSponsorStudents(response.data.students || []); setSponsorCenter(response.data.center || null);
-        setPassword(""); setNotice("Umeingia kama Sponsor. Chagua mwanafunzi unayetaka kuona taarifa zake.");
+        setPassword(""); setShowPassword(false); setNotice("Umeingia kama Sponsor. Chagua mwanafunzi unayetaka kuona taarifa zake.");
       } else {
         const response = await api.post("/parent-portal/login", { school_id: schoolId, username, password });
         sessionStorage.setItem(TOKEN_KEY, response.data.token);
@@ -77,6 +79,7 @@ export default function ParentPortal() {
         setMustChangePassword(Boolean(response.data.must_change_password));
         setToken(response.data.token);
         setPassword("");
+        setShowPassword(false);
         setNotice(response.data.must_change_password ? "Umeingia. Badilisha password ya awali ili kuendelea." : "Umeingia kwenye Parent Portal.");
       }
     } catch (e) { setError(e.response?.data?.message || "Username au password si sahihi."); }
@@ -214,7 +217,14 @@ export default function ParentPortal() {
         <form onSubmit={signIn} className="mt-6 space-y-4">
           <label className="block text-sm font-semibold text-slate-700">Shule<select required value={schoolId} onChange={(e)=>setSchoolId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3"><option value="">Chagua shule</option>{schools.map((s)=><option key={s.id} value={s.id}>{s.school_name}</option>)}</select></label>
           <label className="block text-sm font-semibold text-slate-700">{loginMode === "parent" ? "Username — Jina kamili la mwanafunzi" : "Username — Email ya msimamizi"}<input required value={username} onChange={(e)=>setUsername(e.target.value)} autoComplete="username" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder={loginMode === "parent" ? "Mfano: Amina John Peter" : "name@example.com"}/></label>
-          <label className="block text-sm font-semibold text-slate-700">Password<input required type="password" value={password} onChange={(e)=>setPassword(e.target.value)} autoComplete="current-password" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder={loginMode === "parent" ? "Admission Number" : "Password ya Sponsor"}/></label>
+          <label className="block text-sm font-semibold text-slate-700">Password
+            <div className="relative mt-1">
+              <input required type={showPassword ? "text" : "password"} value={password} onChange={(e)=>setPassword(e.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-slate-300 p-3 pr-12" placeholder={loginMode === "parent" ? "Admission Number" : "Password ya Sponsor"}/>
+              <button type="button" onClick={()=>setShowPassword((visible)=>!visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-500 hover:text-blue-700">
+                {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
+              </button>
+            </div>
+          </label>
           <button disabled={busy} className="w-full rounded-xl bg-blue-700 p-3 font-bold text-white disabled:opacity-60">{busy ? "Inaingia..." : loginMode === "parent" ? "Ingia Parent Portal" : "Ingia Sponsor Portal"}</button>
         </form>
         {loginMode === "parent" && <p className="mt-5 text-xs leading-relaxed text-slate-500">Kila mwanafunzi ana akaunti yake. Ikiwa hujapokea SMS ya kuingia, wasiliana na ofisi ya shule ili watume tena taarifa zako.</p>}

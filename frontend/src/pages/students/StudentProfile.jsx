@@ -12,6 +12,13 @@ function StudentProfile() {
 
     const navigate = useNavigate();
 
+    const returnToStudentList = () => navigate("/students", { replace: true });
+
+    const logoutCompletely = async () => {
+        await supabase.auth.signOut();
+        navigate("/login", { replace: true });
+    };
+
 
     const {
         schoolId,
@@ -342,25 +349,29 @@ function StudentProfile() {
 
 
 
-                <button
-                    type="button"
-                    onClick={() => navigate("/parent-portal-management")}
-                    className="mr-2 rounded bg-blue-700 px-5 py-2 text-white"
-                >
-                    Parent Portal Management
-                </button>
-
-                <button
-
-                    onClick={() => navigate("/students")}
-
-                    className="bg-gray-600 text-white px-5 py-2 rounded"
-
-                >
-
-                    Back
-
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => navigate("/parent-portal-management")}
+                        className="rounded bg-blue-700 px-4 py-2 text-white"
+                    >
+                        Parent Portal Management
+                    </button>
+                    <button
+                        type="button"
+                        onClick={returnToStudentList}
+                        className="rounded bg-gray-700 px-4 py-2 font-semibold text-white hover:bg-gray-800"
+                    >
+                        Back to Student List
+                    </button>
+                    <button
+                        type="button"
+                        onClick={logoutCompletely}
+                        className="rounded border border-red-300 bg-white px-4 py-2 font-semibold text-red-700 hover:bg-red-50"
+                    >
+                        Logout
+                    </button>
+                </div>
 
 
 
