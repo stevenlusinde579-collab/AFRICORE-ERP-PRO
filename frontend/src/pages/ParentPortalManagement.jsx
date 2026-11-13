@@ -95,6 +95,8 @@ export default function ParentPortalManagement() {
   const [sponsorCenters, setSponsorCenters] = useState([]);
   const [selectedSponsorCenter, setSelectedSponsorCenter] = useState(null);
   const [createdSponsorCredentials, setCreatedSponsorCredentials] = useState(null);
+  const [editingSponsorCenter, setEditingSponsorCenter] = useState(null);
+  const [editSponsorForm, setEditSponsorForm] = useState({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
   const [sponsorForm, setSponsorForm] = useState({ sponsor_name: "", sponsor_phone: "", center_name: "", supervisor_name: "", supervisor_phone: "", supervisor_email: "", student_ids: [] });
 
   const sponsorClassOptions = useMemo(() => {
@@ -165,6 +167,44 @@ export default function ParentPortalManagement() {
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kuhifadhi kituo."); }
     finally { setBusy(false); }
   };
+  const openSponsorCenterEditor = (center) => {
+    setEditingSponsorCenter(center);
+    setEditSponsorForm({
+      sponsor_name: center.sponsor?.sponsor_name || "",
+      sponsor_phone: center.sponsor?.sponsor_phone || "",
+      center_name: center.center_name || "",
+      supervisor_name: center.supervisor_name || "",
+      supervisor_phone: center.supervisor_phone || "",
+      supervisor_email: center.supervisor_email || "",
+      student_ids: (center.students || []).map((student) => Number(student.id)),
+    });
+    setError("");
+    setNotice("");
+  };
+  const updateEditSponsorForm = (field, value) => setEditSponsorForm((current) => ({ ...current, [field]: value }));
+  const saveSponsorCenterEdits = async (event) => {
+    event.preventDefault();
+    if (!editingSponsorCenter?.id) return;
+    setBusy(true); setError(""); setNotice(""); setCreatedSponsorCredentials(null);
+    try {
+      const response = await api.patch("/sponsor-portal/management/centers/" + editingSponsorCenter.id, editSponsorForm);
+      if (response.data?.manager_credentials_reset) {
+        setCreatedSponsorCredentials({
+          centerName: editSponsorForm.center_name,
+          username: response.data.username || editSponsorForm.supervisor_email,
+          password: response.data.temporary_password || "",
+          smsSent: response.data?.sms?.status !== "failed",
+          smsError: response.data?.sms?.error || "",
+        });
+      }
+      setNotice(response.data?.message || "Mabadiliko ya Sponsor Centre yamehifadhiwa.");
+      setEditingSponsorCenter(null);
+      await loadSponsorData();
+    } catch (e) {
+      setError(e.response?.data?.message || "Imeshindikana kuhifadhi mabadiliko ya Sponsor Centre.");
+    } finally { setBusy(false); }
+  };
+
   const resendSponsorCredentials = async (center) => {
     if (!center?.id) return;
     setBusy(true); setError(""); setNotice("");
@@ -472,14 +512,34 @@ export default function ParentPortalManagement() {
             <h2 className="text-xl font-extrabold">Registered Sponsors & Centres</h2>
             <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Sponsor</th><th className="p-3">Center</th><th className="p-3">Supervisor</th><th className="p-3">Phone</th><th className="p-3">Students</th><th className="p-3">Username</th><th className="p-3">Credentials</th></tr></thead>
-              <tbody>{sponsorCenters.map((center)=><tr key={center.id} className="border-t border-slate-100"><td className="p-3"><b>{center.sponsor?.sponsor_name || "—"}</b><small className="block text-slate-500">{center.sponsor?.sponsor_phone || ""}</small></td><td className="p-3 font-semibold">{center.center_name}</td><td className="p-3">{center.supervisor_name}<small className="block text-slate-500">{center.supervisor_email}</small></td><td className="p-3">{center.supervisor_phone}</td><td className="p-3">{center.student_count}</td><td className="p-3">{center.account?.username || center.supervisor_email}</td><td className="p-3"><button type="button" onClick={()=>setSelectedSponsorCenter(center)} className="rounded-lg border border-blue-200 px-3 py-1.5 font-semibold text-blue-700 hover:bg-blue-50">View</button></td></tr>)}</tbody>
+              <tbody>{sponsorCenters.map((center)=><tr key={center.id} className="border-t border-slate-100"><td className="p-3"><b>{center.sponsor?.sponsor_name || "—"}</b><small className="block text-slate-500">{center.sponsor?.sponsor_phone || ""}</small></td><td className="p-3 font-semibold">{center.center_name}</td><td className="p-3">{center.supervisor_name}<small className="block text-slate-500">{center.supervisor_email}</small></td><td className="p-3">{center.supervisor_phone}</td><td className="p-3">{center.student_count}</td><td className="p-3">{center.account?.username || center.supervisor_email}</td><td className="p-3"><div className="flex gap-2"><button type="button" onClick={()=>setSelectedSponsorCenter(center)} className="rounded-lg border border-blue-200 px-3 py-1.5 font-semibold text-blue-700 hover:bg-blue-50">View</button><button type="button" onClick={()=>openSponsorCenterEditor(center)} className="rounded-lg border border-amber-200 px-3 py-1.5 font-semibold text-amber-800 hover:bg-amber-50">Edit</button></div></td></tr>)}</tbody>
             </table>{!sponsorCenters.length && <p className="p-6 text-center text-sm text-slate-500">Hakuna Sponsor Centre iliyosajiliwa.</p>}</div>
           </div>
           {selectedSponsorCenter && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Sponsor account details</p><h3 className="mt-1 text-lg font-extrabold">{selectedSponsorCenter.center_name}</h3></div><button type="button" onClick={()=>setSelectedSponsorCenter(null)} className="rounded-lg border bg-white px-3 py-1.5 text-sm font-semibold">Close</button></div>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Sponsor account details</p><h3 className="mt-1 text-lg font-extrabold">{selectedSponsorCenter.center_name}</h3></div><div className="flex gap-2"><button type="button" onClick={()=>openSponsorCenterEditor(selectedSponsorCenter)} className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-sm font-semibold text-amber-800">Edit Centre</button><button type="button" onClick={()=>setSelectedSponsorCenter(null)} className="rounded-lg border bg-white px-3 py-1.5 text-sm font-semibold">Close</button></div></div>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><p><b>Sponsor:</b> {selectedSponsorCenter.sponsor?.sponsor_name || "—"}</p><p><b>Supervisor:</b> {selectedSponsorCenter.supervisor_name}</p><p><b>Phone:</b> {selectedSponsorCenter.supervisor_phone}</p><p><b>Email / Username:</b> {selectedSponsorCenter.account?.username || selectedSponsorCenter.supervisor_email}</p><p><b>Assigned students:</b> {selectedSponsorCenter.student_count}</p><p><b>Account status:</b> {selectedSponsorCenter.account?.is_active ? "Active" : "Not active"}</p></div>
-            <p className="mt-3 text-xs text-slate-600">Kwa usalama, password ya zamani haihifadhiwi katika mfumo. Resend Credentials itatengeneza password mpya na kuituma kwa simu ya msimamizi.</p>
+            <div className="mt-5 rounded-xl border border-blue-100 bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold text-slate-900">Students assigned to this centre</h4><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">{(selectedSponsorCenter.students || []).length} students</span></div>
+              <div className="mt-3 divide-y divide-slate-100">{(selectedSponsorCenter.students || []).map((student)=><div key={student.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-semibold text-slate-800">{student.name}</p><p className="text-xs text-slate-500">{student.admission_number} · {student.class_name}</p></div><button type="button" onClick={()=>openSponsorCenterEditor(selectedSponsorCenter)} className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-50">Edit Student Assignment</button></div>)}
+              {(selectedSponsorCenter.students || []).length === 0 && <p className="py-5 text-center text-sm text-slate-500">Hakuna mwanafunzi aliyepangiwa kituo hiki.</p>}</div>
+            </div>
+            <p className="mt-3 text-xs text-slate-600">Password ya zamani haihifadhiwi. Resend Credentials hutengeneza password mpya na kuituma kwa simu ya msimamizi.</p>
             <button type="button" disabled={busy || !selectedSponsorCenter.account?.is_active} onClick={()=>resendSponsorCredentials(selectedSponsorCenter)} className="mt-4 rounded-xl bg-blue-700 px-5 py-2.5 font-bold text-white disabled:opacity-50">{busy ? "Inatuma..." : "Resend Credentials"}</button>
+          </div>}
+          {editingSponsorCenter && <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-amber-800">Edit Sponsor Centre</p><h3 className="mt-1 text-lg font-extrabold text-slate-900">{editingSponsorCenter.center_name}</h3><p className="mt-1 text-xs text-slate-600">Badilisha taarifa za kituo na wanafunzi wanaohudumiwa.</p></div><button type="button" onClick={()=>setEditingSponsorCenter(null)} className="rounded-lg border bg-white px-3 py-1.5 text-sm font-semibold">Cancel</button></div>
+            <form onSubmit={saveSponsorCenterEdits} className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-sm font-semibold">Sponsor Name<input required value={editSponsorForm.sponsor_name} onChange={(e)=>updateEditSponsorForm("sponsor_name",e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3"/></label>
+              <label className="text-sm font-semibold">Sponsor Phone<input required value={editSponsorForm.sponsor_phone} onChange={(e)=>updateEditSponsorForm("sponsor_phone",e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3"/></label>
+              <label className="text-sm font-semibold">Centre Name<input required value={editSponsorForm.center_name} onChange={(e)=>updateEditSponsorForm("center_name",e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3"/></label>
+              <label className="text-sm font-semibold">Manager Name<input required value={editSponsorForm.supervisor_name} onChange={(e)=>updateEditSponsorForm("supervisor_name",e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3"/></label>
+              <label className="text-sm font-semibold">Manager Phone<input required value={editSponsorForm.supervisor_phone} onChange={(e)=>updateEditSponsorForm("supervisor_phone",e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3"/></label>
+              <label className="text-sm font-semibold">Manager Email / Username<input required type="email" value={editSponsorForm.supervisor_email} onChange={(e)=>updateEditSponsorForm("supervisor_email",e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3"/></label>
+              <div className="md:col-span-2 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="font-bold">Students assigned to this centre</h4><p className="text-xs text-slate-500">Weka tiki kuongeza mwanafunzi; ondoa tiki kumwondoa. Mwanafunzi akiondolewa hapa, rekodi yake ya shule haifutwi.</p></div><span className="text-xs font-bold text-blue-700">{editSponsorForm.student_ids.length} selected</span></div>
+                <div className="mt-3 max-h-72 space-y-1 overflow-y-auto">{sponsorStudents.map((student)=><label key={student.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><input type="checkbox" checked={editSponsorForm.student_ids.includes(Number(student.id))} onChange={(e)=>updateEditSponsorForm("student_ids",e.target.checked?[...new Set([...editSponsorForm.student_ids,Number(student.id)])]:editSponsorForm.student_ids.filter(id=>Number(id)!==Number(student.id)))}/><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{student.name}</span><span className="block text-xs text-slate-500">{student.admission_number || "—"} · {student.class_name || "—"}</span></span><span className="text-xs text-slate-400">{editSponsorForm.student_ids.includes(Number(student.id))?"Assigned":"Not assigned"}</span></label>)}</div>
+              </div>
+              <div className="md:col-span-2 rounded-xl border border-amber-200 bg-white p-3 text-xs text-slate-700">Muhimu: kubadilisha jina/phone/email ya Manager kutatengeneza password mpya na username mpya (email). Kubadilisha Sponsor, jina la kituo au wanafunzi pekee hakutabadilisha credentials.</div>
+              <div className="md:col-span-2 flex flex-wrap gap-2"><button type="submit" disabled={busy} className="rounded-xl bg-blue-700 px-6 py-3 font-bold text-white disabled:opacity-50">{busy?"Saving...":"Save Changes"}</button><button type="button" onClick={()=>setEditingSponsorCenter(null)} className="rounded-xl border bg-white px-5 py-3 font-semibold">Cancel</button></div>
+            </form>
           </div>}
         </section>
       )}
