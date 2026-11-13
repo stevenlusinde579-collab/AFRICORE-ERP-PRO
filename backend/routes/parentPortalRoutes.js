@@ -1107,7 +1107,19 @@ router.get("/notifications", async (req, res) => {
       .eq("student_id", student.id).eq("account_id", accountId);
     if (readsResult.error) throw readsResult.error;
     const readAt = new Map((readsResult.data || []).map(row => [row.section, row.last_read_at]));
-    const since = (section) => readAt.get(section) || "1970-01-01T00:00:00.000Z";
+    const trackedSections = ["reports", "results", "finance", "communication", "chat", "attendance"];
+    const missingSections = trackedSections.filter(section => !readAt.has(section));
+    if (missingSections.length) {
+      // Start tracking from first portal visit; do not label old historical records as newly unread.
+      const baseline = new Date().toISOString();
+      const initialized = await supabase.from("parent_portal_notification_reads").upsert(
+        missingSections.map(section => ({ school_id: school.id, student_id: student.id, account_id: accountId, section, last_read_at: baseline })),
+        { onConflict: "school_id,student_id,account_id,section" }
+      );
+      if (initialized.error) throw initialized.error;
+      missingSections.forEach(section => readAt.set(section, baseline));
+    }
+    const since = (section) => readAt.get(section) || new Date().toISOString();
     const [letters, results, charges, payments, communications, announcements, chat, attendance] = await Promise.all([
       supabase.from("parent_portal_published_letters").select("id,published_at").eq("school_id", school.id).eq("student_id", student.id).gt("published_at", since("reports")),
       supabase.from("parent_portal_result_snapshots").select("id,published_at").eq("school_id", school.id).eq("student_id", student.id).gt("published_at", since("results")),
