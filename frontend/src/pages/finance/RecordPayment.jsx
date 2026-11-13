@@ -2109,6 +2109,28 @@ const RecordPayment = () => {
             return;
         }
 
+        if (name === "financialAccountId") {
+            const selectedAccount = financialAccounts.find(
+                (account) => String(account.id) === String(value)
+            );
+            setPaymentForm((current) => ({
+                ...current,
+                financialAccountId: value,
+                providerName: selectedAccount?.provider_name || current.providerName || "",
+            }));
+            return;
+        }
+
+        if (name === "paymentMethod") {
+            setPaymentForm((current) => ({
+                ...current,
+                paymentMethod: value,
+                financialAccountId: "",
+                providerName: "",
+            }));
+            return;
+        }
+
         setPaymentForm(
             (current) => ({
                 ...current,
@@ -2742,6 +2764,16 @@ const RecordPayment = () => {
             // RECORD ACTUAL PAYMENT
             // ------------------------------------------------
 
+            const financialAccount = financialAccounts.find(
+                (account) =>
+                    String(account.id) ===
+                    String(paymentForm.financialAccountId)
+            );
+
+            if (!financialAccount) {
+                throw new Error("Chagua Financial Account sahihi kabla ya kuhifadhi malipo.");
+            }
+
             const {
                 data: paymentResult,
                 error: paymentError,
@@ -2779,6 +2811,7 @@ const RecordPayment = () => {
 
                         p_provider_name:
                             paymentForm.providerName?.trim() ||
+                            financialAccount.provider_name ||
                             null,
 
                         p_reference_number:
@@ -4428,6 +4461,7 @@ const RecordPayment = () => {
                                         <input
                                             type="text"
                                             name="providerName"
+                                            readOnly
                                             value={
                                                 paymentForm.providerName
                                             }

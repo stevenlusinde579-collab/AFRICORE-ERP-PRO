@@ -107,6 +107,13 @@ function Sidebar({ profile }) {
 
     /* SCHOOL MANAGEMENT — SUPER ADMIN ONLY */
     {
+      name: "Payment Provider Setup",
+      path: "/system/payment-providers",
+      icon: <FaMoneyBillWave />,
+      roles: ["super admin"],
+      superAdminOnly: true
+    },
+    {
       name: "School Management",
       path: "/school-management",
       icon: <FaBuilding />,
