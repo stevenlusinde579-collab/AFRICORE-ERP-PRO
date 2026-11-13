@@ -41,7 +41,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 const { data: { user }, error: authError } = await supabase.auth.getUser();
                 if (authError) throw authError;
                 if (!user?.id) throw new Error("Tafadhali ingia tena kwenye mfumo.");
-                const { data: profile, error: profileError } = await supabase.from("profiles").select("school_id,full_name").eq("id", user.id).single();
+                const { data: profile, error: profileError } = await supabase.from("profiles").select("school_id,full_name,phone").eq("id", user.id).single();
                 if (profileError) throw profileError;
                 if (!profile?.school_id) throw new Error("Akaunti hii haijaunganishwa na shule.");
                 const sid = Number(profile.school_id);
@@ -56,6 +56,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                 if (!active) return;
                 setSchoolId(sid);
                 setAccountantName(profile.full_name || "");
+                setAccountantPhone(profile.phone || "");
                 setYears(yearResult.data || []);
                 setClasses(classResult.data || []);
                 setStudents((studentResult.data || []).filter(s => !s.student_status || !["left", "withdrawn", "transferred", "inactive"].includes(String(s.student_status).toLowerCase())));
@@ -94,7 +95,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
             setIntro(data?.intro_message || DEFAULT_MESSAGE);
             setExtraMessage(data?.extra_message || "Tafadhali zingatieni ratiba ya malipo ya kila muhula kama ilivyooneshwa. Kwa ufafanuzi zaidi, wasiliana na ofisi ya uhasibu ya shule.");
             setAccountantName(current => data?.accountant_name || current);
-            setAccountantPhone(data?.accountant_phone || "");
+            setAccountantPhone(data?.accountant_phone || profile.phone || "");
         })();
         return () => { active = false; };
     }, [open, schoolId, yearId]);
