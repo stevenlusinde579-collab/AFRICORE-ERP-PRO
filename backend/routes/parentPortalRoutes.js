@@ -1115,7 +1115,7 @@ router.get("/notifications", async (req, res) => {
       supabase.schema("finance").from("student_payments").select("id,created_at").eq("school_id", school.id).eq("student_id", student.id).gt("created_at", since("finance")),
       supabase.from("parent_result_communications").select("id,created_at").eq("school_id", school.id).eq("student_id", student.id).gt("created_at", since("communication")),
       supabase.from("announcements").select("id,created_at").eq("school_id", school.id).gt("created_at", since("communication")),
-      student.current_class_id ? supabase.from("parent_portal_chat_messages").select("id,student_id,sender_type,created_at").eq("school_id", school.id).eq("class_id", student.current_class_id).neq("student_id", student.id).gt("created_at", since("chat")) : Promise.resolve({ data: [], error: null }),
+      student.current_class_id ? supabase.from("parent_portal_chat_messages").select("id,student_id,sender_type,created_at").eq("school_id", school.id).eq("class_id", student.current_class_id).or("student_id.is.null,student_id.neq." + student.id).gt("created_at", since("chat")) : Promise.resolve({ data: [], error: null }),
       supabase.from("class_attendance").select("id,created_at").eq("school_id", school.id).eq("student_id", student.id).gt("created_at", since("attendance")),
     ]);
     for (const result of [letters, results, charges, payments, communications, announcements, chat, attendance]) if (result.error) throw result.error;
