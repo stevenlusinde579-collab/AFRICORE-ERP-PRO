@@ -1514,136 +1514,59 @@ const RecordPayment = () => {
 
     // ========================================================
     // PAYMENT METHOD FINANCIAL ACCOUNT FILTER
+    // Active accounts are loaded for the signed-in school only.
+    // Match by the canonical account_type first, then provider/name
+    // aliases so providers such as Mixx by Yas are not missed.
     // ========================================================
 
     const availableFinancialAccounts =
         useMemo(() => {
-            const method =
-                normalize(
-                    paymentForm.paymentMethod
-                );
+            const method = normalize(paymentForm.paymentMethod);
 
-            if (
-                method === "other"
-            ) {
+            if (method === "other") {
                 return financialAccounts;
             }
 
-            return financialAccounts.filter(
-                (account) => {
-                    const type =
-                        normalize(
-                            account.account_type
-                        );
+            return financialAccounts.filter((account) => {
+                const type = normalize(account.account_type);
+                const name = normalize(account.account_name);
+                const provider = normalize(account.provider_name);
+                const identity = `${name} ${provider}`;
 
-                    const name =
-                        normalize(
-                            account.account_name
-                        );
-
-                    const provider =
-                        normalize(
-                            account.provider_name
-                        );
-
-                    if (
-                        method ===
-                        "cash"
-                    ) {
-                        return (
-                            type.includes(
-                                "cash"
-                            ) ||
-                            name.includes(
-                                "cash"
-                            )
-                        );
-                    }
-
-                    if (
-                        method ===
-                        "bank"
-                    ) {
-                        return (
-                            type.includes(
-                                "bank"
-                            ) ||
-                            name.includes(
-                                "bank"
-                            ) ||
-                            provider.includes(
-                                "bank"
-                            )
-                        );
-                    }
-
-                    if (
-                        method ===
-                        "mobile_money"
-                    ) {
-                        return (
-                            type.includes(
-                                "mobile"
-                            ) ||
-                            type.includes(
-                                "mobile_money"
-                            ) ||
-                            name.includes(
-                                "mobile"
-                            ) ||
-                            name.includes(
-                                "m-pesa"
-                            ) ||
-                            name.includes(
-                                "mpesa"
-                            ) ||
-                            name.includes(
-                                "airtel"
-                            ) ||
-                            name.includes(
-                                "tigo"
-                            ) ||
-                            name.includes(
-                                "halopesa"
-                            ) ||
-                            provider.includes(
-                                "mobile"
-                            ) ||
-                            provider.includes(
-                                "m-pesa"
-                            ) ||
-                            provider.includes(
-                                "mpesa"
-                            ) ||
-                            provider.includes(
-                                "airtel"
-                            ) ||
-                            provider.includes(
-                                "tigo"
-                            ) ||
-                            provider.includes(
-                                "halopesa"
-                            )
-                        );
-                    }
-
-                    if (
-                        method ===
-                        "cheque"
-                    ) {
-                        return (
-                            type.includes(
-                                "bank"
-                            ) ||
-                            name.includes(
-                                "bank"
-                            )
-                        );
-                    }
-
-                    return true;
+                if (method === "cash") {
+                    return type === "cash" || identity.includes("cash");
                 }
-            );
+
+                if (method === "bank" || method === "cheque") {
+                    return type === "bank" ||
+                        identity.includes("bank") ||
+                        identity.includes("crdb") ||
+                        identity.includes("nmb") ||
+                        identity.includes("nbc") ||
+                        identity.includes("exim") ||
+                        identity.includes(" stanbic") ||
+                        identity.includes(" absa");
+                }
+
+                if (method === "mobile_money") {
+                    return type === "mobile_money" ||
+                        type.includes("mobile") ||
+                        identity.includes("mobile money") ||
+                        identity.includes("m-pesa") ||
+                        identity.includes("mpesa") ||
+                        identity.includes("airtel") ||
+                        identity.includes("mixx") ||
+                        identity.includes("yas") ||
+                        identity.includes("tigo") ||
+                        identity.includes("halopesa") ||
+                        identity.includes("halo pesa") ||
+                        identity.includes("tigopesa") ||
+                        identity.includes("tigo pesa") ||
+                        identity.includes("vodacom");
+                }
+
+                return true;
+            });
         }, [
             financialAccounts,
             paymentForm.paymentMethod,
