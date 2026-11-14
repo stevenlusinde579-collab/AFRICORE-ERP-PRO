@@ -543,9 +543,15 @@ test("Commerce paper excludes exam-room warning and scopes selective Section C o
             "This paper consists of eleven (11) questions.",
             "Answer all questions in Sections A and B and any two questions from Section C.",
             "SECTION A (16 MARKS)",
-            "Answer all questions.",
-            "1. For each of the items (i)-(x), choose the correct alternative. (8 marks)",
-            "2. Match the taxation terms in List A with the correct descriptions in List B. (8 marks)",
+            "Answer all questions. Each item carries one mark.",
+            "1. For each of the items (i)-(x), choose the correct alternative.",
+            "(i) Item one", "(ii) Item two", "(iii) Item three", "(iv) Item four", "(v) Item five",
+            "(vi) Item six", "(vii) Item seven", "(viii) Item eight", "(ix) Item nine", "(x) Item ten",
+            "2. Match the taxation terms in List A with the correct descriptions in List B.",
+            "List A", "(i) Tax one", "(ii) Tax two", "(iii) Tax three",
+            "(iv) Tax four", "(v) Tax five", "(vi) Tax six",
+            "List B", "A. Description one", "B. Description two", "C. Description three",
+            "D. Description four", "E. Description five", "F. Description six",
             "SECTION B (54 MARKS)",
             "Answer all questions.",
             "Cellular phones and any unauthorized materials are not allowed in the examination room.",
@@ -576,7 +582,10 @@ test("Commerce paper excludes exam-room warning and scopes selective Section C o
     const sectionC = result.questions.filter(question => question.section === "C");
     assert.equal(sectionA.length, 2);
     assert.ok(sectionA.every(question => !question.selection_required));
-    assert.deepEqual(sectionA.map(question => question.max_marks), [8, 8]);
+    assert.deepEqual(sectionA.map(question => question.max_marks), [10, 6]);
+    assert.ok(sectionA.every(question => question.mark_source === "inferred_from_section_structure"));
+    assert.match(sectionA[0].mark_evidence, /10 objective\/matching items.*1 mark/i);
+    assert.match(sectionA[1].mark_evidence, /6 objective\/matching items.*1 mark/i);
     assert.equal(sectionB.length, 6);
     assert.ok(sectionB.every(question => !question.selection_required));
     assert.ok(sectionB.every(question => question.max_marks === 9));
