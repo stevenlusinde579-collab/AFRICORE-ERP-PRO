@@ -3935,6 +3935,9 @@ export const analyzePaper =
                             ai_status:
                                 "Completed",
 
+                            analysis_method:
+                                analysisMethod,
+
                             exam_id:
                                 examId,
 
