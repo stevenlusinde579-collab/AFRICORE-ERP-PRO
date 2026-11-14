@@ -23,11 +23,16 @@ const createImageOnlyPdf = () => {
     context.fillText("Assets equal liabilities plus capital.", 55, 365);
     const jpeg = canvas.toBuffer("image/jpeg", 0.95);
 
+    const contentStream = Buffer.from("q\n560 0 0 200 20 300 cm\n/Im0 Do\nQ\n");
     const objects = [
         Buffer.from("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"),
         Buffer.from("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"),
         Buffer.from("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n"),
-        Buffer.from("4 0 obj\n<< /Length 37 >>\nstream\nq\n560 0 0 200 20 300 cm\n/Im0 Do\nQ\nendstream\nendobj\n"),
+        Buffer.concat([
+            Buffer.from("4 0 obj\n<< /Length " + contentStream.length + " >>\nstream\n"),
+            contentStream,
+            Buffer.from("endstream\nendobj\n"),
+        ]),
         Buffer.concat([
             Buffer.from("5 0 obj\n<< /Type /XObject /Subtype /Image /Width " + width +
                 " /Height " + height + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " +
