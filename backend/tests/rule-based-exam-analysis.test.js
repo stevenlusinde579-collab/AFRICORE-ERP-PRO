@@ -610,7 +610,7 @@ test("Book Keeping PDF: ignores exam instructions and date-like ledger rows as q
             "This paper consists of fifteen (15) questions.",
             "Sections A carries fifteen (15) marks and B carries forty (40) marks and Section C carries forty-five (45) marks.",
             "SECTION A (15 MARKS)",
-            "Answer all questions.",
+            "Answer all questions. Each item carries one mark.",
             "Q1",
             "For each of the items (i) – (x), choose the correct answer from among the given alternatives.",
             "(i) Item one (ii) Item two (iii) Item three (iv) Item four (v) Item five",
