@@ -1,10 +1,64 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createCanvas } from "@napi-rs/canvas";
 import {
     cleanOcrText,
     extractScannedPdfText,
     isLikelyScannedPdfText,
 } from "../services/pdfOcr.js";
+
+
+const createImageOnlyPdf = () => {
+    const width = 1400;
+    const height = 500;
+    const canvas = createCanvas(width, height);
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#000000";
+    context.font = "bold 76px sans-serif";
+    context.fillText("QUESTION 1. ACCOUNTING", 55, 155);
+    context.font = "54px sans-serif";
+    context.fillText("Explain the accounting equation.", 55, 275);
+    context.fillText("Assets equal liabilities plus capital.", 55, 365);
+    const jpeg = canvas.toBuffer("image/jpeg", 0.95);
+
+    const objects = [
+        Buffer.from("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"),
+        Buffer.from("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"),
+        Buffer.from("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n"),
+        Buffer.from("4 0 obj\n<< /Length 37 >>\nstream\nq\n560 0 0 200 20 300 cm\n/Im0 Do\nQ\nendstream\nendobj\n"),
+        Buffer.concat([
+            Buffer.from("5 0 obj\n<< /Type /XObject /Subtype /Image /Width " + width +
+                " /Height " + height + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " +
+                jpeg.length + " >>\nstream\n"),
+            jpeg,
+            Buffer.from("\nendstream\nendobj\n"),
+        ]),
+    ];
+
+    const chunks = [Buffer.from("%PDF-1.4\n")];
+    const offsets = [];
+    for (const object of objects) {
+        offsets.push(Buffer.concat(chunks).length);
+        chunks.push(object);
+    }
+    const xrefOffset = Buffer.concat(chunks).length;
+    const xref = [
+        "xref",
+        "0 6",
+        "0000000000 65535 f ",
+        ...offsets.map(offset => String(offset).padStart(10, "0") + " 00000 n "),
+        "trailer",
+        "<< /Size 6 /Root 1 0 R >>",
+        "startxref",
+        String(xrefOffset),
+        "%%EOF",
+        "",
+    ].join("\n");
+    chunks.push(Buffer.from(xref));
+    return Buffer.concat(chunks);
+};
 
 test("identifies CamScanner-only extraction as a scanned PDF", () => {
     assert.equal(isLikelyScannedPdfText("CamScanner\nCamScanner"), true);
@@ -115,4 +169,14 @@ test("falls back to English if the Swahili language pack cannot load", async () 
     });
     assert.deepEqual(requestedLanguages, ["eng+swa", "eng"]);
     assert.match(result, /QUESTION 1/);
+});
+
+test("recognizes text from a real image-only PDF using PDF.js and Tesseract", { timeout: 240000 }, async () => {
+    const pdfBuffer = createImageOnlyPdf();
+    const recognizedText = await extractScannedPdfText(pdfBuffer, {
+        languages: "eng",
+        renderScale: 1.5,
+    });
+    assert.match(recognizedText, /QUESTION\\s*1/i);
+    assert.match(recognizedText, /accounting/i);
 });
