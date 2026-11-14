@@ -114,7 +114,9 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
         return text;
     } finally {
         if (worker) await worker.terminate().catch(() => {});
-        if (document) await document.destroy().catch(() => {});
+        if (document && typeof document.destroy === "function") {
+            await Promise.resolve(document.destroy()).catch(() => {});
+        }
     }
 };
 
