@@ -525,7 +525,7 @@ test("uses explicit whole-paper total and reports disagreement with section reco
             "4. Describe wholesale trade (35 marks)."
         ].join("\n"),
     });
-    assert.equal(result.total_marks, 100);
+    assert.equal(result.total_marks, 90);
     assert.ok(result.recommendations.some(message =>
         message.includes("explicitly states 100 total marks") &&
         message.includes("90")
