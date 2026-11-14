@@ -278,40 +278,63 @@ router.post("/management/centers/:centerId/resend", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-  const schoolId = Number(req.body?.school_id);
   const username = String(req.body?.username || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
-  if (!Number.isInteger(schoolId) || !username || !password) return res.status(400).json({ success: false, message: "Chagua shule na weka email pamoja na password." });
-  const key = String(req.ip || "") + ":" + schoolId + ":" + username;
+  if (!username || !password) return res.status(400).json({ success: false, message: "Weka email na password." });
+  const key = String(req.ip || "") + ":sponsor:" + username;
   const prior = attempts.get(key);
   if (prior?.until > Date.now()) return res.status(429).json({ success: false, message: "Umejaribu mara nyingi. Subiri dakika 15." });
   try {
-    const school = await supabase.from("schools").select("id,is_active").eq("id", schoolId).maybeSingle();
-    if (school.error || !school.data || school.data.is_active !== true) return res.status(403).json({ success: false, message: "Shule haipo au haijawezeshwa." });
-    const result = await supabase.from("sponsor_portal_accounts").select("id,school_id,center_id,username,password_hash,password_salt,is_active").eq("school_id", schoolId).eq("username", username).eq("is_active", true).limit(2);
+    // Identify the sponsor tenant only after verifying its credentials.
+    // Never trust a school_id supplied by the browser.
+    const result = await supabase.from("sponsor_portal_accounts")
+      .select("id,school_id,center_id,username,password_hash,password_salt,is_active")
+      .eq("username", username).eq("is_active", true).limit(1000);
     if (result.error) throw result.error;
-    let account = null;
-    for (const candidate of result.data || []) if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) { account = candidate; break; }
-    if (!account) {
+    const verified = [];
+    for (const candidate of result.data || []) {
+      if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) verified.push(candidate);
+    }
+    if (verified.length !== 1) {
       const count = (prior?.count || 0) + 1;
       attempts.set(key, { count, until: count >= 10 ? Date.now() + 15 * 60 * 1000 : 0 });
-      return res.status(401).json({ success: false, message: "Email au password si sahihi." });
+      return res.status(verified.length > 1 ? 409 : 401).json({
+        success: false,
+        code: verified.length > 1 ? "AMBIGUOUS_SPONSOR_CREDENTIALS" : undefined,
+        message: verified.length > 1
+          ? "Email hii inatumika kwenye akaunti zaidi ya moja ya shule. Wasiliana na ofisi ya shule upewe username ya kipekee."
+          : "Email au password si sahihi.",
+      });
     }
+    const account = verified[0];
+    const schoolId = Number(account.school_id);
+    const school = await supabase.from("schools").select("id,is_active").eq("id", schoolId).maybeSingle();
+    if (school.error || !school.data || school.data.is_active !== true) return res.status(403).json({ success: false, message: "Shule haipo au haijawezeshwa." });
     attempts.delete(key);
-    const center = await supabase.from("sponsor_centers").select("id,school_id,center_name,is_active").eq("id", account.center_id).eq("school_id", schoolId).maybeSingle();
+    const center = await supabase.from("sponsor_centers").select("id,school_id,center_name,is_active")
+      .eq("id", account.center_id).eq("school_id", schoolId).maybeSingle();
     if (center.error || !center.data || !center.data.is_active) return res.status(403).json({ success: false, message: "Kituo hakitumiki kwa sasa." });
-    const assigned = await supabase.from("sponsor_center_students").select("student_id").eq("school_id", schoolId).eq("center_id", center.data.id);
+    const assigned = await supabase.from("sponsor_center_students").select("student_id")
+      .eq("school_id", schoolId).eq("center_id", center.data.id);
     if (assigned.error) throw assigned.error;
     const studentIds = (assigned.data || []).map(a => a.student_id);
     if (!studentIds.length) return res.status(403).json({ success: false, message: "Hakuna wanafunzi waliopangiwa kituo hiki." });
-    const students = await supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id").eq("school_id", schoolId).in("id", studentIds).order("first_name");
+    const students = await supabase.from("students")
+      .select("id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id")
+      .eq("school_id", schoolId).in("id", studentIds).order("first_name");
     if (students.error) throw students.error;
     const classIds = [...new Set((students.data || []).map(s => s.current_class_id).filter(Boolean))];
     const classes = classIds.length ? await supabase.from("classes").select("id,class_name").eq("school_id", schoolId).in("id", classIds) : { data: [] };
+    if (classes.error) throw classes.error;
     const classMap = new Map((classes.data || []).map(c => [String(c.id), c.class_name]));
-    await supabase.from("sponsor_portal_accounts").update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
+    const update = await supabase.from("sponsor_portal_accounts")
+      .update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
+    if (update.error) throw update.error;
     const token = tokenFor({ sponsor_account_id: account.id, sponsor_center_id: center.data.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
-    return res.json({ success: true, token, center: { id: center.data.id, name: center.data.center_name }, students: (students.data || []).map(s => ({ id: s.id, name: fullName(s), admission_number: s.admission_number || s.admission_no, class_name: classMap.get(String(s.current_class_id)) || "—" })) });
+    return res.json({ success: true, token, center: { id: center.data.id, name: center.data.center_name }, students: (students.data || []).map(s => ({
+      id: s.id, name: fullName(s), admission_number: s.admission_number || s.admission_no,
+      class_name: classMap.get(String(s.current_class_id)) || "—",
+    })) });
   } catch (e) {
     console.error("SPONSOR LOGIN ERROR:", e);
     return res.status(500).json({ success: false, message: "Imeshindikana kuingia Sponsor Portal." });
