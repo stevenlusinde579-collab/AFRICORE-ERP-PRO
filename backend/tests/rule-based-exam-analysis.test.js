@@ -707,3 +707,69 @@ test("Agriculture PDF: ignores numbered pen instruction and scopes Section C sel
     assert.ok(sectionC.every(question => question.selection_count === 2 && question.selection_total === 3));
     assert.equal(result.total_marks, 100);
 });
+
+
+test("recognizes Advanced Level main question numbers printed on separate lines", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Physics",
+        level: "Advanced Level",
+        examType: "ACSEE",
+        curriculum: "Tanzania",
+        pdfText: `ADVANCED CERTIFICATE EXAMINATION
+PHYSICS
+SECTION A (30 MARKS)
+Answer all questions.
+1
+(a) Define electric field intensity.
+(b) Derive an expression for the force between two point charges.
+2
+(a) State Newton's second law of motion.
+(b) Explain the relationship between impulse and momentum.
+3
+(a) Define simple harmonic motion.
+(b) Describe an experiment to determine acceleration due to gravity.`,
+    });
+
+    assert.equal(result.level, "Advanced Level");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Define electric field intensity/);
+    assert.match(result.questions[1].question_text, /Newton's second law/);
+    assert.match(result.questions[2].question_text, /simple harmonic motion/);
+});
+
+test("does not turn isolated page numbers into main questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Chemistry",
+        level: "Advanced Level",
+        pdfText: `CHEMISTRY
+SECTION A (20 MARKS)
+1. Define an acid.
+Page 2
+2. Explain oxidation and reduction.`,
+    });
+
+    assert.equal(result.total_questions, 2);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2]);
+    assert.ok(!result.questions.some(question => /^Page 2$/i.test(question.question_text)));
+});
+
+test("recognizes standalone Advanced question numbers after a page break label", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Biology",
+        level: "Advanced Level",
+        pdfText: `BIOLOGY
+SECTION B (20 MARKS)
+1
+(a) Explain the structure of a chromosome.
+(b) Describe DNA replication.
+Page 3
+2
+(a) Explain natural selection.
+(b) Describe speciation.`,
+    });
+
+    assert.equal(result.total_questions, 2);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2]);
+    assert.match(result.questions[1].question_text, /natural selection/i);
+});
