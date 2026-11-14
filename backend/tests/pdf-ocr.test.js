@@ -75,7 +75,7 @@ test("renders and recognizes each PDF page in order and releases OCR resources",
 test("rejects PDFs beyond the OCR page safety limit", async () => {
     await assert.rejects(
         extractScannedPdfText(Buffer.from("%PDF-test"), {
-            getDocument: () => ({ promise: Promise.resolve({ numPages: 26 }) }),
+            getDocument: () => ({ promise: Promise.resolve({ numPages: 26, destroy: async () => {} }) }),
             createWorker: async () => { throw new Error("worker should not start"); },
         }),
         /safety limit/
