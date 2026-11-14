@@ -774,12 +774,16 @@ export const analyzePaperWithRules = ({
             String(item?.section || item?.name || "").toUpperCase() === String(section.name).toUpperCase()
         );
         if (declared && Number(declared.marks) > 0) {
-            // Controller-extracted totals are cross-check evidence; a total
-            // parsed from the section's own heading remains the preferred value.
-            if (!(Number(section.total_marks) > 0)) section.total_marks = Number(declared.marks);
-            else if (Math.abs(Number(section.total_marks) - Number(declared.marks)) > 0.01) {
+            // The controller's lightweight total detector has no source-line
+            // provenance. It is therefore a cross-check only and must never
+            // create marks or trigger allocation on its own.
+            if (Number(section.total_marks) > 0 &&
+                Math.abs(Number(section.total_marks) - Number(declared.marks)) > 0.01) {
                 recommendations.push("Section " + section.name + " has conflicting section-total evidence (" +
                     section.total_marks + " versus " + declared.marks + " marks); verify the printed heading.");
+            } else if (!(Number(section.total_marks) > 0)) {
+                recommendations.push("A possible " + declared.marks + "-mark total was detected near Section " +
+                    section.name + " by the lightweight PDF scanner, but its exact source line is unverified. It was not used to allocate question marks.");
             }
         }
     }
