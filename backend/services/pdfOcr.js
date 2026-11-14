@@ -16,9 +16,10 @@ export const isLikelyScannedPdfText = (value) => {
     const usefulWords = words.filter(word => !/^camscanner$/i.test(word));
     const scannerWatermarkOnly =
         /camscanner/i.test(text) && usefulWords.length <= 3;
-    // Avoid OCR on short but genuine papers. Preserve native text when it
-    // contains enough readable words to be useful.
-    return scannerWatermarkOnly || text.length < 100 || usefulWords.length < 8;
+    // Short but readable papers must not be sent to OCR unnecessarily.
+    return scannerWatermarkOnly ||
+        (text.length < 100 && usefulWords.length < 5) ||
+        usefulWords.length < 3;
 };
 
 export const cleanOcrText = (value) => String(value || "")
