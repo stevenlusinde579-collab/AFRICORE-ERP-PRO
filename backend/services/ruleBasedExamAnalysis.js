@@ -335,8 +335,8 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
-    const explicitQuestionHeaderPattern = new RegExp(String.raw`^\\s*(?:QUESTION(?:\\s+(?:NO\\.?|NUMBER))?|Q(?:N\\.?)?\\.?)\\s*(${questionOrdinal})\\s*[.)\\]:-]?\\s*(.*)$`, "i");
-    const explicitTaskHeaderPattern = new RegExp(String.raw`^\\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)(?:\\s+(?:NO\\.?|NUMBER))?\\s*(${questionOrdinal})\\s*[.)\\]:-]?\\s*(.*)$`, "i");
+    const explicitQuestionHeaderPattern = /^\\s*(?:QUESTION(?:\\s+(?:NO\\.?|NUMBER))?|Q(?:N\\.?)?\\.?)\\s*(\d{1,2}|twenty|nineteen|eighteen|seventeen|sixteen|fifteen|fourteen|thirteen|twelve|eleven|ten|nine|eight|seven|six|five|four|three|two|one|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|xx|ix|viii|vii|vi|iv|v|iii|ii|i)\\s*[.)\\]:-]?\\s*(.*)$/i;
+    const explicitTaskHeaderPattern = /^\\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)(?:\\s+(?:NO\\.?|NUMBER))?\\s*(\d{1,2}|twenty|nineteen|eighteen|seventeen|sixteen|fifteen|fourteen|thirteen|twelve|eleven|ten|nine|eight|seven|six|five|four|three|two|one|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|xx|ix|viii|vii|vi|iv|v|iii|ii|i)\\s*[.)\\]:-]?\\s*(.*)$/i;
 
     const earlyYearsTaskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|fafanua)\\b/i;
 
