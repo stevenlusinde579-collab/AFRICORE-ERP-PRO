@@ -164,7 +164,7 @@ const detectSelection = (text, availableQuestions = 0) => {
             };
         }
     }
-    const compactSwahili = compact.match(/(?:jibu(?:ni)?maswali(?:yote)?|maswali)(moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi|\d+)(?:\((\d+)\))?kutoka(?:sehemu|section)([a-e])/i);
+    const compactSwahili = compact.match(/(?:jibu(?:ni)?maswali(?:yote)?|maswali)?(moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi|\d+)(?:\((\d+)\))?kutoka(?:sehemu|section)([a-e])/i);
     if (compactSwahili) {
         const count = numberValue(compactSwahili[2] || compactSwahili[1]);
         if (count > 0 && availableQuestions > count) {
@@ -440,7 +440,7 @@ const countObjectiveItems = (text) => {
 };
 
 const isObjectiveOrMatching = (text) =>
-    /choose.{0,80}correct answer|multiple.choice|list\s*a[\s\S]{0,500}list\s*b|match.{0,80}(?:list|terms|items)/i.test(String(text || ""));
+    /choose.{0,120}correct answer|multiple.choice|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
 
 const effectiveMarks = (questions) => {
     const total = new Map();
