@@ -726,6 +726,11 @@ const assessQuestionQuality = (question) => {
 
 export const analyzePaperWithRules = ({
     pdfText,
+    structuralQuestions = [],
+    sectionTotals = [],
+    expectedQuestionCount = 0,
+    globalSelection = null,
+    gradingCriteria = "",
     subjectName = "Unknown Subject",
     level = "Unknown Level",
     examName = "Examination",
@@ -738,11 +743,74 @@ export const analyzePaperWithRules = ({
     }
 
     const educationLevelCategory = classifyEducationLevel(level, text);
-    const sections = splitPaper(text, level);
     const questions = [];
     const blooms = {};
     const topics = new Set();
     const recommendations = [];
+    const sections = splitPaper(text, level);
+    const structuralEvidence = Array.isArray(structuralQuestions) ? structuralQuestions : [];
+    const declaredSections = Array.isArray(sectionTotals) ? sectionTotals : [];
+    const structuralByNumber = new Map();
+    for (const item of structuralEvidence) {
+        const number = Number(item?.question_number);
+        const questionText = String(item?.text || item?.question_text || "").trim();
+        if (Number.isInteger(number) && number > 0 && questionText) {
+            const key = String(number);
+            if (!structuralByNumber.has(key)) structuralByNumber.set(key, []);
+            structuralByNumber.get(key).push(questionText);
+        }
+    }
+    for (const section of sections) {
+        const declared = declaredSections.find(item =>
+            String(item?.section || item?.name || "").toUpperCase() === String(section.name).toUpperCase()
+        );
+        if (declared && Number(declared.marks) > 0) {
+            // Controller-extracted totals are cross-check evidence; a total
+            // parsed from the section's own heading remains the preferred value.
+            if (!(Number(section.total_marks) > 0)) section.total_marks = Number(declared.marks);
+            else if (Math.abs(Number(section.total_marks) - Number(declared.marks)) > 0.01) {
+                recommendations.push("Section " + section.name + " has conflicting section-total evidence (" +
+                    section.total_marks + " versus " + declared.marks + " marks); verify the printed heading.");
+            }
+        }
+    }
+    const declaredCount = Number(expectedQuestionCount) || 0;
+    const structuralCount = structuralEvidence.length;
+    if (declaredCount > 0 && declaredCount !== sections.reduce((sum, section) => sum + section.questions.length, 0)) {
+        recommendations.push("The paper's introductory question-count instruction indicates " + declaredCount +
+            " questions, while the text structure identifies " +
+            sections.reduce((sum, section) => sum + section.questions.length, 0) +
+            ". Review numbering and subparts; the declared count was treated as a cross-check, not a reason to invent questions.");
+    }
+    if (structuralCount > 0) {
+        const parsedCount = sections.reduce((sum, section) => sum + section.questions.length, 0);
+        if (structuralCount !== parsedCount) {
+            recommendations.push("The controller's independent PDF question extraction found " + structuralCount +
+                " question blocks while the section parser found " + parsedCount +
+                ". The two inventories differ; inspect the original paper before approval.");
+        }
+    }
+    if (gradingCriteria && String(gradingCriteria).trim()) {
+        recommendations.push("Configured exam-specific grading criteria were supplied to the analysis context; confirm that question-level marking follows those criteria where applicable.");
+    }
+    if (curriculum && String(curriculum).trim()) {
+        recommendations.push("Curriculum context was supplied. Topic coverage classifications remain limited to identifiable evidence in the extracted question text.");
+    }
+    if (globalSelection && Number(globalSelection.required) > 0 &&
+        Number(globalSelection.available) >= Number(globalSelection.required)) {
+        const onlySection = sections.length === 1 ? sections[0] : null;
+        if (onlySection && !onlySection.selection.selection_required) {
+            onlySection.selection = {
+                selection_required: true,
+                selection_count: Number(globalSelection.required),
+                selection_total: Number(globalSelection.available),
+                selection_instruction: String(globalSelection.source || "Global answer-any instruction detected in PDF"),
+            };
+        } else if (!onlySection) {
+            recommendations.push("A paper-level selection instruction was detected (" + globalSelection.source +
+                "), but multiple sections were found. It was not assigned to an individual section without reliable section scope.");
+        }
+    }
     let confidenceTotal = 0;
 
     for (const section of sections) {
@@ -793,6 +861,9 @@ export const analyzePaperWithRules = ({
                 bloom_level: bloom,
                 question_type: inferQuestionType(source.text),
                 answer_expected: inferExpectedAnswerGuidance(source.text, topic.topic, subjectName, educationLevelCategory),
+                structural_cross_check: structuralByNumber.has(String(source.question_number))
+                    ? "Controller PDF text extraction independently detected a question with this label; compare the full wording because numbering can repeat by section."
+                    : "No matching question label was found by the controller's independent lightweight extractor; verify this question against the original PDF.",
                 ai_confidence: marks > 0 ? 82 : 55,
                 ai_explanation: "Rule-Based classification derived from the printed command verb, question wording, subject context and detected structure. Verify subject-specific content and referenced visual material with the original paper.",
                 is_selective: Boolean(selection.selection_required),
@@ -1033,4 +1104,5 @@ export const analyzePaperWithRules = ({
 };
 
 export default analyzePaperWithRules;
+
 
