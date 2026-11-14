@@ -1220,6 +1220,47 @@ export const readPDF =
 
 
             // =================================================
+            // SCANNED PDF OCR FALLBACK
+            //
+            // Keep the existing text extraction path unchanged for
+            // text-based PDFs. Render pages and run OCR only when the
+            // extracted text is empty/weak or has no question evidence.
+            // =================================================
+
+            let ocrText = "";
+            let ocrScore = 0;
+            const bestExistingScore = Math.max(defaultScore, structuredScore);
+            const bestExistingQuestions = Math.max(
+                defaultQuestions.length,
+                structuredQuestions.length
+            );
+            const shouldRunOcr =
+                bestExistingScore < 35 ||
+                bestExistingQuestions === 0 ||
+                cleanedDefault.length < 180;
+
+            if (shouldRunOcr) {
+                try {
+                    console.log("WEAK PDF TEXT DETECTED. STARTING SCANNED-PDF OCR...");
+                    const { extractScannedPdfText } = await import("./scannedPdfOcr.js");
+                    const rawOcrText = await extractScannedPdfText(buffer);
+                    ocrText = finalClean(rawOcrText);
+                    ocrScore = scoreExtraction(ocrText);
+                    console.log("OCR TEXT LENGTH:", ocrText.length);
+                    console.log("OCR EXTRACTION SCORE:", ocrScore);
+                    console.log("OCR DETECTED QUESTIONS:", detectQuestionNumbers(ocrText));
+                } catch (ocrError) {
+                    console.warn(
+                        "SCANNED PDF OCR FAILED:",
+                        ocrError?.message || ocrError
+                    );
+                    // Do not silently claim OCR succeeded. If no usable
+                    // embedded text exists, the normal final validation
+                    // below returns a clear failure to the caller.
+                }
+            }
+
+            // =================================================
             // SELECT EXTRACTION
             //
             // Structured extraction gets preference when it
@@ -1232,8 +1273,15 @@ export const readPDF =
             let finalText =
                 "";
 
+            if (ocrScore > Math.max(defaultScore, structuredScore) && ocrText.trim()) {
+                finalText = ocrText;
+                console.log("SELECTED EXTRACTION: SCANNED-PDF OCR");
+            }
+
+
 
             if (
+                !finalText.trim() &&
                 structuredScore >
                 0 &&
                 (
@@ -1250,7 +1298,7 @@ export const readPDF =
                     "SELECTED EXTRACTION: STRUCTURED"
                 );
 
-            } else {
+            } else if (!finalText.trim()) {
 
                 finalText =
                     cleanedDefault;
