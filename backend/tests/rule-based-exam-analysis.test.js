@@ -373,3 +373,81 @@ V. Range of R-1`,
     assert.equal(result.questions[0].max_marks, 10);
     assert.equal(result.total_marks, 10);
 });
+
+
+test("parses stored Chemistry structure, selective Section C and 100 marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Chemistry",
+        level: "Form Four",
+        examName: "PRE-MOCK",
+        pdfText: [
+            "1. consists of sections A, B and C with a total of eleven (11) questions.",
+            "2. Answer all questions in sections A and B and two (2) questions from section C.",
+            "3. Section A carries sixteen (16) marks, section B fifty four (54) marks and section C thirty (30) marks.",
+            "All writing must be in blue/black ink except diagrams.",
+            "Answer all questions in this section.",
+            "1. For each of the items (i)-(x), choose the correct answer from the given alternatives.",
+            "(i) Item one", "(ii) Item two", "(iii) Item three", "(iv) Item four", "(v) Item five",
+            "(vi) Item six", "(vii) Item seven", "(viii) Item eight", "(ix) Item nine", "(x) Item ten",
+            "A. option B. option C. option D. option E. option",
+            "Match the parts of the electrolytic cell in List A with the respective terms in List B.",
+            "List A", "(i) item one", "(ii) item two", "(iii) item three", "(iv) item four",
+            "(v) item five", "(vi) item six", "List B", "A. option B. option C. option D. option E. option F. option",
+            "SECTION B",
+            "3. Explain economic activities that depend on water.",
+            "4. Explain hydrogen properties.",
+            "5. Describe a scientific investigation.",
+            "6. Explain hydrogen as a fuel.",
+            "7. Describe lighting a luminous flame.",
+            "8. Explain water hardness.",
+            "SECTION C",
+            "Answer any two questions from Section C.",
+            "9. Explain Le Chatelier's principle.",
+            "10. Describe chemical properties of ethanol.",
+            "11. Explain extraction of sulphur."
+        ].join("\n"),
+    });
+    assert.equal(result.total_questions, 11);
+    assert.equal(result.total_marks, 100);
+    const sectionA = result.questions.filter(question => question.section === "A");
+    assert.equal(sectionA.length, 2);
+    assert.deepEqual(sectionA.map(question => question.max_marks), [10, 6]);
+    const sectionB = result.questions.filter(question => question.section === "B");
+    assert.equal(sectionB.length, 6);
+    assert.ok(sectionB.every(question => question.max_marks === 9));
+    const sectionC = result.questions.filter(question => question.section === "C");
+    assert.equal(sectionC.length, 3);
+    assert.ok(sectionC.every(question => question.selection_required));
+    assert.ok(sectionC.every(question => question.selection_count === 2));
+    assert.ok(sectionC.every(question => question.max_marks === 15));
+});
+
+test("recognizes OCR-compressed Kiswahili answer-two-from-Section-C instruction", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Kiswahili",
+        level: "Form Four",
+        pdfText: [
+            "JibumaswaliyotekutokasehemuA,Bnamaswalimawili(2)kutokaSehemuC.",
+            "SECTION A (Alama 16)",
+            "1. Katikaswalilai-x,chaguaherufiyajibusahihi.",
+            "i. Swali la kwanza", "ii. Swali la pili", "iii. Swali la tatu", "iv. Swali la nne",
+            "v. Swali la tano", "vi. Swali la sita", "vii. Swali la saba", "viii. Swali la nane",
+            "ix. Swali la tisa", "x. Swali la kumi",
+            "2. OanishamaanazadhanambalimbalizatungokatikaorodhaA na orodha B.",
+            "KIFUNGU A KIFUNGU B", "(i) Sehemu ya sentensi", "(ii) Sehemu ya sentensi",
+            "(iii) Sehemu ya sentensi", "(iv) Sehemu ya sentensi", "(v) Sehemu ya sentensi",
+            "(vi) Sehemu ya sentensi",
+            "SECTION B (Alama 54)",
+            "3. Fafanua maana ya lugha.", "4. Tunga sentensi.", "5. Eleza umuhimu wa kamusi.",
+            "6. Bainisha kishazi tegemezi.", "7. Andika visawe.", "8. Soma kifungu cha habari.",
+            "SECTION C (Alama 30)",
+            "9. Mhakiki ni nani?", "10. Jadili tamthilia mbili.", "11. Eleza usanaa wa fasihi."
+        ].join("\n"),
+    });
+    const sectionC = result.questions.filter(question => question.section === "C");
+    assert.equal(sectionC.length, 3);
+    assert.ok(sectionC.every(question => question.selection_required));
+    assert.ok(sectionC.every(question => question.selection_count === 2));
+    assert.ok(sectionC.every(question => question.max_marks === 15));
+    assert.equal(result.total_marks, 100);
+});
