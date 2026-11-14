@@ -651,6 +651,12 @@ export default function AIAnalysisDashboard() {
             ?.selectedFile ||
         null;
 
+    const initialAnalysisResponse =
+        location?.state?.aiAnalysisResponse || null;
+
+    const selectedAnalysisMethod =
+        location?.state?.analysisMethod || "ai";
+
 
     const selectedExamSubjectId =
         useMemo(() => {
@@ -1375,6 +1381,11 @@ export default function AIAnalysisDashboard() {
                     )
                 );
 
+                formData.append(
+                    "analysis_method",
+                    selectedAnalysisMethod
+                );
+
                 try {
                     if (
                         mountedRef.current
@@ -1740,8 +1751,15 @@ export default function AIAnalysisDashboard() {
                             );
 
                         if (
-                            fileSubmissionRef.current !==
-                            fileKey
+                            initialAnalysisResponse?.success === true &&
+                            initialAnalysisResponse?.analysis_completed === true
+                        ) {
+                            // ExamUpload already submitted the selected engine.
+                            // Do not upload the same PDF a second time or silently
+                            // invoke Gemini after a Rule-Based analysis.
+                            fileSubmissionRef.current = fileKey;
+                        } else if (
+                            fileSubmissionRef.current !== fileKey
                         ) {
                             await analyzePaper(
                                 selectedFile,
@@ -1755,9 +1773,7 @@ export default function AIAnalysisDashboard() {
                                 navigate(
                                     `/examination/${examId}/ai-analysis`,
                                     {
-                                        replace:
-                                            true,
-
+                                        replace: true,
                                         state: {
                                             examSubjectId:
                                                 selectedExamSubjectId,
@@ -1875,6 +1891,8 @@ export default function AIAnalysisDashboard() {
         examId,
         selectedExamSubjectId,
         selectedFile,
+        initialAnalysisResponse,
+        selectedAnalysisMethod,
         getFileKey,
         analyzePaper,
         loadAnalysis,
