@@ -566,7 +566,7 @@ test("Commerce paper excludes exam-room warning and scopes selective Section C o
             "9. Explain essential elements of a business plan. (15 marks)",
             "10. Explain principles of management. (15 marks)",
             "11. Discuss factors influencing buying decisions. (15 marks)"
-        ].join("\\n"),
+        ].join("\n"),
     });
 
     assert.equal(result.total_questions, 11);
