@@ -764,7 +764,13 @@ export const analyzePaperWithRules = ({
         exam_type: examType,
         curriculum,
         total_questions: questions.length,
-        total_marks: explicitPaperTotal || totalMarks,
+        // A printed paper total is evidence, not a replacement for a
+        // contradictory section/question reconciliation. Only use it when
+        // the structural calculation is unavailable or agrees with it.
+        total_marks: explicitPaperTotal !== null &&
+            (totalMarks <= 0 || Math.abs(explicitPaperTotal - totalMarks) <= 0.01)
+            ? explicitPaperTotal
+            : totalMarks,
         difficulty: overallDifficulty,
         quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
         syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
