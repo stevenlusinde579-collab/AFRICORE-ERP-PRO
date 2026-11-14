@@ -868,3 +868,42 @@ Discuss risk management in projects (10 marks).`,
     assert.match(result.questions[1].question_text, /project life cycle/i);
     assert.equal(result.questions[1].max_marks, 10);
 });
+
+
+test("recognizes Roman numeral and numbered-header variants in tertiary papers", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Public Administration",
+        level: "Certificate",
+        pdfText: `CERTIFICATE EXAMINATION
+QUESTION I
+Define public administration.
+QUESTION II
+State four functions of government.
+QUESTION NO. 3
+Explain accountability.
+QN 4
+Discuss public service ethics.`,
+    });
+
+    assert.equal(result.education_level_category, "tertiary");
+    assert.equal(result.total_questions, 4);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3, 4]);
+});
+
+test("recognizes Roman numeral activity headers in early-years assessments", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Early Learning",
+        level: "Kindergarten",
+        pdfText: `KINDERGARTEN LEARNING ACTIVITIES
+ACTIVITY I
+Trace the letter A.
+TASK II
+Colour the circle.
+EXERCISE III
+Count the stars.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+});
