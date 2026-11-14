@@ -1,0 +1,359 @@
+const NUMBER_WORDS = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+    eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
+    fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+    nineteen: 19, twenty: 20,
+};
+
+const TOPIC_KEYWORDS = {
+    Accounting: ["ledger", "debit", "credit", "journal", "trial balance", "cash book", "financial statement", "capital", "asset", "liability", "profit", "loss", "balance sheet"],
+    Commerce: ["trade", "business", "entrepreneur", "market", "commerce", "consumer", "producer", "wholesale", "retail", "banking", "insurance", "transport"],
+    Mathematics: ["equation", "calculate", "solve", "factor", "algebra", "geometry", "percentage", "fraction", "probability", "statistics", "ratio", "angle"],
+    Biology: ["cell", "organ", "plant", "animal", "photosynthesis", "respiration", "reproduction", "tissue", "organism", "ecosystem", "nutrition"],
+    Chemistry: ["chemical", "reaction", "acid", "element", "compound", "molecule", "atom", "periodic", "oxidation", "reduction", "mixture"],
+    Physics: ["force", "energy", "motion", "velocity", "acceleration", "mass", "pressure", "electricity", "current", "voltage", "density", "wave"],
+    Geography: ["climate", "weather", "erosion", "population", "map", "scale", "river", "mountain", "soil", "vegetation", "environment"],
+    History: ["colonial", "independence", "revolution", "war", "civilisation", "civilization", "treaty", "nationalism", "slave trade"],
+    "Civics": ["citizen", "government", "constitution", "democracy", "human rights", "election", "leadership", "law", "responsibility"],
+    English: ["grammar", "comprehension", "composition", "noun", "verb", "adjective", "tense", "literature", "passage"],
+    Kiswahili: ["sarufi", "fasihi", "methali", "nahau", "nomino", "kitenzi", "ufahamu", "insha"],
+    "Business Studies": ["business", "entrepreneur", "marketing", "management", "customer", "capital", "enterprise", "trade"],
+};
+
+const BLOOM_VERBS = [
+    { level: "Creating", verbs: ["design", "construct", "compose", "formulate", "develop", "invent", "prepare a plan"] },
+    { level: "Evaluating", verbs: ["evaluate", "assess", "justify", "criticise", "criticize", "recommend", "judge", "defend"] },
+    { level: "Analysing", verbs: ["analyse", "analyze", "compare", "contrast", "differentiate", "examine", "distinguish", "investigate"] },
+    { level: "Applying", verbs: ["calculate", "solve", "demonstrate", "use", "apply", "illustrate", "show how"] },
+    { level: "Understanding", verbs: ["explain", "describe", "summarise", "summarize", "discuss", "interpret", "outline", "classify"] },
+    { level: "Remembering", verbs: ["define", "state", "list", "name", "identify", "mention", "what is", "who is"] },
+];
+
+const normalize = (value) => String(value || "").replace(/\r/g, "\n").replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+const numberValue = (value) => {
+    const token = String(value || "").trim().toLowerCase();
+    if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
+    return NUMBER_WORDS[token] ?? null;
+};
+
+const extractMarkValues = (text) => {
+    const matches = [...String(text || "").matchAll(/(?:\(|\[)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*(?:\)|\])?/gi)];
+    if (!matches.length) return 0;
+    const totalMatch = [...String(text || "").matchAll(/(?:total|maximum|carrying|worth)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi)].pop();
+    if (totalMatch) return Number(totalMatch[1]);
+    return matches.reduce((sum, match) => sum + Number(match[1]), 0);
+};
+
+const extractSectionTotal = (text) => {
+    const matches = [...String(text || "").matchAll(/(?:total\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/gi)];
+    if (!matches.length) return null;
+    return Number(matches[0][1]);
+};
+
+const detectSelection = (text) => {
+    const source = String(text || "").replace(/\s+/g, " ").trim();
+    const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)";
+    const patterns = [
+        new RegExp("\\b(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+"+token+"\\b", "i"),
+        new RegExp("\\b(?:answer|attempt|choose|select|do)\\s+any\\s+"+token+"\\b", "i"),
+        new RegExp("\\bany\\s+"+token+"\\s+questions?\\b", "i"),
+    ];
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const nums = [...match].slice(1).map(numberValue).filter(Number.isFinite);
+        if (!nums.length || nums[0] <= 0) continue;
+        const selectionCount = nums[0];
+        const selectionTotal = nums[1] ?? null;
+        return {
+            selection_required: true,
+            selection_count: selectionCount,
+            selection_total: selectionTotal,
+            selection_instruction: match[0],
+        };
+    }
+    return {
+        selection_required: false,
+        selection_count: 0,
+        selection_total: 0,
+        selection_instruction: null,
+    };
+};
+
+const detectSectionHeading = (line) => {
+    const match = String(line || "").match(/^\s*(?:SECTION|PART)\s+([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
+    if (!match) return null;
+    return { name: String(match[1]).toUpperCase(), title: String(match[2] || "").trim() };
+};
+
+const splitPaper = (pdfText) => {
+    const lines = normalize(pdfText).split("\n");
+    const sections = [];
+    const sectionMap = new Map();
+    let currentSection = null;
+    let currentQuestion = null;
+
+    const ensureSection = (name = "UNSECTIONED", title = "") => {
+        const key = String(name).toUpperCase();
+        if (!sectionMap.has(key)) {
+            const section = { name: key, title, instructionText: [], questions: [] };
+            sectionMap.set(key, section);
+            sections.push(section);
+        }
+        return sectionMap.get(key);
+    };
+
+    currentSection = ensureSection();
+    const questionPattern = /^\s*(?:QUESTION\s*)?(\d{1,3})\s*[.)\]:-]\s+(.*)$/i;
+
+    for (const line of lines) {
+        const heading = detectSectionHeading(line);
+        if (heading) {
+            if (currentQuestion) {
+                currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = null;
+            }
+            currentSection = ensureSection(heading.name, heading.title);
+            currentSection.instructionText.push(line);
+            continue;
+        }
+
+        const questionMatch = line.match(questionPattern);
+        if (questionMatch) {
+            if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = {
+                question_number: Number(questionMatch[1]),
+                text: questionMatch[2] || "",
+                section: currentSection.name,
+            };
+            currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
+        if (currentQuestion) currentQuestion.text += (currentQuestion.text ? "\n" : "") + line;
+        else currentSection.instructionText.push(line);
+    }
+
+    for (const section of sections) {
+        section.instructionText = section.instructionText.join("\n");
+        section.total_marks = extractSectionTotal(section.instructionText);
+        section.selection = detectSelection(section.instructionText);
+        section.questions = section.questions.filter(question => question.text.trim());
+    }
+
+    const nonEmpty = sections.filter(section => section.questions.length);
+    if (!nonEmpty.length) {
+        throw new Error("Rule-Based Engine could not detect numbered main questions. Use a text-based PDF with clear question numbering or select AI Analysis (Gemini).");
+    }
+    return nonEmpty;
+};
+
+const inferTopic = (text, subjectName) => {
+    const lower = String(text || "").toLowerCase();
+    const subject = Object.keys(TOPIC_KEYWORDS).find(key =>
+        String(subjectName || "").toLowerCase().includes(key.toLowerCase())
+    );
+    const dictionary = subject ? { [subject]: TOPIC_KEYWORDS[subject] } : TOPIC_KEYWORDS;
+    let best = null;
+    for (const [name, words] of Object.entries(dictionary)) {
+        const found = words.filter(word => lower.includes(word));
+        if (found.length > (best?.matches.length || 0)) best = { name, matches: found };
+    }
+    return best ? { topic: best.name, sub_topic: best.matches.slice(0, 3).join(", ") || null } : { topic: null, sub_topic: null };
+};
+
+const inferBloom = (text) => {
+    const lower = String(text || "").toLowerCase();
+    for (const item of BLOOM_VERBS) {
+        if (item.verbs.some(verb => lower.includes(verb))) return item.level;
+    }
+    return "Unknown";
+};
+
+const inferDifficulty = (text, marks) => {
+    const lower = String(text || "").toLowerCase();
+    const complex = ["evaluate", "justify", "analyse", "analyze", "design", "construct", "derive", "prove", "discuss"];
+    const simple = ["define", "state", "list", "name", "identify", "mention"];
+    if (complex.some(word => lower.includes(word)) || marks >= 15) return "Hard";
+    if (simple.some(word => lower.includes(word)) && marks > 0 && marks <= 5) return "Easy";
+    return "Medium";
+};
+
+const inferQuestionType = (text) => {
+    const lower = String(text || "").toLowerCase();
+    if (/\b(calculate|solve|compute|find the value|work out)\b/.test(lower)) return "Calculation";
+    if (/\b(true or false|multiple choice|choose the correct|tick the correct|fill in the blank)\b/.test(lower)) return "Objective";
+    if (/\b(draw|sketch|label the diagram)\b/.test(lower)) return "Diagram";
+    if (/\b(explain|describe|discuss|analyse|analyze|compare|evaluate)\b/.test(lower)) return "Structured/Essay";
+    return "Short Answer";
+};
+
+const effectiveMarks = (questions) => {
+    const groups = new Map();
+    for (const question of questions) {
+        const marks = Number(question.max_marks) || 0;
+        if (marks <= 0) continue;
+        if (!question.selection_required) {
+            groups.set("Q-" + question.question_number + "-" + question.section, marks);
+            continue;
+        }
+        const group = question.selection_group;
+        if (!groups.has(group)) groups.set(group, marks * Number(question.selection_count || 1));
+    }
+    return [...groups.values()].reduce((sum, value) => sum + value, 0);
+};
+
+export const analyzePaperWithRules = ({
+    pdfText,
+    subjectName = "Unknown Subject",
+    level = "Unknown Level",
+    examName = "Examination",
+    examType = "",
+    curriculum = "",
+}) => {
+    const text = normalize(pdfText);
+    if (text.length < 20) {
+        throw new Error("Rule-Based Engine requires readable text in the PDF. This file appears scanned or contains too little extractable text. Choose AI Analysis (Gemini) for scanned papers.");
+    }
+
+    const sections = splitPaper(text);
+    const questions = [];
+    const blooms = {};
+    const topics = new Set();
+    const recommendations = [];
+    let confidenceTotal = 0;
+
+    for (const section of sections) {
+        const sectionText = section.instructionText + "\n" + section.questions.map(q => q.text).join("\n");
+        const selection = detectSelection(sectionText) .selection_required
+            ? detectSelection(sectionText)
+            : section.selection;
+        const groupId = selection.selection_required
+            ? "SECTION-" + section.name + "-" + selection.selection_count + "-OF-" + (selection.selection_total || section.questions.length)
+            : null;
+
+        const pending = [];
+        let explicitTotal = 0;
+
+        for (const source of section.questions) {
+            const marks = extractMarkValues(source.text);
+            if (marks > 0) explicitTotal += marks;
+            const topic = inferTopic(source.text, subjectName);
+            const bloom = inferBloom(source.text);
+            const question = {
+                question_number: source.question_number,
+                question_text: source.text.slice(0, 12000),
+                section: section.name,
+                section_type: section.title || section.name,
+                max_marks: marks,
+                mark_source: marks > 0 ? "explicit_in_paper" : "uncertain_teacher_confirmation_required",
+                mark_evidence: marks > 0 ? "Explicit mark value(s) detected in the question text." : "No explicit mark value was detected for this question.",
+                topic: topic.topic,
+                sub_topic: topic.sub_topic,
+                difficulty_level: inferDifficulty(source.text, marks),
+                bloom_level: bloom,
+                question_type: inferQuestionType(source.text),
+                answer_expected: null,
+                ai_confidence: marks > 0 ? 82 : 55,
+                ai_explanation: "Rule-Based Engine uses visible wording and structural evidence; semantic interpretation and expected answers require teacher review.",
+                is_selective: Boolean(selection.selection_required),
+                selection_required: Boolean(selection.selection_required),
+                selection_count: selection.selection_required ? selection.selection_count : 0,
+                selection_total: selection.selection_required ? (selection.selection_total || section.questions.length) : 0,
+                selection_group: groupId,
+                selection_instruction: selection.selection_instruction,
+            };
+            if (topic.topic) topics.add(topic.topic);
+            blooms[bloom] = (blooms[bloom] || 0) + 1;
+            confidenceTotal += question.ai_confidence;
+            if (!marks) pending.push(question);
+            questions.push(question);
+        }
+
+        if (pending.length && Number(section.total_marks) > 0) {
+            const requiredCount = selection.selection_required
+                ? Number(selection.selection_count || 0)
+                : section.questions.length;
+            const explicitRequiredMarks = selection.selection_required
+                ? 0
+                : explicitTotal;
+            const remaining = Number(section.total_marks) - explicitRequiredMarks;
+            const divisor = selection.selection_required
+                ? requiredCount
+                : pending.length;
+            if (divisor > 0 && remaining >= 0) {
+                const inferred = remaining / divisor;
+                for (const question of pending) {
+                    question.max_marks = Number(inferred.toFixed(2));
+                    question.mark_source = "inferred_from_section_structure";
+                    question.mark_evidence = selection.selection_required
+                        ? "Inferred equally from the printed section total and the explicit answer-any selection count."
+                        : "Inferred by distributing the remaining printed section marks equally among questions with no explicit marks, after preserving explicit question marks.";
+                    question.ai_confidence = 72;
+                }
+            } else {
+                recommendations.push("Section " + section.name + " marks could not be allocated reliably; confirm the marks with the teacher.");
+            }
+        } else if (pending.length) {
+            recommendations.push("Some questions in Section " + section.name + " have no printed marks; teacher confirmation is required.");
+        }
+    }
+
+    for (const question of questions) {
+        if (question.max_marks <= 0) {
+            recommendations.push("Confirm the maximum marks for Question " + question.question_number + " in Section " + question.section + ".");
+        }
+    }
+
+    const totalMarks = effectiveMarks(questions);
+    const sectionOutput = sections.map(section => {
+        const sectionQuestions = questions.filter(q => q.section === section.name);
+        const selection = sectionQuestions.find(q => q.selection_required);
+        return {
+            section: section.name,
+            name: section.name,
+            title: section.title || section.name,
+            marks: section.total_marks,
+            total_marks: section.total_marks,
+            question_count: sectionQuestions.length,
+            selection_required: Boolean(selection),
+            selection_count: selection?.selection_count || 0,
+            selection_total: selection?.selection_total || 0,
+        };
+    });
+
+    if (!recommendations.length) recommendations.push("Structural analysis completed. Teacher should review topic, Bloom level, difficulty and marking interpretation before approval.");
+    const explicitPaperTotal = [...text.matchAll(/(?:TOTAL\s+(?:MARKS?|SCORE)|MAXIMUM\s+MARKS?)\s*[:\-]?\s*(\d+(?:\.\d+)?)/gi)].map(match => Number(match[1])).find(value => value > 0);
+    const averageConfidence = questions.length ? Math.round(confidenceTotal / questions.length) : 0;
+    const difficultyCounts = questions.reduce((acc, q) => {
+        acc[q.difficulty_level] = (acc[q.difficulty_level] || 0) + 1;
+        return acc;
+    }, {});
+    const hardCount = difficultyCounts.Hard || 0;
+    const overallDifficulty = hardCount / Math.max(questions.length, 1) >= 0.4 ? "Hard" : (difficultyCounts.Easy || 0) / Math.max(questions.length, 1) >= 0.6 ? "Easy" : "Medium";
+
+    return {
+        summary: "Rule-Based structural analysis for " + subjectName + " (" + level + "). " + questions.length + " main questions were detected.",
+        subject: subjectName,
+        level,
+        exam_name: examName,
+        exam_type: examType,
+        curriculum,
+        total_questions: questions.length,
+        total_marks: explicitPaperTotal || totalMarks,
+        difficulty: overallDifficulty,
+        quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
+        syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
+        sections: sectionOutput,
+        topics_found: [...topics],
+        weak_topics: [],
+        strong_topics: [],
+        recommendations: [...new Set(recommendations)],
+        teacher_comments: "Rule-Based Engine does not generate expected answers. Review uncertain marks and all semantic classifications against the original paper before approval.",
+        blooms_distribution: blooms,
+        questions,
+    };
+};
+
+export default analyzePaperWithRules;
