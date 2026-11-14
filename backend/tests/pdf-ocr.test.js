@@ -10,6 +10,10 @@ test("identifies CamScanner-only extraction as a scanned PDF", () => {
     assert.equal(isLikelyScannedPdfText("CamScanner\nCamScanner"), true);
 });
 
+test("does not classify a short but readable examination as scanned", () => {
+    assert.equal(isLikelyScannedPdfText("QUESTION 1. Define assets and liabilities."), false);
+});
+
 test("does not classify a readable text-based paper as scanned", () => {
     const paper = Array.from({ length: 35 }, (_, index) =>
         "QUESTION " + (index + 1) + ". Explain the accounting treatment and prepare the relevant financial statements."
