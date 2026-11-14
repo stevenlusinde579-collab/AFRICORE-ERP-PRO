@@ -287,12 +287,17 @@ router.post("/login", async (req, res) => {
   try {
     // Identify the sponsor tenant only after verifying its credentials.
     // Never trust a school_id supplied by the browser.
-    const result = await supabase.from("sponsor_portal_accounts")
-      .select("id,school_id,center_id,username,password_hash,password_salt,is_active")
-      .eq("username", username).eq("is_active", true).limit(1000);
-    if (result.error) throw result.error;
+    const candidates = [];
+    for (let offset = 0; ; offset += 1000) {
+      const page = await supabase.from("sponsor_portal_accounts")
+        .select("id,school_id,center_id,username,password_hash,password_salt,is_active")
+        .eq("username", username).eq("is_active", true).range(offset, offset + 999);
+      if (page.error) throw page.error;
+      candidates.push(...(page.data || []));
+      if ((page.data || []).length < 1000) break;
+    }
     const verified = [];
-    for (const candidate of result.data || []) {
+    for (const candidate of candidates) {
       if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) verified.push(candidate);
     }
     if (verified.length !== 1) {
