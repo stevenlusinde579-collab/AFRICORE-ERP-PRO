@@ -796,7 +796,7 @@ test("classifies education levels without forcing unknown levels into O-Level", 
         const result = analyzePaperWithRules({
             subjectName: "General Studies",
             level,
-            pdfText: "EXAMINATION\\n1. Explain your answer (5 marks).",
+            pdfText: "EXAMINATION\n1. Explain your answer (5 marks).",
         });
         assert.equal(result.education_level_category, expected, level);
         assert.equal(result.questions.length, 1, level);
