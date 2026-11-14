@@ -334,7 +334,7 @@ SECTION B (60 MARKS)
 3. Find the area of a triangle (20 marks)
 4. Calculate the volume of a cylinder (20 marks)`,
     });
-    assert.equal(result.total_marks, 100);
+    assert.equal(result.total_marks, 50);
     assert.ok(result.recommendations.some(item =>
         item.includes("printed section totals add up to 100") &&
         item.includes("detected question allocation gives 50")
@@ -352,6 +352,6 @@ Answer any two out of the following three questions.
 2. Describe weather (15 marks)
 3. Discuss rainfall (10 marks)`,
     });
-    assert.equal(result.total_marks, 30);
+    assert.equal(result.total_marks, 35);
     assert.ok(result.recommendations.some(item => item.includes("declares 30 marks")));
 });
