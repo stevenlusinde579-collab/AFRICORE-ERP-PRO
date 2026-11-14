@@ -502,7 +502,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
 
     const nonEmpty = sections.filter(section => section.questions.length);
     if (!nonEmpty.length) {
-        throw new Error("Rule-Based Engine could not detect numbered main questions. Use a text-based PDF with clear question numbering or select AI Analysis (Gemini).");
+        throw new Error("Rule-Based Engine could not identify a reliable question or activity structure in this text-based PDF. Check that the paper text is readable and its questions or tasks are clearly separated.");
     }
     return nonEmpty;
 };
