@@ -38,7 +38,12 @@ const numberValue = (value) => {
 };
 
 const extractMarkValues = (text) => {
-    const source = String(text || "");
+    // Normalize common Kiswahili mark notation before applying the existing mark hierarchy.
+    const source = String(text || "")
+        .replace(/\balama\s*(\d+(?:\.\d+)?)/gi, "$1 marks")
+        .replace(/(\d+(?:\.\d+)?)\s*alama\b/gi, "$1 marks")
+        .replace(/\bpoints?\s*(\d+(?:\.\d+)?)/gi, "$1 marks")
+        .replace(/(\d+(?:\.\d+)?)\s*pts?\b/gi, "$1 marks");
     const markPattern = /(?:\(|\[)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*(?:\)|\])?/gi;
     const matches = [...source.matchAll(markPattern)];
     if (!matches.length) return 0;
@@ -46,8 +51,8 @@ const extractMarkValues = (text) => {
     // Explicit parent totals (including totals printed after the subparts)
     // always take precedence over the sum of sub-question marks.
     const totalPatterns = [
-        /(?:total|maximum|question\s+total|in\s+total)\s*(?:of|:)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi,
-        /(?:question\s+)?(?:carries|is\s+worth|has)\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi,
+        /(?:total|maximum|question\s+total|in\s+total|jumla(?:\s+ya)?|jumla\s+kuu)\s*(?:of|ya|:)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi,
+        /(?:question\s+)?(?:carries|is\s+worth|has|lina|ina|ni)\s*(?:alama\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi,
     ];
     for (const pattern of totalPatterns) {
         const totals = [...source.matchAll(pattern)];
@@ -57,7 +62,7 @@ const extractMarkValues = (text) => {
     // Identify labelled subparts (a), (b), a), b), etc. A mark token inside
     // a subpart belongs to that subpart; one outside all subparts is a parent
     // question mark and must not be added to its children.
-    const labels = [...source.matchAll(/(?:\(\s*[a-h]\s*\)|(?:^|\n)\s*[a-h]\s*[.)])(?=\s|$)/gim)];
+    const labels = [...source.matchAll(/(?:\(\s*(?:iii|ii|iv|vi{0,3}|ix|v|x|[a-h])\s*\)|(?:^|\n)\s*(?:[a-h]|iii|ii|iv|vi{0,3}|ix|v|x)\s*[.)])(?=\s|$)/gim)];
     if (labels.length) {
         const ranges = labels.map((label, index) => ({
             start: label.index,
@@ -89,6 +94,7 @@ const extractPerQuestionMarks = (text) => {
     const source = String(text || "").replace(/\s+/g, " ");
     const patterns = [
         /\beach\s+(?:main\s+)?question\s+(?:carries|is\s+worth|has|is\s+allocated)\s+(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
+        /\bkila\s+swali\s+(?:lina|ni)\s+(?:alama\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)?\b/i,
         /\b(?:all|every)\s+questions?\s+(?:carry|carries|are\s+worth)\s+(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
         /\bquestions?\s+(?:carry|are\s+worth)\s+(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s+each\b/i,
     ];
@@ -103,9 +109,13 @@ const extractPerQuestionMarks = (text) => {
 };
 
 const extractSectionTotal = (text) => {
-    const matches = [...String(text || "").matchAll(/(?:total\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/gi)];
-    if (!matches.length) return null;
-    return Number(matches[0][1]);
+    const source = String(text || "")
+        .replace(/\balama\s*(\d+(?:\.\d+)?)/gi, "$1 marks")
+        .replace(/(\d+(?:\.\d+)?)\s*alama\b/gi, "$1 marks");
+    const explicitTotal = source.match(/(?:total|jumla(?:\s+ya)?|jumla\s+kuu)\s*(?:of|ya|:)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i);
+    if (explicitTotal) return Number(explicitTotal[1]);
+    const firstMark = source.match(/(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i);
+    return firstMark ? Number(firstMark[1]) : null;
 };
 
 const detectSelection = (text) => {
@@ -139,7 +149,7 @@ const detectSelection = (text) => {
 };
 
 const detectSectionHeading = (line) => {
-    const match = String(line || "").match(/^\s*(?:SECTION|PART)\s+([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
+    const match = String(line || "").match(/^\s*(?:SECTION|PART|SEHEMU)\s+([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
     if (!match) return null;
     return { name: String(match[1]).toUpperCase(), title: String(match[2] || "").trim() };
 };
