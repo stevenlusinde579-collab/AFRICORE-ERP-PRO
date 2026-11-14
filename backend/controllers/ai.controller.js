@@ -2470,7 +2470,6 @@ export const analyzePaper =
             } else {
                 const aiStartedAt = Date.now();
     
-                let aiRawResponse;
     
     try {
                     aiRawResponse =
@@ -2589,7 +2588,6 @@ export const analyzePaper =
                 // PARSE AI
                 // ------------------------------------------------
     
-                let aiResult;
     
                 try {
                     aiResult = parseAIResult(aiRawResponse);
@@ -2667,56 +2665,6 @@ export const analyzePaper =
                 }
     
     
-                try {
-                    aiResult = parseAIResult(aiRawResponse);
-                } catch (firstParseError) {
-                    console.error(
-                        "AI JSON PARSE ERROR; STARTING ONE CONTROLLED RECOVERY ATTEMPT:",
-                        errorDetails(firstParseError)
-                    );
-                    try {
-                        const recoveryPrompt = [
-                            String(prompt),
-                            "",
-                            "FINAL JSON RECOVERY MODE:",
-                            "Return exactly one complete valid JSON object using the required schema. Do not include markdown, commentary, or text outside JSON.",
-                            "Keep explanatory text concise to avoid truncation. Preserve all visible main questions and sub-items from the PDF.",
-                            "Do not invent questions, answers, or marks. If marks are not printed or cannot be established from the paper, represent uncertainty according to the schema and recommend teacher review.",
-                            "Close every string, object, and array. Escape quotation marks and control characters inside string values.",
-                        ].join("\n");
-                        const recoveryRawResponse = await withTimeout(
-                            askGeminiWithPDF(recoveryPrompt, req.file.buffer.toString("base64")),
-                            120000,
-                            "AI analysis recovery timed out."
-                        );
-                        aiResult = parseAIResult(recoveryRawResponse);
-                        console.warn("AI JSON RECOVERY SUCCEEDED", JSON.stringify({
-                            examId,
-                            examPaperId,
-                            originalErrorCode: firstParseError?.code || null,
-                        }));
-                    } catch (recoveryError) {
-                        console.error("AI JSON RECOVERY FAILED:", errorDetails(recoveryError));
-                        const safeMessage = "The examination paper was saved, but AI could not produce a complete readable analysis after an automatic retry. Please try again later; if it continues, check the backend AI error logs.";
-                        await updatePaperStatus(examPaperId, {
-                            status: "Failed",
-                            aiStatus: "Failed",
-                            errorMessage: safeMessage,
-                        });
-                        return res.status(200).json({
-                            success: false,
-                            paper_saved: true,
-                            analysis_completed: false,
-                            ai_status: "Failed",
-                            analysis_method: analysisMethod,
-                            exam_id: examId,
-                            exam_subject_id: examSubjectId,
-                            exam_paper_id: examPaperId,
-                            reused_paper: reusedPaper,
-                            message: safeMessage,
-                        });
-                    }
-                }
                 aiResult.analysis_method = "ai";
             }
 
