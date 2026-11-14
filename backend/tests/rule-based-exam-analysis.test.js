@@ -773,3 +773,236 @@ Page 3
     assert.deepEqual(result.questions.map(question => question.question_number), [1, 2]);
     assert.match(result.questions[1].question_text, /natural selection/i);
 });
+
+
+test("classifies education levels without forcing unknown levels into O-Level", () => {
+    const cases = [
+        ["Baby Class", "early_years"],
+        ["Nursery", "early_years"],
+        ["KG", "early_years"],
+        ["Pre-primary", "early_years"],
+        ["Standard IV", "primary"],
+        ["Primary Standard VII", "primary"],
+        ["Form Two", "ordinary_secondary"],
+        ["O-Level", "ordinary_secondary"],
+        ["Form Five", "advanced_secondary"],
+        ["Form Six", "advanced_secondary"],
+        ["Form V", "advanced_secondary"],
+        ["Form VI", "advanced_secondary"],
+        ["Form 5", "advanced_secondary"],
+        ["Form 6", "advanced_secondary"],
+        ["Form IV", "ordinary_secondary"],
+        ["A-Level", "advanced_secondary"],
+        ["Certificate", "tertiary"],
+        ["Diploma", "tertiary"],
+        ["Unknown Level", "general"],
+    ];
+
+    for (const [level, expected] of cases) {
+        const result = analyzePaperWithRules({
+            subjectName: "General Studies",
+            level,
+            pdfText: "EXAMINATION\n1. Explain your answer (5 marks).",
+        });
+        assert.equal(result.education_level_category, expected, level);
+        assert.equal(result.questions.length, 1, level);
+    }
+});
+
+test("recognizes numbered activities and exercises in non-secondary assessments", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Environmental Activities",
+        level: "Nursery",
+        pdfText: `NURSERY ACTIVITY ASSESSMENT
+ACTIVITY 1
+Trace letter A.
+ACTIVITY 2
+Colour the big circle.
+EXERCISE 3
+Count the objects.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.questions.length, 3);
+    assert.deepEqual(result.questions.map(item => item.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Trace letter A/i);
+});
+
+test("extracts unnumbered early-years task prompts instead of failing for no numbered questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Early Mathematics",
+        level: "Baby Class",
+        pdfText: `BABY CLASS MATHEMATICS
+Count the objects.
+Circle the biggest shape.
+Trace number 1.
+Colour the red ball.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.total_questions, 4);
+    assert.equal(result.questions.length, 4);
+    assert.match(result.questions[1].question_text, /Circle the biggest shape/i);
+});
+
+
+test("recognizes word-numbered questions in certificate and diploma examination papers", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Project Management",
+        level: "Diploma",
+        examName: "End of Semester",
+        pdfText: `DIPLOMA IN PROJECT MANAGEMENT
+QUESTION ONE
+(a) Define project management.
+(b) State four project constraints.
+QUESTION TWO
+Explain the project life cycle (10 marks).
+QUESTION THREE
+Discuss risk management in projects (10 marks).`,
+    });
+
+    assert.equal(result.education_level_category, "tertiary");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Define project management/i);
+    assert.match(result.questions[1].question_text, /project life cycle/i);
+    assert.equal(result.questions[1].max_marks, 10);
+});
+
+
+test("recognizes Roman numeral and numbered-header variants in tertiary papers", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Public Administration",
+        level: "Certificate",
+        pdfText: `CERTIFICATE EXAMINATION
+QUESTION I
+Define public administration.
+QUESTION II
+State four functions of government.
+QUESTION NO. 3
+Explain accountability.
+QN 4
+Discuss public service ethics.`,
+    });
+
+    assert.equal(result.education_level_category, "tertiary");
+    assert.equal(result.total_questions, 4);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3, 4]);
+});
+
+test("recognizes Roman numeral activity headers in early-years assessments", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Early Learning",
+        level: "Kindergarten",
+        pdfText: `KINDERGARTEN LEARNING ACTIVITIES
+ACTIVITY I
+Trace the letter A.
+TASK II
+Colour the circle.
+EXERCISE III
+Count the stars.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+});
+
+
+test("keeps mixed numbered and unnumbered early-years tasks as separate activities", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Baby Class Mathematics",
+        level: "Baby Class",
+        pdfText: `BABY CLASS MATHEMATICS
+1. Count the objects.
+Circle the biggest shape.
+Trace number 1.
+2. Colour the red ball.`,
+    });
+
+    assert.equal(result.total_questions, 4);
+    assert.match(result.questions[0].question_text, /Count the objects/i);
+    assert.match(result.questions[1].question_text, /Circle the biggest shape/i);
+    assert.match(result.questions[2].question_text, /Trace number 1/i);
+    assert.match(result.questions[3].question_text, /Colour the red ball/i);
+});
+
+
+test("analyses a primary objective section using printed per-item marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Primary Science",
+        level: "Standard VII",
+        pdfText: `PRIMARY SCHOOL LEAVING EXAMINATION
+STANDARD VII SCIENCE
+SECTION A (8 MARKS)
+Answer all questions. Each correct item carries one mark.
+1. Choose the correct answer from the alternatives given.
+(i) Which organ pumps blood?
+(ii) Which gas do plants absorb?
+(iii) Which organ helps humans breathe?
+(iv) Which source gives solar energy?
+(v) Which material conducts electricity?
+2. Match the following items in List A with List B.
+(i) First item
+(ii) Second item
+(iii) Third item.`,
+    });
+
+    assert.equal(result.education_level_category, "primary");
+    assert.equal(result.total_questions, 2);
+    assert.deepEqual(result.questions.map(question => question.max_marks), [5, 3]);
+    assert.ok(result.questions.every(question => question.mark_source === "inferred_from_section_structure"));
+    assert.equal(result.total_marks, 8);
+});
+
+test("analyses an Advanced Level selective section with Roman numeral main questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Physics",
+        level: "Form VI",
+        examType: "ACSEE",
+        pdfText: `ADVANCED CERTIFICATE EXAMINATION
+PHYSICS
+SECTION B (40 MARKS)
+Answer any TWO of the following FOUR questions.
+QUESTION I
+(a) Derive the expression for the electric field intensity.
+(b) Explain the principle of superposition.
+QUESTION II
+(a) Describe electromagnetic induction.
+(b) State Faraday's laws.
+QUESTION III
+(a) Explain simple harmonic motion.
+(b) Derive its period equation.
+QUESTION IV
+(a) Discuss wave interference.
+(b) Explain diffraction.`,
+    });
+
+    assert.equal(result.education_level_category, "advanced_secondary");
+    assert.equal(result.total_questions, 4);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3, 4]);
+    assert.ok(result.questions.every(question => question.selection_required));
+    assert.ok(result.questions.every(question => question.selection_count === 2));
+    assert.ok(result.questions.every(question => question.max_marks === 20));
+    assert.equal(result.total_marks, 40);
+});
+
+test("analyses Nursery word-numbered activities and keeps activities distinct", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Early Learning",
+        level: "Nursery",
+        pdfText: `NURSERY SCHOOL ASSESSMENT
+ACTIVITY ONE
+Trace the letter B.
+ACTIVITY TWO
+Colour three circles.
+ACTIVITY THREE
+Count the pictures.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Trace the letter B/i);
+    assert.match(result.questions[1].question_text, /Colour three circles/i);
+});

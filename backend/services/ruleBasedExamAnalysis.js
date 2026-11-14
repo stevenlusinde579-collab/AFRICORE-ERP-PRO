@@ -34,6 +34,22 @@ const BLOOM_VERBS = [
     { level: "Remembering", verbs: ["define", "state", "list", "name", "identify", "mention", "what is", "who is"] },
 ];
 
+
+// Education-level recognition is descriptive only: it never forces a paper into
+// an O-Level template. Unknown levels continue through the generic parser.
+const classifyEducationLevel = (level, paperText = "") => {
+    const source = (String(level || "") + " " + String(paperText || "").slice(0, 5000)).toLowerCase();
+    if (/\b(baby\s*class|nursery|kindergarten|\bkg\b|pre[- ]?primary|early\s+years|early\s+childhood)\b/.test(source)) return "early_years";
+    if (/\b(primary|standard\s*[1-7ivx]+|std\.?\s*[1-7]|grade\s*[1-7])\b/.test(source)) return "primary";
+    if (/\b(o[- ]?level|ordinary\s+level|form\s*(?:[1-4]|i|ii|iii|iv)|form\s+(?:one|two|three|four))\b/.test(source)) return "ordinary_secondary";
+    if (/\b(a[- ]?level|advanced\s+level|form\s*(?:5|6|v|vi)|form\s+(?:five|six))\b/.test(source)) return "advanced_secondary";
+    if (/\b(certificate|diploma|degree|university|college|undergraduate|postgraduate)\b/.test(source)) return "tertiary";
+    return "general";
+};
+
+const isEarlyYearsLevel = (level, paperText = "") =>
+    classifyEducationLevel(level, paperText) === "early_years";
+
 const normalize = (value) => String(value || "")
     .replace(/\r/g, "\n")
     // Remove recurring PDF page headers/footers before detecting question numbers.
@@ -50,7 +66,19 @@ const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
-    return NUMBER_WORDS[token] ?? null;
+    if (NUMBER_WORDS[token] !== undefined) return NUMBER_WORDS[token];
+    // Roman numeral question labels occur in tertiary and advanced-level papers.
+    if (/^(?:xx|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|iv|v|iii|ii|i)$/.test(token)) {
+        const values = { i: 1, v: 5, x: 10 };
+        let total = 0;
+        for (let index = 0; index < token.length; index += 1) {
+            const current = values[token[index]];
+            const next = values[token[index + 1]] || 0;
+            total += current < next ? -current : current;
+        }
+        return total;
+    }
+    return null;
 };
 
 const extractMarkValues = (text) => {
@@ -283,7 +311,7 @@ const extractNamedSectionTotals = (text) => {
     return totals;
 };
 
-const splitPaper = (pdfText) => {
+const splitPaper = (pdfText, level = "Unknown Level") => {
     const normalizedText = normalize(pdfText);
     const lines = normalizedText.split("\n");
     const namedSectionTotals = extractNamedSectionTotals(normalizedText);
@@ -307,7 +335,10 @@ const splitPaper = (pdfText) => {
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
-    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION(?:\s+(?:NO\.?|NUMBER))?|Q(?:N\.?)?\.?)\s*(\d{1,2}|twenty|nineteen|eighteen|seventeen|sixteen|fifteen|fourteen|thirteen|twelve|eleven|ten|nine|eight|seven|six|five|four|three|two|one|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|xx|ix|viii|vii|vi|iv|v|iii|ii|i)\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitTaskHeaderPattern = /^\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)(?:\s+(?:NO\.?|NUMBER))?\s*(\d{1,2}|twenty|nineteen|eighteen|seventeen|sixteen|fifteen|fourteen|thirteen|twelve|eleven|ten|nine|eight|seven|six|five|four|three|two|one|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|xx|ix|viii|vii|vi|iv|v|iii|ii|i)\s*[.)\]:-]?\s*(.*)$/i;
+
+    const earlyYearsTaskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|fafanua)\b/i;
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = lines[lineIndex];
@@ -348,6 +379,7 @@ const splitPaper = (pdfText) => {
 
         const questionMatch =
             line.match(explicitQuestionHeaderPattern) ||
+            line.match(explicitTaskHeaderPattern) ||
             line.match(questionPattern);
         if (standaloneQuestionNumber !== null) {
             if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
@@ -360,8 +392,8 @@ const splitPaper = (pdfText) => {
             continue;
         }
         if (questionMatch) {
-            const questionNumber = Number(questionMatch[1]);
-            const questionOpening = String(questionMatch[2] || "").trim();
+            const questionNumber = numberValue(questionMatch[1]) ?? Number(questionMatch[1] || questionMatch[2]);
+            const questionOpening = String(questionMatch[3] || questionMatch[2] || "").trim();
 
             // Exam-room instructions and page furniture are not question stems,
             // even when OCR places a question-like number before them.
@@ -377,6 +409,19 @@ const splitPaper = (pdfText) => {
             const existingQuestion = currentSection.questions.find(
                 question => question.question_number === questionNumber
             );
+            if (existingQuestion && isEarlyYearsLevel(level, normalizedText) &&
+                currentQuestion && currentQuestion !== existingQuestion && questionOpening &&
+                earlyYearsTaskPattern.test(questionOpening)) {
+                currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = {
+                    question_number: Math.max(0, ...currentSection.questions.map(item => item.question_number)) + 1,
+                    text: questionOpening,
+                    section: currentSection.name,
+                };
+                currentSection.questions.push(currentQuestion);
+                continue;
+            }
+
             if (existingQuestion) {
                 if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
                 currentQuestion = existingQuestion;
@@ -390,6 +435,20 @@ const splitPaper = (pdfText) => {
             currentQuestion = {
                 question_number: questionNumber,
                 text: questionOpening,
+                section: currentSection.name,
+            };
+            currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
+        // In early-years worksheets, a new action prompt may be a separate
+        // activity even when the teacher did not number it. Do not merge it
+        // into the previous activity merely because the PDF omitted numbering.
+        if (isEarlyYearsLevel(level, normalizedText) && currentQuestion && earlyYearsTaskPattern.test(line)) {
+            currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = {
+                question_number: Math.max(0, ...currentSection.questions.map(item => item.question_number)) + 1,
+                text: line,
                 section: currentSection.name,
             };
             currentSection.questions.push(currentQuestion);
@@ -459,9 +518,43 @@ const splitPaper = (pdfText) => {
         section.questions = section.questions.filter(question => question.text.trim());
     }
 
+    // Early-years worksheets often present activities as unnumbered action
+    // prompts (e.g. "Colour the circle", "Trace letter A"). When no numbered
+    // structure exists, preserve each clearly stated task as a main item.
+    if (!sections.some(section => section.questions.length) && isEarlyYearsLevel(level, normalizedText)) {
+        const taskPattern = earlyYearsTaskPattern;
+        for (const section of sections) {
+            const taskLines = section.instructionText.split("\n").map(line => line.trim()).filter(Boolean);
+            let task = null;
+            for (const line of taskLines) {
+                if (taskPattern.test(line)) {
+                    task = {
+                        question_number: section.questions.length + 1,
+                        text: line,
+                        section: section.name,
+                    };
+                    section.questions.push(task);
+                } else if (task && !isAdministrativeInstruction(line) && !detectSectionHeading(line)) {
+                    task.text += "\n" + line;
+                }
+            }
+        }
+    }
+
+    // Early-years activities are often numbered inconsistently or mix numbered
+    // prompts with unnumbered tasks. Normalize their display numbering by
+    // reading order after all activity boundaries have been identified.
+    if (isEarlyYearsLevel(level, normalizedText)) {
+        for (const section of sections) {
+            section.questions.forEach((question, index) => {
+                question.question_number = index + 1;
+            });
+        }
+    }
+
     const nonEmpty = sections.filter(section => section.questions.length);
     if (!nonEmpty.length) {
-        throw new Error("Rule-Based Engine could not detect numbered main questions. Use a text-based PDF with clear question numbering or select AI Analysis (Gemini).");
+        throw new Error("Rule-Based Engine could not identify a reliable question or activity structure in this text-based PDF. Check that the paper text is readable and its questions or tasks are clearly separated.");
     }
     return nonEmpty;
 };
@@ -585,7 +678,8 @@ export const analyzePaperWithRules = ({
         throw new Error("Rule-Based Engine requires readable text in the PDF. This file appears scanned or contains too little extractable text. Choose AI Analysis (Gemini) for scanned papers.");
     }
 
-    const sections = splitPaper(text);
+    const educationLevelCategory = classifyEducationLevel(level, text);
+    const sections = splitPaper(text, level);
     const questions = [];
     const blooms = {};
     const topics = new Set();
@@ -787,16 +881,16 @@ export const analyzePaperWithRules = ({
         : null;
     const allQuestionsHaveMarks = questions.length > 0 &&
         questions.every(question => Number(question.max_marks) > 0);
-    const declaredTotalIsWithinSmallTolerance = declaredSectionTotals !== null &&
+    const declaredTotalIsWithinSmallTolerance = allSectionsHaveDeclaredTotals &&
         Math.abs(declaredSectionsTotal - allocatedQuestionMarks) <= 2;
     // Keep the printed total when question marks remain unknown or the
     // difference is small. If every question is marked and the discrepancy
     // is material, report the complete question allocation and flag the mismatch.
-    const totalMarks = declaredSectionTotals !== null &&
+    const totalMarks = allSectionsHaveDeclaredTotals &&
         (!allQuestionsHaveMarks || declaredTotalIsWithinSmallTolerance)
         ? declaredSectionsTotal
         : allocatedQuestionMarks;
-    if (declaredSectionTotals !== null &&
+    if (allSectionsHaveDeclaredTotals &&
         Math.abs(declaredSectionsTotal - allocatedQuestionMarks) > 0.01) {
         recommendations.push(
             "The printed section totals add up to " + Number(declaredSectionsTotal.toFixed(2)) +
@@ -846,6 +940,7 @@ export const analyzePaperWithRules = ({
         summary: "Rule-Based structural analysis for " + subjectName + " (" + level + "). " + questions.length + " main questions were detected.",
         subject: subjectName,
         level,
+        education_level_category: educationLevelCategory,
         exam_name: examName,
         exam_type: examType,
         curriculum,
