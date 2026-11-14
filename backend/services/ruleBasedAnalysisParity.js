@@ -13,7 +13,7 @@ const EDUCATION_LEVEL_PATTERNS = [
             /\bbaby\s*class\b/i,
             /\bnursery\b/i,
             /\bpre[- ]?primary\b/i,
-            /\bkindergarten\b|\b\bkg\b/i,
+            /\bkindergarten\b|\bkg\b/i,
             /\bchekechea\b|\bawali\b/i,
         ],
     },
