@@ -44,7 +44,7 @@ const normalize = (value) => String(value || "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|section\s+[a-c]\s+(?:carries|has|contains)|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|section\s+[a-c]\s+(?:carries|has|contains)\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
+const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|section\s*[a-c]\s+(?:carries|has|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -78,6 +78,15 @@ const extractMarkValues = (text) => {
     // question mark and must not be added to its children.
     const labels = [...source.matchAll(/(?:\(\s*(?:iii|ii|iv|vi{0,3}|ix|v|x|[a-i])\s*\)|(?:^|\n)\s*(?:[a-i]|iii|ii|iv|vi{0,3}|ix|v|x)\s*[.)])(?=\s|$)/gim)];
     if (labels.length) {
+        // Some papers print a mark value once with an at-sign to mean
+        // "for each subpart" (for example, five Roman-numbered parts and
+        // "(2 marks @)"). Apply that explicit per-part value to every
+        // detected subpart instead of counting the annotation only once.
+        const perPartMark = source.match(/(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*@/i);
+        if (perPartMark && labels.length > 1) {
+            return Number(perPartMark[1]) * labels.length;
+        }
+
         const ranges = labels.map((label, index) => ({
             start: label.index,
             end: labels[index + 1]?.index ?? source.length,
@@ -139,6 +148,35 @@ const detectSelection = (text, availableQuestions = 0) => {
         .toLowerCase()
         .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s*\(\s*\d+\s*\)/gi, "$1");
     const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
+    // OCR can remove every space from instructions. Recover compact English
+    // and Kiswahili selection clauses that name their target section.
+    const compact = source.replace(/[^a-z0-9()]/g, "");
+    const compactEnglish = compact.match(/(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\((\d+)\))?questions?(?:from|in)section([a-e])/i);
+    if (compactEnglish) {
+        const count = numberValue(compactEnglish[2] || compactEnglish[1]);
+        if (count > 0 && availableQuestions > count) {
+            return {
+                selection_required: true,
+                selection_count: count,
+                selection_total: availableQuestions,
+                selection_instruction: compactEnglish[0],
+                selection_section: compactEnglish[3].toUpperCase(),
+            };
+        }
+    }
+    const compactSwahili = compact.match(/(?:jibu(?:ni)?maswali(?:yote)?|maswali)?(moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi|\d+)(?:\((\d+)\))?kutoka(?:sehemu|section)([a-e])/i);
+    if (compactSwahili) {
+        const count = numberValue(compactSwahili[2] || compactSwahili[1]);
+        if (count > 0 && availableQuestions > count) {
+            return {
+                selection_required: true,
+                selection_count: count,
+                selection_total: availableQuestions,
+                selection_instruction: compactSwahili[0],
+                selection_section: compactSwahili[3].toUpperCase(),
+            };
+        }
+    }
     const patterns = [
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+(?:the\\s+following\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?following\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 2 },
@@ -171,6 +209,7 @@ const detectSelection = (text, availableQuestions = 0) => {
             selection_count: selectionCount,
             selection_total: effectiveTotal,
             selection_instruction: match[0],
+            selection_section: null,
         };
     }
 
@@ -313,9 +352,19 @@ const splitPaper = (pdfText) => {
     // omit a standalone "SECTION A" heading. If B/C headings are present and
     // the opening unsectioned block has questions, treat that block as Section A.
     const opening = sectionMap.get("UNSECTIONED");
-    if (opening && opening.questions.length && namedSectionTotals.has("A") &&
+    if (opening && opening.questions.length &&
+        (namedSectionTotals.has("A") || sectionMap.has("A")) &&
         (sectionMap.has("B") || sectionMap.has("C"))) {
+        const explicitA = sectionMap.get("A");
+        if (explicitA && explicitA !== opening) {
+            opening.instructionText.push(...explicitA.instructionText);
+            opening.questions.push(...explicitA.questions);
+            opening.title = explicitA.title || opening.title;
+            const duplicateIndex = sections.indexOf(explicitA);
+            if (duplicateIndex >= 0) sections.splice(duplicateIndex, 1);
+        }
         opening.name = "A";
+        opening.questions.sort((left, right) => left.question_number - right.question_number);
         sectionMap.delete("UNSECTIONED");
         sectionMap.set("A", opening);
     }
@@ -326,6 +375,8 @@ const splitPaper = (pdfText) => {
         if (namedSectionTotals.has(section.name)) {
             section.total_marks = namedSectionTotals.get(section.name);
         }
+        const headingTotal = extractSectionTotal(section.title);
+        if (Number(headingTotal) > 0) section.total_marks = headingTotal;
         section.selection = detectSelection(section.instructionText, section.questions.length);
         section.questions = section.questions.filter(question => question.text.trim());
     }
@@ -382,6 +433,15 @@ const inferQuestionType = (text) => {
     return "Short Answer";
 };
 
+const countObjectiveItems = (text) => {
+    const source = String(text || "");
+    const roman = [...source.matchAll(/(?:^|\n)\s*\(?\s*(?:i|ii|iii|iv|v|vi|vii|viii|ix|x)\s*[.)]\s+/gim)];
+    return roman.length;
+};
+
+const isObjectiveOrMatching = (text) =>
+    /choose.{0,120}correct answer|multiple.choice|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
+
 const effectiveMarks = (questions) => {
     const total = new Map();
     const selective = new Map();
@@ -432,9 +492,14 @@ export const analyzePaperWithRules = ({
 
     for (const section of sections) {
         const sectionText = section.instructionText + "\n" + section.questions.map(q => q.text).join("\n");
-        const selection = detectSelection(sectionText, section.questions.length).selection_required
-            ? detectSelection(sectionText, section.questions.length)
-            : section.selection;
+        const localSelection = detectSelection(sectionText, section.questions.length);
+        const paperSelection = detectSelection(text, section.questions.length);
+        const selection = localSelection.selection_required &&
+            (!localSelection.selection_section || localSelection.selection_section === section.name)
+            ? localSelection
+            : (paperSelection.selection_required && paperSelection.selection_section === section.name
+                ? paperSelection
+                : section.selection);
         const groupId = selection.selection_required
             ? "SECTION-" + section.name + "-" + selection.selection_count + "-OF-" + (selection.selection_total || section.questions.length)
             : null;
@@ -488,8 +553,25 @@ export const analyzePaperWithRules = ({
             let inferred = null;
             let evidence = "";
             const perQuestionInstruction = extractPerQuestionMarks(sectionText);
+            const objectiveItemCounts = pending.map(question =>
+                isObjectiveOrMatching(question.question_text)
+                    ? countObjectiveItems(question.question_text)
+                    : 0
+            );
+            const objectiveItemsTotal = objectiveItemCounts.reduce((sum, count) => sum + count, 0);
+            const objectiveItemsReconcile = pending.length === section.questions.length &&
+                objectiveItemCounts.every(count => count > 0) &&
+                Number(section.total_marks) > 0 &&
+                objectiveItemsTotal === Number(section.total_marks);
 
-            if (perQuestionInstruction !== null) {
+            if (objectiveItemsReconcile) {
+                pending.forEach((question, index) => {
+                    question.max_marks = objectiveItemCounts[index];
+                    question.mark_source = "inferred_from_section_structure";
+                    question.mark_evidence = "Inferred from the count of objective/matching items; the item count exactly reconciles with the printed section total.";
+                    question.ai_confidence = 82;
+                });
+            } else if (perQuestionInstruction !== null) {
                 inferred = perQuestionInstruction;
                 evidence = "Applied the explicit section instruction that each question carries " + perQuestionInstruction + " marks.";
             } else if (selection.selection_required && explicitQuestionMarks.length > 0) {
