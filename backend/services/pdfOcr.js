@@ -105,15 +105,24 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
             logger: () => {},
             cacheMethod: "write",
         };
+        const createAbortableWorker = async (languages) => {
+            const pendingWorker = Promise.resolve(workerFactory(languages, 1, workerOptions));
+            // If the language data finishes loading after cancellation, terminate
+            // the late-created worker immediately so it cannot leak resources.
+            pendingWorker.then(async lateWorker => {
+                if (signal?.aborted) await lateWorker?.terminate?.().catch(() => {});
+            }).catch(() => {});
+            return await awaitWithAbort(pendingWorker, signal);
+        };
         try {
-            worker = await workerFactory(options.languages || "eng+swa", 1, workerOptions);
+            worker = await createAbortableWorker(options.languages || "eng+swa");
             console.log("PDF OCR LANGUAGES: English + Swahili");
         } catch (languageError) {
-            // Some deployments may not have the Swahili traineddata available
-            // from the configured language-data host. English remains a safe
-            // fallback so OCR can still attempt to read the examination.
+            if (signal?.aborted) throw createAbortError(signal);
+            // Some deployments may not have the Swahili traineddata available.
+            // English remains a safe fallback so OCR can still attempt the paper.
             console.warn("Swahili OCR language unavailable; retrying English:", languageError?.message || languageError);
-            worker = await workerFactory("eng", 1, workerOptions);
+            worker = await createAbortableWorker("eng");
             console.log("PDF OCR LANGUAGES: English fallback");
         }
         throwIfAborted(signal);
