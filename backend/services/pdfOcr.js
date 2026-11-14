@@ -7,9 +7,13 @@ export const OCR_MAX_FILE_BYTES = 30 * 1024 * 1024;
 
 export const isLikelyScannedPdfText = (value) => {
     const text = String(value || "").replace(/\s+/g, " ").trim();
-    const words = text.match(/[\p{L}\p{N}]{2,}/gu) || [];
+    const words = text.match(/[\\p{L}\\p{N}]{2,}/gu) || [];
     const usefulWords = words.filter(word => !/^camscanner$/i.test(word));
-    return text.length < 180 || usefulWords.length < 25;
+    const scannerWatermarkOnly =
+        /camscanner/i.test(text) && usefulWords.length <= 3;
+    // Avoid OCR on short but genuine papers. Preserve native text when it
+    // contains enough readable words to be useful.
+    return scannerWatermarkOnly || text.length < 100 || usefulWords.length < 8;
 };
 
 export const cleanOcrText = (value) => String(value || "")
