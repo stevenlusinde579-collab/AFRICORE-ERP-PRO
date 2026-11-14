@@ -34,7 +34,17 @@ const BLOOM_VERBS = [
     { level: "Remembering", verbs: ["define", "state", "list", "name", "identify", "mention", "what is", "who is"] },
 ];
 
-const normalize = (value) => String(value || "").replace(/\r/g, "\n").replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+const normalize = (value) => String(value || "")
+    .replace(/\r/g, "\n")
+    // Remove recurring PDF page headers/footers before detecting question numbers.
+    .replace(/\bpage\s*\d+\s*of\s*\d+\b/gi, " ")
+    .replace(/\b(?:csee|necta|es[e]?e)\s*20\d{2}\b/gi, " ")
+    .replace(/[\t ]+/g, " ")
+    .replace(/^\s*\d{1,2}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|section\s+[a-c]\s+(?:carries|has|contains)|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|section\s+[a-c]\s+(?:carries|has|contains)\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -123,7 +133,7 @@ const extractSectionTotal = (text) => {
 };
 
 const detectSelection = (text, availableQuestions = 0) => {
-    const source = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const source = String(text || "").replace(/\s+/g, " ").trim().toLowerCase().replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s*\(\s*\d+\s*\)/gi, "$1");
     const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
     const patterns = [
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+(?:the\\s+following\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
@@ -143,8 +153,13 @@ const detectSelection = (text, availableQuestions = 0) => {
         const selectionTotal = item.total ? numberValue(match[item.total]) : null;
         if (!Number.isFinite(selectionCount) || selectionCount <= 0) continue;
         if (selectionTotal !== null && (!Number.isFinite(selectionTotal) || selectionTotal < selectionCount)) continue;
-        const effectiveTotal = selectionTotal || (availableQuestions > selectionCount ? availableQuestions : null);
-        if (effectiveTotal !== null && effectiveTotal <= selectionCount) continue;
+        // A numeric instruction such as "Answer 3 questions" is not
+        // selective when exactly three questions are available. Without an
+        // explicit larger denominator, require evidence that more are offered
+        // than the required count.
+        if (selectionTotal === null && availableQuestions <= selectionCount) continue;
+        const effectiveTotal = selectionTotal || availableQuestions;
+        if (effectiveTotal <= selectionCount) continue;
         return {
             selection_required: true,
             selection_count: selectionCount,
@@ -162,13 +177,28 @@ const detectSelection = (text, availableQuestions = 0) => {
 };
 
 const detectSectionHeading = (line) => {
-    const match = String(line || "").match(/^\s*(?:SECTION|PART|SEHEMU)\s+([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
+    const match = String(line || "").match(/^\s*(?:SECTION|PART|SEHEMU)\s*([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
     if (!match) return null;
     return { name: String(match[1]).toUpperCase(), title: String(match[2] || "").trim() };
 };
 
+const extractNamedSectionTotals = (text) => {
+    const totals = new Map();
+    const source = String(text || "").replace(/\s+/g, " ");
+    const pattern = /\b(?:section|sehemu)\s*([a-z])\b[^.]{0,55}?\(?\s*(\d{1,3})\s*\)?\s*(?:marks?|mks?|alama)\b/gi;
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+        const name = String(match[1]).toUpperCase();
+        const value = Number(match[2]);
+        if (value > 0 && !totals.has(name)) totals.set(name, value);
+    }
+    return totals;
+};
+
 const splitPaper = (pdfText) => {
-    const lines = normalize(pdfText).split("\n");
+    const normalizedText = normalize(pdfText);
+    const lines = normalizedText.split("\n");
+    const namedSectionTotals = extractNamedSectionTotals(normalizedText);
     const sections = [];
     const sectionMap = new Map();
     let currentSection = null;
@@ -189,7 +219,7 @@ const splitPaper = (pdfText) => {
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,3})\s*[.)\]:-]\s*(.*)$/i;
-    const explicitQuestionHeaderPattern = /^\s*QUESTION\s+(\d{1,3})\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
 
     for (const line of lines) {
         const heading = detectSectionHeading(line);
@@ -207,13 +237,65 @@ const splitPaper = (pdfText) => {
             line.match(explicitQuestionHeaderPattern) ||
             line.match(questionPattern);
         if (questionMatch) {
+            const questionNumber = Number(questionMatch[1]);
+            const questionOpening = String(questionMatch[2] || "").trim();
+
+            // Exam-room instructions and page furniture are not question stems,
+            // even when OCR places a question-like number before them.
+            if (isAdministrativeInstruction(questionOpening)) {
+                if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = null;
+                currentSection.instructionText.push(line);
+                continue;
+            }
+
+            // Repeated numbering across a page break is a continuation, not
+            // another question record.
+            const existingQuestion = currentSection.questions.find(
+                question => question.question_number === questionNumber
+            );
+            if (existingQuestion) {
+                if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = existingQuestion;
+                if (questionOpening && !currentQuestion.text.includes(questionOpening)) {
+                    currentQuestion.text += (currentQuestion.text ? "\n" : "") + questionOpening;
+                }
+                continue;
+            }
+
             if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
             currentQuestion = {
-                question_number: Number(questionMatch[1]),
-                text: questionMatch[2] || "",
+                question_number: questionNumber,
+                text: questionOpening,
                 section: currentSection.name,
             };
             currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
+        // OCR often drops the printed "2." before a matching exercise.
+        // When a multiple-choice question is followed by a List A/List B
+        // matching instruction, recover the next main-question boundary.
+        const looksLikeMatchingQuestion = /\blist\s*b\b/i.test(line) &&
+            /(?:match|respective|pair|items|terms)/i.test(line);
+        const previousLooksLikeObjective = currentQuestion &&
+            /(?:correct answer|alternatives|multiple.choice|choose the correct)/i.test(currentQuestion.text);
+        if (currentQuestion && !currentSection.name.match(/^[B-Z]$/) &&
+            looksLikeMatchingQuestion && previousLooksLikeObjective) {
+            currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = {
+                question_number: Math.max(0, ...currentSection.questions.map(q => q.question_number)) + 1,
+                text: line,
+                section: currentSection.name,
+            };
+            currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
+        if (isAdministrativeInstruction(line)) {
+            if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = null;
+            currentSection.instructionText.push(line);
             continue;
         }
 
@@ -221,9 +303,23 @@ const splitPaper = (pdfText) => {
         else currentSection.instructionText.push(line);
     }
 
+    // Some papers state all section totals in one introductory sentence and
+    // omit a standalone "SECTION A" heading. If B/C headings are present and
+    // the opening unsectioned block has questions, treat that block as Section A.
+    const opening = sectionMap.get("UNSECTIONED");
+    if (opening && opening.questions.length && namedSectionTotals.has("A") &&
+        (sectionMap.has("B") || sectionMap.has("C"))) {
+        opening.name = "A";
+        sectionMap.delete("UNSECTIONED");
+        sectionMap.set("A", opening);
+    }
+
     for (const section of sections) {
         section.instructionText = section.instructionText.join("\n");
         section.total_marks = extractSectionTotal(section.instructionText);
+        if (namedSectionTotals.has(section.name)) {
+            section.total_marks = namedSectionTotals.get(section.name);
+        }
         section.selection = detectSelection(section.instructionText, section.questions.length);
         section.questions = section.questions.filter(question => question.text.trim());
     }
