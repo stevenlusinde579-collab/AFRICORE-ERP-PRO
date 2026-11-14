@@ -65,7 +65,7 @@ const normalize = (value) => String(value || "")
 const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|sections?\s*[a-c]\s+(?:carries|have|has|contain|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|all\s*writings?\s+must\b|all\s+answers?\s+must\b|answers?\s+must\s+be\s+written\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b|use\s+(?:(?:a|the)\s+)?(?:black|blue|ball[- ]?point|pencil|pen)\b[^.]{0,120}\b(?:pen|pencil|drawings?)\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
-    if (/^\\d+(?:\\.\\d+)?$/.test(token)) return Number(token);
+    if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
     if (NUMBER_WORDS[token] !== undefined) return NUMBER_WORDS[token];
     // Roman numeral question labels occur in tertiary and advanced-level papers.
     if (/^(?:xx|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|iv|v|iii|ii|i)$/.test(token)) {
