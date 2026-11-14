@@ -1,8 +1,12 @@
 import { createRequire } from "node:module";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, DOMMatrix, ImageData, Path2D } from "@napi-rs/canvas";
 import { createWorker } from "tesseract.js";
 
 const require = createRequire(import.meta.url);
+
+globalThis.DOMMatrix ||= DOMMatrix;
+globalThis.ImageData ||= ImageData;
+globalThis.Path2D ||= Path2D;
 
 // Reuse the PDF.js build already bundled by pdf-parse so both extraction
 // paths interpret the uploaded PDF consistently.
@@ -11,7 +15,7 @@ const pdfjs = require("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js");
 const MAX_OCR_PAGES = 30;
 const TARGET_RENDER_SCALE = 1.6;
 const MAX_PAGE_PIXELS = 18_000_000;
-const OCR_LANGUAGE = process.env.EXAM_OCR_LANGUAGES || "eng+swa";
+const OCR_LANGUAGE = process.env.EXAM_OCR_LANGUAGES || "eng";
 
 const cleanOcrText = (value = "") =>
     String(value)
@@ -82,10 +86,36 @@ export async function extractScannedPdfText(buffer, options = {}) {
             context.fillStyle = "#ffffff";
             context.fillRect(0, 0, width, height);
 
+            const canvasFactory = {
+                create: (canvasWidth, canvasHeight) => {
+                    const temporaryCanvas = createCanvas(canvasWidth, canvasHeight);
+                    return {
+                        canvas: temporaryCanvas,
+                        context: temporaryCanvas.getContext("2d"),
+                    };
+                },
+                reset: (canvasAndContext, canvasWidth, canvasHeight) => {
+                    canvasAndContext.canvas.width = canvasWidth;
+                    canvasAndContext.canvas.height = canvasHeight;
+                    canvasAndContext.context = canvasAndContext.canvas.getContext("2d");
+                },
+                destroy: (canvasAndContext) => {
+                    if (canvasAndContext?.canvas) {
+                        canvasAndContext.canvas.width = 1;
+                        canvasAndContext.canvas.height = 1;
+                    }
+                    if (canvasAndContext) {
+                        canvasAndContext.canvas = null;
+                        canvasAndContext.context = null;
+                    }
+                },
+            };
+
             try {
                 await page.render({
                     canvasContext: context,
                     viewport,
+                    canvasFactory,
                 }).promise;
 
                 const image = canvas.toBuffer("image/png");
