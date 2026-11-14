@@ -254,6 +254,7 @@ test("parses OCR-compressed Chemistry paper headings, excludes instructions and 
         examName: "PRE-MOCK",
         pdfText: `CHEMISTRY PRE-MOCK
 This paper consists of eleven (11) questions. This paper
+Section A carries sixteen (16) marks, section B fifty four (54) marks and section C (30) marks.
 Q1
 Foreach ofthe items (i)-(x),choose the correct answer from the given alternatives.
 A the respective terms in List B by the parts of the electrolytic cell with the item in the answer booklet.
