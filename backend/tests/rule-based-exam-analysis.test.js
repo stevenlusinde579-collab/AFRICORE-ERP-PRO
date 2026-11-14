@@ -907,3 +907,22 @@ Count the stars.`,
     assert.equal(result.total_questions, 3);
     assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
 });
+
+
+test("keeps mixed numbered and unnumbered early-years tasks as separate activities", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Baby Class Mathematics",
+        level: "Baby Class",
+        pdfText: `BABY CLASS MATHEMATICS
+1. Count the objects.
+Circle the biggest shape.
+Trace number 1.
+2. Colour the red ball.`,
+    });
+
+    assert.equal(result.total_questions, 4);
+    assert.match(result.questions[0].question_text, /Count the objects/i);
+    assert.match(result.questions[1].question_text, /Circle the biggest shape/i);
+    assert.match(result.questions[2].question_text, /Trace number 1/i);
+    assert.match(result.questions[3].question_text, /Colour the red ball/i);
+});
