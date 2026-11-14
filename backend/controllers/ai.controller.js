@@ -2292,18 +2292,21 @@ export const analyzePaper =
             let pdfText =
                 "";
 
-            // PDF text extraction is supporting evidence only. A scanned PDF,
-            // a PDF with diagrams, or a paper with complex layout must still be
-            // sent to Gemini as the original PDF instead of being rejected here.
+            // Preserve the existing Gemini path exactly: OCR is enabled only
+            // for Rule-Based Engine requests. Gemini continues receiving the
+            // original uploaded PDF through its existing flow.
+            const requestedAnalysisMethod = String(req.body?.analysis_method || "ai").trim().toLowerCase();
+            const enableScannedPdfOcr = requestedAnalysisMethod === "rule_based";
+            const pdfReadTimeout = enableScannedPdfOcr ? 150000 : 30000;
+
             try {
-                pdfText =
-                    await withTimeout(
-                        readPDF(
-                            req.file.buffer
-                        ),
-                        30000,
-                        "PDF text extraction timed out after 30 seconds."
-                    );
+                pdfText = await withTimeout(
+                    readPDF(req.file.buffer, { enableOcr: enableScannedPdfOcr }),
+                    pdfReadTimeout,
+                    enableScannedPdfOcr
+                        ? "PDF text extraction and OCR timed out after 150 seconds."
+                        : "PDF text extraction timed out after 30 seconds."
+                );
             } catch (error) {
                 console.error(
                     "PDF TEXT EXTRACTION FAILED; CONTINUING WITH ORIGINAL PDF:",

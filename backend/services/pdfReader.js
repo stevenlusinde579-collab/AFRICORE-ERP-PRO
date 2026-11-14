@@ -1,6 +1,7 @@
 // backend/services/pdfReader.js
 
 import pdf from "pdf-parse";
+import { extractScannedPdfText, isLikelyScannedPdfText } from "./pdfOcr.js";
 
 
 // ============================================================
@@ -622,7 +623,8 @@ const renderPageWithStructure =
 
 const extractDefaultText =
     async (
-        buffer
+        buffer,
+        options = {}
     ) => {
 
         const data =
@@ -975,7 +977,8 @@ const finalClean =
 
 export const readPDF =
     async (
-        buffer
+        buffer,
+        options = {}
     ) => {
 
         try {
@@ -1289,6 +1292,30 @@ export const readPDF =
 
             }
 
+
+            // =================================================
+            // OCR FALLBACK FOR SCANNED / IMAGE-ONLY PDFS
+            // =================================================
+            // Keep the normal text extraction as the first choice. Only invoke
+            // OCR when the extracted text is clearly insufficient; this keeps
+            // selectable-text PDFs fast and preserves their native layout.
+            if (options.enableOcr === true && isLikelyScannedPdfText(finalText)) {
+                console.warn("PDF TEXT IS INSUFFICIENT; STARTING SCANNED-PDF OCR...");
+                try {
+                    const ocrText = await extractScannedPdfText(buffer);
+                    if (ocrText.length > finalText.length) {
+                        finalText = finalClean(ocrText);
+                        console.log("PDF OCR SELECTED:", {
+                            characters: finalText.length,
+                            detectedQuestions: detectQuestionNumbers(finalText),
+                        });
+                    }
+                } catch (ocrError) {
+                    console.error("SCANNED PDF OCR FAILED:", ocrError?.message || ocrError);
+                    // Preserve the original extracted text. The controller can
+                    // still pass the original PDF to Gemini, as before.
+                }
+            }
 
             // =================================================
             // FINAL VALIDATION
