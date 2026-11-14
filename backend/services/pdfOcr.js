@@ -10,6 +10,32 @@ if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = Path2D;
 export const OCR_MAX_PAGES = 25;
 export const OCR_MAX_FILE_BYTES = 30 * 1024 * 1024;
 
+// Abort active OCR/render work when the HTTP request reaches its deadline.
+const createAbortError = (signal) => {
+    if (signal?.reason instanceof Error) return signal.reason;
+    const error = new Error("PDF OCR was cancelled.");
+    error.name = "AbortError";
+    return error;
+};
+const throwIfAborted = (signal) => {
+    if (signal?.aborted) throw createAbortError(signal);
+};
+const awaitWithAbort = (operation, signal, onAbort) => {
+    if (!signal) return Promise.resolve(operation);
+    if (signal.aborted) {
+        try { onAbort?.(); } catch {}
+        return Promise.reject(createAbortError(signal));
+    }
+    return new Promise((resolve, reject) => {
+        const abort = () => {
+            try { onAbort?.(); } catch {}
+            reject(createAbortError(signal));
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        Promise.resolve(operation).then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    });
+};
+
 export const isLikelyScannedPdfText = (value) => {
     const text = String(value || "").replace(/\s+/g, " ").trim();
     const words = text.match(/[\p{L}\p{N}]{2,}/gu) || [];
@@ -47,17 +73,26 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
     const pdfjs = options.getDocument || getDocument;
     const canvasFactory = options.createCanvas || createCanvas;
     const workerFactory = options.createWorker || createWorker;
-    const renderScale = Number(options.renderScale) > 0 ? Number(options.renderScale) : 1.65;
+    const renderScale = Number(options.renderScale) > 0 ? Number(options.renderScale) : 1.35;
+    const signal = options.signal;
 
     let document;
     let worker;
+    let workerTerminated = false;
+    const terminateWorker = async () => {
+        if (!worker || workerTerminated) return;
+        workerTerminated = true;
+        await worker.terminate().catch(() => {});
+    };
     try {
-        document = await pdfjs({
+        throwIfAborted(signal);
+        document = await awaitWithAbort(pdfjs({
             data: new Uint8Array(buffer),
             useSystemFonts: true,
             isEvalSupported: false,
             stopAtErrors: true,
-        }).promise;
+        }).promise, signal);
+        throwIfAborted(signal);
 
         const pageCount = Number(document.numPages) || 0;
         if (!pageCount) throw new Error("OCR could not find any pages in the PDF.");
@@ -81,14 +116,16 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
             worker = await workerFactory("eng", 1, workerOptions);
             console.log("PDF OCR LANGUAGES: English fallback");
         }
-        await worker.setParameters({
+        throwIfAborted(signal);
+        await awaitWithAbort(worker.setParameters({
             preserve_interword_spaces: "1",
             user_defined_dpi: "180",
-        });
+        }), signal, terminateWorker);
 
         const pageTexts = [];
         for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
-            const page = await document.getPage(pageNumber);
+            throwIfAborted(signal);
+            const page = await awaitWithAbort(document.getPage(pageNumber), signal);
             const viewport = page.getViewport({ scale: renderScale });
             const width = Math.max(1, Math.ceil(viewport.width));
             const height = Math.max(1, Math.ceil(viewport.height));
@@ -100,9 +137,12 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
             const canvas = canvasFactory(width, height);
             try {
                 const context = canvas.getContext("2d");
-                await page.render({ canvasContext: context, viewport }).promise;
+                const renderTask = page.render({ canvasContext: context, viewport });
+                await awaitWithAbort(renderTask.promise, signal, () => renderTask.cancel());
+                throwIfAborted(signal);
                 const image = canvas.toBuffer("image/png");
-                const result = await worker.recognize(image);
+                const pageStartedAt = Date.now();
+                const result = await awaitWithAbort(worker.recognize(image), signal, terminateWorker);
                 const pageText = cleanOcrText(result?.data?.text);
                 pageTexts.push("=== PDF PAGE " + pageNumber + " ===\n" + pageText);
                 console.log("PDF OCR PAGE:", {
@@ -110,6 +150,7 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
                     pages: pageCount,
                     characters: pageText.length,
                     confidence: Math.round(Number(result?.data?.confidence) || 0),
+                    durationMs: Date.now() - pageStartedAt,
                 });
             } finally {
                 canvas.width = 1;
@@ -124,7 +165,7 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
         }
         return text;
     } finally {
-        if (worker) await worker.terminate().catch(() => {});
+        await terminateWorker();
         if (document && typeof document.destroy === "function") {
             await Promise.resolve(document.destroy()).catch(() => {});
         }
