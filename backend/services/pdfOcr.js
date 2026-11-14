@@ -66,10 +66,21 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
                 " pages; the current limit is " + OCR_MAX_PAGES + " pages per analysis.");
         }
 
-        worker = await workerFactory("eng+swa", 1, {
+        const workerOptions = {
             logger: () => {},
             cacheMethod: "write",
-        });
+        };
+        try {
+            worker = await workerFactory("eng+swa", 1, workerOptions);
+            console.log("PDF OCR LANGUAGES: English + Swahili");
+        } catch (languageError) {
+            // Some deployments may not have the Swahili traineddata available
+            // from the configured language-data host. English remains a safe
+            // fallback so OCR can still attempt to read the examination.
+            console.warn("SWahili OCR language unavailable; retrying English:", languageError?.message || languageError);
+            worker = await workerFactory("eng", 1, workerOptions);
+            console.log("PDF OCR LANGUAGES: English fallback");
+        }
         await worker.setParameters({
             preserve_interword_spaces: "1",
             user_defined_dpi: "180",
