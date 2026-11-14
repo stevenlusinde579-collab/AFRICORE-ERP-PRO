@@ -857,16 +857,16 @@ export const analyzePaperWithRules = ({
         : null;
     const allQuestionsHaveMarks = questions.length > 0 &&
         questions.every(question => Number(question.max_marks) > 0);
-    const declaredTotalIsWithinSmallTolerance = declaredSectionTotals !== null &&
+    const declaredTotalIsWithinSmallTolerance = allSectionsHaveDeclaredTotals &&
         Math.abs(declaredSectionsTotal - allocatedQuestionMarks) <= 2;
     // Keep the printed total when question marks remain unknown or the
     // difference is small. If every question is marked and the discrepancy
     // is material, report the complete question allocation and flag the mismatch.
-    const totalMarks = declaredSectionTotals !== null &&
+    const totalMarks = allSectionsHaveDeclaredTotals &&
         (!allQuestionsHaveMarks || declaredTotalIsWithinSmallTolerance)
         ? declaredSectionsTotal
         : allocatedQuestionMarks;
-    if (declaredSectionTotals !== null &&
+    if (allSectionsHaveDeclaredTotals &&
         Math.abs(declaredSectionsTotal - allocatedQuestionMarks) > 0.01) {
         recommendations.push(
             "The printed section totals add up to " + Number(declaredSectionsTotal.toFixed(2)) +
