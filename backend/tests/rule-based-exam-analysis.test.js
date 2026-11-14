@@ -531,3 +531,61 @@ test("uses explicit whole-paper total and reports disagreement with section reco
         message.includes("90")
     ));
 });
+
+
+test("Commerce paper excludes exam-room warning and scopes selective Section C only", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Four",
+        examName: "MOCK",
+        pdfText: [
+            "COMMERCE MOCK EXAMINATION",
+            "This paper consists of eleven (11) questions.",
+            "Answer all questions in Sections A and B and any two questions from Section C.",
+            "SECTION A (16 MARKS)",
+            "Answer all questions.",
+            "1. For each of the items (i)-(x), choose the correct alternative. (8 marks)",
+            "2. Match the taxation terms in List A with the correct descriptions in List B. (8 marks)",
+            "SECTION B (54 MARKS)",
+            "Answer all questions.",
+            "Cellular phones and any unauthorized materials are not allowed in the examination room.",
+            "3. Explain five ways insurance companies make profit. (9 marks)",
+            "4. Describe types and importance of warehouses. (9 marks)",
+            "5. Explain sources of capital and their limitations. (9 marks)",
+            "6. Explain functions of BRELA. (9 marks)",
+            "7. Explain advantages of consumer credit. (9 marks)",
+            "8. Explain principles of insurance. (9 marks)",
+            "SECTION C (30 MARKS)",
+            "Answer any two questions from Section C.",
+            "9. Explain essential elements of a business plan. (15 marks)",
+            "10. Explain principles of management. (15 marks)",
+            "11. Discuss factors influencing buying decisions. (15 marks)"
+        ].join("\\n"),
+    });
+
+    assert.equal(result.total_questions, 11);
+    assert.equal(result.questions.length, 11);
+    assert.equal(result.total_marks, 100);
+    assert.deepEqual(
+        result.questions.map(question => question.question_number),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    );
+
+    const sectionA = result.questions.filter(question => question.section === "A");
+    const sectionB = result.questions.filter(question => question.section === "B");
+    const sectionC = result.questions.filter(question => question.section === "C");
+    assert.equal(sectionA.length, 2);
+    assert.ok(sectionA.every(question => !question.selection_required));
+    assert.deepEqual(sectionA.map(question => question.max_marks), [8, 8]);
+    assert.equal(sectionB.length, 6);
+    assert.ok(sectionB.every(question => !question.selection_required));
+    assert.ok(sectionB.every(question => question.max_marks === 9));
+    assert.equal(sectionC.length, 3);
+    assert.ok(sectionC.every(question => question.selection_required));
+    assert.ok(sectionC.every(question => question.selection_count === 2));
+    assert.ok(sectionC.every(question => question.selection_total === 3));
+    assert.ok(sectionC.every(question => question.max_marks === 15));
+    assert.ok(!result.questions.some(question =>
+        /cellular phones|unauthorized materials|examination room/i.test(question.question_text)
+    ));
+});
