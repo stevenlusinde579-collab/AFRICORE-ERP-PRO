@@ -977,7 +977,8 @@ const finalClean =
 
 export const readPDF =
     async (
-        buffer
+        buffer,
+        options = {}
     ) => {
 
         try {
