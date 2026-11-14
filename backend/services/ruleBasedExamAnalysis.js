@@ -622,13 +622,17 @@ export const analyzePaperWithRules = ({
                     ? countObjectiveItems(question.question_text)
                     : 0
             );
-            const perItemInstruction = extractPerItemMarks(sectionText);
+            const sectionPerItemInstruction = extractPerItemMarks(section.instructionText);
+            const objectiveItemMarkValues = pending.map(question =>
+                extractPerItemMarks(question.question_text) ?? sectionPerItemInstruction
+            );
             const objectiveItemsHavePerItemMarks = pending.length === section.questions.length &&
                 objectiveItemCounts.every(count => count > 0) &&
-                perItemInstruction !== null;
+                objectiveItemMarkValues.every(value => value !== null);
 
             if (objectiveItemsHavePerItemMarks) {
                 pending.forEach((question, index) => {
+                    const perItemInstruction = objectiveItemMarkValues[index];
                     question.max_marks = Number((objectiveItemCounts[index] * perItemInstruction).toFixed(2));
                     question.mark_source = "inferred_from_section_structure";
                     question.mark_evidence = "Inferred from " + objectiveItemCounts[index] +
