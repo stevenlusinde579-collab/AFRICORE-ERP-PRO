@@ -231,8 +231,15 @@ const splitPaper = (pdfText) => {
 
             // Repeated numbering across a page break is a continuation, not
             // another question record.
-            if (currentQuestion && currentQuestion.question_number === questionNumber) {
-                if (questionOpening) currentQuestion.text += (currentQuestion.text ? "\n" : "") + questionOpening;
+            const existingQuestion = currentSection.questions.find(
+                question => question.question_number === questionNumber
+            );
+            if (existingQuestion) {
+                if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = existingQuestion;
+                if (questionOpening && !currentQuestion.text.includes(questionOpening)) {
+                    currentQuestion.text += (currentQuestion.text ? "\n" : "") + questionOpening;
+                }
                 continue;
             }
 
