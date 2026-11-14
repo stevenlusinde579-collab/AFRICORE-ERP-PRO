@@ -70,3 +70,25 @@ test("rejects scanned or text-empty PDFs with a useful explanation", () => {
         /requires readable text/
     );
 });
+
+test("recognizes explicit QUESTION N headers without punctuation and keeps following lines together", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "History",
+        level: "Form Two",
+        pdfText: `HISTORY TEST
+SECTION A (10 MARKS)
+Answer all questions.
+QUESTION 1
+Explain two causes of migration.
+QUESTION 2.
+State two effects of migration.`,
+    });
+
+    assert.equal(result.questions.length, 2);
+    assert.equal(result.questions[0].question_number, 1);
+    assert.match(result.questions[0].question_text, /Explain two causes of migration/);
+    assert.equal(result.questions[1].question_number, 2);
+    assert.match(result.questions[1].question_text, /State two effects of migration/);
+    assert.equal(result.questions[0].max_marks, 5);
+    assert.equal(result.questions[1].max_marks, 5);
+});

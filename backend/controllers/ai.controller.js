@@ -3353,15 +3353,18 @@ export const analyzePaper =
 
                 const rowMarks = Number(row.max_marks);
                 const hasValidMarks = Number.isFinite(rowMarks) && rowMarks > 0;
-                // Rule-Based analysis may legitimately be unable to determine
-                // a question's mark from the printed paper. Preserve that
-                // uncertainty as zero (with its explicit uncertainty source)
-                // so the teacher can confirm/edit it during review. Gemini and
-                // all other invalid mark values remain subject to strict checks.
+                // mark_source is analysis metadata, not an exam_questions DB
+                // column. sanitizeExamQuestionRecord intentionally omits it,
+                // so resolve the source from the normalized in-memory question.
+                const sourceQuestion = questions.find((candidate) =>
+                    Number(candidate.question_number) === Number(row.question_number) &&
+                    String(candidate.section || "") === String(row.section || "") &&
+                    String(candidate.question_text || "") === String(row.question_text || "")
+                );
                 const isExplicitlyUncertainRuleMark =
                     analysisMethod === "rule_based" &&
                     rowMarks === 0 &&
-                    row.mark_source === "uncertain_teacher_confirmation_required";
+                    sourceQuestion?.mark_source === "uncertain_teacher_confirmation_required";
 
                 if (!hasValidMarks && !isExplicitlyUncertainRuleMark) {
                     throw new Error(
@@ -3456,12 +3459,25 @@ export const analyzePaper =
                     0
                 );
 
+            const zeroMarkRows = examQuestionRecords.filter(
+                (row) => Number(row.max_marks) === 0
+            );
+            const allQuestionsHaveExplicitlyUncertainRuleMarks =
+                analysisMethod === "rule_based" &&
+                examQuestionRecords.length > 0 &&
+                zeroMarkRows.length === examQuestionRecords.length &&
+                zeroMarkRows.every((row) =>
+                    questions.some((candidate) =>
+                        Number(candidate.question_number) === Number(row.question_number) &&
+                        String(candidate.section || "") === String(row.section || "") &&
+                        String(candidate.question_text || "") === String(row.question_text || "") &&
+                        candidate.mark_source === "uncertain_teacher_confirmation_required"
+                    )
+                );
+
             if (
-                !Number.isFinite(
-                    finalRawQuestionMarks
-                ) ||
-                finalRawQuestionMarks <=
-                    0
+                !Number.isFinite(finalRawQuestionMarks) ||
+                (finalRawQuestionMarks <= 0 && !allQuestionsHaveExplicitlyUncertainRuleMarks)
             ) {
                 throw new Error(
                     "Final question marks are invalid."
@@ -3726,11 +3742,20 @@ export const analyzePaper =
                         question.max_marks
                     );
 
+                const matchingSourceQuestion = questions.find((candidate) =>
+                    Number(candidate.question_number) === Number(question.question_number) &&
+                    String(candidate.section || "") === String(question.section || "") &&
+                    String(candidate.question_text || "") === String(question.question_text || "")
+                );
+                const isExplicitlyUncertainRuleMark =
+                    analysisMethod === "rule_based" &&
+                    marks === 0 &&
+                    matchingSourceQuestion?.mark_source === "uncertain_teacher_confirmation_required";
+
                 if (
-                    !Number.isFinite(
-                        marks
-                    ) ||
-                    marks <= 0
+                    !Number.isFinite(marks) ||
+                    marks < 0 ||
+                    (marks === 0 && !isExplicitlyUncertainRuleMark)
                 ) {
                     throw new Error(
                         `Database returned invalid max_marks for Q${question.question_number}.`
