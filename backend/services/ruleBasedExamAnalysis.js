@@ -39,17 +39,67 @@ const numberValue = (value) => {
 
 const extractMarkValues = (text) => {
     const source = String(text || "");
-    const matches = [...source.matchAll(/(?:\(|\[)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*(?:\)|\])?/gi)];
+    const markPattern = /(?:\\(|\\[)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\s*(?:\\)|\\])?/gi;
+    const matches = [...source.matchAll(markPattern)];
     if (!matches.length) return 0;
-    const totalMatch = [...source.matchAll(/(?:total|maximum|carrying|worth)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi)].pop();
-    if (totalMatch) return Number(totalMatch[1]);
 
-    // A printed parent-question total takes precedence over marks repeated
-    // beside its subparts; otherwise sum the explicitly marked subparts.
-    const firstSubpart = source.search(/(?:\(\s*[a-z]\s*\)|\b[a-z]\))/i);
-    const parentMark = matches.find(match => firstSubpart < 0 || match.index < firstSubpart);
-    if (parentMark) return Number(parentMark[1]);
+    // Explicit parent totals (including totals printed after the subparts)
+    // always take precedence over the sum of sub-question marks.
+    const totalPatterns = [
+        /(?:total|maximum|question\\s+total|in\\s+total)\\s*(?:of|:)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)/gi,
+        /(?:question\\s+)?(?:carries|is\\s+worth|has)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)/gi,
+    ];
+    for (const pattern of totalPatterns) {
+        const totals = [...source.matchAll(pattern)];
+        if (totals.length) return Number(totals[totals.length - 1][1]);
+    }
+
+    // Identify labelled subparts (a), (b), a), b), etc. A mark token inside
+    // a subpart belongs to that subpart; one outside all subparts is a parent
+    // question mark and must not be added to its children.
+    const labels = [...source.matchAll(/(?:\\(\\s*[a-h]\\s*\\)|(?:^|\\n)\\s*[a-h]\\s*[.)])(?=\\s|$)/gim)];
+    if (labels.length) {
+        const ranges = labels.map((label, index) => ({
+            start: label.index,
+            end: labels[index + 1]?.index ?? source.length,
+        }));
+        const childMarks = matches.filter(mark =>
+            ranges.some(range => mark.index >= range.start && mark.index < range.end)
+        );
+        const parentMarks = matches.filter(mark =>
+            !ranges.some(range => mark.index >= range.start && mark.index < range.end)
+        );
+
+        if (parentMarks.length === 1) return Number(parentMarks[0][1]);
+        if (parentMarks.length > 1) {
+            // Ambiguous competing parent-level values: do not invent a total.
+            return 0;
+        }
+        if (childMarks.length) {
+            return childMarks.reduce((sum, mark) => sum + Number(mark[1]), 0);
+        }
+    }
+
+    // Without labelled subparts, multiple mark annotations are only summed
+    // when no explicit parent-total wording exists.
     return matches.reduce((sum, match) => sum + Number(match[1]), 0);
+};
+
+const extractPerQuestionMarks = (text) => {
+    const source = String(text || "").replace(/\\s+/g, " ");
+    const patterns = [
+        /\\beach\\s+(?:main\\s+)?question\\s+(?:carries|is\\s+worth|has|is\\s+allocated)\\s+(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\b/i,
+        /\\b(?:all|every)\\s+questions?\\s+(?:carry|carries|are\\s+worth)\\s+(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\b/i,
+        /\\bquestions?\\s+(?:carry|are\\s+worth)\\s+(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\s+each\\b/i,
+    ];
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (match) {
+            const value = Number(match[1]);
+            if (Number.isFinite(value) && value > 0) return value;
+        }
+    }
+    return null;
 };
 
 const extractSectionTotal = (text) => {
@@ -299,8 +349,12 @@ export const analyzePaperWithRules = ({
                 : section.questions.length;
             let inferred = null;
             let evidence = "";
+            const perQuestionInstruction = extractPerQuestionMarks(sectionText);
 
-            if (selection.selection_required && explicitQuestionMarks.length > 0) {
+            if (perQuestionInstruction !== null) {
+                inferred = perQuestionInstruction;
+                evidence = "Applied the explicit section instruction that each question carries " + perQuestionInstruction + " marks.";
+            } else if (selection.selection_required && explicitQuestionMarks.length > 0) {
                 const uniqueExplicitMarks = [...new Set(explicitQuestionMarks)];
                 if (uniqueExplicitMarks.length === 1) {
                     inferred = uniqueExplicitMarks[0];
@@ -337,6 +391,28 @@ export const analyzePaperWithRules = ({
     for (const question of questions) {
         if (question.max_marks <= 0) {
             recommendations.push("Confirm the maximum marks for Question " + question.question_number + " in Section " + question.section + ".");
+        }
+    }
+
+    // Cross-check fully known question allocations against each printed
+    // section total. A mismatch is surfaced for teacher review, never silently
+    // corrected by changing explicit marks.
+    for (const section of sections) {
+        if (!(Number(section.total_marks) > 0)) continue;
+        const sectionQuestions = questions.filter(question => question.section === section.name);
+        if (!sectionQuestions.length || sectionQuestions.some(question => !(Number(question.max_marks) > 0))) continue;
+
+        const firstSelected = sectionQuestions.find(question => question.selection_required);
+        const allocated = firstSelected
+            ? Number(firstSelected.max_marks) * Number(firstSelected.selection_count || 1)
+            : sectionQuestions.reduce((sum, question) => sum + Number(question.max_marks), 0);
+        const declared = Number(section.total_marks);
+        if (Math.abs(allocated - declared) > 0.01) {
+            recommendations.push(
+                "Section " + section.name + " declares " + declared +
+                " marks, but the detected question allocation gives " + Number(allocated.toFixed(2)) +
+                " marks. Review the printed instructions before approving this marking structure."
+            );
         }
     }
 
