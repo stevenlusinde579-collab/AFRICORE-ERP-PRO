@@ -115,5 +115,5 @@ export const classifyQuestionFormat = (value) => {
     if (/\b(calculate|solve|compute|find the value|work out|hesabu)\b/.test(text)) return "Calculation";
     if (/\b(experiment|practical|laboratory|measure|observe|demonstrate)\b/.test(text)) return "Practical/Experiment";
     if (/\b(explain|describe|discuss|analyse|analyze|compare|evaluate|justify|assess)\b/.test(text)) return "Structured/Essay";
-    return "Short Answer";
+    return null; // Preserve the existing subject-aware Rule-Based fallback for unclassified wording.
 };
