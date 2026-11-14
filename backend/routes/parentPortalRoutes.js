@@ -412,41 +412,61 @@ router.get("/credential-history/:studentId", authenticateUser, requirePermission
 });
 
 router.post("/login", async (req, res) => {
-  const schoolId = Number(req.body?.school_id);
   const username = String(req.body?.username || "").trim();
   const password = String(req.body?.password || "");
-  if (!Number.isInteger(schoolId) || !username || !password) return res.status(400).json({ success: false, message: "Choose your school and enter student username and admission number." });
+  if (!username || !password) return res.status(400).json({ success: false, message: "Enter your student username and password." });
+  const attemptKey = String(req.ip || "unknown") + ":parent:" + username.toLowerCase();
+  const now = Date.now();
+  const prior = loginAttempts.get(attemptKey);
+  if (prior && prior.blockedUntil > now) return res.status(429).json({ success: false, message: "Umejaribu mara nyingi. Subiri dakika 15 kisha ujaribu tena." });
+  const rejectLogin = () => {
+    const failed = (prior?.count || 0) + 1;
+    loginAttempts.set(attemptKey, { count: failed, blockedUntil: failed >= 10 ? now + 15 * 60 * 1000 : 0 });
+  };
   try {
-    const { data: school, error: schoolError } = await supabase.from("schools").select("id,is_active").eq("id", schoolId).maybeSingle();
-    if (schoolError || !school || school.is_active !== true) return res.status(403).json({ success: false, message: "School not found or inactive." });
-    const attemptKey = String(req.ip || "unknown") + ":" + schoolId + ":" + username.toLowerCase();
-    const now = Date.now();
-    const prior = loginAttempts.get(attemptKey);
-    if (prior && prior.blockedUntil > now) return res.status(429).json({ success: false, message: "Umejaribu mara nyingi. Subiri dakika 15 kisha ujaribu tena." });
+    // Resolve the tenant from the matched account, never from a school name or
+    // a client-supplied school_id. If credentials collide across tenants, fail
+    // closed instead of guessing which school's student to expose.
     const { data: matches, error } = await supabase.from("parent_portal_accounts")
       .select("id,student_id,school_id,username,password_hash,password_salt,must_change_password,is_active")
-      .eq("school_id", schoolId).eq("username", username).eq("is_active", true).limit(100);
+      .eq("username", username).eq("is_active", true).limit(1000);
     if (error) throw error;
-    if (!matches?.length) {
-      const failed = (prior?.count || 0) + 1;
-      loginAttempts.set(attemptKey, { count: failed, blockedUntil: failed >= 10 ? now + 15 * 60 * 1000 : 0 });
-      return res.status(401).json({ success: false, message: "Username or password is incorrect." });
+    const verified = [];
+    for (const candidate of matches || []) {
+      if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) verified.push(candidate);
     }
-    let account = null;
-    for (const candidate of matches) if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) { account = candidate; break; }
-    if (!account) {
-      const failed = (prior?.count || 0) + 1;
-      loginAttempts.set(attemptKey, { count: failed, blockedUntil: failed >= 10 ? now + 15 * 60 * 1000 : 0 });
-      return res.status(401).json({ success: false, message: "Username or password is incorrect." });
+    if (verified.length !== 1) {
+      rejectLogin();
+      return res.status(verified.length > 1 ? 409 : 401).json({
+        success: false,
+        code: verified.length > 1 ? "AMBIGUOUS_PARENT_CREDENTIALS" : undefined,
+        message: verified.length > 1
+          ? "These credentials match more than one school account. Contact the school office to issue unique login credentials."
+          : "Username or password is incorrect.",
+      });
+    }
+    const account = verified[0];
+    const schoolId = Number(account.school_id);
+    const { data: school, error: schoolError } = await supabase.from("schools")
+      .select("id,is_active,school_name").eq("id", schoolId).maybeSingle();
+    if (schoolError) throw schoolError;
+    if (!school || school.is_active !== true) return res.status(403).json({ success: false, message: "Your school is inactive. Please contact the school administrator." });
+    const student = await loadStudent(account.student_id, schoolId);
+    if (!student || String(student.status || student.student_status || "Active").toLowerCase() === "inactive") {
+      return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
     }
     loginAttempts.delete(attemptKey);
-    const student = await loadStudent(account.student_id, schoolId);
-    if (!student || String(student.status || student.student_status || "Active").toLowerCase() === "inactive") return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
-    await supabase.from("parent_portal_accounts").update({ last_login_at: new Date().toISOString() }).eq("id", account.id);
+    const update = await supabase.from("parent_portal_accounts")
+      .update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
+    if (update.error) throw update.error;
     const token = tokenFor({ account_id: account.id, student_id: student.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
-    const schoolName = await supabase.from("schools").select("school_name").eq("id", schoolId).single();
-    const classRow = student.current_class_id ? await supabase.from("classes").select("class_name").eq("id", student.current_class_id).eq("school_id", schoolId).maybeSingle() : { data: null };
-    return res.json({ success: true, token, must_change_password: account.must_change_password, student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, school_name: schoolName.data?.school_name || "", class_name: classRow.data?.class_name || student.class_name || "" } });
+    const classRow = student.current_class_id
+      ? await supabase.from("classes").select("class_name").eq("id", student.current_class_id).eq("school_id", schoolId).maybeSingle()
+      : { data: null };
+    return res.json({ success: true, token, must_change_password: account.must_change_password, student: {
+      id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no,
+      school_name: school.school_name || "", class_name: classRow.data?.class_name || student.class_name || "",
+    } });
   } catch (error) {
     console.error("PARENT PORTAL LOGIN ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to sign in to Parent Portal." });
