@@ -1051,7 +1051,7 @@ SECTION A (20 MARKS)
 });
 
 
-test("uses controller-extracted section totals and global selection as cross-check evidence", () => {
+test("cross-checks controller evidence and uses the printed section total for selective marks", () => {
     const result = analyzePaperWithRules({
         subjectName: "Commerce",
         level: "Form Three",
@@ -1105,4 +1105,23 @@ SECTION B (20 MARKS)
 
     assert.ok(result.questions.every(question => !question.selection_required));
     assert.ok(result.recommendations.some(item => /multiple sections/i.test(item)));
+});
+
+
+test("does not allocate marks from an unverified controller section-total hint", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Three",
+        pdfText: `COMMERCE TEST
+SECTION A
+Answer any 2 out of 4 questions.
+1. Explain trade.
+2. Describe insurance.
+3. Discuss banking.
+4. Define entrepreneurship.`,
+        sectionTotals: [{ section: "A", marks: 40 }],
+    });
+
+    assert.ok(result.questions.every(question => question.max_marks === 0));
+    assert.ok(result.recommendations.some(item => /exact source line is unverified/i.test(item)));
 });
