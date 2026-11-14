@@ -65,8 +65,20 @@ const normalize = (value) => String(value || "")
 const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|sections?\s*[a-c]\s+(?:carries|have|has|contain|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|all\s*writings?\s+must\b|all\s+answers?\s+must\b|answers?\s+must\s+be\s+written\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b|use\s+(?:(?:a|the)\s+)?(?:black|blue|ball[- ]?point|pencil|pen)\b[^.]{0,120}\b(?:pen|pencil|drawings?)\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
-    if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
-    return NUMBER_WORDS[token] ?? null;
+    if (/^\\d+(?:\\.\\d+)?$/.test(token)) return Number(token);
+    if (NUMBER_WORDS[token] !== undefined) return NUMBER_WORDS[token];
+    // Roman numeral question labels occur in tertiary and advanced-level papers.
+    if (/^(?:xx|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|iv|v|iii|ii|i)$/.test(token)) {
+        const values = { i: 1, v: 5, x: 10 };
+        let total = 0;
+        for (let index = 0; index < token.length; index += 1) {
+            const current = values[token[index]];
+            const next = values[token[index + 1]] || 0;
+            total += current < next ? -current : current;
+        }
+        return total;
+    }
+    return null;
 };
 
 const extractMarkValues = (text) => {
@@ -323,8 +335,8 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
-    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*[.)\]:-]?\s*(.*)$/i;
-    const explicitTaskHeaderPattern = /^\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitQuestionHeaderPattern = new RegExp(String.raw`^\\s*(?:QUESTION(?:\\s+(?:NO\\.?|NUMBER))?|Q(?:N\\.?)?\\.?)\\s*(${questionOrdinal})\\s*[.)\\]:-]?\\s*(.*)$`, "i");
+    const explicitTaskHeaderPattern = new RegExp(String.raw`^\\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)(?:\\s+(?:NO\\.?|NUMBER))?\\s*(${questionOrdinal})\\s*[.)\\]:-]?\\s*(.*)$`, "i");
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = lines[lineIndex];
