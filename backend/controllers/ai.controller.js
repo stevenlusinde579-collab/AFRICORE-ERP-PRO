@@ -3329,7 +3329,21 @@ export const analyzePaper =
                             selection_instruction:
                                 question.selection_instruction,
                         })
-                );
+                )
+                // PostgreSQL's exam_questions_max_marks_check permits NULL
+                // for marks that genuinely require teacher confirmation, but
+                // rejects numeric zero. Keep zero in analysis metadata while
+                // persisting an unknown mark as NULL in exam_questions.
+                .map((record, index) => {
+                    const sourceQuestion = questions[index];
+                    const hasUnconfirmedRuleMarks =
+                        analysisMethod === "rule_based" &&
+                        sourceQuestion?.mark_source === "uncertain_teacher_confirmation_required" &&
+                        Number(record.max_marks) <= 0;
+                    return hasUnconfirmedRuleMarks
+                        ? { ...record, max_marks: null }
+                        : record;
+                });
 
             // ------------------------------------------------
             // FINAL VALIDATION
