@@ -39,15 +39,15 @@ const numberValue = (value) => {
 
 const extractMarkValues = (text) => {
     const source = String(text || "");
-    const markPattern = /(?:\\(|\\[)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\s*(?:\\)|\\])?/gi;
+    const markPattern = /(?:\(|\[)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*(?:\)|\])?/gi;
     const matches = [...source.matchAll(markPattern)];
     if (!matches.length) return 0;
 
     // Explicit parent totals (including totals printed after the subparts)
     // always take precedence over the sum of sub-question marks.
     const totalPatterns = [
-        /(?:total|maximum|question\\s+total|in\\s+total)\\s*(?:of|:)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)/gi,
-        /(?:question\\s+)?(?:carries|is\\s+worth|has)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)/gi,
+        /(?:total|maximum|question\s+total|in\s+total)\s*(?:of|:)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi,
+        /(?:question\s+)?(?:carries|is\s+worth|has)\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi,
     ];
     for (const pattern of totalPatterns) {
         const totals = [...source.matchAll(pattern)];
@@ -57,7 +57,7 @@ const extractMarkValues = (text) => {
     // Identify labelled subparts (a), (b), a), b), etc. A mark token inside
     // a subpart belongs to that subpart; one outside all subparts is a parent
     // question mark and must not be added to its children.
-    const labels = [...source.matchAll(/(?:\\(\\s*[a-h]\\s*\\)|(?:^|\\n)\\s*[a-h]\\s*[.)])(?=\\s|$)/gim)];
+    const labels = [...source.matchAll(/(?:\(\s*[a-h]\s*\)|(?:^|\n)\s*[a-h]\s*[.)])(?=\s|$)/gim)];
     if (labels.length) {
         const ranges = labels.map((label, index) => ({
             start: label.index,
@@ -86,11 +86,11 @@ const extractMarkValues = (text) => {
 };
 
 const extractPerQuestionMarks = (text) => {
-    const source = String(text || "").replace(/\\s+/g, " ");
+    const source = String(text || "").replace(/\s+/g, " ");
     const patterns = [
-        /\\beach\\s+(?:main\\s+)?question\\s+(?:carries|is\\s+worth|has|is\\s+allocated)\\s+(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\b/i,
-        /\\b(?:all|every)\\s+questions?\\s+(?:carry|carries|are\\s+worth)\\s+(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\b/i,
-        /\\bquestions?\\s+(?:carry|are\\s+worth)\\s+(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\s+each\\b/i,
+        /\beach\s+(?:main\s+)?question\s+(?:carries|is\s+worth|has|is\s+allocated)\s+(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
+        /\b(?:all|every)\s+questions?\s+(?:carry|carries|are\s+worth)\s+(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
+        /\bquestions?\s+(?:carry|are\s+worth)\s+(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s+each\b/i,
     ];
     for (const pattern of patterns) {
         const match = source.match(pattern);
