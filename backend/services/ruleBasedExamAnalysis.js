@@ -1,3 +1,5 @@
+import { inferEducationProfile, classifyQuestionFormat } from "./ruleBasedAnalysisParity.js";
+
 const NUMBER_WORDS = {
     one: 1, two: 2, three: 3, four: 4, five: 5,
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -579,8 +581,12 @@ export const analyzePaperWithRules = ({
     examName = "Examination",
     examType = "",
     curriculum = "",
+    gradingCriteria = "",
 }) => {
     const text = normalize(pdfText);
+    const educationProfile = inferEducationProfile({
+        level, subjectName, examName, examType, curriculum, pdfText: text,
+    });
     if (text.length < 20) {
         throw new Error("Rule-Based Engine requires readable text in the PDF. This file appears scanned or contains too little extractable text. Choose AI Analysis (Gemini) for scanned papers.");
     }
@@ -590,6 +596,11 @@ export const analyzePaperWithRules = ({
     const blooms = {};
     const topics = new Set();
     const recommendations = [];
+    if (educationProfile.category === "unclassified") {
+        recommendations.push("The education level could not be established confidently from the supplied class metadata or PDF text. The engine will analyse the paper's visible structure without assuming O-Level/CSEE conventions; confirm the level if curriculum-specific evaluation is required.");
+    } else {
+        recommendations.push("Education profile detected as " + educationProfile.label + " from the supplied metadata/PDF evidence. Question structure and marks are analysed from the paper itself; no unrelated level-specific grading template is imposed.");
+    }
     let confidenceTotal = 0;
 
     for (const section of sections) {
@@ -638,7 +649,7 @@ export const analyzePaperWithRules = ({
                 sub_topic: topic.sub_topic,
                 difficulty_level: inferDifficulty(source.text, marks),
                 bloom_level: bloom,
-                question_type: inferQuestionType(source.text),
+                question_type: classifyQuestionFormat(source.text) || inferQuestionType(source.text),
                 answer_expected: null,
                 ai_confidence: marks > 0 ? 82 : 55,
                 ai_explanation: "Rule-Based Engine uses visible wording and structural evidence; semantic interpretation and expected answers require teacher review.",
@@ -843,9 +854,11 @@ export const analyzePaperWithRules = ({
     const overallDifficulty = hardCount / Math.max(questions.length, 1) >= 0.4 ? "Hard" : (difficultyCounts.Easy || 0) / Math.max(questions.length, 1) >= 0.6 ? "Easy" : "Medium";
 
     return {
-        summary: "Rule-Based structural analysis for " + subjectName + " (" + level + "). " + questions.length + " main questions were detected.",
+        summary: "Rule-Based paper-first structural analysis for " + subjectName + ". " + questions.length + " main questions were detected; education profile: " + educationProfile.label + ".",
         subject: subjectName,
         level,
+        education_profile: educationProfile,
+        grading_criteria_context: gradingCriteria || null,
         exam_name: examName,
         exam_type: examType,
         curriculum,
