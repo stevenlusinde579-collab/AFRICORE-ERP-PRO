@@ -364,6 +364,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
 
         const questionMatch =
             line.match(explicitQuestionHeaderPattern) ||
+            line.match(explicitTaskHeaderPattern) ||
             line.match(questionPattern);
         if (standaloneQuestionNumber !== null) {
             if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
