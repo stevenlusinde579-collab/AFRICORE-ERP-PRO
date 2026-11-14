@@ -23,6 +23,15 @@ const TOPIC_KEYWORDS = {
     English: ["grammar", "comprehension", "composition", "noun", "verb", "adjective", "tense", "literature", "passage"],
     Kiswahili: ["sarufi", "fasihi", "methali", "nahau", "nomino", "kitenzi", "ufahamu", "insha"],
     "Business Studies": ["business", "entrepreneur", "marketing", "management", "customer", "capital", "enterprise", "trade"],
+    Agriculture: ["crop", "livestock", "soil", "irrigation", "fertilizer", "fertiliser", "pest", "disease", "farm", "cultivation", "harvest", "animal husbandry"],
+    Economics: ["demand", "supply", "market", "inflation", "unemployment", "national income", "opportunity cost", "scarcity", "utility", "production"],
+    "Computer Studies": ["computer", "hardware", "software", "algorithm", "programming", "database", "network", "operating system", "input", "output"],
+    ICT: ["information technology", "communication technology", "computer", "internet", "network", "data", "digital", "software", "hardware"],
+    "Food and Nutrition": ["nutrition", "food", "diet", "carbohydrate", "protein", "vitamin", "mineral", "balanced diet", "cooking", "hygiene"],
+    Literature: ["poem", "poetry", "novel", "play", "character", "plot", "theme", "setting", "narrator", "literary"],
+    French: ["grammaire", "vocabulaire", "conjugaison", "lecture", "compréhension", "écriture", "verbe", "nom"],
+    "Physical Education": ["fitness", "exercise", "sport", "athletics", "training", "muscle", "health", "warm-up", "rules of play"],
+    "Religious Education": ["religion", "faith", "bible", "quran", "scripture", "prayer", "worship", "prophet", "moral", "ethics"],
 };
 
 const BLOOM_VERBS = [
@@ -791,7 +800,7 @@ export const analyzePaperWithRules = ({
         }
     }
     if (gradingCriteria && String(gradingCriteria).trim()) {
-        recommendations.push("Configured exam-specific grading criteria were supplied to the analysis context; confirm that question-level marking follows those criteria where applicable.");
+        recommendations.push("The examination has configured grading-scale data. These grade bands are not question-level marks and have not been used to alter the paper's mark allocation.");
     }
     if (curriculum && String(curriculum).trim()) {
         recommendations.push("Curriculum context was supplied. Topic coverage classifications remain limited to identifiable evidence in the extracted question text.");
@@ -861,11 +870,12 @@ export const analyzePaperWithRules = ({
                 bloom_level: bloom,
                 question_type: inferQuestionType(source.text),
                 answer_expected: inferExpectedAnswerGuidance(source.text, topic.topic, subjectName, educationLevelCategory),
-                structural_cross_check: structuralByNumber.has(String(source.question_number))
-                    ? "Controller PDF text extraction independently detected a question with this label; compare the full wording because numbering can repeat by section."
-                    : "No matching question label was found by the controller's independent lightweight extractor; verify this question against the original PDF.",
                 ai_confidence: marks > 0 ? 82 : 55,
-                ai_explanation: "Rule-Based classification derived from the printed command verb, question wording, subject context and detected structure. Verify subject-specific content and referenced visual material with the original paper.",
+                ai_explanation: "Rule-Based classification derived from the printed command verb, question wording, subject context and detected structure. " +
+                    (structuralByNumber.has(String(source.question_number))
+                        ? "The independent PDF text extractor also detected this question label; verify exact wording where numbering repeats by section. "
+                        : "The independent lightweight PDF extractor did not find this question label; verify it against the original paper. ") +
+                    "Verify subject-specific content and referenced visual material with the original paper.",
                 is_selective: Boolean(selection.selection_required),
                 selection_required: Boolean(selection.selection_required),
                 selection_count: selection.selection_required ? selection.selection_count : 0,
