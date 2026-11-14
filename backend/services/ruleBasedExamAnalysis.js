@@ -133,15 +133,21 @@ const extractSectionTotal = (text) => {
 };
 
 const detectSelection = (text, availableQuestions = 0) => {
-    const source = String(text || "").replace(/\s+/g, " ").trim().toLowerCase().replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s*\(\s*\d+\s*\)/gi, "$1");
+    const source = String(text || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase()
+        .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s*\(\s*\d+\s*\)/gi, "$1");
     const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
     const patterns = [
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+(?:the\\s+following\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
-        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+the\\s+following\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?following\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?(?:the\\s+)?questions?\\s+(?:in|from)\\s+(?:this|the)\\s+section\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\s+(?:in|from)\\s+(?:this|the)\\s+section\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+the\\s+following\\s+"+token+"\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+(?:kati ya|miongoni mwa)\\s+(?:maswali?\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+ya\\s+(?:maswali?\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\b", "i"), count: 1, total: 0 },
-        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+any\\s+"+token+"\\b", "i"), count: 1, total: 0 },
         { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?(?:yoyote\\s+)?"+token+"\\s+(?:tu\\s+)?(?:maswali?)?\\b", "i"), count: 1, total: 0 },
         { regex: new RegExp("any\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 0 },
     ];
@@ -150,16 +156,15 @@ const detectSelection = (text, availableQuestions = 0) => {
         const match = source.match(item.regex);
         if (!match) continue;
         const selectionCount = numberValue(match[item.count]);
-        const selectionTotal = item.total ? numberValue(match[item.total]) : null;
+        const statedTotal = item.total ? numberValue(match[item.total]) : null;
         if (!Number.isFinite(selectionCount) || selectionCount <= 0) continue;
-        if (selectionTotal !== null && (!Number.isFinite(selectionTotal) || selectionTotal < selectionCount)) continue;
-        // A numeric instruction such as "Answer 3 questions" is not
-        // selective when exactly three questions are available. Without an
-        // explicit larger denominator, require evidence that more are offered
-        // than the required count.
-        if (selectionTotal === null && availableQuestions <= selectionCount) continue;
-        const effectiveTotal = selectionTotal || availableQuestions;
-        if (effectiveTotal <= selectionCount) continue;
+        if (statedTotal !== null && (!Number.isFinite(statedTotal) || statedTotal < selectionCount)) continue;
+
+        // A selection instruction can be embedded in a question stem or
+        // extracted on a separate line. Use the section's detected main
+        // question count when the paper does not print an explicit denominator.
+        const effectiveTotal = statedTotal || availableQuestions;
+        if (!Number.isFinite(effectiveTotal) || effectiveTotal <= selectionCount) continue;
         return {
             selection_required: true,
             selection_count: selectionCount,
@@ -377,18 +382,31 @@ const inferQuestionType = (text) => {
 };
 
 const effectiveMarks = (questions) => {
-    const groups = new Map();
+    const total = new Map();
+    const selective = new Map();
     for (const question of questions) {
         const marks = Number(question.max_marks) || 0;
         if (marks <= 0) continue;
         if (!question.selection_required) {
-            groups.set("Q-" + question.question_number + "-" + question.section, marks);
+            total.set("Q-" + question.question_number + "-" + question.section, marks);
             continue;
         }
-        const group = question.selection_group;
-        if (!groups.has(group)) groups.set(group, marks * Number(question.selection_count || 1));
+        const group = question.selection_group || ("SECTION-" + question.section);
+        if (!selective.has(group)) {
+            selective.set(group, {
+                count: Math.max(1, Number(question.selection_count) || 1),
+                marks: [],
+            });
+        }
+        selective.get(group).marks.push(marks);
     }
-    return [...groups.values()].reduce((sum, value) => sum + value, 0);
+    for (const [group, data] of selective) {
+        // If optional questions carry different marks, the maximum available
+        // score is the sum of the highest-marked required number of options.
+        const bestAvailable = data.marks.sort((a, b) => b - a).slice(0, data.count);
+        total.set(group, bestAvailable.reduce((sum, value) => sum + value, 0));
+    }
+    return [...total.values()].reduce((sum, value) => sum + value, 0);
 };
 
 export const analyzePaperWithRules = ({
@@ -535,7 +553,25 @@ export const analyzePaperWithRules = ({
         }
     }
 
-    const totalMarks = effectiveMarks(questions);
+    const allocatedQuestionMarks = effectiveMarks(questions);
+    const declaredSectionTotals = sections
+        .filter(section => Number(section.total_marks) > 0)
+        .map(section => Number(section.total_marks));
+    const allSectionsHaveDeclaredTotals = sections.length > 0 &&
+        declaredSectionTotals.length === sections.length;
+    const declaredSectionsTotal = allSectionsHaveDeclaredTotals
+        ? declaredSectionTotals.reduce((sum, value) => sum + value, 0)
+        : null;
+    const totalMarks = allocatedQuestionMarks;
+    if (declaredSectionsTotal !== null &&
+        Math.abs(declaredSectionsTotal - allocatedQuestionMarks) > 0.01) {
+        recommendations.push(
+            "The printed section totals add up to " + Number(declaredSectionsTotal.toFixed(2)) +
+            " marks, while the detected question allocation gives " +
+            Number(allocatedQuestionMarks.toFixed(2)) +
+            " marks. The paper total follows the printed section totals; review the missing or misread question marks before approval."
+        );
+    }
     const sectionOutput = sections.map(section => {
         const sectionQuestions = questions.filter(q => q.section === section.name);
         const selection = sectionQuestions.find(q => q.selection_required);
@@ -570,7 +606,7 @@ export const analyzePaperWithRules = ({
         exam_type: examType,
         curriculum,
         total_questions: questions.length,
-        total_marks: explicitPaperTotal || totalMarks,
+        total_marks: explicitPaperTotal || declaredSectionsTotal || totalMarks,
         difficulty: overallDifficulty,
         quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
         syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
