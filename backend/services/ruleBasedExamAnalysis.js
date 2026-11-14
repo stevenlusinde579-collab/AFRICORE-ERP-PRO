@@ -38,10 +38,17 @@ const numberValue = (value) => {
 };
 
 const extractMarkValues = (text) => {
-    const matches = [...String(text || "").matchAll(/(?:\(|\[)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*(?:\)|\])?/gi)];
+    const source = String(text || "");
+    const matches = [...source.matchAll(/(?:\(|\[)?\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*(?:\)|\])?/gi)];
     if (!matches.length) return 0;
-    const totalMatch = [...String(text || "").matchAll(/(?:total|maximum|carrying|worth)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi)].pop();
+    const totalMatch = [...source.matchAll(/(?:total|maximum|carrying|worth)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?)/gi)].pop();
     if (totalMatch) return Number(totalMatch[1]);
+
+    // A printed parent-question total takes precedence over marks repeated
+    // beside its subparts; otherwise sum the explicitly marked subparts.
+    const firstSubpart = source.search(/(?:\(\s*[a-z]\s*\)|\b[a-z]\))/i);
+    const parentMark = matches.find(match => firstSubpart < 0 || match.index < firstSubpart);
+    if (parentMark) return Number(parentMark[1]);
     return matches.reduce((sum, match) => sum + Number(match[1]), 0);
 };
 
@@ -160,7 +167,12 @@ const inferTopic = (text, subjectName) => {
         const found = words.filter(word => lower.includes(word));
         if (found.length > (best?.matches.length || 0)) best = { name, matches: found };
     }
-    return best ? { topic: best.name, sub_topic: best.matches.slice(0, 3).join(", ") || null } : { topic: null, sub_topic: null };
+    return best
+        ? {
+            topic: best.matches[0].replace(/\b\w/g, character => character.toUpperCase()),
+            sub_topic: best.matches.slice(1, 4).join(", ") || null,
+        }
+        : { topic: null, sub_topic: null };
 };
 
 const inferBloom = (text) => {
