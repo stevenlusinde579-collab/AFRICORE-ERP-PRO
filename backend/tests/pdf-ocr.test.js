@@ -185,3 +185,42 @@ test("recognizes text from a real image-only PDF using PDF.js and Tesseract", { 
     assert.match(recognizedText, /QUESTION\s*1/i);
     assert.match(recognizedText, /accounting/i);
 });
+
+
+test("cancels an in-flight OCR recognition when the request is aborted", async () => {
+    const controller = new AbortController();
+    let terminated = false;
+    const fakeDocument = {
+        numPages: 1,
+        async getPage() {
+            return {
+                getViewport: () => ({ width: 20, height: 20 }),
+                render: () => ({ promise: Promise.resolve(), cancel: () => {} }),
+                cleanup: () => {},
+            };
+        },
+        async destroy() {},
+    };
+
+    const pendingRecognition = new Promise(() => {});
+    const analysis = extractScannedPdfText(Buffer.from("%PDF-test"), {
+        getDocument: () => ({ promise: Promise.resolve(fakeDocument) }),
+        createCanvas: () => ({
+            width: 20,
+            height: 20,
+            getContext: () => ({}),
+            toBuffer: () => Buffer.from("image"),
+        }),
+        createWorker: async () => ({
+            setParameters: async () => {},
+            recognize: () => pendingRecognition,
+            terminate: async () => { terminated = true; },
+        }),
+        signal: controller.signal,
+    });
+
+    await new Promise(resolve => setImmediate(resolve));
+    controller.abort(new Error("test timeout"));
+    await assert.rejects(analysis, /test timeout/);
+    assert.equal(terminated, true);
+});

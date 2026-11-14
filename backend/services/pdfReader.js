@@ -1302,7 +1302,7 @@ export const readPDF =
             if (options.enableOcr === true && isLikelyScannedPdfText(finalText)) {
                 console.warn("PDF TEXT IS INSUFFICIENT; STARTING SCANNED-PDF OCR...");
                 try {
-                    const ocrText = await extractScannedPdfText(buffer);
+                    const ocrText = await extractScannedPdfText(buffer, { signal: options.signal });
                     if (ocrText.length > finalText.length) {
                         finalText = finalClean(ocrText);
                         console.log("PDF OCR SELECTED:", {
@@ -1312,8 +1312,9 @@ export const readPDF =
                     }
                 } catch (ocrError) {
                     console.error("SCANNED PDF OCR FAILED:", ocrError?.message || ocrError);
-                    // Preserve the original extracted text. The controller can
-                    // still pass the original PDF to Gemini, as before.
+                    // Rule-Based requests must not continue with empty text.
+                    // Gemini does not enable this OCR path and is unaffected.
+                    throw ocrError;
                 }
             }
 
