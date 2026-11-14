@@ -844,3 +844,27 @@ Colour the red ball.`,
     assert.equal(result.questions.length, 4);
     assert.match(result.questions[1].question_text, /Circle the biggest shape/i);
 });
+
+
+test("recognizes word-numbered questions in certificate and diploma examination papers", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Project Management",
+        level: "Diploma",
+        examName: "End of Semester",
+        pdfText: `DIPLOMA IN PROJECT MANAGEMENT
+QUESTION ONE
+(a) Define project management.
+(b) State four project constraints.
+QUESTION TWO
+Explain the project life cycle (10 marks).
+QUESTION THREE
+Discuss risk management in projects (10 marks).`,
+    });
+
+    assert.equal(result.education_level_category, "tertiary");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Define project management/i);
+    assert.match(result.questions[1].question_text, /project life cycle/i);
+    assert.equal(result.questions[1].max_marks, 10);
+});
