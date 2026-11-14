@@ -71,7 +71,7 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
             cacheMethod: "write",
         };
         try {
-            worker = await workerFactory("eng+swa", 1, workerOptions);
+            worker = await workerFactory(options.languages || "eng+swa", 1, workerOptions);
             console.log("PDF OCR LANGUAGES: English + Swahili");
         } catch (languageError) {
             // Some deployments may not have the Swahili traineddata available
