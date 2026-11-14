@@ -44,7 +44,7 @@ const normalize = (value) => String(value || "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|sections?\s*[a-c]\s+(?:carries|have|has|contain|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|all\s*writings?\s+must\b|all\s+answers?\s+must\b|answers?\s+must\s+be\s+written\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b)/i.test(String(value || "").trim());
+const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|sections?\s*[a-c]\s+(?:carries|have|has|contain|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|all\s*writings?\s+must\b|all\s+answers?\s+must\b|answers?\s+must\s+be\s+written\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b|use\s+(?:(?:a|the)\s+)?(?:black|blue|ball[- ]?point|pencil|pen)\b[^.]{0,120}\b(?:pen|pencil|drawings?)\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -563,12 +563,16 @@ export const analyzePaperWithRules = ({
         // Introductory instructions may name a later section (e.g. "two
         // questions from Section C"). Apply that rule only to the named section.
         const paperSelection = detectSelection(text, section.questions.length);
+        const sectionSelection = section.selection.selection_required &&
+            (!section.selection.selection_section || section.selection.selection_section === section.name)
+            ? section.selection
+            : { selection_required: false, selection_count: 0, selection_total: 0, selection_instruction: null };
         const selection = localSelection.selection_required &&
             (!localSelection.selection_section || localSelection.selection_section === section.name)
             ? localSelection
             : (paperSelection.selection_required && paperSelection.selection_section === section.name
                 ? paperSelection
-                : section.selection);
+                : sectionSelection);
         const groupId = selection.selection_required
             ? "SECTION-" + section.name + "-" + selection.selection_count + "-OF-" + (selection.selection_total || section.questions.length)
             : null;
