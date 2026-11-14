@@ -2430,6 +2430,11 @@ export const analyzePaper =
                 try {
                     aiResult = analyzePaperWithRules({
                         pdfText,
+                        structuralQuestions,
+                        sectionTotals,
+                        expectedQuestionCount,
+                        globalSelection,
+                        gradingCriteria,
                         subjectName,
                         level,
                         examName,
