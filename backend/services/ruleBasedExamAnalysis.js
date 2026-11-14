@@ -500,7 +500,7 @@ const extractPerItemMarks = (text) => {
 };
 
 const isObjectiveOrMatching = (text) =>
-    /choose.{0,120}correct answer|multiple.choice|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
+    /choose.{0,120}correct\s+(?:answer|alternative)|multiple.choice|select.{0,120}correct\s+(?:answer|alternative)|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
 
 const effectiveMarks = (questions) => {
     const total = new Map();
