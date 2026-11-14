@@ -162,3 +162,86 @@ SECTION A (40 MARKS)
         item.includes("declares 40 marks") && item.includes("20 marks")
     ));
 });
+
+
+test("detects Kiswahili alama notation on parent questions and roman subparts", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Kiswahili",
+        level: "Form Two",
+        pdfText: "MTIHANI WA KISWAHILI\nSEHEMU A (ALAMA 20)\nJibu maswali yote.\n1. Soma habari kisha jibu maswali yafuatayo:\n(i) Eleza maana ya msamiati (alama 4)\n(ii) Taja wahusika wawili (alama 4)\n(iii) Fafanua dhamira kuu (alama 4)\n2. Andika insha kuhusu mazingira (alama 8)",
+    });
+    assert.equal(result.questions.length, 2);
+    assert.equal(result.questions[0].max_marks, 12);
+    assert.equal(result.questions[1].max_marks, 8);
+    assert.equal(result.total_marks, 20);
+    assert.ok(result.questions.every(question => question.mark_source === "explicit_in_paper"));
+});
+
+test("detects Kiswahili section totals and equal marks per question", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Kiswahili",
+        level: "Standard VII",
+        pdfText: "MTIHANI WA KISWAHILI\nSEHEMU B (JUMLA YA ALAMA 40)\nKila swali lina alama 10.\n1. Taja methali nne.\n2. Eleza maana ya nahau.\n3. Andika sentensi tano.\n4. Eleza matumizi ya nomino.",
+    });
+    assert.equal(result.total_marks, 40);
+    assert.ok(result.questions.every(question => question.max_marks === 10));
+});
+
+
+test("recognizes selective questions stated as two of the following three in Section C", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Kiswahili",
+        level: "Form Four",
+        pdfText: `MTIHANI WA KISWAHILI
+SEHEMU A (ALAMA 60)
+Jibu maswali yote.
+1. Swali la kwanza (alama 20)
+2. Swali la pili (alama 20)
+3. Swali la tatu (alama 20)
+SEHEMU C (ALAMA 40)
+Jibu maswali mawili kati ya matatu yafuatayo.
+7. Jadili matumizi ya lugha (alama 20)
+8. Eleza dhamira za fasihi (alama 20)
+9. Fafanua umuhimu wa methali (alama 20)`,
+    });
+
+    const sectionC = result.questions.filter(question => question.section === "C");
+    assert.equal(sectionC.length, 3);
+    assert.ok(sectionC.every(question => question.selection_required));
+    assert.ok(sectionC.every(question => question.selection_count === 2));
+    assert.ok(sectionC.every(question => question.selection_total === 3));
+    assert.equal(result.total_marks, 100);
+});
+
+test("does not mark a section selective when all available questions are compulsory", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "History",
+        level: "Form Two",
+        pdfText: `HISTORY
+SECTION C (30 MARKS)
+Answer 3 questions.
+1. Explain migration (10 marks)
+2. Describe trade (10 marks)
+3. Discuss colonialism (10 marks)`,
+    });
+
+    assert.ok(result.questions.every(question => !question.selection_required));
+    assert.equal(result.total_marks, 30);
+});
+
+test("recognizes English selective instructions that say any two of the following three", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Geography",
+        level: "Form Three",
+        pdfText: `GEOGRAPHY
+SECTION C (40 MARKS)
+Answer any TWO of the following THREE questions.
+5. Explain weathering (20 marks)
+6. Describe erosion (20 marks)
+7. Discuss climate (20 marks)`,
+    });
+
+    assert.ok(result.questions.every(question => question.selection_required));
+    assert.ok(result.questions.every(question => question.selection_count === 2));
+    assert.equal(result.total_marks, 40);
+});
