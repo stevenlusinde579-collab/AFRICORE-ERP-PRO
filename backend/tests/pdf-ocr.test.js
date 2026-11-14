@@ -182,6 +182,6 @@ test("recognizes text from a real image-only PDF using PDF.js and Tesseract", { 
         languages: "eng",
         renderScale: 1.5,
     });
-    assert.match(recognizedText, /QUESTION\\s*1/i);
+    assert.match(recognizedText, /QUESTION\s*1/i);
     assert.match(recognizedText, /accounting/i);
 });
