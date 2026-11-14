@@ -1049,3 +1049,60 @@ SECTION A (20 MARKS)
     assert.match(result.questions[1].answer_expected, /correctly match each item/i);
     assert.equal(result.education_level_category, "advanced_secondary");
 });
+
+
+test("uses controller-extracted section totals and global selection as cross-check evidence", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Three",
+        pdfText: `COMMERCE TEST
+SECTION A
+Answer any 2 out of 4 questions.
+1. Explain trade.
+2. Describe insurance.
+3. Discuss banking.
+4. Define entrepreneurship.`,
+        sectionTotals: [{ section: "A", marks: 40 }],
+        expectedQuestionCount: 4,
+        globalSelection: {
+            required: 2,
+            available: 4,
+            source: "Answer any 2 out of 4 questions",
+        },
+        structuralQuestions: [
+            { question_number: 1, text: "Explain trade." },
+            { question_number: 2, text: "Describe insurance." },
+            { question_number: 3, text: "Discuss banking." },
+            { question_number: 4, text: "Define entrepreneurship." },
+        ],
+    });
+
+    assert.equal(result.questions.length, 4);
+    assert.ok(result.questions.every(question => question.selection_required));
+    assert.ok(result.questions.every(question => question.selection_count === 2));
+    assert.ok(result.questions.every(question => question.selection_total === 4));
+    assert.ok(result.questions.every(question => question.max_marks === 20));
+    assert.equal(result.total_marks, 40);
+});
+
+test("does not force paper-level selection across multiple unrelated sections", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "General Studies",
+        level: "Certificate",
+        pdfText: `CERTIFICATE TEST
+SECTION A (20 MARKS)
+1. Define communication (10 marks).
+2. Explain teamwork (10 marks).
+SECTION B (20 MARKS)
+3. Describe leadership (10 marks).
+4. Explain planning (10 marks).`,
+        globalSelection: {
+            required: 2,
+            available: 4,
+            source: "Answer any 2 out of 4 questions",
+        },
+    });
+
+    assert.ok(result.questions.every(question => !question.selection_required));
+    assert.ok(result.recommendations.some(item => /multiple sections/i.test(item)));
+});
