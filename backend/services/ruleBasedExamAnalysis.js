@@ -619,7 +619,7 @@ export const analyzePaperWithRules = ({
         exam_type: examType,
         curriculum,
         total_questions: questions.length,
-        total_marks: explicitPaperTotal || declaredSectionsTotal || totalMarks,
+        total_marks: explicitPaperTotal || totalMarks,
         difficulty: overallDifficulty,
         quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
         syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
