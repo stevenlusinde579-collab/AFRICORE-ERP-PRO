@@ -177,8 +177,23 @@ const detectSectionHeading = (line) => {
     return { name: String(match[1]).toUpperCase(), title: String(match[2] || "").trim() };
 };
 
+const extractNamedSectionTotals = (text) => {
+    const totals = new Map();
+    const source = String(text || "").replace(/\s+/g, " ");
+    const pattern = /\b(?:section|sehemu)\s*([a-z])\b[^.]{0,55}?\(?\s*(\d{1,3})\s*\)?\s*(?:marks?|mks?|alama)\b/gi;
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+        const name = String(match[1]).toUpperCase();
+        const value = Number(match[2]);
+        if (value > 0 && !totals.has(name)) totals.set(name, value);
+    }
+    return totals;
+};
+
 const splitPaper = (pdfText) => {
-    const lines = normalize(pdfText).split("\n");
+    const normalizedText = normalize(pdfText);
+    const lines = normalizedText.split("\n");
+    const namedSectionTotals = extractNamedSectionTotals(normalizedText);
     const sections = [];
     const sectionMap = new Map();
     let currentSection = null;
@@ -264,9 +279,23 @@ const splitPaper = (pdfText) => {
         else currentSection.instructionText.push(line);
     }
 
+    // Some papers state all section totals in one introductory sentence and
+    // omit a standalone "SECTION A" heading. If B/C headings are present and
+    // the opening unsectioned block has questions, treat that block as Section A.
+    const opening = sectionMap.get("UNSECTIONED");
+    if (opening && opening.questions.length && namedSectionTotals.has("A") &&
+        (sectionMap.has("B") || sectionMap.has("C"))) {
+        opening.name = "A";
+        sectionMap.delete("UNSECTIONED");
+        sectionMap.set("A", opening);
+    }
+
     for (const section of sections) {
         section.instructionText = section.instructionText.join("\n");
         section.total_marks = extractSectionTotal(section.instructionText);
+        if (namedSectionTotals.has(section.name)) {
+            section.total_marks = namedSectionTotals.get(section.name);
+        }
         section.selection = detectSelection(section.instructionText, section.questions.length);
         section.questions = section.questions.filter(question => question.text.trim());
     }
