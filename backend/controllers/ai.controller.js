@@ -3351,16 +3351,19 @@ export const analyzePaper =
                     );
                 }
 
-                if (
-                    !Number.isFinite(
-                        Number(
-                            row.max_marks
-                        )
-                    ) ||
-                    Number(
-                        row.max_marks
-                    ) <= 0
-                ) {
+                const rowMarks = Number(row.max_marks);
+                const hasValidMarks = Number.isFinite(rowMarks) && rowMarks > 0;
+                // Rule-Based analysis may legitimately be unable to determine
+                // a question's mark from the printed paper. Preserve that
+                // uncertainty as zero (with its explicit uncertainty source)
+                // so the teacher can confirm/edit it during review. Gemini and
+                // all other invalid mark values remain subject to strict checks.
+                const isExplicitlyUncertainRuleMark =
+                    analysisMethod === "rule_based" &&
+                    rowMarks === 0 &&
+                    row.mark_source === "uncertain_teacher_confirmation_required";
+
+                if (!hasValidMarks && !isExplicitlyUncertainRuleMark) {
                     throw new Error(
                         `Invalid max_marks for Q${row.question_number}.`
                     );
