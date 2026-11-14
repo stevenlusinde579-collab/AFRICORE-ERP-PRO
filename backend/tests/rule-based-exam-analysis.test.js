@@ -926,3 +926,83 @@ Trace number 1.
     assert.match(result.questions[2].question_text, /Trace number 1/i);
     assert.match(result.questions[3].question_text, /Colour the red ball/i);
 });
+
+
+test("analyses a primary objective section using printed per-item marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Primary Science",
+        level: "Standard VII",
+        pdfText: `PRIMARY SCHOOL LEAVING EXAMINATION
+STANDARD VII SCIENCE
+SECTION A (8 MARKS)
+Answer all questions. Each correct item carries one mark.
+1. Choose the correct answer from the alternatives given.
+(i) Which organ pumps blood?
+(ii) Which gas do plants absorb?
+(iii) Which organ helps humans breathe?
+(iv) Which source gives solar energy?
+(v) Which material conducts electricity?
+2. Match the following items in List A with List B.
+(i) First item
+(ii) Second item
+(iii) Third item.`,
+    });
+
+    assert.equal(result.education_level_category, "primary");
+    assert.equal(result.total_questions, 2);
+    assert.deepEqual(result.questions.map(question => question.max_marks), [5, 3]);
+    assert.ok(result.questions.every(question => question.mark_source === "inferred_from_section_structure"));
+    assert.equal(result.total_marks, 8);
+});
+
+test("analyses an Advanced Level selective section with Roman numeral main questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Physics",
+        level: "Form VI",
+        examType: "ACSEE",
+        pdfText: `ADVANCED CERTIFICATE EXAMINATION
+PHYSICS
+SECTION B (40 MARKS)
+Answer any TWO of the following FOUR questions.
+QUESTION I
+(a) Derive the expression for the electric field intensity.
+(b) Explain the principle of superposition.
+QUESTION II
+(a) Describe electromagnetic induction.
+(b) State Faraday's laws.
+QUESTION III
+(a) Explain simple harmonic motion.
+(b) Derive its period equation.
+QUESTION IV
+(a) Discuss wave interference.
+(b) Explain diffraction.`,
+    });
+
+    assert.equal(result.education_level_category, "advanced_secondary");
+    assert.equal(result.total_questions, 4);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3, 4]);
+    assert.ok(result.questions.every(question => question.selection_required));
+    assert.ok(result.questions.every(question => question.selection_count === 2));
+    assert.ok(result.questions.every(question => question.max_marks === 20));
+    assert.equal(result.total_marks, 40);
+});
+
+test("analyses Nursery word-numbered activities and keeps activities distinct", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Early Learning",
+        level: "Nursery",
+        pdfText: `NURSERY SCHOOL ASSESSMENT
+ACTIVITY ONE
+Trace the letter B.
+ACTIVITY TWO
+Colour three circles.
+ACTIVITY THREE
+Count the pictures.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.total_questions, 3);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Trace the letter B/i);
+    assert.match(result.questions[1].question_text, /Colour three circles/i);
+});
