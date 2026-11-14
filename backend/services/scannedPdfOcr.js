@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 globalThis.DOMMatrix ||= DOMMatrix;
 globalThis.ImageData ||= ImageData;
 globalThis.Path2D ||= Path2D;
+globalThis.HTMLElement ||= class HTMLElement {};
 
 // Reuse the PDF.js build already bundled by pdf-parse so both extraction
 // paths interpret the uploaded PDF consistently.
