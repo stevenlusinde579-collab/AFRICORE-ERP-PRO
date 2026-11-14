@@ -623,7 +623,8 @@ const renderPageWithStructure =
 
 const extractDefaultText =
     async (
-        buffer
+        buffer,
+        options = {}
     ) => {
 
         const data =
@@ -1297,7 +1298,7 @@ export const readPDF =
             // Keep the normal text extraction as the first choice. Only invoke
             // OCR when the extracted text is clearly insufficient; this keeps
             // selectable-text PDFs fast and preserves their native layout.
-            if (isLikelyScannedPdfText(finalText)) {
+            if (options.enableOcr === true && isLikelyScannedPdfText(finalText)) {
                 console.warn("PDF TEXT IS INSUFFICIENT; STARTING SCANNED-PDF OCR...");
                 try {
                     const ocrText = await extractScannedPdfText(buffer);
