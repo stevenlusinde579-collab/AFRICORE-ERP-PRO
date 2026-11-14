@@ -44,7 +44,7 @@ const normalize = (value) => String(value || "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|section\s*[a-c]\s+(?:carries|has|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b)/i.test(String(value || "").trim());
+const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|section\s*[a-c]\s+(?:carries|has|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -480,8 +480,29 @@ const countObjectiveItems = (text) => {
     return roman.length;
 };
 
+const extractPerItemMarks = (text) => {
+    const source = String(text || "").replace(/\s+/g, " ").toLowerCase();
+    const patterns = [
+        /\beach\s+(?:correct\s+)?(?:item|question|response|answer)\s+(?:carries|is\s+worth|gets|earns|has)\s+(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\b/i,
+        /\b(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\s+(?:for|per)\s+(?:each\s+)?(?:item|question|correct\s+answer)\b/i,
+        /\bone\s+mark\s+(?:is\s+)?awarded\s+for\s+each\s+(?:item|correct\s+answer|match)\b/i,
+        /\b(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\s+each\b/i,
+        /\beach\s+(?:item|match|correct\s+answer)\s+(?:is\s+)?(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\b/i,
+        /\bkila\s+(?:kipengele|jibu|oanisha)\s+(?:kina|lina|ni)\s+(?:alama\s*)?(moja|mbili|tatu|nne|tano|\d+)\b/i,
+        /\b(moja|mbili|tatu|nne|tano|\d+)\s*(?:alama|marks?)\s+kwa\s+kila\s+(?:kipengele|jibu|oanisha)\b/i,
+    ];
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const raw = String(match[1] || "one").trim();
+        const value = numberValue(raw) ?? ({ mbili: 2, tatu: 3, nne: 4, tano: 5 }[raw]);
+        if (Number.isFinite(value) && value > 0) return value;
+    }
+    return null;
+};
+
 const isObjectiveOrMatching = (text) =>
-    /choose.{0,120}correct answer|multiple.choice|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
+    /choose.{0,120}correct\s+(?:answer|alternative)|multiple.choice|select.{0,120}correct\s+(?:answer|alternative)|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
 
 const effectiveMarks = (questions) => {
     const total = new Map();
@@ -532,8 +553,12 @@ export const analyzePaperWithRules = ({
     let confidenceTotal = 0;
 
     for (const section of sections) {
+        // Selection rules belong to section instructions, not arbitrary question
+        // wording (for example, "choose the correct answer" in MCQs).
         const sectionText = section.instructionText + "\n" + section.questions.map(q => q.text).join("\n");
-        const localSelection = detectSelection(sectionText, section.questions.length, section.name);
+        const localSelection = detectSelection(section.instructionText, section.questions.length, section.name);
+        // Introductory instructions may name a later section (e.g. "two
+        // questions from Section C"). Apply that rule only to the named section.
         const paperSelection = detectSelection(text, section.questions.length);
         const selection = localSelection.selection_required &&
             (!localSelection.selection_section || localSelection.selection_section === section.name)
@@ -599,17 +624,34 @@ export const analyzePaperWithRules = ({
                     ? countObjectiveItems(question.question_text)
                     : 0
             );
+            const sectionPerItemInstruction = extractPerItemMarks(section.instructionText);
+            const objectiveItemMarkValues = pending.map(question =>
+                extractPerItemMarks(question.question_text) ?? sectionPerItemInstruction
+            );
+            const objectiveItemsHavePerItemMarks = pending.length === section.questions.length &&
+                objectiveItemCounts.every(count => count > 0) &&
+                objectiveItemMarkValues.every(value => value !== null);
             const objectiveItemsTotal = objectiveItemCounts.reduce((sum, count) => sum + count, 0);
             const objectiveItemsReconcile = pending.length === section.questions.length &&
                 objectiveItemCounts.every(count => count > 0) &&
                 Number(section.total_marks) > 0 &&
                 objectiveItemsTotal === Number(section.total_marks);
 
-            if (objectiveItemsReconcile) {
+            if (objectiveItemsHavePerItemMarks) {
+                pending.forEach((question, index) => {
+                    const perItemInstruction = objectiveItemMarkValues[index];
+                    question.max_marks = Number((objectiveItemCounts[index] * perItemInstruction).toFixed(2));
+                    question.mark_source = "inferred_from_section_structure";
+                    question.mark_evidence = "Inferred from " + objectiveItemCounts[index] +
+                        " objective/matching items multiplied by the PDF instruction of " +
+                        perItemInstruction + " mark(s) per item.";
+                    question.ai_confidence = 82;
+                });
+            } else if (objectiveItemsReconcile) {
                 pending.forEach((question, index) => {
                     question.max_marks = objectiveItemCounts[index];
                     question.mark_source = "inferred_from_section_structure";
-                    question.mark_evidence = "Inferred from the count of objective/matching items; the item count exactly reconciles with the printed section total.";
+                    question.mark_evidence = "The detected objective/matching item counts exactly reconcile with the printed section total; no conflicting per-item mark instruction was detected.";
                     question.ai_confidence = 82;
                 });
             } else if (perQuestionInstruction !== null) {
