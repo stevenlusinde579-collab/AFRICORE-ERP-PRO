@@ -409,6 +409,19 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
             const existingQuestion = currentSection.questions.find(
                 question => question.question_number === questionNumber
             );
+            if (existingQuestion && isEarlyYearsLevel(level, normalizedText) &&
+                currentQuestion && currentQuestion !== existingQuestion && questionOpening &&
+                earlyYearsTaskPattern.test(questionOpening)) {
+                currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = {
+                    question_number: Math.max(0, ...currentSection.questions.map(item => item.question_number)) + 1,
+                    text: questionOpening,
+                    section: currentSection.name,
+                };
+                currentSection.questions.push(currentQuestion);
+                continue;
+            }
+
             if (existingQuestion) {
                 if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
                 currentQuestion = existingQuestion;
@@ -525,6 +538,17 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
                     task.text += "\n" + line;
                 }
             }
+        }
+    }
+
+    // Early-years activities are often numbered inconsistently or mix numbered
+    // prompts with unnumbered tasks. Normalize their display numbering by
+    // reading order after all activity boundaries have been identified.
+    if (isEarlyYearsLevel(level, normalizedText)) {
+        for (const section of sections) {
+            section.questions.forEach((question, index) => {
+                question.question_number = index + 1;
+            });
         }
     }
 
