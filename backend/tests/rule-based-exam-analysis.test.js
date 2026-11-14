@@ -634,7 +634,7 @@ test("Book Keeping PDF: ignores exam instructions and date-like ledger rows as q
     });
 
     assert.equal(result.questions.some(q => /all writings must|all answers must|sections? a carries/i.test(q.question_text)), false);
-    assert.equal(result.questions.some(q => /^1\.2018/m.test(q.question_text)), true);
+    assert.equal(result.questions.some(q => q.question_text.includes("1.2018")), true);
     assert.equal(result.questions.filter(q => q.section === "A").length, 2);
     assert.deepEqual(
         result.questions.filter(q => q.section === "A").map(q => q.max_marks),
