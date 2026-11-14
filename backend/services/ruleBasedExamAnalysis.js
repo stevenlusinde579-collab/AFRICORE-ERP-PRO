@@ -112,7 +112,11 @@ const splitPaper = (pdfText) => {
     };
 
     currentSection = ensureSection();
-    const questionPattern = /^\s*(?:QUESTION\s*)?(\d{1,3})\s*[.)\]:-](?:\s+(.*))?$/i;
+    // Accept both "1. Explain..." and explicit headers such as
+    // "QUESTION 1" followed by the question on the next line. Do not treat
+    // arbitrary standalone page numbers as questions.
+    const questionPattern = /^\s*(\d{1,3})\s*[.)\]:-]\s*(.*)$/i;
+    const explicitQuestionHeaderPattern = /^\s*QUESTION\s+(\d{1,3})\s*[.)\]:-]?\s*(.*)$/i;
 
     for (const line of lines) {
         const heading = detectSectionHeading(line);
@@ -126,7 +130,9 @@ const splitPaper = (pdfText) => {
             continue;
         }
 
-        const questionMatch = line.match(questionPattern);
+        const questionMatch =
+            line.match(explicitQuestionHeaderPattern) ||
+            line.match(questionPattern);
         if (questionMatch) {
             if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
             currentQuestion = {
