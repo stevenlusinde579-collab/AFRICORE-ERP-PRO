@@ -34,7 +34,17 @@ const BLOOM_VERBS = [
     { level: "Remembering", verbs: ["define", "state", "list", "name", "identify", "mention", "what is", "who is"] },
 ];
 
-const normalize = (value) => String(value || "").replace(/\r/g, "\n").replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+const normalize = (value) => String(value || "")
+    .replace(/\r/g, "\n")
+    // Remove recurring PDF page headers/footers before detecting question numbers.
+    .replace(/\bpage\s*\d+\s*of\s*\d+\b/gi, " ")
+    .replace(/\b(?:csee|necta|es[e]?e)\s*20\d{2}\b/gi, " ")
+    .replace(/[\t ]+/g, " ")
+    .replace(/^\s*\d{1,2}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -162,7 +172,7 @@ const detectSelection = (text, availableQuestions = 0) => {
 };
 
 const detectSectionHeading = (line) => {
-    const match = String(line || "").match(/^\s*(?:SECTION|PART|SEHEMU)\s+([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
+    const match = String(line || "").match(/^\s*(?:SECTION|PART|SEHEMU)\s*([A-E]|[IVX]+|\d+)\b(?:\s*[:.)-]?\s*(.*))?$/i);
     if (!match) return null;
     return { name: String(match[1]).toUpperCase(), title: String(match[2] || "").trim() };
 };
@@ -207,13 +217,39 @@ const splitPaper = (pdfText) => {
             line.match(explicitQuestionHeaderPattern) ||
             line.match(questionPattern);
         if (questionMatch) {
+            const questionNumber = Number(questionMatch[1]);
+            const questionOpening = String(questionMatch[2] || "").trim();
+
+            // Exam-room instructions and page furniture are not question stems,
+            // even when OCR places a question-like number before them.
+            if (isAdministrativeInstruction(questionOpening)) {
+                if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+                currentQuestion = null;
+                currentSection.instructionText.push(line);
+                continue;
+            }
+
+            // Repeated numbering across a page break is a continuation, not
+            // another question record.
+            if (currentQuestion && currentQuestion.question_number === questionNumber) {
+                if (questionOpening) currentQuestion.text += (currentQuestion.text ? "\n" : "") + questionOpening;
+                continue;
+            }
+
             if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
             currentQuestion = {
-                question_number: Number(questionMatch[1]),
-                text: questionMatch[2] || "",
+                question_number: questionNumber,
+                text: questionOpening,
                 section: currentSection.name,
             };
             currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
+        if (isAdministrativeInstruction(line)) {
+            if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = null;
+            currentSection.instructionText.push(line);
             continue;
         }
 
