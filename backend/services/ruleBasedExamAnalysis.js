@@ -672,7 +672,7 @@ const inferExpectedAnswerGuidance = (questionText, topic, subjectName, levelCate
     const topicLabel = topic ? String(topic).toLowerCase() : null;
     const subjectLabel = String(subjectName || "the subject").trim();
     const has = (...verbs) => verbs.some(verb => new RegExp("\\b" + verb + "\\b", "i").test(lower));
-    const countMatch = lower.match(/\\b(one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\b/);
+    const countMatch = lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b/);
     const count = countMatch ? (numberValue(countMatch[1]) ?? Number(countMatch[1])) : null;
     const focus = topicLabel ? " concerning " + topicLabel : " relevant to " + subjectLabel;
     if (has("calculate", "compute", "work out", "solve", "determine")) {
@@ -715,8 +715,8 @@ const assessQuestionQuality = (question) => {
     const text = String(question.question_text || "").trim();
     const issues = [];
     if (text.length < 12) issues.push("Question wording is very short; check that the full stem was extracted.");
-    if (/\\b(?:figure|diagram|table|graph|map|passage|list\\s+[ab])\\b/i.test(text) &&
-        !/\\b(?:shown|below|above|following|given|attached|provided)\\b/i.test(text)) {
+    if (/\b(?:figure|diagram|table|graph|map|passage|list\s+[ab])\b/i.test(text) &&
+        !/\b(?:shown|below|above|following|given|attached|provided)\b/i.test(text)) {
         issues.push("Question refers to supporting material; verify that the referenced figure, table, graph, map or passage is present.");
     }
     if (question.max_marks <= 0) issues.push("Marks are not established from reliable printed evidence.");
