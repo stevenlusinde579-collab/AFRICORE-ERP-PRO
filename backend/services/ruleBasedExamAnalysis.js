@@ -486,14 +486,16 @@ const extractPerItemMarks = (text) => {
         /\beach\s+(?:correct\s+)?(?:item|question|response|answer)\s+(?:carries|is\s+worth|gets|earns|has)\s+(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\b/i,
         /\b(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\s+(?:for|per)\s+(?:each\s+)?(?:item|question|correct\s+answer)\b/i,
         /\bone\s+mark\s+(?:is\s+)?awarded\s+for\s+each\s+(?:item|correct\s+answer|match)\b/i,
+        /\b(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\s+each\b/i,
+        /\beach\s+(?:item|match|correct\s+answer)\s+(?:is\s+)?(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\b/i,
         /\bkila\s+(?:kipengele|jibu|oanisha)\s+(?:kina|lina|ni)\s+(?:alama\s*)?(moja|mbili|tatu|nne|tano|\d+)\b/i,
-        /\b( moja|mbili|tatu|nne|tano|\d+)\s*(?:alama|marks?)\s+kwa\s+kila\s+(?:kipengele|jibu|oanisha)\b/i,
+        /\b(moja|mbili|tatu|nne|tano|\d+)\s*(?:alama|marks?)\s+kwa\s+kila\s+(?:kipengele|jibu|oanisha)\b/i,
     ];
     for (const pattern of patterns) {
         const match = source.match(pattern);
         if (!match) continue;
         const raw = String(match[1] || "one").trim();
-        const value = numberValue(raw) ?? ({ mbila: 2, mbili: 2, tatu: 3, nne: 4, tano: 5 }[raw]);
+        const value = numberValue(raw) ?? ({ mbili: 2, tatu: 3, nne: 4, tano: 5 }[raw]);
         if (Number.isFinite(value) && value > 0) return value;
     }
     return null;
