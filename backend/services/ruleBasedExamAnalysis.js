@@ -338,6 +338,8 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     const explicitQuestionHeaderPattern = new RegExp(String.raw`^\\s*(?:QUESTION(?:\\s+(?:NO\\.?|NUMBER))?|Q(?:N\\.?)?\\.?)\\s*(${questionOrdinal})\\s*[.)\\]:-]?\\s*(.*)$`, "i");
     const explicitTaskHeaderPattern = new RegExp(String.raw`^\\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)(?:\\s+(?:NO\\.?|NUMBER))?\\s*(${questionOrdinal})\\s*[.)\\]:-]?\\s*(.*)$`, "i");
 
+    const earlyYearsTaskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|fafanua)\\b/i;
+
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = lines[lineIndex];
         const heading = detectSectionHeading(line);
@@ -426,6 +428,20 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
             continue;
         }
 
+        // In early-years worksheets, a new action prompt may be a separate
+        // activity even when the teacher did not number it. Do not merge it
+        // into the previous activity merely because the PDF omitted numbering.
+        if (isEarlyYearsLevel(level, normalizedText) && currentQuestion && earlyYearsTaskPattern.test(line)) {
+            currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = {
+                question_number: Math.max(0, ...currentSection.questions.map(item => item.question_number)) + 1,
+                text: line,
+                section: currentSection.name,
+            };
+            currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
         // OCR often drops the printed "2." before a matching exercise.
         // When a multiple-choice question is followed by a List A/List B
         // matching instruction, recover the next main-question boundary.
@@ -493,7 +509,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     // prompts (e.g. "Colour the circle", "Trace letter A"). When no numbered
     // structure exists, preserve each clearly stated task as a main item.
     if (!sections.some(section => section.questions.length) && isEarlyYearsLevel(level, normalizedText)) {
-        const taskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|onyesha|fafanua)\b/i;
+        const taskPattern = earlyYearsTaskPattern;
         for (const section of sections) {
             const taskLines = section.instructionText.split("\n").map(line => line.trim()).filter(Boolean);
             let task = null;
