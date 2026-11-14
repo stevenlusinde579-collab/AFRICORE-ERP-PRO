@@ -665,6 +665,65 @@ const effectiveMarks = (questions) => {
     return [...total.values()].reduce((sum, value) => sum + value, 0);
 };
 
+
+const inferExpectedAnswerGuidance = (questionText, topic, subjectName, levelCategory) => {
+    const text = String(questionText || "").replace(/\s+/g, " ").trim();
+    const lower = text.toLowerCase();
+    const topicLabel = topic ? String(topic).toLowerCase() : null;
+    const subjectLabel = String(subjectName || "the subject").trim();
+    const has = (...verbs) => verbs.some(verb => new RegExp("\\b" + verb + "\\b", "i").test(lower));
+    const countMatch = lower.match(/\\b(one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\b/);
+    const count = countMatch ? (numberValue(countMatch[1]) ?? Number(countMatch[1])) : null;
+    const focus = topicLabel ? " concerning " + topicLabel : " relevant to " + subjectLabel;
+    if (has("calculate", "compute", "work out", "solve", "determine")) {
+        return "Expected response: show the relevant method or formula, substitute the given values, show working steps, and state the final answer with appropriate units where applicable. This is an assessment expectation, not a solved answer.";
+    }
+    if (has("define", "what is", "meaning of")) {
+        return "Expected response: give a clear and accurate definition" + focus + ", using the key concept and its distinguishing features. The exact subject content should be checked against the taught syllabus.";
+    }
+    if (has("state", "mention", "name", "identify", "list", "give")) {
+        return "Expected response: provide " + (count && count > 1 ? count + " " : "") + "distinct, relevant point(s)" + focus + ". Award credit only for correct, non-duplicated points and follow any printed subpart requirements.";
+    }
+    if (has("explain", "describe", "discuss", "elaborate")) {
+        return "Expected response: present a relevant explanation" + focus + ", develop each required point with supporting detail or an example, and address every part of the instruction. The marking guide should award credit for accurate, relevant points.";
+    }
+    if (has("compare", "contrast", "differentiate", "distinguish")) {
+        return "Expected response: identify the items being compared and give clear paired similarities and/or differences using the comparison criteria stated in the question.";
+    }
+    if (has("evaluate", "assess", "justify", "critically")) {
+        return "Expected response: make a reasoned judgement supported by relevant evidence, explain the supporting arguments, and reach a justified conclusion.";
+    }
+    if (has("draw", "sketch", "illustrate", "plot")) {
+        return "Expected response: provide the requested accurate and appropriately labelled drawing, sketch, illustration or plot; assess required features, labels, scale and presentation where relevant.";
+    }
+    if (has("match", "pair", "relate", "correspond")) {
+        return "Expected response: correctly match each item in the first list or column with its corresponding item in the second list, preserving the printed item structure.";
+    }
+    if (has("fill", "complete", "tick", "circle", "choose", "select")) {
+        return "Expected response: select or supply the correct response for each printed item. Count each response slot once and do not treat answer options as separate main questions.";
+    }
+    if (has("read", "passage", "comprehension")) {
+        return "Expected response: answer each comprehension item using relevant evidence from the supplied passage and follow the exact response requested in each subpart.";
+    }
+    if (levelCategory === "early_years") {
+        return "Expected response: the learner should complete the stated age-appropriate activity (for example recognition, tracing, counting, matching, colouring or oral response). The teacher should confirm the expected response and any rubric against the worksheet.";
+    }
+    return "Expected response: follow the command verb and address all printed parts of the question. The source text does not provide enough evidence to generate a reliable subject-specific model answer; teacher marking guidance is required.";
+};
+
+const assessQuestionQuality = (question) => {
+    const text = String(question.question_text || "").trim();
+    const issues = [];
+    if (text.length < 12) issues.push("Question wording is very short; check that the full stem was extracted.");
+    if (/\\b(?:figure|diagram|table|graph|map|passage|list\\s+[ab])\\b/i.test(text) &&
+        !/\\b(?:shown|below|above|following|given|attached|provided)\\b/i.test(text)) {
+        issues.push("Question refers to supporting material; verify that the referenced figure, table, graph, map or passage is present.");
+    }
+    if (question.max_marks <= 0) issues.push("Marks are not established from reliable printed evidence.");
+    if (question.bloom_level === "Unknown") issues.push("Cognitive command could not be classified confidently.");
+    return issues;
+};
+
 export const analyzePaperWithRules = ({
     pdfText,
     subjectName = "Unknown Subject",
@@ -733,9 +792,9 @@ export const analyzePaperWithRules = ({
                 difficulty_level: inferDifficulty(source.text, marks),
                 bloom_level: bloom,
                 question_type: inferQuestionType(source.text),
-                answer_expected: null,
+                answer_expected: inferExpectedAnswerGuidance(source.text, topic.topic, subjectName, educationLevelCategory),
                 ai_confidence: marks > 0 ? 82 : 55,
-                ai_explanation: "Rule-Based Engine uses visible wording and structural evidence; semantic interpretation and expected answers require teacher review.",
+                ai_explanation: "Rule-Based classification derived from the printed command verb, question wording, subject context and detected structure. Verify subject-specific content and referenced visual material with the original paper.",
                 is_selective: Boolean(selection.selection_required),
                 selection_required: Boolean(selection.selection_required),
                 selection_count: selection.selection_required ? selection.selection_count : 0,
@@ -953,17 +1012,25 @@ export const analyzePaperWithRules = ({
             ? explicitPaperTotal
             : totalMarks,
         difficulty: overallDifficulty,
-        quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
+        quality_score: Math.max(0, Math.min(100, Math.round(
+            55 +
+            (questions.length ? questions.filter(question => question.max_marks > 0).length / questions.length : 0) * 20 +
+            (questions.length ? questions.filter(question => question.topic).length / questions.length : 0) * 10 +
+            (questions.length ? questions.filter(question => question.bloom_level !== "Unknown").length / questions.length : 0) * 5 +
+            (questions.length ? questions.filter(question => assessQuestionQuality(question).length === 0).length / questions.length : 0) * 10 -
+            recommendations.filter(item => /mismatch|could not|confirm|review/i.test(item)).length * 3
+        ))),
         syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
         sections: sectionOutput,
         topics_found: [...topics],
         weak_topics: [],
         strong_topics: [],
         recommendations: [...new Set(recommendations)],
-        teacher_comments: "Rule-Based Engine does not generate expected answers. Review uncertain marks and all semantic classifications against the original paper before approval.",
+        teacher_comments: "Rule-Based Engine generated marking expectations from question command verbs and structure; these are not a substitute for a subject-specific official marking scheme. Review uncertain marks, answer expectations, referenced visual material and semantic classifications against the original paper before approval.",
         blooms_distribution: blooms,
         questions,
     };
 };
 
 export default analyzePaperWithRules;
+
