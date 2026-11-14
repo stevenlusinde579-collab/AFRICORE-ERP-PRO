@@ -1006,3 +1006,122 @@ Count the pictures.`,
     assert.match(result.questions[0].question_text, /Trace the letter B/i);
     assert.match(result.questions[1].question_text, /Colour three circles/i);
 });
+
+
+test("generates command-verb marking expectations and analysis metadata", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Mathematics",
+        level: "Standard IV",
+        pdfText: `STANDARD IV MATHEMATICS
+SECTION A (20 MARKS)
+1. Calculate the area of a rectangle with length 5 cm and width 3 cm (10 marks).
+2. State two properties of a square (10 marks).`,
+    });
+    assert.match(result.questions[0].answer_expected, /formula|method/i);
+    assert.match(result.questions[1].answer_expected, /2 distinct/i);
+    assert.match(result.questions[0].ai_explanation, /command verb/i);
+    assert.ok(result.quality_score >= 0 && result.quality_score <= 100);
+    assert.equal(result.education_level_category, "primary");
+});
+
+test("generates age-appropriate activity expectations for Nursery tasks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "General Knowledge",
+        level: "Nursery",
+        pdfText: `NURSERY ACTIVITY
+1. Trace letter A.
+2. Colour the red circle.`,
+    });
+    assert.equal(result.education_level_category, "early_years");
+    assert.match(result.questions[0].answer_expected, /age-appropriate activity/i);
+});
+
+test("provides structured marking guidance for compare and matching questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Biology",
+        level: "Form Five",
+        pdfText: `BIOLOGY ADVANCED LEVEL
+SECTION A (20 MARKS)
+1. Compare mitosis and meiosis (10 marks).
+2. Match each term with its corresponding definition (10 marks).`,
+    });
+    assert.match(result.questions[0].answer_expected, /paired similarities|differences/i);
+    assert.match(result.questions[1].answer_expected, /correctly match each item/i);
+    assert.equal(result.education_level_category, "advanced_secondary");
+});
+
+
+test("cross-checks controller evidence and uses the printed section total for selective marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Three",
+        pdfText: `COMMERCE TEST
+SECTION A (40 MARKS)
+Answer any 2 out of 4 questions.
+1. Explain trade.
+2. Describe insurance.
+3. Discuss banking.
+4. Define entrepreneurship.`,
+        sectionTotals: [{ section: "A", marks: 40 }],
+        expectedQuestionCount: 4,
+        globalSelection: {
+            required: 2,
+            available: 4,
+            source: "Answer any 2 out of 4 questions",
+        },
+        structuralQuestions: [
+            { question_number: 1, text: "Explain trade." },
+            { question_number: 2, text: "Describe insurance." },
+            { question_number: 3, text: "Discuss banking." },
+            { question_number: 4, text: "Define entrepreneurship." },
+        ],
+    });
+
+    assert.equal(result.questions.length, 4);
+    assert.ok(result.questions.every(question => question.selection_required));
+    assert.ok(result.questions.every(question => question.selection_count === 2));
+    assert.ok(result.questions.every(question => question.selection_total === 4));
+    assert.ok(result.questions.every(question => question.max_marks === 20));
+    assert.equal(result.total_marks, 40);
+});
+
+test("does not force paper-level selection across multiple unrelated sections", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "General Studies",
+        level: "Certificate",
+        pdfText: `CERTIFICATE TEST
+SECTION A (20 MARKS)
+1. Define communication (10 marks).
+2. Explain teamwork (10 marks).
+SECTION B (20 MARKS)
+3. Describe leadership (10 marks).
+4. Explain planning (10 marks).`,
+        globalSelection: {
+            required: 2,
+            available: 4,
+            source: "Answer any 2 out of 4 questions",
+        },
+    });
+
+    assert.ok(result.questions.every(question => !question.selection_required));
+    assert.ok(result.recommendations.some(item => /multiple sections/i.test(item)));
+});
+
+
+test("does not allocate marks from an unverified controller section-total hint", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Three",
+        pdfText: `COMMERCE TEST
+SECTION A
+Answer any 2 out of 4 questions.
+1. Explain trade.
+2. Describe insurance.
+3. Discuss banking.
+4. Define entrepreneurship.`,
+        sectionTotals: [{ section: "A", marks: 40 }],
+    });
+
+    assert.ok(result.questions.every(question => question.max_marks === 0));
+    assert.ok(result.recommendations.some(item => /exact source line is unverified/i.test(item)));
+});

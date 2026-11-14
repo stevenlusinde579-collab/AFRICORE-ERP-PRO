@@ -23,6 +23,15 @@ const TOPIC_KEYWORDS = {
     English: ["grammar", "comprehension", "composition", "noun", "verb", "adjective", "tense", "literature", "passage"],
     Kiswahili: ["sarufi", "fasihi", "methali", "nahau", "nomino", "kitenzi", "ufahamu", "insha"],
     "Business Studies": ["business", "entrepreneur", "marketing", "management", "customer", "capital", "enterprise", "trade"],
+    Agriculture: ["crop", "livestock", "soil", "irrigation", "fertilizer", "fertiliser", "pest", "disease", "farm", "cultivation", "harvest", "animal husbandry"],
+    Economics: ["demand", "supply", "market", "inflation", "unemployment", "national income", "opportunity cost", "scarcity", "utility", "production"],
+    "Computer Studies": ["computer", "hardware", "software", "algorithm", "programming", "database", "network", "operating system", "input", "output"],
+    ICT: ["information technology", "communication technology", "computer", "internet", "network", "data", "digital", "software", "hardware"],
+    "Food and Nutrition": ["nutrition", "food", "diet", "carbohydrate", "protein", "vitamin", "mineral", "balanced diet", "cooking", "hygiene"],
+    Literature: ["poem", "poetry", "novel", "play", "character", "plot", "theme", "setting", "narrator", "literary"],
+    French: ["grammaire", "vocabulaire", "conjugaison", "lecture", "compréhension", "écriture", "verbe", "nom"],
+    "Physical Education": ["fitness", "exercise", "sport", "athletics", "training", "muscle", "health", "warm-up", "rules of play"],
+    "Religious Education": ["religion", "faith", "bible", "quran", "scripture", "prayer", "worship", "prophet", "moral", "ethics"],
 };
 
 const BLOOM_VERBS = [
@@ -665,8 +674,72 @@ const effectiveMarks = (questions) => {
     return [...total.values()].reduce((sum, value) => sum + value, 0);
 };
 
+
+const inferExpectedAnswerGuidance = (questionText, topic, subjectName, levelCategory) => {
+    const text = String(questionText || "").replace(/\s+/g, " ").trim();
+    const lower = text.toLowerCase();
+    const topicLabel = topic ? String(topic).toLowerCase() : null;
+    const subjectLabel = String(subjectName || "the subject").trim();
+    const has = (...verbs) => verbs.some(verb => new RegExp("\\b" + verb + "\\b", "i").test(lower));
+    const countMatch = lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b/);
+    const count = countMatch ? (numberValue(countMatch[1]) ?? Number(countMatch[1])) : null;
+    const focus = topicLabel ? " concerning " + topicLabel : " relevant to " + subjectLabel;
+    if (has("calculate", "compute", "work out", "solve", "determine")) {
+        return "Expected response: show the relevant method or formula, substitute the given values, show working steps, and state the final answer with appropriate units where applicable. This is an assessment expectation, not a solved answer.";
+    }
+    if (has("define", "what is", "meaning of")) {
+        return "Expected response: give a clear and accurate definition" + focus + ", using the key concept and its distinguishing features. The exact subject content should be checked against the taught syllabus.";
+    }
+    if (has("state", "mention", "name", "identify", "list", "give")) {
+        return "Expected response: provide " + (count && count > 1 ? count + " " : "") + "distinct, relevant point(s)" + focus + ". Award credit only for correct, non-duplicated points and follow any printed subpart requirements.";
+    }
+    if (has("explain", "describe", "discuss", "elaborate")) {
+        return "Expected response: present a relevant explanation" + focus + ", develop each required point with supporting detail or an example, and address every part of the instruction. The marking guide should award credit for accurate, relevant points.";
+    }
+    if (has("compare", "contrast", "differentiate", "distinguish")) {
+        return "Expected response: identify the items being compared and give clear paired similarities and/or differences using the comparison criteria stated in the question.";
+    }
+    if (has("evaluate", "assess", "justify", "critically")) {
+        return "Expected response: make a reasoned judgement supported by relevant evidence, explain the supporting arguments, and reach a justified conclusion.";
+    }
+    if (has("draw", "sketch", "illustrate", "plot")) {
+        return "Expected response: provide the requested accurate and appropriately labelled drawing, sketch, illustration or plot; assess required features, labels, scale and presentation where relevant.";
+    }
+    if (has("match", "pair", "relate", "correspond")) {
+        return "Expected response: correctly match each item in the first list or column with its corresponding item in the second list, preserving the printed item structure.";
+    }
+    if (has("fill", "complete", "tick", "circle", "choose", "select")) {
+        return "Expected response: select or supply the correct response for each printed item. Count each response slot once and do not treat answer options as separate main questions.";
+    }
+    if (has("read", "passage", "comprehension")) {
+        return "Expected response: answer each comprehension item using relevant evidence from the supplied passage and follow the exact response requested in each subpart.";
+    }
+    if (levelCategory === "early_years") {
+        return "Expected response: the learner should complete the stated age-appropriate activity (for example recognition, tracing, counting, matching, colouring or oral response). The teacher should confirm the expected response and any rubric against the worksheet.";
+    }
+    return "Expected response: follow the command verb and address all printed parts of the question. The source text does not provide enough evidence to generate a reliable subject-specific model answer; teacher marking guidance is required.";
+};
+
+const assessQuestionQuality = (question) => {
+    const text = String(question.question_text || "").trim();
+    const issues = [];
+    if (text.length < 12) issues.push("Question wording is very short; check that the full stem was extracted.");
+    if (/\b(?:figure|diagram|table|graph|map|passage|list\s+[ab])\b/i.test(text) &&
+        !/\b(?:shown|below|above|following|given|attached|provided)\b/i.test(text)) {
+        issues.push("Question refers to supporting material; verify that the referenced figure, table, graph, map or passage is present.");
+    }
+    if (question.max_marks <= 0) issues.push("Marks are not established from reliable printed evidence.");
+    if (question.bloom_level === "Unknown") issues.push("Cognitive command could not be classified confidently.");
+    return issues;
+};
+
 export const analyzePaperWithRules = ({
     pdfText,
+    structuralQuestions = [],
+    sectionTotals = [],
+    expectedQuestionCount = 0,
+    globalSelection = null,
+    gradingCriteria = "",
     subjectName = "Unknown Subject",
     level = "Unknown Level",
     examName = "Examination",
@@ -679,11 +752,78 @@ export const analyzePaperWithRules = ({
     }
 
     const educationLevelCategory = classifyEducationLevel(level, text);
-    const sections = splitPaper(text, level);
     const questions = [];
     const blooms = {};
     const topics = new Set();
     const recommendations = [];
+    const sections = splitPaper(text, level);
+    const structuralEvidence = Array.isArray(structuralQuestions) ? structuralQuestions : [];
+    const declaredSections = Array.isArray(sectionTotals) ? sectionTotals : [];
+    const structuralByNumber = new Map();
+    for (const item of structuralEvidence) {
+        const number = Number(item?.question_number);
+        const questionText = String(item?.text || item?.question_text || "").trim();
+        if (Number.isInteger(number) && number > 0 && questionText) {
+            const key = String(number);
+            if (!structuralByNumber.has(key)) structuralByNumber.set(key, []);
+            structuralByNumber.get(key).push(questionText);
+        }
+    }
+    for (const section of sections) {
+        const declared = declaredSections.find(item =>
+            String(item?.section || item?.name || "").toUpperCase() === String(section.name).toUpperCase()
+        );
+        if (declared && Number(declared.marks) > 0) {
+            // The controller's lightweight total detector has no source-line
+            // provenance. It is therefore a cross-check only and must never
+            // create marks or trigger allocation on its own.
+            if (Number(section.total_marks) > 0 &&
+                Math.abs(Number(section.total_marks) - Number(declared.marks)) > 0.01) {
+                recommendations.push("Section " + section.name + " has conflicting section-total evidence (" +
+                    section.total_marks + " versus " + declared.marks + " marks); verify the printed heading.");
+            } else if (!(Number(section.total_marks) > 0)) {
+                recommendations.push("A possible " + declared.marks + "-mark total was detected near Section " +
+                    section.name + " by the lightweight PDF scanner, but its exact source line is unverified. It was not used to allocate question marks.");
+            }
+        }
+    }
+    const declaredCount = Number(expectedQuestionCount) || 0;
+    const structuralCount = structuralEvidence.length;
+    if (declaredCount > 0 && declaredCount !== sections.reduce((sum, section) => sum + section.questions.length, 0)) {
+        recommendations.push("The paper's introductory question-count instruction indicates " + declaredCount +
+            " questions, while the text structure identifies " +
+            sections.reduce((sum, section) => sum + section.questions.length, 0) +
+            ". Review numbering and subparts; the declared count was treated as a cross-check, not a reason to invent questions.");
+    }
+    if (structuralCount > 0) {
+        const parsedCount = sections.reduce((sum, section) => sum + section.questions.length, 0);
+        if (structuralCount !== parsedCount) {
+            recommendations.push("The controller's independent PDF question extraction found " + structuralCount +
+                " question blocks while the section parser found " + parsedCount +
+                ". The two inventories differ; inspect the original paper before approval.");
+        }
+    }
+    if (gradingCriteria && String(gradingCriteria).trim()) {
+        recommendations.push("The examination has configured grading-scale data. These grade bands are not question-level marks and have not been used to alter the paper's mark allocation.");
+    }
+    if (curriculum && String(curriculum).trim()) {
+        recommendations.push("Curriculum context was supplied. Topic coverage classifications remain limited to identifiable evidence in the extracted question text.");
+    }
+    if (globalSelection && Number(globalSelection.required) > 0 &&
+        Number(globalSelection.available) >= Number(globalSelection.required)) {
+        const onlySection = sections.length === 1 ? sections[0] : null;
+        if (onlySection && !onlySection.selection.selection_required) {
+            onlySection.selection = {
+                selection_required: true,
+                selection_count: Number(globalSelection.required),
+                selection_total: Number(globalSelection.available),
+                selection_instruction: String(globalSelection.source || "Global answer-any instruction detected in PDF"),
+            };
+        } else if (!onlySection) {
+            recommendations.push("A paper-level selection instruction was detected (" + globalSelection.source +
+                "), but multiple sections were found. It was not assigned to an individual section without reliable section scope.");
+        }
+    }
     let confidenceTotal = 0;
 
     for (const section of sections) {
@@ -733,9 +873,13 @@ export const analyzePaperWithRules = ({
                 difficulty_level: inferDifficulty(source.text, marks),
                 bloom_level: bloom,
                 question_type: inferQuestionType(source.text),
-                answer_expected: null,
+                answer_expected: inferExpectedAnswerGuidance(source.text, topic.topic, subjectName, educationLevelCategory),
                 ai_confidence: marks > 0 ? 82 : 55,
-                ai_explanation: "Rule-Based Engine uses visible wording and structural evidence; semantic interpretation and expected answers require teacher review.",
+                ai_explanation: "Rule-Based classification derived from the printed command verb, question wording, subject context and detected structure. " +
+                    (structuralByNumber.has(String(source.question_number))
+                        ? "The independent PDF text extractor also detected this question label; verify exact wording where numbering repeats by section. "
+                        : "The independent lightweight PDF extractor did not find this question label; verify it against the original paper. ") +
+                    "Verify subject-specific content and referenced visual material with the original paper.",
                 is_selective: Boolean(selection.selection_required),
                 selection_required: Boolean(selection.selection_required),
                 selection_count: selection.selection_required ? selection.selection_count : 0,
@@ -953,17 +1097,26 @@ export const analyzePaperWithRules = ({
             ? explicitPaperTotal
             : totalMarks,
         difficulty: overallDifficulty,
-        quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
+        quality_score: Math.max(0, Math.min(100, Math.round(
+            55 +
+            (questions.length ? questions.filter(question => question.max_marks > 0).length / questions.length : 0) * 20 +
+            (questions.length ? questions.filter(question => question.topic).length / questions.length : 0) * 10 +
+            (questions.length ? questions.filter(question => question.bloom_level !== "Unknown").length / questions.length : 0) * 5 +
+            (questions.length ? questions.filter(question => assessQuestionQuality(question).length === 0).length / questions.length : 0) * 10 -
+            recommendations.filter(item => /mismatch|could not|confirm|review/i.test(item)).length * 3
+        ))),
         syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
         sections: sectionOutput,
         topics_found: [...topics],
         weak_topics: [],
         strong_topics: [],
         recommendations: [...new Set(recommendations)],
-        teacher_comments: "Rule-Based Engine does not generate expected answers. Review uncertain marks and all semantic classifications against the original paper before approval.",
+        teacher_comments: "Rule-Based Engine generated marking expectations from question command verbs and structure; these are not a substitute for a subject-specific official marking scheme. Review uncertain marks, answer expectations, referenced visual material and semantic classifications against the original paper before approval.",
         blooms_distribution: blooms,
         questions,
     };
 };
 
 export default analyzePaperWithRules;
+
+
