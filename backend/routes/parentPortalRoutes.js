@@ -427,12 +427,17 @@ router.post("/login", async (req, res) => {
     // Resolve the tenant from the matched account, never from a school name or
     // a client-supplied school_id. If credentials collide across tenants, fail
     // closed instead of guessing which school's student to expose.
-    const { data: matches, error } = await supabase.from("parent_portal_accounts")
-      .select("id,student_id,school_id,username,password_hash,password_salt,must_change_password,is_active")
-      .eq("username", username).eq("is_active", true).limit(1000);
-    if (error) throw error;
+    const matches = [];
+    for (let offset = 0; ; offset += 1000) {
+      const page = await supabase.from("parent_portal_accounts")
+        .select("id,student_id,school_id,username,password_hash,password_salt,must_change_password,is_active")
+        .eq("username", username).eq("is_active", true).range(offset, offset + 999);
+      if (page.error) throw page.error;
+      matches.push(...(page.data || []));
+      if ((page.data || []).length < 1000) break;
+    }
     const verified = [];
-    for (const candidate of matches || []) {
+    for (const candidate of matches) {
       if (await passwordMatches(password, candidate.password_salt, candidate.password_hash)) verified.push(candidate);
     }
     if (verified.length !== 1) {
