@@ -1006,3 +1006,46 @@ Count the pictures.`,
     assert.match(result.questions[0].question_text, /Trace the letter B/i);
     assert.match(result.questions[1].question_text, /Colour three circles/i);
 });
+
+
+test("generates command-verb marking expectations and analysis metadata", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Mathematics",
+        level: "Standard IV",
+        pdfText: `STANDARD IV MATHEMATICS
+SECTION A (20 MARKS)
+1. Calculate the area of a rectangle with length 5 cm and width 3 cm (10 marks).
+2. State two properties of a square (10 marks).`,
+    });
+    assert.match(result.questions[0].answer_expected, /formula|method/i);
+    assert.match(result.questions[1].answer_expected, /2 distinct/i);
+    assert.match(result.questions[0].ai_explanation, /command verb/i);
+    assert.ok(result.quality_score >= 0 && result.quality_score <= 100);
+    assert.equal(result.education_level_category, "primary");
+});
+
+test("generates age-appropriate activity expectations for Nursery tasks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "General Knowledge",
+        level: "Nursery",
+        pdfText: `NURSERY ACTIVITY
+1. Trace letter A.
+2. Colour the red circle.`,
+    });
+    assert.equal(result.education_level_category, "early_years");
+    assert.match(result.questions[0].answer_expected, /age-appropriate activity/i);
+});
+
+test("provides structured marking guidance for compare and matching questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Biology",
+        level: "Form Five",
+        pdfText: `BIOLOGY ADVANCED LEVEL
+SECTION A (20 MARKS)
+1. Compare mitosis and meiosis (10 marks).
+2. Match each term with its corresponding definition (10 marks).`,
+    });
+    assert.match(result.questions[0].answer_expected, /paired similarities|differences/i);
+    assert.match(result.questions[1].answer_expected, /correctly match each item/i);
+    assert.equal(result.education_level_category, "advanced_secondary");
+});
