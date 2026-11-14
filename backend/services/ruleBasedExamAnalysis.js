@@ -324,6 +324,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
     const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitTaskHeaderPattern = /^\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = lines[lineIndex];
@@ -480,9 +481,9 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     // prompts (e.g. "Colour the circle", "Trace letter A"). When no numbered
     // structure exists, preserve each clearly stated task as a main item.
     if (!sections.some(section => section.questions.length) && isEarlyYearsLevel(level, normalizedText)) {
-        const taskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|onyesha|fafanua)\\b/i;
+        const taskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|onyesha|fafanua)\b/i;
         for (const section of sections) {
-            const taskLines = section.instructionText.split("\\n").map(line => line.trim()).filter(Boolean);
+            const taskLines = section.instructionText.split("\n").map(line => line.trim()).filter(Boolean);
             let task = null;
             for (const line of taskLines) {
                 if (taskPattern.test(line)) {
@@ -493,7 +494,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
                     };
                     section.questions.push(task);
                 } else if (task && !isAdministrativeInstruction(line) && !detectSectionHeading(line)) {
-                    task.text += "\\n" + line;
+                    task.text += "\n" + line;
                 }
             }
         }
