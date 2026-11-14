@@ -631,6 +631,11 @@ export const analyzePaperWithRules = ({
             const objectiveItemsHavePerItemMarks = pending.length === section.questions.length &&
                 objectiveItemCounts.every(count => count > 0) &&
                 objectiveItemMarkValues.every(value => value !== null);
+            const objectiveItemsTotal = objectiveItemCounts.reduce((sum, count) => sum + count, 0);
+            const objectiveItemsReconcile = pending.length === section.questions.length &&
+                objectiveItemCounts.every(count => count > 0) &&
+                Number(section.total_marks) > 0 &&
+                objectiveItemsTotal === Number(section.total_marks);
 
             if (objectiveItemsHavePerItemMarks) {
                 pending.forEach((question, index) => {
@@ -640,6 +645,13 @@ export const analyzePaperWithRules = ({
                     question.mark_evidence = "Inferred from " + objectiveItemCounts[index] +
                         " objective/matching items multiplied by the PDF instruction of " +
                         perItemInstruction + " mark(s) per item.";
+                    question.ai_confidence = 82;
+                });
+            } else if (objectiveItemsReconcile) {
+                pending.forEach((question, index) => {
+                    question.max_marks = objectiveItemCounts[index];
+                    question.mark_source = "inferred_from_section_structure";
+                    question.mark_evidence = "The detected objective/matching item counts exactly reconcile with the printed section total; no conflicting per-item mark instruction was detected.";
                     question.ai_confidence = 82;
                 });
             } else if (perQuestionInstruction !== null) {
