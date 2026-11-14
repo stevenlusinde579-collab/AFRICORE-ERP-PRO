@@ -1,6 +1,11 @@
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, DOMMatrix, ImageData, Path2D } from "@napi-rs/canvas";
 import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
+// PDF.js uses browser canvas primitives while rendering pages in Node.
+if (typeof globalThis.DOMMatrix === "undefined") globalThis.DOMMatrix = DOMMatrix;
+if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = ImageData;
+if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = Path2D;
 
 export const OCR_MAX_PAGES = 25;
 export const OCR_MAX_FILE_BYTES = 30 * 1024 * 1024;
