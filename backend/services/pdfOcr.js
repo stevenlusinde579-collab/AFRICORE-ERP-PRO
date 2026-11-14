@@ -12,7 +12,7 @@ export const OCR_MAX_FILE_BYTES = 30 * 1024 * 1024;
 
 export const isLikelyScannedPdfText = (value) => {
     const text = String(value || "").replace(/\s+/g, " ").trim();
-    const words = text.match(/[\\p{L}\\p{N}]{2,}/gu) || [];
+    const words = text.match(/[\p{L}\p{N}]{2,}/gu) || [];
     const usefulWords = words.filter(word => !/^camscanner$/i.test(word));
     const scannerWatermarkOnly =
         /camscanner/i.test(text) && usefulWords.length <= 3;
