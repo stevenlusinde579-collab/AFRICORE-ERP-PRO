@@ -81,3 +81,38 @@ test("rejects PDFs beyond the OCR page safety limit", async () => {
         /safety limit/
     );
 });
+
+test("falls back to English if the Swahili language pack cannot load", async () => {
+    const requestedLanguages = [];
+    const fakeDocument = {
+        numPages: 1,
+        async getPage() {
+            return {
+                getViewport: () => ({ width: 10, height: 10 }),
+                render: () => ({ promise: Promise.resolve() }),
+                cleanup: () => {},
+            };
+        },
+        async destroy() {},
+    };
+    const result = await extractScannedPdfText(Buffer.from("%PDF-test"), {
+        getDocument: () => ({ promise: Promise.resolve(fakeDocument) }),
+        createCanvas: () => ({
+            width: 10,
+            height: 10,
+            getContext: () => ({}),
+            toBuffer: () => Buffer.from("image"),
+        }),
+        createWorker: async (languages) => {
+            requestedLanguages.push(languages);
+            if (languages === "eng+swa") throw new Error("Swahili traineddata unavailable");
+            return {
+                setParameters: async () => {},
+                recognize: async () => ({ data: { text: "QUESTION 1. Explain the accounting process.", confidence: 88 } }),
+                terminate: async () => {},
+            };
+        },
+    });
+    assert.deepEqual(requestedLanguages, ["eng+swa", "eng"]);
+    assert.match(result, /QUESTION 1/);
+});
