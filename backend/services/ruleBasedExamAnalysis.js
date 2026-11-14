@@ -480,6 +480,25 @@ const countObjectiveItems = (text) => {
     return roman.length;
 };
 
+const extractPerItemMarks = (text) => {
+    const source = String(text || "").replace(/\s+/g, " ").toLowerCase();
+    const patterns = [
+        /\beach\s+(?:correct\s+)?(?:item|question|response|answer)\s+(?:carries|is\s+worth|gets|earns|has)\s+(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\b/i,
+        /\b(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:marks?|mks?)\s+(?:for|per)\s+(?:each\s+)?(?:item|question|correct\s+answer)\b/i,
+        /\bone\s+mark\s+(?:is\s+)?awarded\s+for\s+each\s+(?:item|correct\s+answer|match)\b/i,
+        /\bkila\s+(?:kipengele|jibu|oanisha)\s+(?:kina|lina|ni)\s+(?:alama\s*)?(moja|mbili|tatu|nne|tano|\d+)\b/i,
+        /\b( moja|mbili|tatu|nne|tano|\d+)\s*(?:alama|marks?)\s+kwa\s+kila\s+(?:kipengele|jibu|oanisha)\b/i,
+    ];
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const raw = String(match[1] || "one").trim();
+        const value = numberValue(raw) ?? ({ mbila: 2, mbili: 2, tatu: 3, nne: 4, tano: 5 }[raw]);
+        if (Number.isFinite(value) && value > 0) return value;
+    }
+    return null;
+};
+
 const isObjectiveOrMatching = (text) =>
     /choose.{0,120}correct answer|multiple.choice|list\s*a[\s\S]{0,700}list\s*b|list\s*b[\s\S]{0,700}list\s*a|kifungu\s*a[\s\S]{0,700}kifungu\s*b|kifungu\s*b[\s\S]{0,700}kifungu\s*a|match.{0,100}(?:list|terms|items|kifungu)/i.test(String(text || ""));
 
@@ -603,17 +622,18 @@ export const analyzePaperWithRules = ({
                     ? countObjectiveItems(question.question_text)
                     : 0
             );
-            const objectiveItemsTotal = objectiveItemCounts.reduce((sum, count) => sum + count, 0);
-            const objectiveItemsReconcile = pending.length === section.questions.length &&
+            const perItemInstruction = extractPerItemMarks(sectionText);
+            const objectiveItemsHavePerItemMarks = pending.length === section.questions.length &&
                 objectiveItemCounts.every(count => count > 0) &&
-                Number(section.total_marks) > 0 &&
-                objectiveItemsTotal === Number(section.total_marks);
+                perItemInstruction !== null;
 
-            if (objectiveItemsReconcile) {
+            if (objectiveItemsHavePerItemMarks) {
                 pending.forEach((question, index) => {
-                    question.max_marks = objectiveItemCounts[index];
+                    question.max_marks = Number((objectiveItemCounts[index] * perItemInstruction).toFixed(2));
                     question.mark_source = "inferred_from_section_structure";
-                    question.mark_evidence = "Inferred from the count of objective/matching items; the item count exactly reconciles with the printed section total.";
+                    question.mark_evidence = "Inferred from " + objectiveItemCounts[index] +
+                        " objective/matching items multiplied by the PDF instruction of " +
+                        perItemInstruction + " mark(s) per item.";
                     question.ai_confidence = 82;
                 });
             } else if (perQuestionInstruction !== null) {
