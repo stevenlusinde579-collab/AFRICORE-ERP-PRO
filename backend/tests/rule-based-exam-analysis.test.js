@@ -302,3 +302,56 @@ Non-programmable calculators may be used.`,
     assert.ok(!result.questions.some(q => /this paper consists|answer all questions/i.test(q.question_text)));
     assert.equal(result.questions.filter(q => q.question_number === 1).length, 1);
 });
+
+test("recognizes selection instructions that specify a section without printing its denominator", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Chemistry",
+        level: "Form Four",
+        pdfText: `CHEMISTRY
+SECTION C (30 MARKS)
+Answer two (2) questions from section C.
+9. Explain Le Chatelier's principle (15 marks)
+10. Describe chemical properties of ethanol (15 marks)
+11. Explain extraction of sulphur (15 marks)`,
+    });
+    const sectionC = result.questions.filter(question => question.section === "C");
+    assert.equal(sectionC.length, 3);
+    assert.ok(sectionC.every(question => question.selection_required));
+    assert.ok(sectionC.every(question => question.selection_count === 2));
+    assert.ok(sectionC.every(question => question.selection_total === 3));
+    assert.equal(result.total_marks, 30);
+});
+
+test("uses declared section totals for the paper total and reports a question allocation mismatch", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Mathematics",
+        level: "Form Three",
+        pdfText: `MATHEMATICS
+SECTION A (40 MARKS)
+1. Calculate the value of x (5 marks)
+2. Solve the equation (5 marks)
+SECTION B (60 MARKS)
+3. Find the area of a triangle (20 marks)
+4. Calculate the volume of a cylinder (20 marks)`,
+    });
+    assert.equal(result.total_marks, 50);
+    assert.ok(result.recommendations.some(item =>
+        item.includes("printed section totals add up to 100") &&
+        item.includes("detected question allocation gives 50")
+    ));
+});
+
+test("computes selective effective marks from the highest required optional question marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Geography",
+        level: "Form Four",
+        pdfText: `GEOGRAPHY
+SECTION C (30 MARKS)
+Answer any two out of the following three questions.
+1. Explain climate (20 marks)
+2. Describe weather (15 marks)
+3. Discuss rainfall (10 marks)`,
+    });
+    assert.equal(result.total_marks, 35);
+    assert.ok(result.recommendations.some(item => item.includes("declares 30 marks")));
+});
