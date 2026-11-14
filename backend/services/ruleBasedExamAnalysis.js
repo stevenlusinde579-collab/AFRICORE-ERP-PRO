@@ -105,7 +105,7 @@ const splitPaper = (pdfText) => {
     };
 
     currentSection = ensureSection();
-    const questionPattern = /^\s*(?:QUESTION\s*)?(\d{1,3})\s*[.)\]:-]\s+(.*)$/i;
+    const questionPattern = /^\s*(?:QUESTION\s*)?(\d{1,3})\s*[.)\]:-](?:\s+(.*))?$/i;
 
     for (const line of lines) {
         const heading = detectSectionHeading(line);
@@ -235,10 +235,14 @@ export const analyzePaperWithRules = ({
 
         const pending = [];
         let explicitTotal = 0;
+        const explicitQuestionMarks = [];
 
         for (const source of section.questions) {
             const marks = extractMarkValues(source.text);
-            if (marks > 0) explicitTotal += marks;
+            if (marks > 0) {
+                explicitTotal += marks;
+                explicitQuestionMarks.push(marks);
+            }
             const topic = inferTopic(source.text, subjectName);
             const bloom = inferBloom(source.text);
             const question = {
@@ -275,25 +279,37 @@ export const analyzePaperWithRules = ({
             const requiredCount = selection.selection_required
                 ? Number(selection.selection_count || 0)
                 : section.questions.length;
-            const explicitRequiredMarks = selection.selection_required
-                ? 0
-                : explicitTotal;
-            const remaining = Number(section.total_marks) - explicitRequiredMarks;
-            const divisor = selection.selection_required
-                ? requiredCount
-                : pending.length;
-            if (divisor > 0 && remaining >= 0) {
-                const inferred = remaining / divisor;
+            let inferred = null;
+            let evidence = "";
+
+            if (selection.selection_required && explicitQuestionMarks.length > 0) {
+                const uniqueExplicitMarks = [...new Set(explicitQuestionMarks)];
+                if (uniqueExplicitMarks.length === 1) {
+                    inferred = uniqueExplicitMarks[0];
+                    evidence = "Matched the explicit per-question mark value printed for other questions in the same selective section; the section total is retained as a cross-check.";
+                }
+            } else {
+                const remaining = Number(section.total_marks) - explicitTotal;
+                const divisor = selection.selection_required
+                    ? requiredCount
+                    : pending.length;
+                if (divisor > 0 && remaining >= 0) {
+                    inferred = remaining / divisor;
+                    evidence = selection.selection_required
+                        ? "Inferred equally from the printed section total and the explicit answer-any selection count."
+                        : "Inferred by distributing the remaining printed section marks equally among questions with no explicit marks, after preserving explicit question marks.";
+                }
+            }
+
+            if (Number.isFinite(inferred) && inferred > 0) {
                 for (const question of pending) {
                     question.max_marks = Number(inferred.toFixed(2));
                     question.mark_source = "inferred_from_section_structure";
-                    question.mark_evidence = selection.selection_required
-                        ? "Inferred equally from the printed section total and the explicit answer-any selection count."
-                        : "Inferred by distributing the remaining printed section marks equally among questions with no explicit marks, after preserving explicit question marks.";
+                    question.mark_evidence = evidence;
                     question.ai_confidence = 72;
                 }
             } else {
-                recommendations.push("Section " + section.name + " marks could not be allocated reliably; confirm the marks with the teacher.");
+                recommendations.push("Section " + section.name + " marks could not be allocated reliably from the available explicit marks and section instructions; confirm the marks with the teacher.");
             }
         } else if (pending.length) {
             recommendations.push("Some questions in Section " + section.name + " have no printed marks; teacher confirmation is required.");
