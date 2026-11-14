@@ -92,3 +92,73 @@ State two effects of migration.`,
     assert.equal(result.questions[0].max_marks, 5);
     assert.equal(result.questions[1].max_marks, 5);
 });
+
+
+test("uses parent question total once and does not double-count sub-question marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Four",
+        pdfText: `COMMERCE
+SECTION A (10 MARKS)
+Answer all questions.
+QUESTION 1 (10 marks)
+(a) Define trade (2 marks)
+(b) Explain commerce (3 marks)
+(c) State five aids to trade (5 marks)`,
+    });
+
+    assert.equal(result.questions.length, 1);
+    assert.equal(result.questions[0].max_marks, 10);
+    assert.equal(result.total_marks, 10);
+});
+
+test("sums labelled sub-question marks when no parent total is printed", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Biology",
+        level: "Form Two",
+        pdfText: `BIOLOGY
+SECTION A (10 MARKS)
+1. Answer the following:
+(a) Define a cell (2 marks)
+(b) Name three cell organelles (3 marks)
+(c) Explain the function of the nucleus (5 marks)`,
+    });
+
+    assert.equal(result.questions[0].max_marks, 10);
+    assert.equal(result.total_marks, 10);
+});
+
+test("uses explicit equal-per-question instructions ahead of inferred section division", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "History",
+        level: "Form Three",
+        pdfText: `HISTORY
+SECTION B (40 MARKS)
+Each question carries 10 marks. Answer any 2 out of 4 questions.
+1. Explain migration.
+2. Discuss colonial rule.
+3. Describe nationalism.
+4. Explain independence.`,
+    });
+
+    assert.ok(result.questions.every(question => question.max_marks === 10));
+    assert.equal(result.total_marks, 20);
+    assert.ok(result.recommendations.some(item => item.includes("declares 40 marks")));
+});
+
+test("flags a mismatch between printed section total and explicit question marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Mathematics",
+        level: "Standard IV",
+        pdfText: `MATHEMATICS
+SECTION A (40 MARKS)
+1. Add 2 and 3 (5 marks)
+2. Multiply 4 and 5 (5 marks)
+3. Divide 20 by 4 (5 marks)
+4. Subtract 3 from 9 (5 marks)`,
+    });
+
+    assert.ok(result.recommendations.some(item =>
+        item.includes("declares 40 marks") && item.includes("20 marks")
+    ));
+});
