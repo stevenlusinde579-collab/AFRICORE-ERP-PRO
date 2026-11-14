@@ -323,8 +323,8 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
-    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
-    const explicitTaskHeaderPattern = /^\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitTaskHeaderPattern = /^\s*(?:ACTIVITY|TASK|EXERCISE|ITEM)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*[.)\]:-]?\s*(.*)$/i;
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         const line = lines[lineIndex];
@@ -378,7 +378,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
             continue;
         }
         if (questionMatch) {
-            const questionNumber = Number(questionMatch[1] || questionMatch[2]);
+            const questionNumber = numberValue(questionMatch[1]) ?? Number(questionMatch[1] || questionMatch[2]);
             const questionOpening = String(questionMatch[3] || questionMatch[2] || "").trim();
 
             // Exam-room instructions and page furniture are not question stems,
