@@ -78,6 +78,15 @@ const extractMarkValues = (text) => {
     // question mark and must not be added to its children.
     const labels = [...source.matchAll(/(?:\(\s*(?:iii|ii|iv|vi{0,3}|ix|v|x|[a-i])\s*\)|(?:^|\n)\s*(?:[a-i]|iii|ii|iv|vi{0,3}|ix|v|x)\s*[.)])(?=\s|$)/gim)];
     if (labels.length) {
+        // Some papers print a mark value once with an at-sign to mean
+        // "for each subpart" (for example, five Roman-numbered parts and
+        // "(2 marks @)"). Apply that explicit per-part value to every
+        // detected subpart instead of counting the annotation only once.
+        const perPartMark = source.match(/(\\d+(?:\\.\\d+)?)\\s*(?:marks?|mks?)\\s*@/i);
+        if (perPartMark && labels.length > 1) {
+            return Number(perPartMark[1]) * labels.length;
+        }
+
         const ranges = labels.map((label, index) => ({
             start: label.index,
             end: labels[index + 1]?.index ?? source.length,
