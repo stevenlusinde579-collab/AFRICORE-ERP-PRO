@@ -394,6 +394,28 @@ export const analyzePaperWithRules = ({
         }
     }
 
+    // Cross-check fully known question allocations against each printed
+    // section total. A mismatch is surfaced for teacher review, never silently
+    // corrected by changing explicit marks.
+    for (const section of sections) {
+        if (!(Number(section.total_marks) > 0)) continue;
+        const sectionQuestions = questions.filter(question => question.section === section.name);
+        if (!sectionQuestions.length || sectionQuestions.some(question => !(Number(question.max_marks) > 0))) continue;
+
+        const firstSelected = sectionQuestions.find(question => question.selection_required);
+        const allocated = firstSelected
+            ? Number(firstSelected.max_marks) * Number(firstSelected.selection_count || 1)
+            : sectionQuestions.reduce((sum, question) => sum + Number(question.max_marks), 0);
+        const declared = Number(section.total_marks);
+        if (Math.abs(allocated - declared) > 0.01) {
+            recommendations.push(
+                "Section " + section.name + " declares " + declared +
+                " marks, but the detected question allocation gives " + Number(allocated.toFixed(2)) +
+                " marks. Review the printed instructions before approving this marking structure."
+            );
+        }
+    }
+
     const totalMarks = effectiveMarks(questions);
     const sectionOutput = sections.map(section => {
         const sectionQuestions = questions.filter(q => q.section === section.name);
