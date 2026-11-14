@@ -563,14 +563,26 @@ export const analyzePaperWithRules = ({
     const declaredSectionsTotal = allSectionsHaveDeclaredTotals
         ? declaredSectionTotals.reduce((sum, value) => sum + value, 0)
         : null;
-    const totalMarks = allocatedQuestionMarks;
-    if (declaredSectionsTotal !== null &&
+    const allQuestionsHaveMarks = questions.length > 0 &&
+        questions.every(question => Number(question.max_marks) > 0);
+    const declaredTotalIsWithinSmallTolerance = declaredSectionTotals !== null &&
+        Math.abs(declaredSectionsTotal - allocatedQuestionMarks) <= 2;
+    // Keep the printed total when question marks remain unknown or the
+    // difference is small. If every question is marked and the discrepancy
+    // is material, report the complete question allocation and flag the mismatch.
+    const totalMarks = declaredSectionTotals !== null &&
+        (!allQuestionsHaveMarks || declaredTotalIsWithinSmallTolerance)
+        ? declaredSectionsTotal
+        : allocatedQuestionMarks;
+    if (declaredSectionTotals !== null &&
         Math.abs(declaredSectionsTotal - allocatedQuestionMarks) > 0.01) {
         recommendations.push(
             "The printed section totals add up to " + Number(declaredSectionsTotal.toFixed(2)) +
             " marks, while the detected question allocation gives " +
             Number(allocatedQuestionMarks.toFixed(2)) +
-            " marks. The paper total follows the printed section totals; review the missing or misread question marks before approval."
+            " marks. The reported paper total follows " +
+            (totalMarks === declaredSectionsTotal ? "the printed section totals" : "the complete detected question allocation") +
+            "; review the difference before approval."
         );
     }
     const sectionOutput = sections.map(section => {
