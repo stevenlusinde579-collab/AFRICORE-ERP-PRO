@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import ParentLiveMeeting from "../components/ParentLiveMeeting";
 import { StudentReportPrint } from "./examination/ResultsAnalysis";
@@ -10,9 +9,6 @@ const money = (value) => new Intl.NumberFormat("en-TZ", { style: "currency", cur
 const dateText = (value) => value ? new Date(value).toLocaleDateString() : "-";
 
 export default function ParentPortal() {
-  const [searchParams] = useSearchParams();
-  const [schools, setSchools] = useState([]);
-  const [schoolId, setSchoolId] = useState(searchParams.get("school") || "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -71,9 +67,6 @@ export default function ParentPortal() {
     }
   };
 
-  useEffect(() => {
-    api.get("/parent-portal/schools").then((r) => setSchools(r.data?.schools || [])).catch(() => setError("Imeshindikana kupata orodha ya shule."));
-  }, []);
   useEffect(() => { if (token && !mustChangePassword) loadDashboard(token); }, [token, mustChangePassword]);
   useEffect(() => {
     if (!token || mustChangePassword) return undefined;
@@ -85,7 +78,7 @@ export default function ParentPortal() {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       if (loginMode === "sponsor") {
-        const response = await api.post("/sponsor-portal/login", { school_id: schoolId, username, password });
+        const response = await api.post("/sponsor-portal/login", { username, password });
         sessionStorage.setItem("africore_sponsor_portal_token", response.data.token);
         sessionStorage.setItem("africore_sponsor_students", JSON.stringify(response.data.students || []));
         sessionStorage.setItem("africore_sponsor_center", JSON.stringify(response.data.center || null));
@@ -93,7 +86,7 @@ export default function ParentPortal() {
         setPortalHome(true); setShowSponsorStudents(false);
         setPassword(""); setShowPassword(false); setNotice("Umeingia kama Sponsor. Chagua mwanafunzi unayetaka kuona taarifa zake.");
       } else {
-        const response = await api.post("/parent-portal/login", { school_id: schoolId, username, password });
+        const response = await api.post("/parent-portal/login", { username, password });
         sessionStorage.setItem(TOKEN_KEY, response.data.token);
         setLoginStudent(response.data.student || null);
         setPortalHome(true);
@@ -265,7 +258,6 @@ export default function ParentPortal() {
         <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1"><button type="button" onClick={()=>{setLoginMode("parent");setError("");}} className={"rounded-lg p-2 text-sm font-bold "+(loginMode==="parent"?"bg-white shadow":"text-slate-500")}>Login as Parent</button><button type="button" onClick={()=>{setLoginMode("sponsor");setError("");}} className={"rounded-lg p-2 text-sm font-bold "+(loginMode==="sponsor"?"bg-white shadow":"text-slate-500")}>Login as Sponsor</button></div>
         {error && <div className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         <form onSubmit={signIn} className="mt-6 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">Shule<select required value={schoolId} onChange={(e)=>setSchoolId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3"><option value="">Chagua shule</option>{schools.map((s)=><option key={s.id} value={s.id}>{s.school_name}</option>)}</select></label>
           <label className="block text-sm font-semibold text-slate-700">{loginMode === "parent" ? "Username — Jina kamili la mwanafunzi" : "Username — Email ya msimamizi"}<input required value={username} onChange={(e)=>setUsername(e.target.value)} autoComplete="username" className="mt-1 w-full rounded-xl border border-slate-300 p-3" placeholder={loginMode === "parent" ? "Mfano: Amina John Peter" : "name@example.com"}/></label>
           <label className="block text-sm font-semibold text-slate-700">Password
             <div className="relative mt-1">
