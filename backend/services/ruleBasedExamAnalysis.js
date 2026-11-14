@@ -44,7 +44,7 @@ const normalize = (value) => String(value || "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
+const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|section\s+[a-c]\s+(?:carries|has|contains)\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -133,7 +133,7 @@ const extractSectionTotal = (text) => {
 };
 
 const detectSelection = (text, availableQuestions = 0) => {
-    const source = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const source = String(text || "").replace(/\s+/g, " ").trim().toLowerCase().replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s*\(\s*\d+\s*\)/gi, "$1");
     const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
     const patterns = [
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+(?:the\\s+following\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
