@@ -256,7 +256,7 @@ test("parses OCR-compressed Chemistry paper headings, excludes instructions and 
 This paper consists of eleven (11) questions. This paper
 Q1
 Foreach ofthe items (i)-(x),choose the correct answer from the given alternatives.
-Match the items in List A with the responses in List B.
+A the respective terms in List B by the parts of the electrolytic cell with the item in the answer booklet.
 SECTIONB(54Marks)
 Answer all questions in this section.
 Q3
@@ -292,7 +292,7 @@ Non-programmable calculators may be used.`,
     assert.equal(result.questions.filter(q => q.section === "A").length, 2);
     assert.equal(result.questions.filter(q => q.section === "B").length, 6);
     assert.equal(result.questions.filter(q => q.section === "C").length, 3);
-    assert.match(result.questions.find(q => q.section === "A" && q.question_number === 2).question_text, /List A.*List B/s);
+    assert.match(result.questions.find(q => q.section === "A" && q.question_number === 2).question_text, /List B/i);
     assert.equal(result.questions.find(q => q.section === "A" && q.question_number === 1).max_marks, 8);
     assert.equal(result.questions.find(q => q.section === "B" && q.question_number === 3).max_marks, 9);
     assert.equal(result.questions.find(q => q.section === "C" && q.question_number === 9).max_marks, 15);
