@@ -256,7 +256,6 @@ test("parses OCR-compressed Chemistry paper headings, excludes instructions and 
 This paper consists of eleven (11) questions. This paper
 Q1
 Foreach ofthe items (i)-(x),choose the correct answer from the given alternatives.
-Q2
 Match the items in List A with the responses in List B.
 SECTIONB(54Marks)
 Answer all questions in this section.
@@ -289,7 +288,14 @@ Non-programmable calculators may be used.`,
 
     assert.equal(result.total_questions, 11);
     assert.equal(result.questions.length, 11);
+    assert.equal(result.total_marks, 100);
+    assert.equal(result.questions.filter(q => q.section === "A").length, 2);
+    assert.equal(result.questions.filter(q => q.section === "B").length, 6);
     assert.equal(result.questions.filter(q => q.section === "C").length, 3);
+    assert.match(result.questions.find(q => q.section === "A" && q.question_number === 2).question_text, /List A.*List B/s);
+    assert.equal(result.questions.find(q => q.section === "A" && q.question_number === 1).max_marks, 8);
+    assert.equal(result.questions.find(q => q.section === "B" && q.question_number === 3).max_marks, 9);
+    assert.equal(result.questions.find(q => q.section === "C" && q.question_number === 9).max_marks, 15);
     assert.ok(result.questions.filter(q => q.section === "C").every(q => q.selection_required));
     assert.ok(result.questions.every(q => !/write your examination number|non-programmable calculators/i.test(q.question_text)));
     assert.ok(!result.questions.some(q => /this paper consists|answer all questions/i.test(q.question_text)));
