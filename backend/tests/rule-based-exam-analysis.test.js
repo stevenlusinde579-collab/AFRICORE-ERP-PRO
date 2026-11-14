@@ -598,3 +598,48 @@ test("Commerce paper excludes exam-room warning and scopes selective Section C o
         /cellular phones|unauthorized materials|examination room/i.test(question.question_text)
     ));
 });
+
+
+test("Book Keeping PDF: ignores exam instructions and date-like ledger rows as question boundaries", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Book Keeping",
+        level: "Form Four",
+        examName: "PRE-MOCK",
+        pdfText: [
+            "BOOK KEEPING PRE-MOCK",
+            "This paper consists of fifteen (15) questions.",
+            "Sections A carries fifteen (15) marks and B carries forty (40) marks and Section C carries forty-five (45) marks.",
+            "SECTION A (15 MARKS)",
+            "Answer all questions.",
+            "Q1",
+            "For each of the items (i) – (x), choose the correct answer from among the given alternatives.",
+            "(i) Item one (ii) Item two (iii) Item three (iv) Item four (v) Item five",
+            "(vi) Item six (vii) Item seven (viii) Item eight (ix) Item nine (x) Item ten",
+            "Q2",
+            "Match the explanation in column A with the corresponding names in column B.",
+            "(i) First definition (ii) Second definition (iii) Third definition (iv) Fourth definition (v) Fifth definition",
+            "SECTION B (40 MARKS)",
+            "Q3",
+            "Briefly explain the following concepts (a) Exchequer account (b) Accounting officer.",
+            "Sections A carries fifteen (15) marks and B carries forty (40) marks and Section C carries forty-five (45) marks.",
+            "All writings must be in blue or black ink.",
+            "All answers must be written in the spaces provided.",
+            "Q4",
+            "The following information was extracted from the records. 1.2018 Sales ledger (Dr) 190,800 Sales ledger (Cr) 1,100.",
+            "SECTION C (45 MARKS)",
+            "Answer all questions in this section.",
+            "Q5",
+            "Prepare a statement of financial position from the information provided (15 marks)."
+        ].join("\\n"),
+    });
+
+    assert.equal(result.questions.some(q => /all writings must|all answers must|sections? a carries/i.test(q.question_text)), false);
+    assert.equal(result.questions.some(q => /^1\\.2018/m.test(q.question_text)), true);
+    assert.equal(result.questions.filter(q => q.section === "A").length, 2);
+    assert.deepEqual(
+        result.questions.filter(q => q.section === "A").map(q => q.max_marks),
+        [10, 5]
+    );
+    assert.ok(result.questions.every(q => q.question_number > 0));
+    assert.ok(!result.questions.some(q => q.question_number === 31));
+});
