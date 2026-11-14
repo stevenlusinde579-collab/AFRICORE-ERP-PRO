@@ -59,3 +59,8 @@ Answer all questions.
     assert.equal(result.questions[1].question_type, "Matching");
     assert.equal(result.questions[0].max_marks, 5);
 });
+
+
+test("leaves generic wording to the existing subject-aware question classifier", () => {
+    assert.equal(classifyQuestionFormat("What is the meaning of trade?"), null);
+});
