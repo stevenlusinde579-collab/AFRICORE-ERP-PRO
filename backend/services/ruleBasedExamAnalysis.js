@@ -44,7 +44,7 @@ const normalize = (value) => String(value || "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|section\s+[a-c]\s+(?:carries|has|contains)\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
+const isAdministrativeInstruction = (value) => /^(?:this paper\s+consists|section\s+[a-c]\s+(?:carries|has|contains)|answer all questions?\b|answer any\b|answer two\b|jibu maswali yote\b|jibu maswali mawili\b|write your examination number\b|communication devices\b|all writing must\b|non[- ]programmable calculators?\b|the following constants\b|section\s+[a-c]\s+(?:carries|has|contains)\b|unauthorized materials\b|do not open\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -199,7 +199,7 @@ const splitPaper = (pdfText) => {
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
     const questionPattern = /^\s*(\d{1,3})\s*[.)\]:-]\s*(.*)$/i;
-    const explicitQuestionHeaderPattern = /^\s*QUESTION\s+(\d{1,3})\s*[.)\]:-]?\s*(.*)$/i;
+    const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
 
     for (const line of lines) {
         const heading = detectSectionHeading(line);
