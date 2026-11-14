@@ -144,6 +144,7 @@ const detectSelection = (text, availableQuestions = 0) => {
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?following\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?(?:the\\s+)?questions?\\s+(?:in|from)\\s+(?:this|the)\\s+section\\b", "i"), count: 1, total: 0 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\s+(?:in|from)\\s+(?:this|the)\\s+section\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\s+from\\s+section\\s+[a-e]\\b", "i"), count: 1, total: 0 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+the\\s+following\\s+"+token+"\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+(?:kati ya|miongoni mwa)\\s+(?:maswali?\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+ya\\s+(?:maswali?\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
