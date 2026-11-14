@@ -4,6 +4,10 @@ const NUMBER_WORDS = {
     eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
     fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
     nineteen: 19, twenty: 20,
+    moja: 1, mmoja: 1, moja: 1, mawili: 2, wawili: 2,
+    matatu: 3, watatu: 3, manne: 4, wanne: 4,
+    matano: 5, watano: 5, sita: 6, saba: 7,
+    nane: 8, tisa: 9, kumi: 10,
 };
 
 const TOPIC_KEYWORDS = {
@@ -118,28 +122,36 @@ const extractSectionTotal = (text) => {
     return firstMark ? Number(firstMark[1]) : null;
 };
 
-const detectSelection = (text) => {
-    const source = String(text || "").replace(/\s+/g, " ").trim();
-    const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)";
+const detectSelection = (text, availableQuestions = 0) => {
+    const source = String(text || "").replace(/\\s+/g, " ").trim().toLowerCase();
+    const token = "(\\\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
     const patterns = [
-        new RegExp("\\b(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+"+token+"\\b", "i"),
-        new RegExp("\\b(?:answer|attempt|choose|select|do)\\s+any\\s+"+token+"\\b", "i"),
-        new RegExp("\\bany\\s+"+token+"\\s+questions?\\b", "i"),
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\\\s+(?:any\\\\s+)?"+token+"\\\\s+(?:questions?\\\\s+)?(?:out of|from)\\\\s+"+token+"\\\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\\\s+(?:maswali?\\\\s+)?"+token+"\\\\s+(?:kati ya|miongoni mwa)\\\\s+(?:maswali?\\\\s+)?"+token+"\\\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\\\s+any\\\\s+"+token+"\\\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\\\s+(?:maswali?\\\\s+)?(?:yoyote\\\\s+)?"+token+"\\\\s+(?:tu\\\\s+)?(?:maswali?)?\\\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("any\\\\s+"+token+"\\\\s+questions?\\\\b", "i"), count: 1, total: 0 },
     ];
-    for (const pattern of patterns) {
-        const match = source.match(pattern);
+
+    for (const item of patterns) {
+        const match = source.match(item.regex);
         if (!match) continue;
-        const nums = [...match].slice(1).map(numberValue).filter(Number.isFinite);
-        if (!nums.length || nums[0] <= 0) continue;
-        const selectionCount = nums[0];
-        const selectionTotal = nums[1] ?? null;
+        const selectionCount = numberValue(match[item.count]);
+        const selectionTotal = item.total ? numberValue(match[item.total]) : null;
+        if (!Number.isFinite(selectionCount) || selectionCount <= 0) continue;
+        if (selectionTotal !== null && (!Number.isFinite(selectionTotal) || selectionTotal < selectionCount)) continue;
+        const effectiveTotal = selectionTotal || (availableQuestions > selectionCount ? availableQuestions : null);
+        // A selection instruction is meaningful only when fewer questions are
+        // required than are available (or the paper explicitly states an "any" choice).
+        if (effectiveTotal !== null && effectiveTotal <= selectionCount) continue;
         return {
             selection_required: true,
             selection_count: selectionCount,
-            selection_total: selectionTotal,
+            selection_total: effectiveTotal,
             selection_instruction: match[0],
         };
     }
+
     return {
         selection_required: false,
         selection_count: 0,
@@ -211,7 +223,7 @@ const splitPaper = (pdfText) => {
     for (const section of sections) {
         section.instructionText = section.instructionText.join("\n");
         section.total_marks = extractSectionTotal(section.instructionText);
-        section.selection = detectSelection(section.instructionText);
+        section.selection = detectSelection(section.instructionText, section.questions.length);
         section.questions = section.questions.filter(question => question.text.trim());
     }
 
@@ -304,8 +316,8 @@ export const analyzePaperWithRules = ({
 
     for (const section of sections) {
         const sectionText = section.instructionText + "\n" + section.questions.map(q => q.text).join("\n");
-        const selection = detectSelection(sectionText) .selection_required
-            ? detectSelection(sectionText)
+        const selection = detectSelection(sectionText, section.questions.length).selection_required
+            ? detectSelection(sectionText, section.questions.length)
             : section.selection;
         const groupId = selection.selection_required
             ? "SECTION-" + section.name + "-" + selection.selection_count + "-OF-" + (selection.selection_total || section.questions.length)
