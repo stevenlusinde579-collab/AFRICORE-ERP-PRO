@@ -77,7 +77,7 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
             // Some deployments may not have the Swahili traineddata available
             // from the configured language-data host. English remains a safe
             // fallback so OCR can still attempt to read the examination.
-            console.warn("SWahili OCR language unavailable; retrying English:", languageError?.message || languageError);
+            console.warn("Swahili OCR language unavailable; retrying English:", languageError?.message || languageError);
             worker = await workerFactory("eng", 1, workerOptions);
             console.log("PDF OCR LANGUAGES: English fallback");
         }
