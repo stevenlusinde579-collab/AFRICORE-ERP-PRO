@@ -34,6 +34,22 @@ const BLOOM_VERBS = [
     { level: "Remembering", verbs: ["define", "state", "list", "name", "identify", "mention", "what is", "who is"] },
 ];
 
+
+// Education-level recognition is descriptive only: it never forces a paper into
+// an O-Level template. Unknown levels continue through the generic parser.
+const classifyEducationLevel = (level, paperText = "") => {
+    const source = (String(level || "") + " " + String(paperText || "").slice(0, 5000)).toLowerCase();
+    if (/\b(baby\s*class|nursery|kindergarten|\bkg\b|pre[- ]?primary|early\s+years|early\s+childhood)\b/.test(source)) return "early_years";
+    if (/\b(primary|standard\s*[1-7ivx]+|std\.?\s*[1-7]|grade\s*[1-7])\b/.test(source)) return "primary";
+    if (/\b(o[- ]?level|ordinary\s+level|form\s*[1-4ivx]+|form\s+(one|two|three|four))\b/.test(source)) return "ordinary_secondary";
+    if (/\b(a[- ]?level|advanced\s+level|form\s*[5-6vix]+|form\s+(five|six))\b/.test(source)) return "advanced_secondary";
+    if (/\b(certificate|diploma|degree|university|college|undergraduate|postgraduate)\b/.test(source)) return "tertiary";
+    return "general";
+};
+
+const isEarlyYearsLevel = (level, paperText = "") =>
+    classifyEducationLevel(level, paperText) === "early_years";
+
 const normalize = (value) => String(value || "")
     .replace(/\r/g, "\n")
     // Remove recurring PDF page headers/footers before detecting question numbers.
@@ -283,7 +299,7 @@ const extractNamedSectionTotals = (text) => {
     return totals;
 };
 
-const splitPaper = (pdfText) => {
+const splitPaper = (pdfText, level = "Unknown Level") => {
     const normalizedText = normalize(pdfText);
     const lines = normalizedText.split("\n");
     const namedSectionTotals = extractNamedSectionTotals(normalizedText);
@@ -360,8 +376,8 @@ const splitPaper = (pdfText) => {
             continue;
         }
         if (questionMatch) {
-            const questionNumber = Number(questionMatch[1]);
-            const questionOpening = String(questionMatch[2] || "").trim();
+            const questionNumber = Number(questionMatch[1] || questionMatch[2]);
+            const questionOpening = String(questionMatch[3] || questionMatch[2] || "").trim();
 
             // Exam-room instructions and page furniture are not question stems,
             // even when OCR places a question-like number before them.
@@ -457,6 +473,29 @@ const splitPaper = (pdfText) => {
         if (Number(headingTotal) > 0) section.total_marks = headingTotal;
         section.selection = detectSelection(section.instructionText, section.questions.length, section.name);
         section.questions = section.questions.filter(question => question.text.trim());
+    }
+
+    // Early-years worksheets often present activities as unnumbered action
+    // prompts (e.g. "Colour the circle", "Trace letter A"). When no numbered
+    // structure exists, preserve each clearly stated task as a main item.
+    if (!sections.some(section => section.questions.length) && isEarlyYearsLevel(level, normalizedText)) {
+        const taskPattern = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|onyesha|fafanua)\\b/i;
+        for (const section of sections) {
+            const taskLines = section.instructionText.split("\\n").map(line => line.trim()).filter(Boolean);
+            let task = null;
+            for (const line of taskLines) {
+                if (taskPattern.test(line)) {
+                    task = {
+                        question_number: section.questions.length + 1,
+                        text: line,
+                        section: section.name,
+                    };
+                    section.questions.push(task);
+                } else if (task && !isAdministrativeInstruction(line) && !detectSectionHeading(line)) {
+                    task.text += "\\n" + line;
+                }
+            }
+        }
     }
 
     const nonEmpty = sections.filter(section => section.questions.length);
@@ -585,7 +624,8 @@ export const analyzePaperWithRules = ({
         throw new Error("Rule-Based Engine requires readable text in the PDF. This file appears scanned or contains too little extractable text. Choose AI Analysis (Gemini) for scanned papers.");
     }
 
-    const sections = splitPaper(text);
+    const educationLevelCategory = classifyEducationLevel(level, text);
+    const sections = splitPaper(text, level);
     const questions = [];
     const blooms = {};
     const topics = new Set();
@@ -846,6 +886,7 @@ export const analyzePaperWithRules = ({
         summary: "Rule-Based structural analysis for " + subjectName + " (" + level + "). " + questions.length + " main questions were detected.",
         subject: subjectName,
         level,
+        education_level_category: educationLevelCategory,
         exam_name: examName,
         exam_type: examType,
         curriculum,
