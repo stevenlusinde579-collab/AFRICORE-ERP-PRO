@@ -44,7 +44,7 @@ const normalize = (value) => String(value || "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|section\s*[a-c]\s+(?:carries|has|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b)/i.test(String(value || "").trim());
+const isAdministrativeInstruction = (value) => /^(?:(?:this\s+paper\s+)?consists\b|sections?\s*[a-c]\s+(?:carries|have|has|contain|contains)\b|answer\s+all\s+questions?\b|answer\s+any\b|answer\s+two\b|jibu\s*maswali\s*yote\b|jibu\s*maswali\s*mawili\b|write\s+your\s+(?:examination|exam)\s+number\b|communication\s*devices\b|all\s*writing\s*must\b|all\s*writings?\s+must\b|all\s+answers?\s+must\b|answers?\s+must\s+be\s+written\b|non[- ]programmable\s+calculators?\b|the\s*following\s+constants\b|unauthorized\s+materials\b|do\s+not\s+open\b|cellular\s+phones?\b.*\bnot\s+allowed\b|(?:any\s+)?unauthorized\s+materials?\b.*\bnot\s+allowed\b|(?:candidates?|students?)\s+are\s+not\s+allowed\b)/i.test(String(value || "").trim());
 const numberValue = (value) => {
     const token = String(value || "").trim().toLowerCase();
     if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
@@ -304,7 +304,7 @@ const splitPaper = (pdfText) => {
     // Accept both "1. Explain..." and explicit headers such as
     // "QUESTION 1" followed by the question on the next line. Do not treat
     // arbitrary standalone page numbers as questions.
-    const questionPattern = /^\s*(\d{1,3})\s*[.)\]:-]\s*(.*)$/i;
+    const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
     const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
 
     for (const line of lines) {
@@ -475,8 +475,11 @@ const inferQuestionType = (text) => {
 };
 
 const countObjectiveItems = (text) => {
+    // PDF text extraction frequently collapses a whole MCQ/matching list onto
+    // one line. Count item labels anywhere they occur, but require punctuation
+    // plus following whitespace so ordinary Roman numerals in prose are ignored.
     const source = String(text || "");
-    const roman = [...source.matchAll(/(?:^|\n)\s*\(?\s*(?:i|ii|iii|iv|v|vi|vii|viii|ix|x)\s*[.)]\s+/gim)];
+    const roman = [...source.matchAll(/(?:^|[\s,;])\(?\s*(?:i|ii|iii|iv|v|vi|vii|viii|ix|x)\s*[.)]\s+/gim)];
     return roman.length;
 };
 
