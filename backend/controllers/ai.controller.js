@@ -2297,22 +2297,38 @@ export const analyzePaper =
             // original uploaded PDF through its existing flow.
             const requestedAnalysisMethod = String(req.body?.analysis_method || "ai").trim().toLowerCase();
             const enableScannedPdfOcr = requestedAnalysisMethod === "rule_based";
-            const pdfReadTimeout = enableScannedPdfOcr ? 150000 : 30000;
+            const pdfReadTimeout = enableScannedPdfOcr ? 120000 : 30000;
+            const pdfAbortController = enableScannedPdfOcr ? new AbortController() : null;
+            let pdfTimeoutId = null;
 
             try {
-                pdfText = await withTimeout(
-                    readPDF(req.file.buffer, { enableOcr: enableScannedPdfOcr }),
-                    pdfReadTimeout,
-                    enableScannedPdfOcr
-                        ? "PDF text extraction and OCR timed out after 150 seconds."
-                        : "PDF text extraction timed out after 30 seconds."
-                );
+                if (enableScannedPdfOcr) {
+                    pdfTimeoutId = setTimeout(() => {
+                        const timeoutError = new Error("Scanned PDF OCR timed out after 120 seconds and was cancelled. Try a clearer or shorter PDF.");
+                        timeoutError.code = "PDF_OCR_TIMEOUT";
+                        pdfAbortController.abort(timeoutError);
+                    }, pdfReadTimeout);
+
+                    pdfText = await readPDF(req.file.buffer, {
+                        enableOcr: true,
+                        signal: pdfAbortController.signal,
+                    });
+                    if (pdfAbortController.signal.aborted) throw pdfAbortController.signal.reason;
+                } else {
+                    pdfText = await withTimeout(
+                        readPDF(req.file.buffer, { enableOcr: false }),
+                        pdfReadTimeout,
+                        "PDF text extraction timed out after 30 seconds."
+                    );
+                }
             } catch (error) {
-                console.error(
-                    "PDF TEXT EXTRACTION FAILED; CONTINUING WITH ORIGINAL PDF:",
-                    error?.message || error
-                );
+                console.error("PDF TEXT EXTRACTION FAILED:", error?.message || error);
+                // Never feed an empty PDF string to Rule-Based Engine after OCR
+                // failed. The abort signal terminates the active OCR worker.
+                if (enableScannedPdfOcr) throw error;
                 pdfText = "";
+            } finally {
+                if (pdfTimeoutId) clearTimeout(pdfTimeoutId);
             }
 
             pdfText =
