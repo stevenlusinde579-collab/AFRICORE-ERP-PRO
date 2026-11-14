@@ -2435,6 +2435,7 @@ export const analyzePaper =
                         examName,
                         examType,
                         curriculum,
+                        gradingCriteria,
                     });
                     aiResult.analysis_method = "rule_based";
                     aiRawResponse = JSON.stringify(aiResult);
