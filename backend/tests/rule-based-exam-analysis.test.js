@@ -162,3 +162,27 @@ SECTION A (40 MARKS)
         item.includes("declares 40 marks") && item.includes("20 marks")
     ));
 });
+
+
+test("detects Kiswahili alama notation on parent questions and roman subparts", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Kiswahili",
+        level: "Form Two",
+        pdfText: "MTIHANI WA KISWAHILI\nSEHEMU A (ALAMA 20)\nJibu maswali yote.\n1. Soma habari kisha jibu maswali yafuatayo:\n(i) Eleza maana ya msamiati (alama 4)\n(ii) Taja wahusika wawili (alama 4)\n(iii) Fafanua dhamira kuu (alama 4)\n2. Andika insha kuhusu mazingira (alama 8)",
+    });
+    assert.equal(result.questions.length, 2);
+    assert.equal(result.questions[0].max_marks, 12);
+    assert.equal(result.questions[1].max_marks, 8);
+    assert.equal(result.total_marks, 20);
+    assert.ok(result.questions.every(question => question.mark_source === "explicit_in_paper"));
+});
+
+test("detects Kiswahili section totals and equal marks per question", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Kiswahili",
+        level: "Standard VII",
+        pdfText: "MTIHANI WA KISWAHILI\nSEHEMU B (JUMLA YA ALAMA 40)\nKila swali lina alama 10.\n1. Taja methali nne.\n2. Eleza maana ya nahau.\n3. Andika sentensi tano.\n4. Eleza matumizi ya nomino.",
+    });
+    assert.equal(result.total_marks, 40);
+    assert.ok(result.questions.every(question => question.max_marks === 10));
+});
