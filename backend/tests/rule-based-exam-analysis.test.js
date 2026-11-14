@@ -245,3 +245,53 @@ Answer any TWO of the following THREE questions.
     assert.ok(result.questions.every(question => question.selection_count === 2));
     assert.equal(result.total_marks, 40);
 });
+
+
+test("parses OCR-compressed Chemistry paper headings, excludes instructions and keeps selective Section C", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Chemistry",
+        level: "Form Four",
+        examName: "PRE-MOCK",
+        pdfText: `CHEMISTRY PRE-MOCK
+This paper consists of eleven (11) questions. This paper
+Q1
+Foreach ofthe items (i)-(x),choose the correct answer from the given alternatives.
+Q2
+Match the items in List A with the responses in List B.
+SECTIONB(54Marks)
+Answer all questions in this section.
+Q3
+Briefly explain six economic activities that depend on water.
+Q4
+(a) Justify the fact that hydrogen has got both properties of group I and group VII elements.
+(b) Compare the reactions of sodium metal with elements G and H.
+Q5
+(a) Categorize each variable in the solubility experiment.
+(b) Identify six steps to follow when conducting a scientific investigation.
+Q6
+Suggest three advantages and three disadvantages of hydrogen as a fuel.
+Q7
+Identify six steps in lighting a luminous flame.
+Q8
+Explain temporary and permanent hardness of water.
+SECTIONC(30Marks)
+Answer two (2) questions from section C.
+Q9
+Briefly explain Le Chatelier's principle and explain four ways to increase product yield.
+Q10
+Describe the chemical properties of ethanol.
+Q11
+Explain the extraction and uses of sulphur.
+Page 5 of 5 CSEE2025
+Write your Examination Number on every page of your answer booklet.
+Non-programmable calculators may be used.`,
+    });
+
+    assert.equal(result.total_questions, 11);
+    assert.equal(result.questions.length, 11);
+    assert.equal(result.questions.filter(q => q.section === "C").length, 3);
+    assert.ok(result.questions.filter(q => q.section === "C").every(q => q.selection_required));
+    assert.ok(result.questions.every(q => !/write your examination number|non-programmable calculators/i.test(q.question_text)));
+    assert.ok(!result.questions.some(q => /this paper consists|answer all questions/i.test(q.question_text)));
+    assert.equal(result.questions.filter(q => q.question_number === 1).length, 1);
+});
