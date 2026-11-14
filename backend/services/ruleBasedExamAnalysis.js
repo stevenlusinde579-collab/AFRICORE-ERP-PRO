@@ -123,14 +123,17 @@ const extractSectionTotal = (text) => {
 };
 
 const detectSelection = (text, availableQuestions = 0) => {
-    const source = String(text || "").replace(/\\s+/g, " ").trim().toLowerCase();
-    const token = "(\\\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
+    const source = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const token = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi)";
     const patterns = [
-        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\\\s+(?:any\\\\s+)?"+token+"\\\\s+(?:questions?\\\\s+)?(?:out of|from)\\\\s+"+token+"\\\\b", "i"), count: 1, total: 2 },
-        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\\\s+(?:maswali?\\\\s+)?"+token+"\\\\s+(?:kati ya|miongoni mwa)\\\\s+(?:maswali?\\\\s+)?"+token+"\\\\b", "i"), count: 1, total: 2 },
-        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\\\s+any\\\\s+"+token+"\\\\b", "i"), count: 1, total: 0 },
-        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\\\s+(?:maswali?\\\\s+)?(?:yoyote\\\\s+)?"+token+"\\\\s+(?:tu\\\\s+)?(?:maswali?)?\\\\b", "i"), count: 1, total: 0 },
-        { regex: new RegExp("any\\\\s+"+token+"\\\\s+questions?\\\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+(?:the\\s+following\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+the\\s+following\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+(?:kati ya|miongoni mwa)\\s+(?:maswali?\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+ya\\s+(?:maswali?\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+any\\s+"+token+"\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?(?:yoyote\\s+)?"+token+"\\s+(?:tu\\s+)?(?:maswali?)?\\b", "i"), count: 1, total: 0 },
+        { regex: new RegExp("any\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 0 },
     ];
 
     for (const item of patterns) {
@@ -141,8 +144,6 @@ const detectSelection = (text, availableQuestions = 0) => {
         if (!Number.isFinite(selectionCount) || selectionCount <= 0) continue;
         if (selectionTotal !== null && (!Number.isFinite(selectionTotal) || selectionTotal < selectionCount)) continue;
         const effectiveTotal = selectionTotal || (availableQuestions > selectionCount ? availableQuestions : null);
-        // A selection instruction is meaningful only when fewer questions are
-        // required than are available (or the paper explicitly states an "any" choice).
         if (effectiveTotal !== null && effectiveTotal <= selectionCount) continue;
         return {
             selection_required: true,
