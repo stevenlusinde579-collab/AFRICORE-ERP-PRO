@@ -355,3 +355,21 @@ Answer any two out of the following three questions.
     assert.equal(result.total_marks, 35);
     assert.ok(result.recommendations.some(item => item.includes("declares 30 marks")));
 });
+
+test("multiplies a single @ mark annotation across all Roman-numeral subparts", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Mathematics",
+        level: "Form Three",
+        pdfText: `MATHEMATICS
+SECTION B (10 MARKS)
+12. Given the relation R. Find the:
+I. Domain of R (2 marks @)
+II. Range of R
+III. Inverse of R
+IV. Domain of R-1
+V. Range of R-1`,
+    });
+    assert.equal(result.questions.length, 1);
+    assert.equal(result.questions[0].max_marks, 10);
+    assert.equal(result.total_marks, 10);
+});
