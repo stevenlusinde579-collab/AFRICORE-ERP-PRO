@@ -271,8 +271,7 @@ const splitPaper = (pdfText) => {
         // OCR often drops the printed "2." before a matching exercise.
         // When a multiple-choice question is followed by a List A/List B
         // matching instruction, recover the next main-question boundary.
-        const looksLikeMatchingQuestion = /\\blist\\s*a\\b/i.test(line) &&
-            /\\blist\\s*b\\b/i.test(line) &&
+        const looksLikeMatchingQuestion = /\blist\s*b\b/i.test(line) &&
             /(?:match|respective|pair|items|terms)/i.test(line);
         const previousLooksLikeObjective = currentQuestion &&
             /(?:correct answer|alternatives|multiple.choice|choose the correct)/i.test(currentQuestion.text);
