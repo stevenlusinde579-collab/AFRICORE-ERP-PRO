@@ -651,6 +651,12 @@ export default function AIAnalysisDashboard() {
             ?.selectedFile ||
         null;
 
+    const initialAnalysisResponse =
+        location?.state?.aiAnalysisResponse || null;
+
+    const selectedAnalysisMethod =
+        location?.state?.analysisMethod || "ai";
+
 
     const selectedExamSubjectId =
         useMemo(() => {
@@ -1375,6 +1381,11 @@ export default function AIAnalysisDashboard() {
                     )
                 );
 
+                formData.append(
+                    "analysis_method",
+                    selectedAnalysisMethod
+                );
+
                 try {
                     if (
                         mountedRef.current
@@ -1740,8 +1751,15 @@ export default function AIAnalysisDashboard() {
                             );
 
                         if (
-                            fileSubmissionRef.current !==
-                            fileKey
+                            initialAnalysisResponse?.success === true &&
+                            initialAnalysisResponse?.analysis_completed === true
+                        ) {
+                            // ExamUpload already submitted the selected engine.
+                            // Do not upload the same PDF a second time or silently
+                            // invoke Gemini after a Rule-Based analysis.
+                            fileSubmissionRef.current = fileKey;
+                        } else if (
+                            fileSubmissionRef.current !== fileKey
                         ) {
                             await analyzePaper(
                                 selectedFile,
@@ -1755,9 +1773,7 @@ export default function AIAnalysisDashboard() {
                                 navigate(
                                     `/examination/${examId}/ai-analysis`,
                                     {
-                                        replace:
-                                            true,
-
+                                        replace: true,
                                         state: {
                                             examSubjectId:
                                                 selectedExamSubjectId,
@@ -1875,6 +1891,8 @@ export default function AIAnalysisDashboard() {
         examId,
         selectedExamSubjectId,
         selectedFile,
+        initialAnalysisResponse,
+        selectedAnalysisMethod,
         getFileKey,
         analyzePaper,
         loadAnalysis,
@@ -2729,7 +2747,7 @@ export default function AIAnalysisDashboard() {
 
                                     <p className="mt-1 text-sm text-indigo-700">
                                         Mfumo unasubiri
-                                        AI Analysis
+                                        Examination Analysis
                                         ikamilike.
                                         Hautaonyeshwa
                                         ujumbe wa
@@ -2804,7 +2822,7 @@ export default function AIAnalysisDashboard() {
                                     </div>
 
                                     <h1 className="text-lg sm:text-xl font-black text-slate-900 truncate">
-                                        AI Analysis
+                                        Examination Analysis
                                     </h1>
 
                                 </div>
@@ -3260,7 +3278,7 @@ export default function AIAnalysisDashboard() {
                             />
 
                             <KpiCard
-                                label="AI Confidence"
+                                label="Analysis Confidence"
                                 value={`${averageConfidence}%`}
                                 subtitle="Average question confidence"
                                 icon={
@@ -3402,7 +3420,7 @@ export default function AIAnalysisDashboard() {
                                     icon={
                                         <FaBrain />
                                     }
-                                    title="AI Confidence"
+                                    title="Analysis Confidence"
                                     type={
                                         averageConfidence >=
                                         80
@@ -3820,7 +3838,7 @@ export default function AIAnalysisDashboard() {
                                                                 <div className="bg-white border border-slate-200 rounded-xl p-4">
 
                                                                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                                                                        AI Confidence
+                                                                        Analysis Confidence
                                                                     </p>
 
                                                                     <p className="mt-2 text-xl font-black text-indigo-600">
@@ -3898,7 +3916,7 @@ export default function AIAnalysisDashboard() {
                                                                         <div>
 
                                                                             <p className="font-bold text-indigo-900">
-                                                                                AI Explanation
+                                                                                Analysis Notes
                                                                             </p>
 
                                                                             <p className="mt-1 text-sm text-indigo-800 leading-6">

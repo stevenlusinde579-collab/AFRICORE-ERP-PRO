@@ -3,6 +3,7 @@ import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
+import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
 import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
 // ============================================================
@@ -2413,196 +2414,52 @@ export const analyzePaper =
             // The frontend receives only a safe message.
             // ------------------------------------------------
 
-            const aiStartedAt =
-                Date.now();
-
-            let aiRawResponse;
-
-            try {
-                aiRawResponse =
-                    await withTimeout(
-                        askGeminiWithPDF(
-                            prompt,
-                            req.file.buffer.toString("base64")
-                        ),
-                        120000,
-                        "AI analysis timed out."
-                    );
-            } catch (
-                error
-            ) {
-                console.error(
-                    "GEMINI ANALYSIS ERROR:",
-                    error
-                );
-
-                const rawMessage =
-                    String(
-                        error?.message ||
-                            ""
-                    );
-
-                const isQuotaError =
-                    error?.status ===
-                        429 ||
-                    error?.statusCode ===
-                        429 ||
-                    error?.code ===
-                        429 ||
-                    /429/i.test(
-                        rawMessage
-                    ) ||
-                    /quota/i.test(
-                        rawMessage
-                    ) ||
-                    /resource.?exhausted/i.test(
-                        rawMessage
-                    ) ||
-                    /gemini_quota_exceeded/i.test(
-                        rawMessage
-                    );
-
-                const safeMessage =
-                    isQuotaError
-                        ? "The examination paper was saved successfully, but AI analysis is temporarily unavailable. Please try the AI analysis again later."
-                        : "The examination paper was saved successfully, but AI analysis could not be completed. Please try again.";
-
-                try {
-                    await updatePaperStatus(
-                        examPaperId,
-                        {
-                            status:
-                                "Failed",
-
-                            aiStatus:
-                                "Failed",
-
-                            errorMessage:
-                                safeMessage,
-                        }
-                    );
-                } catch (
-                    statusError
-                ) {
-                    console.error(
-                        "FAILED TO UPDATE PAPER AFTER GEMINI ERROR:",
-                        statusError
-                    );
-                }
-
-                return res
-                    .status(200)
-                    .json({
-                        success:
-                            false,
-
-                        paper_saved:
-                            true,
-
-                        analysis_completed:
-                            false,
-
-                        ai_status:
-                            "Failed",
-
-                        exam_id:
-                            examId,
-
-                        exam_subject_id:
-                            examSubjectId,
-
-                        exam_paper_id:
-                            examPaperId,
-
-                        reused_paper:
-                            reusedPaper,
-
-                        message:
-                            safeMessage,
-                    });
+            const analysisMethod = String(req.body?.analysis_method || "ai").trim().toLowerCase();
+            if (!["ai", "rule_based"].includes(analysisMethod)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid analysis method. Choose AI Analysis or Rule-Based Engine.",
+                });
             }
 
-            console.log(
-                "GEMINI RESPONSE RECEIVED"
-            );
-
-            console.log(
-                "AI RESPONSE TIME:",
-                `${Date.now() - aiStartedAt}ms`
-            );
-
-            // ------------------------------------------------
-            // PARSE AI
-            // ------------------------------------------------
-
             let aiResult;
+            let aiRawResponse;
 
-            try {
-                aiResult = parseAIResult(aiRawResponse);
-            } catch (firstParseError) {
-                console.error(
-                    "AI JSON PARSE ERROR; STARTING ONE CONTROLLED RECOVERY ATTEMPT:",
-                    errorDetails(firstParseError)
-                );
-
-                // Gemini's service validates JSON syntax, but the controller
-                // parser can still reject an unusual provider response. Retry
-                // the original PDF once here as well, using a concise recovery
-                // instruction. This is especially useful for long primary and
-                // early-years papers; never fabricate questions or marks.
+            if (analysisMethod === "rule_based") {
+                const ruleStartedAt = Date.now();
                 try {
-                    const recoveryPrompt = [
-                        String(prompt),
-                        "",
-                        "FINAL JSON RECOVERY MODE:",
-                        "Return exactly one complete valid JSON object using the required schema. Do not include markdown, commentary, or text outside JSON.",
-                        "Keep explanatory text concise to avoid truncation. Preserve all visible main questions and sub-items from the PDF.",
-                        "Do not invent questions, answers, or marks. If marks are not printed or cannot be established from the paper, represent uncertainty according to the schema and recommend teacher review.",
-                        "Close every string, object, and array. Escape quotation marks and control characters inside string values.",
-                    ].join("\n");
-
-                    const recoveryRawResponse = await withTimeout(
-                        askGeminiWithPDF(
-                            recoveryPrompt,
-                            req.file.buffer.toString("base64")
-                        ),
-                        120000,
-                        "AI analysis recovery timed out."
-                    );
-
-                    aiResult = parseAIResult(recoveryRawResponse);
-
-                    console.warn(
-                        "AI JSON RECOVERY SUCCEEDED",
-                        JSON.stringify({
-                            examId,
-                            examPaperId,
-                            originalErrorCode: firstParseError?.code || null,
-                        })
-                    );
-                } catch (recoveryError) {
-                    console.error(
-                        "AI JSON RECOVERY FAILED:",
-                        errorDetails(recoveryError)
-                    );
-
-                    const safeMessage =
-                        "The examination paper was saved, but AI could not produce a complete readable analysis after an automatic retry. Please try again later; if it continues, check the backend AI error logs.";
-
-                    await updatePaperStatus(
+                    aiResult = analyzePaperWithRules({
+                        pdfText,
+                        subjectName,
+                        level,
+                        examName,
+                        examType,
+                        curriculum,
+                    });
+                    aiResult.analysis_method = "rule_based";
+                    aiRawResponse = JSON.stringify(aiResult);
+                    console.log("RULE-BASED EXAM ANALYSIS COMPLETED:", {
+                        examId,
+                        examSubjectId,
                         examPaperId,
-                        {
-                            status: "Failed",
-                            aiStatus: "Failed",
-                            errorMessage: safeMessage,
-                        }
-                    );
-
+                        questions: aiResult.questions?.length || 0,
+                        durationMs: Date.now() - ruleStartedAt,
+                    });
+                } catch (ruleError) {
+                    console.error("RULE-BASED EXAM ANALYSIS ERROR:", ruleError);
+                    const safeMessage = ruleError?.message ||
+                        "The paper was saved, but Rule-Based Engine could not analyse its structure. Try AI Analysis (Gemini) for scanned or complex papers.";
+                    await updatePaperStatus(examPaperId, {
+                        status: "Failed",
+                        aiStatus: "Failed",
+                        errorMessage: safeMessage,
+                    });
                     return res.status(200).json({
                         success: false,
                         paper_saved: true,
                         analysis_completed: false,
                         ai_status: "Failed",
+                        analysis_method: analysisMethod,
                         exam_id: examId,
                         exam_subject_id: examSubjectId,
                         exam_paper_id: examPaperId,
@@ -2610,6 +2467,205 @@ export const analyzePaper =
                         message: safeMessage,
                     });
                 }
+            } else {
+                const aiStartedAt = Date.now();
+    
+    
+    try {
+                    aiRawResponse =
+                        await withTimeout(
+                            askGeminiWithPDF(
+                                prompt,
+                                req.file.buffer.toString("base64")
+                            ),
+                            120000,
+                            "AI analysis timed out."
+                        );
+                } catch (
+                    error
+                ) {
+                    console.error(
+                        "GEMINI ANALYSIS ERROR:",
+                        error
+                    );
+    
+                    const rawMessage =
+                        String(
+                            error?.message ||
+                                ""
+                        );
+    
+                    const isQuotaError =
+                        error?.status ===
+                            429 ||
+                        error?.statusCode ===
+                            429 ||
+                        error?.code ===
+                            429 ||
+                        /429/i.test(
+                            rawMessage
+                        ) ||
+                        /quota/i.test(
+                            rawMessage
+                        ) ||
+                        /resource.?exhausted/i.test(
+                            rawMessage
+                        ) ||
+                        /gemini_quota_exceeded/i.test(
+                            rawMessage
+                        );
+    
+                    const safeMessage =
+                        isQuotaError
+                            ? "The examination paper was saved successfully, but AI analysis is temporarily unavailable. Please try the AI analysis again later."
+                            : "The examination paper was saved successfully, but AI analysis could not be completed. Please try again.";
+    
+                    try {
+                        await updatePaperStatus(
+                            examPaperId,
+                            {
+                                status:
+                                    "Failed",
+    
+                                aiStatus:
+                                    "Failed",
+    
+                                errorMessage:
+                                    safeMessage,
+                            }
+                        );
+                    } catch (
+                        statusError
+                    ) {
+                        console.error(
+                            "FAILED TO UPDATE PAPER AFTER GEMINI ERROR:",
+                            statusError
+                        );
+                    }
+    
+                    return res
+                        .status(200)
+                        .json({
+                            success:
+                                false,
+    
+                            paper_saved:
+                                true,
+    
+                            analysis_completed:
+                                false,
+    
+                            ai_status:
+                                "Failed",
+    
+                            exam_id:
+                                examId,
+    
+                            exam_subject_id:
+                                examSubjectId,
+    
+                            exam_paper_id:
+                                examPaperId,
+    
+                            reused_paper:
+                                reusedPaper,
+    
+                            message:
+                                safeMessage,
+                        });
+                }
+    
+                console.log(
+                    "GEMINI RESPONSE RECEIVED"
+                );
+    
+                console.log(
+                    "AI RESPONSE TIME:",
+                    `${Date.now() - aiStartedAt}ms`
+                );
+    
+                // ------------------------------------------------
+                // PARSE AI
+                // ------------------------------------------------
+    
+    
+                try {
+                    aiResult = parseAIResult(aiRawResponse);
+                } catch (firstParseError) {
+                    console.error(
+                        "AI JSON PARSE ERROR; STARTING ONE CONTROLLED RECOVERY ATTEMPT:",
+                        errorDetails(firstParseError)
+                    );
+    
+                    // Gemini's service validates JSON syntax, but the controller
+                    // parser can still reject an unusual provider response. Retry
+                    // the original PDF once here as well, using a concise recovery
+                    // instruction. This is especially useful for long primary and
+                    // early-years papers; never fabricate questions or marks.
+                    try {
+                        const recoveryPrompt = [
+                            String(prompt),
+                            "",
+                            "FINAL JSON RECOVERY MODE:",
+                            "Return exactly one complete valid JSON object using the required schema. Do not include markdown, commentary, or text outside JSON.",
+                            "Keep explanatory text concise to avoid truncation. Preserve all visible main questions and sub-items from the PDF.",
+                            "Do not invent questions, answers, or marks. If marks are not printed or cannot be established from the paper, represent uncertainty according to the schema and recommend teacher review.",
+                            "Close every string, object, and array. Escape quotation marks and control characters inside string values.",
+                        ].join("\n");
+    
+                        const recoveryRawResponse = await withTimeout(
+                            askGeminiWithPDF(
+                                recoveryPrompt,
+                                req.file.buffer.toString("base64")
+                            ),
+                            120000,
+                            "AI analysis recovery timed out."
+                        );
+    
+                        aiResult = parseAIResult(recoveryRawResponse);
+    
+                        console.warn(
+                            "AI JSON RECOVERY SUCCEEDED",
+                            JSON.stringify({
+                                examId,
+                                examPaperId,
+                                originalErrorCode: firstParseError?.code || null,
+                            })
+                        );
+                    } catch (recoveryError) {
+                        console.error(
+                            "AI JSON RECOVERY FAILED:",
+                            errorDetails(recoveryError)
+                        );
+    
+                        const safeMessage =
+                            "The examination paper was saved, but AI could not produce a complete readable analysis after an automatic retry. Please try again later; if it continues, check the backend AI error logs.";
+    
+                        await updatePaperStatus(
+                            examPaperId,
+                            {
+                                status: "Failed",
+                                aiStatus: "Failed",
+                                errorMessage: safeMessage,
+                            }
+                        );
+    
+                        return res.status(200).json({
+                            success: false,
+                            paper_saved: true,
+                            analysis_completed: false,
+                            ai_status: "Failed",
+                            exam_id: examId,
+                            exam_subject_id: examSubjectId,
+                            exam_paper_id: examPaperId,
+                            reused_paper: reusedPaper,
+                            message: safeMessage,
+                        });
+                    }
+                }
+    
+    
+                aiResult.analysis_method = "ai";
             }
 
             const rawQuestions =
@@ -3878,6 +3934,9 @@ export const analyzePaper =
 
                             ai_status:
                                 "Completed",
+
+                            analysis_method:
+                                analysisMethod,
 
                             exam_id:
                                 examId,
