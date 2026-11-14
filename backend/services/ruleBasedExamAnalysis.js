@@ -62,7 +62,7 @@ const extractMarkValues = (text) => {
     // Identify labelled subparts (a), (b), a), b), etc. A mark token inside
     // a subpart belongs to that subpart; one outside all subparts is a parent
     // question mark and must not be added to its children.
-    const labels = [...source.matchAll(/(?:\(\s*(?:iii|ii|iv|vi{0,3}|ix|v|x|[a-h])\s*\)|(?:^|\n)\s*(?:[a-h]|iii|ii|iv|vi{0,3}|ix|v|x)\s*[.)])(?=\s|$)/gim)];
+    const labels = [...source.matchAll(/(?:\(\s*(?:iii|ii|iv|vi{0,3}|ix|v|x|[a-i])\s*\)|(?:^|\n)\s*(?:[a-i]|iii|ii|iv|vi{0,3}|ix|v|x)\s*[.)])(?=\s|$)/gim)];
     if (labels.length) {
         const ranges = labels.map((label, index) => ({
             start: label.index,
