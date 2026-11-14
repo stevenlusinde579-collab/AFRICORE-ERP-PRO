@@ -40,7 +40,9 @@ const normalize = (value) => String(value || "")
     .replace(/\bpage\s*\d+\s*of\s*\d+\b/gi, " ")
     .replace(/\b(?:csee|necta|es[e]?e)\s*20\d{2}\b/gi, " ")
     .replace(/[\t ]+/g, " ")
-    .replace(/^\s*\d{1,2}\s*$/gm, "")
+    // Keep standalone numeric lines: in many Advanced Level papers the
+    // main-question number is printed on its own line above its stem.
+    // Page-number filtering is handled contextually by splitPaper().
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
@@ -307,7 +309,8 @@ const splitPaper = (pdfText) => {
     const questionPattern = /^\s*(\d{1,2})\s*[.)\]:-](?!\s*\d)\s*(.*)$/i;
     const explicitQuestionHeaderPattern = /^\s*(?:QUESTION|Q)\s*(\d{1,2})\s*[.)\]:-]?\s*(.*)$/i;
 
-    for (const line of lines) {
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+        const line = lines[lineIndex];
         const heading = detectSectionHeading(line);
         if (heading) {
             if (currentQuestion) {
@@ -319,9 +322,43 @@ const splitPaper = (pdfText) => {
             continue;
         }
 
+        // Some examination boards place the main question number on a
+        // separate line, especially in Advanced Level structured papers.
+        // Treat it as a question boundary only when it is sequential within
+        // the section and the next meaningful line resembles a question stem
+        // or a labelled subpart. This avoids turning ordinary page numbers
+        // into questions.
+        const standaloneNumber = line.match(/^\s*(\d{1,2})\s*$/);
+        let standaloneQuestionNumber = null;
+        if (standaloneNumber) {
+            const candidate = Number(standaloneNumber[1]);
+            const nextLine = lines.slice(lineIndex + 1).find(item => String(item).trim());
+            const previousNumber = Math.max(0, ...currentSection.questions.map(item => item.question_number));
+            const sequential = previousNumber === 0
+                ? candidate >= 1 && candidate <= 30
+                : candidate === previousNumber + 1;
+            const stemLike = nextLine && (
+                /^\s*(?:\([a-zivx]+\)|[a-zivx][.)])\s*/i.test(nextLine) ||
+                /^\s*(?:the following|a\b|an\b|using\b|study\b|consider\b|read\b|from\b|given\b|with\b|below\b|above\b|figure\b|diagram\b|table\b|data\b|calculate\b|derive\b|determine\b|define\b|describe\b|discuss\b|explain\b|state\b|show\b|prove\b|solve\b|compare\b|analyse\b|analyze\b|evaluate\b|outline\b|identify\b|write\b|list\b|illustrate\b|what\b|why\b|how\b|name\b|mention\b|taja\b|eleza\b|fafanua\b|jadili\b)/i.test(nextLine)
+            );
+            if (sequential && stemLike && !isAdministrativeInstruction(nextLine) && !detectSectionHeading(nextLine)) {
+                standaloneQuestionNumber = candidate;
+            }
+        }
+
         const questionMatch =
             line.match(explicitQuestionHeaderPattern) ||
             line.match(questionPattern);
+        if (standaloneQuestionNumber !== null) {
+            if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = {
+                question_number: standaloneQuestionNumber,
+                text: "",
+                section: currentSection.name,
+            };
+            currentSection.questions.push(currentQuestion);
+            continue;
+        }
         if (questionMatch) {
             const questionNumber = Number(questionMatch[1]);
             const questionOpening = String(questionMatch[2] || "").trim();
