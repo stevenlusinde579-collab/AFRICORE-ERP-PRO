@@ -268,6 +268,26 @@ const splitPaper = (pdfText) => {
             continue;
         }
 
+        // OCR often drops the printed "2." before a matching exercise.
+        // When a multiple-choice question is followed by a List A/List B
+        // matching instruction, recover the next main-question boundary.
+        const looksLikeMatchingQuestion = /\\blist\\s*a\\b/i.test(line) &&
+            /\\blist\\s*b\\b/i.test(line) &&
+            /(?:match|respective|pair|items|terms)/i.test(line);
+        const previousLooksLikeObjective = currentQuestion &&
+            /(?:correct answer|alternatives|multiple.choice|choose the correct)/i.test(currentQuestion.text);
+        if (currentQuestion && !currentSection.name.match(/^[B-Z]$/) &&
+            looksLikeMatchingQuestion && previousLooksLikeObjective) {
+            currentQuestion.text = currentQuestion.text.trim();
+            currentQuestion = {
+                question_number: Math.max(0, ...currentSection.questions.map(q => q.question_number)) + 1,
+                text: line,
+                section: currentSection.name,
+            };
+            currentSection.questions.push(currentQuestion);
+            continue;
+        }
+
         if (isAdministrativeInstruction(line)) {
             if (currentQuestion) currentQuestion.text = currentQuestion.text.trim();
             currentQuestion = null;
