@@ -153,8 +153,13 @@ const detectSelection = (text, availableQuestions = 0) => {
         const selectionTotal = item.total ? numberValue(match[item.total]) : null;
         if (!Number.isFinite(selectionCount) || selectionCount <= 0) continue;
         if (selectionTotal !== null && (!Number.isFinite(selectionTotal) || selectionTotal < selectionCount)) continue;
-        const effectiveTotal = selectionTotal || (availableQuestions > selectionCount ? availableQuestions : null);
-        if (effectiveTotal !== null && effectiveTotal <= selectionCount) continue;
+        // A numeric instruction such as "Answer 3 questions" is not
+        // selective when exactly three questions are available. Without an
+        // explicit larger denominator, require evidence that more are offered
+        // than the required count.
+        if (selectionTotal === null && availableQuestions <= selectionCount) continue;
+        const effectiveTotal = selectionTotal || availableQuestions;
+        if (effectiveTotal <= selectionCount) continue;
         return {
             selection_required: true,
             selection_count: selectionCount,
