@@ -3,7 +3,7 @@ const NUMBER_WORDS = {
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
     eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
     fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
-    nineteen: 19, twenty: 20,
+    nineteen: 19, twenty: 20, hundred: 100,
     moja: 1, mmoja: 1, moja: 1, mawili: 2, wawili: 2,
     matatu: 3, watatu: 3, manne: 4, wanne: 4,
     matano: 5, watano: 5, sita: 6, saba: 7,
@@ -151,7 +151,7 @@ const detectSelection = (text, availableQuestions = 0, defaultSection = null) =>
     // OCR can remove every space from instructions. Recover compact English
     // and Kiswahili selection clauses that name their target section.
     const compact = source.replace(/[^a-z0-9()]/g, "");
-    const compactEnglish = compact.match(/(?:answer|attempt|choose|select)?(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\((\d+)\))?questions?(?:from|in|within)section([a-e])/i);
+    const compactEnglish = compact.match(/(?:answer|attempt|choose|select)?(?:any)?(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\((\d+)\))?questions?(?:from|in|within)section([a-e])/i);
     if (compactEnglish) {
         const count = numberValue(compactEnglish[2] || compactEnglish[1]);
         if (count > 0 && availableQuestions > count) {
@@ -248,10 +248,10 @@ const extractDeclaredPaperTotal = (text) => {
 
 const extractDeclaredQuestionCount = (text) => {
     const source = String(text || "").replace(/\s+/g, " ").toLowerCase();
-    const numberToken = "(\\\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)";
+    const numberToken = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)";
     const patterns = [
-        new RegExp("(?:consists?\\\\s+of|contains?|has|comprises?)\\\\s+(?:a\\\\s+total\\\\s+of\\\\s+)?"+numberToken+"(?:\\\\s*\\\\(\\\\s*(\\\\d+)\\\\s*\\\\))?\\\\s+(?:main\\\\s+)?questions?\\\\b", "i"),
-        new RegExp("(?:total|number)\\\\s+of\\\\s+questions?\\\\s*[:=-]?\\\\s*"+numberToken+"\\\\b", "i"),
+        new RegExp("(?:consists?\\s+of|contains?|has|comprises?)\\s+(?:a\\s+total\\s+of\\s+)?"+numberToken+"(?:\\s*\\(\\s*(\\d+)\\s*\\))?\\s+(?:main\\s+)?questions?\\b", "i"),
+        new RegExp("(?:total|number)\\s+of\\s+questions?\\s*[:=-]?\\s*"+numberToken+"\\b", "i"),
     ];
     for (const pattern of patterns) {
         const match = source.match(pattern);
@@ -739,6 +739,15 @@ export const analyzePaperWithRules = ({
 
     if (!recommendations.length) recommendations.push("Structural analysis completed. Teacher should review topic, Bloom level, difficulty and marking interpretation before approval.");
     const explicitPaperTotal = extractDeclaredPaperTotal(text);
+    if (explicitPaperTotal !== null && totalMarks > 0 &&
+        Math.abs(explicitPaperTotal - totalMarks) > 0.01) {
+        recommendations.push(
+            "The paper explicitly states " + explicitPaperTotal +
+            " total marks, but section/question reconciliation gives " +
+            Number(totalMarks.toFixed(2)) +
+            ". The printed paper total is displayed as the declared total; verify the missing or conflicting marks before approval."
+        );
+    }
     const averageConfidence = questions.length ? Math.round(confidenceTotal / questions.length) : 0;
     const difficultyCounts = questions.reduce((acc, q) => {
         acc[q.difficulty_level] = (acc[q.difficulty_level] || 0) + 1;
