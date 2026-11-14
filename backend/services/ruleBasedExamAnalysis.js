@@ -596,6 +596,11 @@ export const analyzePaperWithRules = ({
     const blooms = {};
     const topics = new Set();
     const recommendations = [];
+    if (educationProfile.category === "unclassified") {
+        recommendations.push("The education level could not be established confidently from the supplied class metadata or PDF text. The engine will analyse the paper's visible structure without assuming O-Level/CSEE conventions; confirm the level if curriculum-specific evaluation is required.");
+    } else {
+        recommendations.push("Education profile detected as " + educationProfile.label + " from the supplied metadata/PDF evidence. Question structure and marks are analysed from the paper itself; no unrelated level-specific grading template is imposed.");
+    }
     let confidenceTotal = 0;
 
     for (const section of sections) {
