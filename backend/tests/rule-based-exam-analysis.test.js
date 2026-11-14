@@ -352,5 +352,6 @@ Answer any two out of the following three questions.
 2. Describe weather (15 marks)
 3. Discuss rainfall (10 marks)`,
     });
-    assert.equal(result.total_marks, 35);
+    assert.equal(result.total_marks, 30);
+    assert.ok(result.recommendations.some(item => item.includes("declares 30 marks")));
 });
