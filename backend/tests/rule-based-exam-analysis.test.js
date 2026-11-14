@@ -643,3 +643,67 @@ test("Book Keeping PDF: ignores exam instructions and date-like ledger rows as q
     assert.ok(result.questions.every(q => q.question_number > 0));
     assert.ok(!result.questions.some(q => q.question_number === 31));
 });
+
+
+
+test("Agriculture PDF: ignores numbered pen instruction and scopes Section C selection without changing Section A marks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Agriculture",
+        level: "Secondary",
+        examName: "PRE-MOCK",
+        pdfText: [
+            "AGRICULTURE PRE-MOCK",
+            "Answer all questions in Sections A and B and any two questions from Section C.",
+            "SECTION A (16 MARKS)",
+            "Answer all questions. Each item carries one mark.",
+            "1. For each of the items (i) – (x), choose the correct answer from among the given alternatives.",
+            "(i) Why molasses is normally applied to forage during silage making?",
+            "(ii) Why is fine-textured soil more nutritious?",
+            "(iii) Which bee hive type is discouraged in Tanzania?",
+            "(iv) Why include cover crops in crop rotation?",
+            "(v) Which nutrient deficiency causes leaf discolouration?",
+            "(vi) Which farm structure restrains animals?",
+            "(vii) What is the function of worker bees?",
+            "(viii) Which fence can injure farm animals?",
+            "(ix) How can chemical residues in food crops be controlled?",
+            "(x) What risk management term describes adaptable housing?",
+            "2. Match the descriptions of animal breeding methods in List A with the correct technical terms in List B.",
+            "(i) Breeding pure improved sires to ordinary females",
+            "(ii) Mating distant related animals with a common ancestor",
+            "(iii) Breeding a crossbred animal back to a pure parent",
+            "(iv) Mating nearby related animals",
+            "(v) Mating same breed animals from different farms",
+            "(vi) Mating animals of different breeds",
+            "4. Use black, blue or ball point pen and pencil only in case of drawings.",
+            "SECTION B (54 MARKS)",
+            "3. Assess six factors when selecting an apiary site. (9 marks)",
+            "4. Explain the importance of inter and intra row spacing. (9 marks)",
+            "5. Explain plant population and seed rate factors. (9 marks)",
+            "6. Assess influences of soil structure. (9 marks)",
+            "7. Explain farm management functions. (9 marks)",
+            "8. Explain dry period and colostrum importance. (9 marks)",
+            "SECTION C (30 MARKS)",
+            "Answer any two questions from Section C.",
+            "9. Assess causes of poor soil fertility and agronomic measures. (15 marks)",
+            "10. Evaluate merits and challenges of organic farming. (15 marks)",
+            "11. Describe necrotic symptoms of crop disease. (15 marks)"
+        ].join("\n"),
+    });
+
+    const sectionA = result.questions.filter(question => question.section === "A");
+    const sectionB = result.questions.filter(question => question.section === "B");
+    const sectionC = result.questions.filter(question => question.section === "C");
+
+    assert.equal(result.questions.length, 11);
+    assert.equal(sectionA.length, 2);
+    assert.deepEqual(sectionA.map(question => question.max_marks), [10, 6]);
+    assert.ok(sectionA.every(question => !question.selection_required));
+    assert.ok(!result.questions.some(question => /use black, blue or ball point pen/i.test(question.question_text)));
+    assert.equal(sectionB.length, 6);
+    assert.ok(sectionB.some(question => question.question_number === 4 &&
+        /inter and intra row spacing/i.test(question.question_text)));
+    assert.equal(sectionC.length, 3);
+    assert.ok(sectionC.every(question => question.selection_required));
+    assert.ok(sectionC.every(question => question.selection_count === 2 && question.selection_total === 3));
+    assert.equal(result.total_marks, 100);
+});
