@@ -1056,7 +1056,7 @@ test("uses controller-extracted section totals and global selection as cross-che
         subjectName: "Commerce",
         level: "Form Three",
         pdfText: `COMMERCE TEST
-SECTION A
+SECTION A (40 MARKS)
 Answer any 2 out of 4 questions.
 1. Explain trade.
 2. Describe insurance.
