@@ -539,7 +539,8 @@ export const analyzePaperWithRules = ({
         // Introductory instructions may name a later section (e.g. "two
         // questions from Section C"). Apply that rule only to the named section.
         const paperSelection = detectSelection(text, section.questions.length);
-        const selection = localSelection.selection_required
+        const selection = localSelection.selection_required &&
+            (!localSelection.selection_section || localSelection.selection_section === section.name)
             ? localSelection
             : (paperSelection.selection_required && paperSelection.selection_section === section.name
                 ? paperSelection
