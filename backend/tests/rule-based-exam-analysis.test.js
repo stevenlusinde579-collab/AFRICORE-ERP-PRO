@@ -451,3 +451,83 @@ test("recognizes OCR-compressed Kiswahili answer-two-from-Section-C instruction"
     assert.ok(sectionC.every(question => question.max_marks === 15));
     assert.equal(result.total_marks, 100);
 });
+
+
+test("applies an introductory selective instruction only to its named section", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "History",
+        level: "Form Four",
+        pdfText: [
+            "HISTORY EXAMINATION",
+            "This paper consists of eleven (11) questions.",
+            "Answer all questions in Sections A and B and any two questions from Section C.",
+            "TOTAL MARKS: 100",
+            "SECTION A (20 MARKS)",
+            "1. Explain the meaning of history (10 marks).",
+            "2. State sources of history (10 marks).",
+            "SECTION B (50 MARKS)",
+            "3. Explain migration (10 marks).",
+            "4. Describe trade (10 marks).",
+            "5. Explain colonialism (10 marks).",
+            "6. Discuss nationalism (10 marks).",
+            "7. Explain independence (10 marks).",
+            "SECTION C (30 MARKS)",
+            "8. Discuss the causes of the First World War (15 marks).",
+            "9. Explain its effects (15 marks).",
+            "10. Describe the peace settlement (15 marks).",
+            "11. Discuss the League of Nations (15 marks)."
+        ].join("\n"),
+    });
+    const sectionA = result.questions.filter(q => q.section === "A");
+    const sectionB = result.questions.filter(q => q.section === "B");
+    const sectionC = result.questions.filter(q => q.section === "C");
+    assert.ok(sectionA.every(q => !q.selection_required));
+    assert.ok(sectionB.every(q => !q.selection_required));
+    assert.equal(sectionC.length, 4);
+    assert.ok(sectionC.every(q => q.selection_required));
+    assert.ok(sectionC.every(q => q.selection_count === 2));
+    assert.ok(sectionC.every(q => q.selection_total === 4));
+    assert.equal(result.total_questions, 11);
+    assert.equal(result.total_marks, 100);
+});
+
+test("recognizes compact English selective wording with 'any' and named section", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Geography",
+        level: "Form Three",
+        pdfText: [
+            "GEOGRAPHY",
+            "SECTION C (30 MARKS)",
+            "Answer any two questions from Section C.",
+            "1. Explain weathering (15 marks).",
+            "2. Describe erosion (15 marks).",
+            "3. Discuss climate (15 marks)."
+        ].join("\n"),
+    });
+    assert.ok(result.questions.every(q => q.selection_required));
+    assert.ok(result.questions.every(q => q.selection_count === 2));
+    assert.ok(result.questions.every(q => q.selection_total === 3));
+    assert.equal(result.total_marks, 30);
+});
+
+test("uses explicit whole-paper total and reports disagreement with section reconciliation", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Commerce",
+        level: "Form Two",
+        pdfText: [
+            "COMMERCE",
+            "TOTAL MARKS: 100",
+            "SECTION A (20 MARKS)",
+            "1. Define trade (10 marks).",
+            "2. Explain commerce (10 marks).",
+            "SECTION B (70 MARKS)",
+            "3. Explain retail trade (35 marks).",
+            "4. Describe wholesale trade (35 marks)."
+        ].join("\n"),
+    });
+    assert.equal(result.total_marks, 90);
+    assert.ok(result.recommendations.some(message =>
+        message.includes("explicitly states 100 total marks") &&
+        message.includes("90")
+    ));
+});

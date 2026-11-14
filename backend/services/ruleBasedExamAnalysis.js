@@ -3,7 +3,7 @@ const NUMBER_WORDS = {
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
     eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
     fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
-    nineteen: 19, twenty: 20,
+    nineteen: 19, twenty: 20, hundred: 100,
     moja: 1, mmoja: 1, moja: 1, mawili: 2, wawili: 2,
     matatu: 3, watatu: 3, manne: 4, wanne: 4,
     matano: 5, watano: 5, sita: 6, saba: 7,
@@ -141,7 +141,7 @@ const extractSectionTotal = (text) => {
     return firstMark ? Number(firstMark[1]) : null;
 };
 
-const detectSelection = (text, availableQuestions = 0) => {
+const detectSelection = (text, availableQuestions = 0, defaultSection = null) => {
     const source = String(text || "")
         .replace(/\s+/g, " ")
         .trim()
@@ -151,7 +151,7 @@ const detectSelection = (text, availableQuestions = 0) => {
     // OCR can remove every space from instructions. Recover compact English
     // and Kiswahili selection clauses that name their target section.
     const compact = source.replace(/[^a-z0-9()]/g, "");
-    const compactEnglish = compact.match(/(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\((\d+)\))?questions?(?:from|in)section([a-e])/i);
+    const compactEnglish = compact.match(/(?:answer|attempt|choose|select)?(?:any)?(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\((\d+)\))?questions?(?:from|in|within)section([a-e])/i);
     if (compactEnglish) {
         const count = numberValue(compactEnglish[2] || compactEnglish[1]);
         if (count > 0 && availableQuestions > count) {
@@ -164,7 +164,7 @@ const detectSelection = (text, availableQuestions = 0) => {
             };
         }
     }
-    const compactSwahili = compact.match(/(?:jibu(?:ni)?maswali(?:yote)?|maswali)?(moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi|\d+)(?:\((\d+)\))?kutoka(?:sehemu|section)([a-e])/i);
+    const compactSwahili = compact.match(/(?:jibu(?:ni)?maswali(?:yote)?|maswali)?(moja|mmoja|mawili|wawili|matatu|watatu|manne|wanne|matano|watano|sita|saba|nane|tisa|kumi|\d+)(?:\((\d+)\))?(?:kutoka|katika)(?:sehemu|section)([a-e])/i);
     if (compactSwahili) {
         const count = numberValue(compactSwahili[2] || compactSwahili[1]);
         if (count > 0 && availableQuestions > count) {
@@ -179,6 +179,8 @@ const detectSelection = (text, availableQuestions = 0) => {
     }
     const patterns = [
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+(?:questions?\\s+)?(?:out of|from)\\s+(?:the\\s+following\\s+)?"+token+"\\b", "i"), count: 1, total: 2 },
+        { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\s+(?:from|in|within)\\s+(?:the\\s+)?section\\s+([a-e])\\b", "i"), count: 1, total: 0, section: 2 },
+        { regex: new RegExp("(?:jibu|jibuni|chagua|fanya)\\s+(?:maswali?\\s+)?"+token+"\\s+(?:kutoka|katika)\\s+(?:sehemu|section)\\s+([a-e])\\b", "i"), count: 1, total: 0, section: 2 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?following\\s+"+token+"\\s+questions?\\b", "i"), count: 1, total: 2 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+of\\s+(?:the\\s+)?(?:the\\s+)?questions?\\s+(?:in|from)\\s+(?:this|the)\\s+section\\b", "i"), count: 1, total: 0 },
         { regex: new RegExp("(?:answer|attempt|choose|select|do)\\s+(?:any\\s+)?"+token+"\\s+questions?\\s+(?:in|from)\\s+(?:this|the)\\s+section\\b", "i"), count: 1, total: 0 },
@@ -209,7 +211,7 @@ const detectSelection = (text, availableQuestions = 0) => {
             selection_count: selectionCount,
             selection_total: effectiveTotal,
             selection_instruction: match[0],
-            selection_section: null,
+            selection_section: item.section ? String(match[item.section]).toUpperCase() : defaultSection,
         };
     }
 
@@ -219,6 +221,45 @@ const detectSelection = (text, availableQuestions = 0) => {
         selection_total: 0,
         selection_instruction: null,
     };
+};
+
+const extractDeclaredPaperTotal = (text) => {
+    const source = String(text || "").replace(/\s+/g, " ");
+    const patterns = [
+        /\b(?:total|maximum|full)\s+(?:possible\s+)?(?:marks?|score)\s*(?:of|is|are|:|-)?\s*(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\s*(?:marks?|mks?|alama)?\b/i,
+        /\b(?:the\s+)?paper\s+(?:carries|is\s+out\s+of|has)\s*(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\s*(?:marks?|mks?|alama)\b/i,
+        /\b(?:jumla(?:\s+kuu)?(?:\s+ya)?\s+alama|alama\s+ya\s+jumla)\s*(?:ni|:|-)?\s*(\d+(?:\.\d+)?|moja|mawili|matatu|nne|tano|sita|saba|nane|tisa|kumi|ishirini|thelathini|arobaini|hamsini|sitini|sabini|themanini|tisini|mia)\b/i,
+    ];
+    const swahiliNumbers = {
+        moja: 1, mawili: 2, matatu: 3, nne: 4, tano: 5, sita: 6,
+        saba: 7, nane: 8, tisa: 9, kumi: 10, ishirini: 20,
+        thelathini: 30, arobaini: 40, hamsini: 50, sitini: 60,
+        sabini: 70, themanini: 80, tisini: 90, mia: 100,
+    };
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const token = String(match[1]).toLowerCase();
+        const value = numberValue(token) ?? swahiliNumbers[token];
+        if (Number.isFinite(value) && value > 0) return value;
+    }
+    return null;
+};
+
+const extractDeclaredQuestionCount = (text) => {
+    const source = String(text || "").replace(/\s+/g, " ").toLowerCase();
+    const numberToken = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)";
+    const patterns = [
+        new RegExp("(?:consists?\\s+of|contains?|has|comprises?)\\s+(?:a\\s+total\\s+of\\s+)?"+numberToken+"(?:\\s*\\(\\s*(\\d+)\\s*\\))?\\s+(?:main\\s+)?questions?\\b", "i"),
+        new RegExp("(?:total|number)\\s+of\\s+questions?\\s*[:=-]?\\s*"+numberToken+"\\b", "i"),
+    ];
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const value = numberValue(match[2] || match[1]);
+        if (Number.isInteger(value) && value > 0 && value <= 100) return value;
+    }
+    return null;
 };
 
 const detectSectionHeading = (line) => {
@@ -377,7 +418,7 @@ const splitPaper = (pdfText) => {
         }
         const headingTotal = extractSectionTotal(section.title);
         if (Number(headingTotal) > 0) section.total_marks = headingTotal;
-        section.selection = detectSelection(section.instructionText, section.questions.length);
+        section.selection = detectSelection(section.instructionText, section.questions.length, section.name);
         section.questions = section.questions.filter(question => question.text.trim());
     }
 
@@ -492,7 +533,7 @@ export const analyzePaperWithRules = ({
 
     for (const section of sections) {
         const sectionText = section.instructionText + "\n" + section.questions.map(q => q.text).join("\n");
-        const localSelection = detectSelection(sectionText, section.questions.length);
+        const localSelection = detectSelection(sectionText, section.questions.length, section.name);
         const paperSelection = detectSelection(text, section.questions.length);
         const selection = localSelection.selection_required &&
             (!localSelection.selection_section || localSelection.selection_section === section.name)
@@ -622,9 +663,13 @@ export const analyzePaperWithRules = ({
         const sectionQuestions = questions.filter(question => question.section === section.name);
         if (!sectionQuestions.length || sectionQuestions.some(question => !(Number(question.max_marks) > 0))) continue;
 
-        const firstSelected = sectionQuestions.find(question => question.selection_required);
-        const allocated = firstSelected
-            ? Number(firstSelected.max_marks) * Number(firstSelected.selection_count || 1)
+        const selectedQuestions = sectionQuestions.filter(question => question.selection_required);
+        const allocated = selectedQuestions.length
+            ? selectedQuestions
+                .map(question => Number(question.max_marks) || 0)
+                .sort((a, b) => b - a)
+                .slice(0, Math.max(1, Number(selectedQuestions[0].selection_count) || 1))
+                .reduce((sum, value) => sum + value, 0)
             : sectionQuestions.reduce((sum, question) => sum + Number(question.max_marks), 0);
         const declared = Number(section.total_marks);
         if (Math.abs(allocated - declared) > 0.01) {
@@ -634,6 +679,15 @@ export const analyzePaperWithRules = ({
                 " marks. Review the printed instructions before approving this marking structure."
             );
         }
+    }
+
+    const declaredQuestionCount = extractDeclaredQuestionCount(text);
+    if (declaredQuestionCount !== null && declaredQuestionCount !== questions.length) {
+        recommendations.push(
+            "The paper states " + declaredQuestionCount +
+            " main questions, but the Rule-Based Engine detected " + questions.length +
+            ". Review possible missed questions, OCR numbering, or sub-question boundaries before approval."
+        );
     }
 
     const allocatedQuestionMarks = effectiveMarks(questions);
@@ -684,7 +738,16 @@ export const analyzePaperWithRules = ({
     });
 
     if (!recommendations.length) recommendations.push("Structural analysis completed. Teacher should review topic, Bloom level, difficulty and marking interpretation before approval.");
-    const explicitPaperTotal = [...text.matchAll(/(?:TOTAL\s+(?:MARKS?|SCORE)|MAXIMUM\s+MARKS?)\s*[:\-]?\s*(\d+(?:\.\d+)?)/gi)].map(match => Number(match[1])).find(value => value > 0);
+    const explicitPaperTotal = extractDeclaredPaperTotal(text);
+    if (explicitPaperTotal !== null && totalMarks > 0 &&
+        Math.abs(explicitPaperTotal - totalMarks) > 0.01) {
+        recommendations.push(
+            "The paper explicitly states " + explicitPaperTotal +
+            " total marks, but section/question reconciliation gives " +
+            Number(totalMarks.toFixed(2)) +
+            ". The printed paper total is displayed as the declared total; verify the missing or conflicting marks before approval."
+        );
+    }
     const averageConfidence = questions.length ? Math.round(confidenceTotal / questions.length) : 0;
     const difficultyCounts = questions.reduce((acc, q) => {
         acc[q.difficulty_level] = (acc[q.difficulty_level] || 0) + 1;
@@ -701,7 +764,13 @@ export const analyzePaperWithRules = ({
         exam_type: examType,
         curriculum,
         total_questions: questions.length,
-        total_marks: explicitPaperTotal || totalMarks,
+        // A printed paper total is evidence, not a replacement for a
+        // contradictory section/question reconciliation. Only use it when
+        // the structural calculation is unavailable or agrees with it.
+        total_marks: explicitPaperTotal !== null &&
+            (totalMarks <= 0 || Math.abs(explicitPaperTotal - totalMarks) <= 0.01)
+            ? explicitPaperTotal
+            : totalMarks,
         difficulty: overallDifficulty,
         quality_score: Math.min(100, Math.round(45 + Math.min(questions.length, 10) * 4 + averageConfidence / 5)),
         syllabus_coverage: topics.size ? Math.min(100, topics.size * 15) : 0,
