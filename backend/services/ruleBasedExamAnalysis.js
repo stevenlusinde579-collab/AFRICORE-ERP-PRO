@@ -41,8 +41,8 @@ const classifyEducationLevel = (level, paperText = "") => {
     const source = (String(level || "") + " " + String(paperText || "").slice(0, 5000)).toLowerCase();
     if (/\b(baby\s*class|nursery|kindergarten|\bkg\b|pre[- ]?primary|early\s+years|early\s+childhood)\b/.test(source)) return "early_years";
     if (/\b(primary|standard\s*[1-7ivx]+|std\.?\s*[1-7]|grade\s*[1-7])\b/.test(source)) return "primary";
-    if (/\b(o[- ]?level|ordinary\s+level|form\s*[1-4ivx]+|form\s+(one|two|three|four))\b/.test(source)) return "ordinary_secondary";
-    if (/\b(a[- ]?level|advanced\s+level|form\s*[5-6vix]+|form\s+(five|six))\b/.test(source)) return "advanced_secondary";
+    if (/\b(o[- ]?level|ordinary\s+level|form\s*(?:[1-4]|i|ii|iii|iv)|form\s+(?:one|two|three|four))\b/.test(source)) return "ordinary_secondary";
+    if (/\b(a[- ]?level|advanced\s+level|form\s*(?:5|6|v|vi)|form\s+(?:five|six))\b/.test(source)) return "advanced_secondary";
     if (/\b(certificate|diploma|degree|university|college|undergraduate|postgraduate)\b/.test(source)) return "tertiary";
     return "general";
 };
