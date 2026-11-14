@@ -773,3 +773,68 @@ Page 3
     assert.deepEqual(result.questions.map(question => question.question_number), [1, 2]);
     assert.match(result.questions[1].question_text, /natural selection/i);
 });
+
+
+test("classifies education levels without forcing unknown levels into O-Level", () => {
+    const cases = [
+        ["Baby Class", "early_years"],
+        ["Nursery", "early_years"],
+        ["KG", "early_years"],
+        ["Pre-primary", "early_years"],
+        ["Standard IV", "primary"],
+        ["Primary Standard VII", "primary"],
+        ["Form Two", "ordinary_secondary"],
+        ["O-Level", "ordinary_secondary"],
+        ["Form Six", "advanced_secondary"],
+        ["A-Level", "advanced_secondary"],
+        ["Certificate", "tertiary"],
+        ["Diploma", "tertiary"],
+        ["Unknown Level", "general"],
+    ];
+
+    for (const [level, expected] of cases) {
+        const result = analyzePaperWithRules({
+            subjectName: "General Studies",
+            level,
+            pdfText: "EXAMINATION\\n1. Explain your answer (5 marks).",
+        });
+        assert.equal(result.education_level_category, expected, level);
+        assert.equal(result.questions.length, 1, level);
+    }
+});
+
+test("recognizes numbered activities and exercises in non-secondary assessments", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Environmental Activities",
+        level: "Nursery",
+        pdfText: `NURSERY ACTIVITY ASSESSMENT
+ACTIVITY 1
+Trace letter A.
+ACTIVITY 2
+Colour the big circle.
+EXERCISE 3
+Count the objects.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.questions.length, 3);
+    assert.deepEqual(result.questions.map(item => item.question_number), [1, 2, 3]);
+    assert.match(result.questions[0].question_text, /Trace letter A/i);
+});
+
+test("extracts unnumbered early-years task prompts instead of failing for no numbered questions", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "Early Mathematics",
+        level: "Baby Class",
+        pdfText: `BABY CLASS MATHEMATICS
+Count the objects.
+Circle the biggest shape.
+Trace number 1.
+Colour the red ball.`,
+    });
+
+    assert.equal(result.education_level_category, "early_years");
+    assert.equal(result.total_questions, 4);
+    assert.equal(result.questions.length, 4);
+    assert.match(result.questions[1].question_text, /Circle the biggest shape/i);
+});
