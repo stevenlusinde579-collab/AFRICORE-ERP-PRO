@@ -299,11 +299,14 @@ export default function AddExpense() {
             }
 
             const [
-                expenseAccountsResult,
+                systemExpenseAccountsResult,
+                schoolExpenseAccountsResult,
                 financialAccountsResult,
                 suppliersResult
             ] = await Promise.all([
 
+                // Global system accounts are shared defaults; they do not
+                // belong to one school and must not require school setup.
                 supabase
                     .from("chart_of_accounts")
                     .select(`
@@ -313,6 +316,25 @@ export default function AddExpense() {
                         account_type,
                         is_active
                     `)
+                    .eq("is_active", true)
+                    .eq("account_type", "expense")
+                    .order("account_code", {
+                        ascending: true
+                    }),
+
+                // School-created accounts are visible only to their owner school.
+                supabase
+                    .schema("finance")
+                    .from("chart_of_accounts")
+                    .select(`
+                        id,
+                        school_id,
+                        account_code,
+                        account_name,
+                        account_type,
+                        is_active
+                    `)
+                    .eq("school_id", schoolId)
                     .eq("is_active", true)
                     .eq("account_type", "expense")
                     .order("account_code", {
@@ -359,8 +381,12 @@ export default function AddExpense() {
             ]);
 
 
-            if (expenseAccountsResult.error) {
-                throw expenseAccountsResult.error;
+            if (systemExpenseAccountsResult.error) {
+                throw systemExpenseAccountsResult.error;
+            }
+
+            if (schoolExpenseAccountsResult.error) {
+                throw schoolExpenseAccountsResult.error;
             }
 
             if (financialAccountsResult.error) {
@@ -372,8 +398,34 @@ export default function AddExpense() {
             }
 
 
+            const systemExpenseAccounts = (
+                systemExpenseAccountsResult.data || []
+            ).map(account => ({
+                ...account,
+                account_source: "system"
+            }));
+
+            const schoolExpenseAccounts = (
+                schoolExpenseAccountsResult.data || []
+            ).map(account => ({
+                ...account,
+                account_source: "school"
+            }));
+
             setExpenseAccounts(
-                expenseAccountsResult.data || []
+                [
+                    ...systemExpenseAccounts,
+                    ...schoolExpenseAccounts
+                ].sort((a, b) =>
+                    String(a.account_code || "").localeCompare(
+                        String(b.account_code || ""),
+                        undefined,
+                        { numeric: true }
+                    ) ||
+                    String(a.account_name || "").localeCompare(
+                        String(b.account_name || "")
+                    )
+                )
             );
 
             setFinancialAccounts(
