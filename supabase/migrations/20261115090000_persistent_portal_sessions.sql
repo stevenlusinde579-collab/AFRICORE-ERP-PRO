@@ -27,6 +27,9 @@ create index if not exists portal_sessions_school_active_idx
 alter table public.portal_sessions enable row level security;
 revoke all on public.portal_sessions from anon, authenticated;
 grant all on public.portal_sessions to service_role;
+revoke all on function public.revoke_portal_sessions_on_account_change() from public, anon, authenticated;
+revoke all on function public.revoke_portal_sessions_on_school_deactivation() from public, anon, authenticated;
+revoke all on function public.revoke_portal_sessions_on_sponsor_center_deactivation() from public, anon, authenticated;
 
 create or replace function public.revoke_portal_sessions_on_account_change()
 returns trigger
@@ -97,3 +100,46 @@ drop trigger if exists sponsor_centers_revoke_portal_sessions_on_deactivation on
 create trigger sponsor_centers_revoke_portal_sessions_on_deactivation
 after update of is_active on public.sponsor_centers
 for each row execute function public.revoke_portal_sessions_on_sponsor_center_deactivation();
+
+create or replace function public.revoke_portal_sessions_on_student_deactivation()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if lower(coalesce(new.status, 'active')) = 'inactive'
+     and lower(coalesce(old.status, 'active')) <> 'inactive' then
+    update public.portal_sessions set revoked_at = coalesce(revoked_at, now())
+     where student_id = new.id and school_id = new.school_id and revoked_at is null;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.revoke_portal_sessions_on_student_deactivation() from public, anon, authenticated;
+drop trigger if exists students_revoke_portal_sessions_on_deactivation on public.students;
+create trigger students_revoke_portal_sessions_on_deactivation
+after update of status on public.students
+for each row execute function public.revoke_portal_sessions_on_student_deactivation();
+
+create or replace function public.revoke_sponsor_portal_sessions_on_assignment_removal()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.portal_sessions set revoked_at = coalesce(revoked_at, now())
+   where account_type = 'sponsor'
+     and school_id = old.school_id
+     and center_id = old.center_id
+     and student_id = old.student_id
+     and revoked_at is null;
+  return old;
+end;
+$$;
+revoke all on function public.revoke_sponsor_portal_sessions_on_assignment_removal() from public, anon, authenticated;
+drop trigger if exists sponsor_assignments_revoke_portal_sessions_on_delete on public.sponsor_center_students;
+create trigger sponsor_assignments_revoke_portal_sessions_on_delete
+after delete on public.sponsor_center_students
+for each row execute function public.revoke_sponsor_portal_sessions_on_assignment_removal();
