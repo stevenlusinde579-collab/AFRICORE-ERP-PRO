@@ -229,9 +229,8 @@ function RecordPayable() {
 
     // ============================================================
     // LOAD PAYMENT ACCOUNTS
-    //
-    // IMPORTANT:
-    // pay_supplier_bill expects public.financial_accounts.id.
+    // Use the school's active Finance cash/bank/mobile-money accounts.
+    // The payment RPC receives finance.cash_accounts.id.
     // ============================================================
 
     const loadFinancialAccounts = async schoolId => {
@@ -239,18 +238,21 @@ function RecordPayable() {
             data,
             error: accountError,
         } = await supabase
-            .from("financial_accounts")
+            .schema("finance")
+            .from("cash_accounts")
             .select(`
                 id,
                 school_id,
                 account_name,
                 account_type,
                 account_number,
-                bank_name,
+                provider_name,
                 current_balance,
-                chart_of_account_id
+                chart_of_account_id,
+                is_active
             `)
             .eq("school_id", Number(schoolId))
+            .eq("is_active", true)
             .in("account_type", [
                 "cash",
                 "bank",
