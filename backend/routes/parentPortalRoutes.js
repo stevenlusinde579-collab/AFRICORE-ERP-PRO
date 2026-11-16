@@ -182,7 +182,7 @@ async function parentPortalStaffAccess(req, res, next) {
 
 async function parentAuth(req, res, next) {
   try {
-    const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     const session = await getPortalSession(token);
     if (!session || !session.school_id || !session.account_id) {
       return res.status(401).json({ success: false, message: "Parent Portal session is unavailable. Please sign in again." });
@@ -1252,7 +1252,7 @@ router.post("/chat", async (req, res) => {
 
 router.post("/logout", async (req, res) => {
   try {
-    const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     await revokePortalSession(token);
     return res.json({ success: true, message: "Signed out." });
   } catch (error) {
