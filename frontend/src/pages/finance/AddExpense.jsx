@@ -1442,6 +1442,10 @@ export default function AddExpense() {
                                                         {account.account_code}
                                                         {" - "}
                                                         {account.account_name}
+                                                        {" - "}
+                                                        {account.account_source === "system"
+                                                            ? "System"
+                                                            : "School"}
 
                                                     </option>
                                                 )
