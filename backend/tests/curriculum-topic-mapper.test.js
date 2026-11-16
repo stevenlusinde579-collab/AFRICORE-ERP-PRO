@@ -92,7 +92,7 @@ test("includes topic confidence and evidence in Rule-Based question output", () 
 test("registers official TIE curriculum sources for all school education levels", () => {
     const levels = TANZANIA_CURRICULUM_SOURCES.levels;
     for (const key of ["pre_primary", "primary", "ordinary_secondary", "advanced_secondary"]) {
-        assert.match(levels[key].officialUrl, /^https:\/\/www\\.tie\\.go\\.tz\//, key);
+        assert.ok(levels[key].officialUrl.startsWith("https://www.tie.go.tz/"), key);
         assert.equal(levels[key].year, 2023, key);
         assert.equal(levels[key].status, "official_source_registered", key);
     }
