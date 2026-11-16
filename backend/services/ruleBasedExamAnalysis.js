@@ -490,19 +490,18 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
             continue;
         }
 
-        // Recover a missing main-question boundary when PDF extraction drops
-        // the printed number but preserves a clearly new task heading. In
-        // primary English papers, a completed multi-part exercise may be
-        // followed by a separate daily-routine completion task on the same
-        // physical line or paragraph.
-        const embeddedTask = line.match(/\\b(complete\\s+[A-Z][A-Za-z'’ -]*['’]s\\s+daily\\s+routine\\b)/i);
+        // Recover an omitted main-question number when a distinct task heading
+        // follows a completed multi-part exercise in the extracted PDF text.
+        // Keep this deliberately narrow: require a recognisable task heading
+        // and at least two completed Roman-numbered items before splitting.
+        const embeddedTask = line.match(/\b(complete\s+[A-Z][A-Za-z'’ -]*['’]s\s+daily\s+routine\b)/i);
         if (currentQuestion && embeddedTask) {
             const boundary = embeddedTask.index;
-            const precedingText = [currentQuestion.text, line.slice(0, boundary)].join("\\n");
-            const completedParts = [...precedingText.matchAll(/(?:^|[\\s])(?:i{1,3}|iv|v)\\s*[.)]/gim)].length;
+            const precedingText = [currentQuestion.text, line.slice(0, boundary)].join("\n");
+            const completedParts = [...precedingText.matchAll(/\b(?:i{1,3}|iv|v)\s*[.)]/gi)].length;
             if (completedParts >= 2) {
                 const before = line.slice(0, boundary).trim();
-                if (before) currentQuestion.text += (currentQuestion.text ? "\\n" : "") + before;
+                if (before) currentQuestion.text += (currentQuestion.text ? "\n" : "") + before;
                 currentQuestion.text = currentQuestion.text.trim();
                 const nextNumber = Math.max(0, ...currentSection.questions.map(item => item.question_number)) + 1;
                 currentQuestion = {
@@ -515,7 +514,7 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
             }
         }
 
-        if (currentQuestion) currentQuestion.text += (currentQuestion.text ? "\\n" : "") + line;
+        if (currentQuestion) currentQuestion.text += (currentQuestion.text ? "\n" : "") + line;
         else currentSection.instructionText.push(line);
     }
 
