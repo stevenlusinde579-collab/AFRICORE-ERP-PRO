@@ -335,7 +335,7 @@ router.post("/login", async (req, res) => {
     const update = await supabase.from("sponsor_portal_accounts")
       .update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
     if (update.error) throw update.error;
-    const token = tokenFor({ sponsor_account_id: account.id, sponsor_center_id: center.data.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
+    const token = tokenFor({ sponsor_account_id: account.id, sponsor_center_id: center.data.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 });
     return res.json({ success: true, token, center: { id: center.data.id, name: center.data.center_name }, students: (students.data || []).map(s => ({
       id: s.id, name: fullName(s), admission_number: s.admission_number || s.admission_no,
       class_name: classMap.get(String(s.current_class_id)) || "—",
@@ -367,7 +367,7 @@ router.post("/select-student", async (req, res) => {
   if (student.error || !student.data) return res.status(404).json({ success: false, message: "Mwanafunzi hayupo." });
   const school = await supabase.from("schools").select("id,school_name,is_active").eq("id", claims.school_id).maybeSingle();
   if (school.error || !school.data || school.data.is_active !== true) return res.status(403).json({ success: false, message: "Shule haijawezeshwa." });
-  const parentToken = tokenFor({ sponsor_account_id: claims.sponsor_account_id, sponsor_center_id: claims.sponsor_center_id, sponsor_student_id: studentId, student_id: studentId, school_id: Number(claims.school_id), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
+  const parentToken = tokenFor({ sponsor_account_id: claims.sponsor_account_id, sponsor_center_id: claims.sponsor_center_id, sponsor_student_id: studentId, student_id: studentId, school_id: Number(claims.school_id), exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 });
   return res.json({ success: true, token: parentToken, student: { id: studentId, name: fullName(student.data), school_name: school.data.school_name, admission_number: student.data.admission_number || student.data.admission_no } });
 });
 
