@@ -36,16 +36,51 @@ const awaitWithAbort = (operation, signal, onAbort) => {
     });
 };
 
+export const scoreExamTextQuality = (value) => {
+    const text = String(value || "").replace(/\u0000/g, "").trim();
+    if (!text) return 0;
+
+    const words = text.match(/[\p{L}\p{N}]{2,}/gu) || [];
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const questionHeaders = [
+        ...text.matchAll(/^\s*(?:QUESTION\s*)?\d{1,3}\s*[.)\-:]?\s*\S/gim),
+        ...text.matchAll(/^\s*Q\s*\d{1,3}\b/gim),
+    ].length;
+    const sectionHeaders = [...text.matchAll(/^\s*(?:SECTION|SEHEMU)\s+[A-F]\b/gim)].length;
+    const markEvidence = [...text.matchAll(/\b\d+(?:\.\d+)?\s*(?:marks?|mks?|alama)\b/gi)].length;
+    const visibleChars = [...text].filter(char => !/\s/.test(char));
+    const readableChars = visibleChars.filter(char => /[\p{L}\p{N},.;:!?()[\]{}%+\-/'"’]/u.test(char));
+    const readability = visibleChars.length
+        ? readableChars.length / visibleChars.length
+        : 0;
+
+    return Math.round(
+        Math.min(20, words.length * 0.8) +
+        Math.min(15, lines.length * 0.5) +
+        Math.min(25, questionHeaders * 5) +
+        Math.min(10, sectionHeaders * 3) +
+        Math.min(10, markEvidence * 2) +
+        Math.max(0, Math.min(20, readability * 20))
+    );
+};
+
 export const isLikelyScannedPdfText = (value) => {
-    const text = String(value || "").replace(/\s+/g, " ").trim();
+    const raw = String(value || "").trim();
+    const text = raw.replace(/\s+/g, " ");
     const words = text.match(/[\p{L}\p{N}]{2,}/gu) || [];
     const usefulWords = words.filter(word => !/^camscanner$/i.test(word));
     const scannerWatermarkOnly =
         /camscanner/i.test(text) && usefulWords.length <= 3;
-    // Short but readable papers must not be sent to OCR unnecessarily.
+
+    // Preserve short, genuinely readable papers. Trigger OCR for longer but
+    // structurally weak extraction too (e.g. a scanned page with OCR-like
+    // fragments, broken glyphs, or a few unrelated text-layer artefacts).
+    const weakLongExtraction = raw.length >= 120 &&
+        (usefulWords.length < 10 || scoreExamTextQuality(raw) < 24);
     return scannerWatermarkOnly ||
         (text.length < 100 && usefulWords.length < 5) ||
-        usefulWords.length < 3;
+        usefulWords.length < 3 ||
+        weakLongExtraction;
 };
 
 export const cleanOcrText = (value) => String(value || "")
