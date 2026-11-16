@@ -1,3 +1,5 @@
+import { inferCurriculumTopic } from "./curriculumTopicMapper.js";
+
 const NUMBER_WORDS = {
     one: 1, two: 2, three: 3, four: 4, five: 5,
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -490,6 +492,30 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
             continue;
         }
 
+        // Recover an omitted main-question number when a distinct task heading
+        // follows a completed multi-part exercise in the extracted PDF text.
+        // Keep this deliberately narrow: require a recognisable task heading
+        // and at least two completed Roman-numbered items before splitting.
+        const embeddedTask = line.match(/\b(complete\s+[A-Z][A-Za-z'’ -]*['’]s\s+daily\s+routine\b)/i);
+        if (currentQuestion && embeddedTask) {
+            const boundary = embeddedTask.index;
+            const precedingText = [currentQuestion.text, line.slice(0, boundary)].join("\n");
+            const completedParts = [...precedingText.matchAll(/\b(?:i{1,3}|iv|v)\s*[.)]/gi)].length;
+            if (completedParts >= 2) {
+                const before = line.slice(0, boundary).trim();
+                if (before) currentQuestion.text += (currentQuestion.text ? "\n" : "") + before;
+                currentQuestion.text = currentQuestion.text.trim();
+                const nextNumber = Math.max(0, ...currentSection.questions.map(item => item.question_number)) + 1;
+                currentQuestion = {
+                    question_number: nextNumber,
+                    text: line.slice(boundary).trim(),
+                    section: currentSection.name,
+                };
+                currentSection.questions.push(currentQuestion);
+                continue;
+            }
+        }
+
         if (currentQuestion) currentQuestion.text += (currentQuestion.text ? "\n" : "") + line;
         else currentSection.instructionText.push(line);
     }
@@ -568,24 +594,11 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     return nonEmpty;
 };
 
-const inferTopic = (text, subjectName) => {
-    const lower = String(text || "").toLowerCase();
-    const subject = Object.keys(TOPIC_KEYWORDS).find(key =>
-        String(subjectName || "").toLowerCase().includes(key.toLowerCase())
-    );
-    const dictionary = subject ? { [subject]: TOPIC_KEYWORDS[subject] } : TOPIC_KEYWORDS;
-    let best = null;
-    for (const [name, words] of Object.entries(dictionary)) {
-        const found = words.filter(word => lower.includes(word));
-        if (found.length > (best?.matches.length || 0)) best = { name, matches: found };
-    }
-    return best
-        ? {
-            topic: best.matches[0].replace(/\b\w/g, character => character.toUpperCase()),
-            sub_topic: best.matches.slice(1, 4).join(", ") || null,
-        }
-        : { topic: null, sub_topic: null };
-};
+const inferTopic = (text, subjectName, level) => inferCurriculumTopic({
+    questionText: text,
+    subjectName,
+    level,
+});
 
 const inferBloom = (text) => {
     const lower = String(text || "").toLowerCase();
@@ -858,7 +871,7 @@ export const analyzePaperWithRules = ({
                 explicitTotal += marks;
                 explicitQuestionMarks.push(marks);
             }
-            const topic = inferTopic(source.text, subjectName);
+            const topic = inferTopic(source.text, subjectName, level);
             const bloom = inferBloom(source.text);
             const question = {
                 question_number: source.question_number,
@@ -870,6 +883,9 @@ export const analyzePaperWithRules = ({
                 mark_evidence: marks > 0 ? "Explicit mark value(s) detected in the question text." : "No explicit mark value was detected for this question.",
                 topic: topic.topic,
                 sub_topic: topic.sub_topic,
+                topic_confidence: topic.topic_confidence,
+                topic_evidence: topic.topic_evidence,
+                topic_source: topic.topic_source,
                 difficulty_level: inferDifficulty(source.text, marks),
                 bloom_level: bloom,
                 question_type: inferQuestionType(source.text),
