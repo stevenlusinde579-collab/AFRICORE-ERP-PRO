@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { supabase } from "../config/supabase.js";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 import { requirePermission } from "../middleware/permissionMiddleware.js";
+import { createPortalSession, getPortalSession, revokePortalSession, revokePortalAccountSessions } from "../utils/portalSessions.js";
 
 
 const router = express.Router();
@@ -62,7 +63,6 @@ function canAdministerParentMeetings(req) {
 }
 
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://africorepro.vercel.app").replace(/\/$/, "");
-const TOKEN_SECRET = process.env.PARENT_PORTAL_JWT_SECRET || process.env.SUPABASE_SERVICE_KEY;
 
 function fullName(student) {
   return [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ").trim();
@@ -73,28 +73,6 @@ function normalizePhone(value) {
   if (phone.startsWith("0")) return "255" + phone.slice(1);
   if (phone.startsWith("6") || phone.startsWith("7")) return "255" + phone;
   return phone;
-}
-function tokenFor(payload) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const unsigned = header + "." + body;
-  const signature = crypto.createHmac("sha256", TOKEN_SECRET).update(unsigned).digest("base64url");
-  return unsigned + "." + signature;
-}
-function verifyToken(token) {
-  if (!TOKEN_SECRET || !token) return null;
-  const parts = String(token).split(".");
-  if (parts.length !== 3) return null;
-  const unsigned = parts[0] + "." + parts[1];
-  const expected = crypto.createHmac("sha256", TOKEN_SECRET).update(unsigned).digest();
-  let supplied;
-  try { supplied = Buffer.from(parts[2], "base64url"); } catch { return null; }
-  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    if (!payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch { return null; }
 }
 async function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const derived = await scrypt(String(password), salt, 64);
@@ -205,45 +183,50 @@ async function parentPortalStaffAccess(req, res, next) {
 async function parentAuth(req, res, next) {
   try {
     const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    const claims = verifyToken(token);
-    if (!claims?.school_id || !claims?.student_id) {
-      return res.status(401).json({ success: false, message: "Parent Portal session expired. Please sign in again." });
+    const session = await getPortalSession(token);
+    if (!session || !session.school_id || !session.account_id) {
+      return res.status(401).json({ success: false, message: "Parent Portal session is unavailable. Please sign in again." });
     }
 
     let account;
-    if (claims.sponsor_account_id && claims.sponsor_center_id) {
+    let studentId = Number(session.student_id || 0);
+    if (session.account_type === "sponsor") {
+      if (!session.center_id || !studentId) {
+        return res.status(401).json({ success: false, message: "Chagua mwanafunzi kwanza ili kuona taarifa zake." });
+      }
       const { data: sponsorAccount, error: sponsorError } = await supabase.from("sponsor_portal_accounts")
         .select("id,school_id,center_id,username,is_active")
-        .eq("id", claims.sponsor_account_id).eq("school_id", claims.school_id)
-        .eq("center_id", claims.sponsor_center_id).eq("is_active", true).maybeSingle();
-      if (sponsorError || !sponsorAccount || !claims.sponsor_student_id || Number(claims.student_id) !== Number(claims.sponsor_student_id)) {
-        return res.status(401).json({ success: false, message: "Sponsor session is unavailable." });
-      }
+        .eq("id", session.account_id).eq("school_id", session.school_id)
+        .eq("center_id", session.center_id).eq("is_active", true).maybeSingle();
+      if (sponsorError || !sponsorAccount) return res.status(401).json({ success: false, message: "Sponsor account is unavailable." });
       const { data: assignment, error: assignmentError } = await supabase.from("sponsor_center_students")
         .select("student_id").eq("school_id", sponsorAccount.school_id)
-        .eq("center_id", sponsorAccount.center_id).eq("student_id", sponsorAccount && claims.student_id).maybeSingle();
+        .eq("center_id", sponsorAccount.center_id).eq("student_id", studentId).maybeSingle();
       if (assignmentError || !assignment) return res.status(403).json({ success: false, message: "Mwanafunzi huyu hajapangiwa kituo chako." });
       const { data: center, error: centerError } = await supabase.from("sponsor_centers")
         .select("id,center_name,is_active").eq("id", sponsorAccount.center_id).eq("school_id", sponsorAccount.school_id).maybeSingle();
       if (centerError || !center || !center.is_active) return res.status(403).json({ success: false, message: "Kituo hiki hakitumiki." });
-      account = { id: sponsorAccount.id, student_id: Number(claims.student_id), school_id: Number(claims.school_id), username: sponsorAccount.username, must_change_password: false, is_active: true, sponsor_center_id: center.id, sponsor_center_name: center.center_name, is_sponsor: true };
-    } else {
-      if (!claims.account_id) return res.status(401).json({ success: false, message: "Parent Portal session expired. Please sign in again." });
+      account = { id: sponsorAccount.id, student_id: studentId, school_id: Number(session.school_id), username: sponsorAccount.username, must_change_password: false, is_active: true, sponsor_center_id: center.id, sponsor_center_name: center.center_name, is_sponsor: true };
+    } else if (session.account_type === "parent") {
+      if (!studentId) return res.status(401).json({ success: false, message: "Parent Portal session is unavailable." });
       const { data: parentAccount, error } = await supabase.from("parent_portal_accounts")
         .select("id,student_id,school_id,username,must_change_password,is_active")
-        .eq("id", claims.account_id).eq("student_id", claims.student_id).eq("school_id", claims.school_id)
-        .maybeSingle();
-      if (error || !parentAccount || !parentAccount.is_active) return res.status(401).json({ success: false, message: "Parent Portal account is unavailable." });
+        .eq("id", session.account_id).eq("student_id", studentId).eq("school_id", session.school_id)
+        .eq("is_active", true).maybeSingle();
+      if (error || !parentAccount) return res.status(401).json({ success: false, message: "Parent Portal account is unavailable." });
       account = parentAccount;
+    } else {
+      return res.status(401).json({ success: false, message: "Portal session type is invalid." });
     }
 
-    const student = await loadStudent(account.student_id, account.school_id);
+    const student = await loadStudent(studentId, session.school_id);
     if (!student) return res.status(403).json({ success: false, message: "Student is no longer available in this school." });
-    const { data: school, error: schoolError } = await supabase.from("schools").select("id,school_name,is_active").eq("id", account.school_id).maybeSingle();
+    const { data: school, error: schoolError } = await supabase.from("schools")
+      .select("id,school_name,is_active").eq("id", session.school_id).maybeSingle();
     if (schoolError || !school || school.is_active !== true) return res.status(403).json({ success: false, message: "This school is inactive. Please contact the school administrator." });
     if (String(student.status || student.student_status || "Active").toLowerCase() === "inactive") return res.status(403).json({ success: false, message: "Student account is inactive. Contact the school." });
-    req.parent = { account, student, school };
-    if (account.must_change_password && !["/change-password", "/logout"].includes(req.path)) {
+    req.parent = { account, student, school, session };
+    if (account.must_change_password && !["/change-password", "/logout", "/revoke-all-sessions"].includes(req.path)) {
       return res.status(403).json({ success: false, code: "PARENT_PASSWORD_CHANGE_REQUIRED", message: "Badilisha password yako ya awali kwanza." });
     }
     next();
@@ -464,7 +447,7 @@ router.post("/login", async (req, res) => {
     const update = await supabase.from("parent_portal_accounts")
       .update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
     if (update.error) throw update.error;
-    const token = tokenFor({ account_id: account.id, student_id: student.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
+    const { token } = await createPortalSession({ accountType: "parent", accountId: account.id, studentId: student.id, schoolId, req });
     const classRow = student.current_class_id
       ? await supabase.from("classes").select("class_name").eq("id", student.current_class_id).eq("school_id", schoolId).maybeSingle()
       : { data: null };
@@ -1231,7 +1214,8 @@ router.post("/change-password", async (req, res) => {
     const hashed = await hashPassword(newPassword);
     const update = await supabase.from("parent_portal_accounts").update({ password_hash: hashed.hash, password_salt: hashed.salt, must_change_password: false, updated_at: new Date().toISOString() }).eq("id", account.id);
     if (update.error) throw update.error;
-    return res.json({ success: true, message: "Password changed successfully." });
+    await revokePortalAccountSessions("parent", account.id);
+    return res.json({ success: true, message: "Password changed. Please sign in again on this and other devices." });
   } catch (error) {
     console.error("PARENT PASSWORD CHANGE ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to change password." });
@@ -1266,6 +1250,25 @@ router.post("/chat", async (req, res) => {
   return res.json({ success: true, message: data });
 });
 
-router.post("/logout", (_req, res) => res.json({ success: true, message: "Signed out." }));
+router.post("/logout", async (req, res) => {
+  try {
+    const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    await revokePortalSession(token);
+    return res.json({ success: true, message: "Signed out." });
+  } catch (error) {
+    console.error("PARENT PORTAL LOGOUT ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to sign out." });
+  }
+});
+
+router.post("/revoke-all-sessions", async (req, res) => {
+  try {
+    await revokePortalAccountSessions(req.parent.account.is_sponsor ? "sponsor" : "parent", req.parent.account.id);
+    return res.json({ success: true, message: "All portal sessions have been signed out." });
+  } catch (error) {
+    console.error("PARENT PORTAL REVOKE SESSIONS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to sign out all devices." });
+  }
+});
 
 export default router;

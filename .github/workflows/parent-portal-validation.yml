@@ -32,9 +32,13 @@ jobs:
           node --check server.js
           node --check routes/parentPortalRoutes.js
           node --check routes/sponsorPortalRoutes.js
+          node --check utils/portalSessions.js
+          node --check utils/portalSessionCrypto.js
       - name: Run backend regression tests
         working-directory: backend
-        run: npm run test:ai-safe
+        run: |
+          npm run test:ai-safe
+          node --test tests/portal-sessions.test.js
       - name: Check Parent Portal migration guardrails
         run: |
           grep -q "alter table public.parent_portal_accounts enable row level security" supabase/migrations/20261110110000_parent_portal_foundation.sql
@@ -43,6 +47,8 @@ jobs:
           grep -q "parent_portal_suggestions" supabase/migrations/20261110110000_parent_portal_foundation.sql
           grep -q "alter table public.sponsor_center_students enable row level security" supabase/migrations/20261112090000_sponsor_center_portal.sql
           grep -q "revoke all on public.sponsor_portal_accounts from anon, authenticated" supabase/migrations/20261112090000_sponsor_center_portal.sql
+          grep -q "alter table public.portal_sessions enable row level security" supabase/migrations/20261115090000_persistent_portal_sessions.sql
+          grep -q "revoke all on public.portal_sessions from anon, authenticated" supabase/migrations/20261115090000_persistent_portal_sessions.sql
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
