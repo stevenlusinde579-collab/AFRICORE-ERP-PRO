@@ -341,7 +341,7 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/select-student", async (req, res) => {
-  const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   try {
     const session = await getPortalSession(token);
     if (!session || session.account_type !== "sponsor" || !session.center_id) {
@@ -374,7 +374,7 @@ router.post("/select-student", async (req, res) => {
 
 router.post("/logout", async (req, res) => {
   try {
-    const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     await revokePortalSession(token);
     return res.json({ success: true, message: "Signed out." });
   } catch (error) {
@@ -384,7 +384,7 @@ router.post("/logout", async (req, res) => {
 });
 
 router.post("/revoke-all-sessions", async (req, res) => {
-  const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   try {
     const session = await getPortalSession(token);
     if (!session || session.account_type !== "sponsor") return res.status(401).json({ success: false, message: "Sponsor session haipo." });
