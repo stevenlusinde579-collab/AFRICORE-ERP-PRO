@@ -47,7 +47,7 @@ test("passes education-level context through the topic mapper", () => {
     const result = inferCurriculumTopic({
         subjectName: "Mathematics",
         level: "Standard IV",
-        questionText: "Find the missing number in 24 + __ = 40.",
+        questionText: "Add 24 and 16.",
     });
     assert.equal(result.curriculum_level, "primary");
     assert.equal(result.topic, "Number");
