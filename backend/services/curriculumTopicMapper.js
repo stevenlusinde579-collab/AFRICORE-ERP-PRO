@@ -1,6 +1,6 @@
 const TOPIC_RULES = [
-    ["English Language", "Reading comprehension", "Reading for meaning", [/\b(read|reading|passage|comprehension|answer the questions that follow|mary'?s daily routine)\b/i]],
-    ["English Language", "Grammar", "Verb forms and tenses", [/\b(verb|verbs|tense|present simple|past tense|correct form|conjugat|subject[- ]verb agreement)\b/i]],
+    ["English Language", "Reading comprehension", "Reading for meaning", [/\b(read|reading|passage|comprehension|answer the questions that follow)\b/i]],
+    ["English Language", "Grammar", "Verb forms and tenses", [/\b(verb|verbs|tense|present simple|past tense|correct form|daily routine|conjugat|subject[- ]verb agreement)\b/i]],
     ["English Language", "Grammar", "Parts of speech", [/\b(noun|pronoun|adjective|adverb|preposition|conjunction)\b/i]],
     ["English Language", "Vocabulary", "Spelling and word formation", [/\b(jumbled letters|spell|spelling|rearrange the letters|word formation|meaning of the word)\b/i]],
     ["English Language", "Writing", "Guided and creative composition", [/\b(composition|write a letter|story|paragraph|essay|describe your)\b/i]],
