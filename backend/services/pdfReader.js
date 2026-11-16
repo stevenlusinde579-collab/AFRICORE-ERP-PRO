@@ -1,7 +1,7 @@
 // backend/services/pdfReader.js
 
 import pdf from "pdf-parse";
-import { extractScannedPdfText, isLikelyScannedPdfText } from "./pdfOcr.js";
+import { extractScannedPdfText, isLikelyScannedPdfText, scoreExamTextQuality } from "./pdfOcr.js";
 
 
 // ============================================================
@@ -1300,20 +1300,36 @@ export const readPDF =
             // OCR when the extracted text is clearly insufficient; this keeps
             // selectable-text PDFs fast and preserves their native layout.
             if (options.enableOcr === true && isLikelyScannedPdfText(finalText)) {
-                console.warn("PDF TEXT IS INSUFFICIENT; STARTING SCANNED-PDF OCR...");
+                console.warn("PDF TEXT IS INSUFFICIENT OR STRUCTURALLY WEAK; STARTING SCANNED-PDF OCR...");
                 try {
                     const ocrText = await extractScannedPdfText(buffer, { signal: options.signal });
-                    if (ocrText.length > finalText.length) {
-                        finalText = finalClean(ocrText);
+                    const cleanedOcrText = finalClean(ocrText);
+                    const extractedQuality = scoreExamTextQuality(finalText);
+                    const ocrQuality = scoreExamTextQuality(cleanedOcrText);
+                    // Select the more useful extraction by examination structure,
+                    // not merely by character count. OCR can be shorter but retain
+                    // question labels and marks more accurately than PDF text layers.
+                    if (ocrQuality > extractedQuality ||
+                        (!finalText.trim() && cleanedOcrText.length > 0)) {
+                        finalText = cleanedOcrText;
                         console.log("PDF OCR SELECTED:", {
                             characters: finalText.length,
+                            quality: ocrQuality,
+                            previousQuality: extractedQuality,
                             detectedQuestions: detectQuestionNumbers(finalText),
+                        });
+                    } else {
+                        console.log("EXISTING PDF TEXT RETAINED AFTER OCR COMPARISON:", {
+                            characters: finalText.length,
+                            quality: extractedQuality,
+                            ocrCharacters: cleanedOcrText.length,
+                            ocrQuality,
                         });
                     }
                 } catch (ocrError) {
                     console.error("SCANNED PDF OCR FAILED:", ocrError?.message || ocrError);
-                    // Rule-Based requests must not continue with empty text.
-                    // Gemini does not enable this OCR path and is unaffected.
+                    // Rule-Based requests must not continue with empty/weak text
+                    // when OCR fails; return the actionable OCR error instead.
                     throw ocrError;
                 }
             }
