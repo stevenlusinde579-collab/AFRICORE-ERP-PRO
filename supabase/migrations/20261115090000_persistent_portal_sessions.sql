@@ -5,7 +5,7 @@ create table if not exists public.portal_sessions (
   account_type text not null check (account_type in ('parent','sponsor')),
   account_id uuid not null,
   school_id bigint not null references public.schools(id) on delete cascade,
-  student_id bigint null references public.students(id) on delete set null,
+  student_id bigint null references public.students(id) on delete cascade,
   center_id uuid null references public.sponsor_centers(id) on delete cascade,
   token_hash text not null unique,
   user_agent text null,
