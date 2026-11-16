@@ -1125,3 +1125,41 @@ Answer any 2 out of 4 questions.
     assert.ok(result.questions.every(question => question.max_marks === 0));
     assert.ok(result.recommendations.some(item => /exact source line is unverified/i.test(item)));
 });
+
+
+test("recovers an omitted Q5 boundary between two English Language tasks", () => {
+    const result = analyzePaperWithRules({
+        subjectName: "English Language",
+        level: "Standard IV",
+        examName: "ANNUAL",
+        pdfText: `STANDARD IV ENGLISH LANGUAGE
+Q1
+Listen carefully to the sentences read by your invigilator then write them correctly in the space provided.
+i. __________ ii. __________ iii. __________ iv. __________ v. __________
+Q2
+Choose the most correct answer from the given alternatives and write its letter in the box provided.
+i. My sister cooks food every day. Therefore, she is a teacher, cook, nurse or driver.
+Q3
+Match the words from List A with the words with similar sounds in List B.
+i. Blue A. Two ii. Night B. Light iii. Cake C. Make
+Q4
+Write the correct English word from the jumbled letters in the brackets to make meaningful sentences.
+i. She is a (tarms) girl in our class.
+ii. Peter (dawelk) to school yesterday.
+iii. She (dekoco) rice for dinner.
+Complete Mary's daily routine by writing the verbs in the brackets into the correct form.
+Mary (i) (wake up) at six o'clock every morning.
+(ii) (make) her bed. (iii) (help) her mother in the kitchen.
+(iv) (walk) to school with her friends.
+Q6
+Read the following passage carefully and then answer the questions that follow.
+My name is Grace. I am in class four. I study at Furaha primary school.`,
+    });
+
+    assert.equal(result.total_questions, 6);
+    assert.deepEqual(result.questions.map(question => question.question_number), [1, 2, 3, 4, 5, 6]);
+    assert.match(result.questions[3].question_text, /jumbled letters/i);
+    assert.doesNotMatch(result.questions[3].question_text, /Complete Mary's daily routine/i);
+    assert.match(result.questions[4].question_text, /Complete Mary's daily routine/i);
+    assert.match(result.questions[5].question_text, /Grace/i);
+});
