@@ -594,9 +594,10 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     return nonEmpty;
 };
 
-const inferTopic = (text, subjectName) => inferCurriculumTopic({
+const inferTopic = (text, subjectName, level) => inferCurriculumTopic({
     questionText: text,
     subjectName,
+    level,
 });
 
 const inferBloom = (text) => {
@@ -870,7 +871,7 @@ export const analyzePaperWithRules = ({
                 explicitTotal += marks;
                 explicitQuestionMarks.push(marks);
             }
-            const topic = inferTopic(source.text, subjectName);
+            const topic = inferTopic(source.text, subjectName, level);
             const bloom = inferBloom(source.text);
             const question = {
                 question_number: source.question_number,
