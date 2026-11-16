@@ -102,15 +102,6 @@ const subjectMatches = (ruleSubject, subject) => {
     return (aliases[ruleSubject] || [ruleSubject.toLowerCase()]).some(alias => s.includes(alias));
 };
 
-const LEVEL_GROUPS = {
-    early_years: ["early_years", "primary"],
-    primary: ["primary"],
-    ordinary_secondary: ["ordinary_secondary", "primary"],
-    advanced_secondary: ["advanced_secondary", "ordinary_secondary"],
-    tertiary: ["tertiary", "advanced_secondary"],
-    general: ["early_years", "primary", "ordinary_secondary", "advanced_secondary", "tertiary"],
-};
-
 const classifyLevel = value => {
     const level = normalise(value);
     if (/baby class|nursery|kindergarten|pre[- ]?primary|early years/.test(level)) return "early_years";
@@ -138,8 +129,7 @@ export const inferCurriculumTopic = ({ questionText, subjectName, level = "" }) 
                 const generic = /^(read|reading|data|time|work|power|trade|bank|soil|crop|cell|force|area|mean)$/i.test(phrase);
                 return total + (generic ? 1 : Math.min(7, words * 2 + 1));
             }, 0);
-            const levelFit = (LEVEL_GROUPS[levelGroup] || LEVEL_GROUPS.general).includes(levelGroup) ? 1 : 0;
-            return { subject, topic, sub_topic: subTopic, evidence: uniqueEvidence, score: score + levelFit, raw_score: score };
+            return { subject, topic, sub_topic: subTopic, evidence: uniqueEvidence, score, raw_score: score };
         })
         .filter(item => item.raw_score > 0)
         .sort((a, b) => b.score - a.score);
