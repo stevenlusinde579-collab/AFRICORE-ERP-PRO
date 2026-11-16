@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { inferCurriculumTopic } from "../services/curriculumTopicMapper.js";
 import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
+import { TANZANIA_CURRICULUM_SOURCES } from "../data/tanzaniaCurriculumSources.js";
 
 test("maps English daily-routine verb task to grammar with evidence", () => {
     const topic = inferCurriculumTopic({
@@ -85,4 +86,14 @@ test("includes topic confidence and evidence in Rule-Based question output", () 
     assert.equal(result.questions[0].sub_topic, "Verb forms and tenses");
     assert.ok(result.questions[0].topic_confidence > 0);
     assert.match(result.questions[0].topic_evidence, /daily routine|verb|correct form/i);
+});
+
+
+test("registers official TIE curriculum sources for all school education levels", () => {
+    const levels = TANZANIA_CURRICULUM_SOURCES.levels;
+    for (const key of ["pre_primary", "primary", "ordinary_secondary", "advanced_secondary"]) {
+        assert.match(levels[key].officialUrl, /^https:\/\/www\\.tie\\.go\\.tz\//, key);
+        assert.equal(levels[key].year, 2023, key);
+        assert.equal(levels[key].status, "official_source_registered", key);
+    }
 });
