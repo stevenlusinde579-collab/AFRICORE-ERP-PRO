@@ -1,3 +1,5 @@
+import { inferCurriculumTopic } from "./curriculumTopicMapper.js";
+
 const NUMBER_WORDS = {
     one: 1, two: 2, three: 3, four: 4, five: 5,
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -592,24 +594,10 @@ const splitPaper = (pdfText, level = "Unknown Level") => {
     return nonEmpty;
 };
 
-const inferTopic = (text, subjectName) => {
-    const lower = String(text || "").toLowerCase();
-    const subject = Object.keys(TOPIC_KEYWORDS).find(key =>
-        String(subjectName || "").toLowerCase().includes(key.toLowerCase())
-    );
-    const dictionary = subject ? { [subject]: TOPIC_KEYWORDS[subject] } : TOPIC_KEYWORDS;
-    let best = null;
-    for (const [name, words] of Object.entries(dictionary)) {
-        const found = words.filter(word => lower.includes(word));
-        if (found.length > (best?.matches.length || 0)) best = { name, matches: found };
-    }
-    return best
-        ? {
-            topic: best.matches[0].replace(/\b\w/g, character => character.toUpperCase()),
-            sub_topic: best.matches.slice(1, 4).join(", ") || null,
-        }
-        : { topic: null, sub_topic: null };
-};
+const inferTopic = (text, subjectName) => inferCurriculumTopic({
+    questionText: text,
+    subjectName,
+});
 
 const inferBloom = (text) => {
     const lower = String(text || "").toLowerCase();
