@@ -136,7 +136,15 @@ export default function ParentPortal() {
     setActiveTab("overview");
     setError("");
   };
-  const signOutAll = async () => {\n    try {\n      if (sponsorToken) await api.post("/sponsor-portal/revoke-all-sessions", {}, { headers: { Authorization: "Bearer " + sponsorToken } });\n      else if (token) await api.post("/parent-portal/revoke-all-sessions", {}, { headers: { Authorization: "Bearer " + token } });\n    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kutoa akaunti kwenye vifaa vyote."); return; }\n    await signOut();\n  };\n\n  const signOut = async () => {
+  const signOutAll = async () => {
+    try {
+      if (sponsorToken) await api.post("/sponsor-portal/revoke-all-sessions", {}, { headers: { Authorization: "Bearer " + sponsorToken } });
+      else if (token) await api.post("/parent-portal/revoke-all-sessions", {}, { headers: { Authorization: "Bearer " + token } });
+    } catch (e) { setError(e.response?.data?.message || "Imeshindikana kutoa akaunti kwenye vifaa vyote."); return; }
+    await signOut();
+  };
+
+  const signOut = async () => {
     try {
       if (sponsorToken) await api.post("/sponsor-portal/logout", {}, { headers: { Authorization: "Bearer " + sponsorToken } });
       else if (token) await api.post("/parent-portal/logout", {}, { headers: { Authorization: "Bearer " + token } });
