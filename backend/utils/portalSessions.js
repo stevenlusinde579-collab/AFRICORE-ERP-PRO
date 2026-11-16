@@ -1,9 +1,6 @@
 import crypto from "node:crypto";
 import { supabase } from "../config/supabase.js";
-
-export function hashPortalSessionToken(token) {
-  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
-}
+import { hashPortalSessionToken, isValidPortalSessionToken } from "./portalSessionCrypto.js";
 
 export async function createPortalSession({ accountType, accountId, schoolId, studentId = null, centerId = null, req }) {
   const token = crypto.randomBytes(32).toString("base64url");
@@ -23,7 +20,7 @@ export async function createPortalSession({ accountType, accountId, schoolId, st
 
 export async function getPortalSession(token) {
   const value = String(token || "");
-  if (!/^[A-Za-z0-9_-]{40,60}$/.test(value)) return null;
+  if (!isValidPortalSessionToken(value)) return null;
   const { data, error } = await supabase.from("portal_sessions")
     .select("id,account_type,account_id,school_id,student_id,center_id,revoked_at")
     .eq("token_hash", hashPortalSessionToken(value))
@@ -33,7 +30,8 @@ export async function getPortalSession(token) {
   if (!data) return null;
   const touch = await supabase.from("portal_sessions")
     .update({ last_seen_at: new Date().toISOString() })
-    .eq("id", data.id).is("revoked_at", null);
+    .eq("id", data.id).is("revoked_at", null)
+    .lt("last_seen_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
   if (touch.error) throw touch.error;
   return data;
 }
@@ -49,7 +47,7 @@ export async function setPortalSessionStudent(sessionId, studentId) {
 
 export async function revokePortalSession(token) {
   const value = String(token || "");
-  if (!/^[A-Za-z0-9_-]{40,60}$/.test(value)) return false;
+  if (!isValidPortalSessionToken(value)) return false;
   const { data, error } = await supabase.from("portal_sessions")
     .update({ revoked_at: new Date().toISOString() })
     .eq("token_hash", hashPortalSessionToken(value)).is("revoked_at", null)
