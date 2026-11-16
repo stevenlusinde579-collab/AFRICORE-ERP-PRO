@@ -27,9 +27,6 @@ create index if not exists portal_sessions_school_active_idx
 alter table public.portal_sessions enable row level security;
 revoke all on public.portal_sessions from anon, authenticated;
 grant all on public.portal_sessions to service_role;
-revoke all on function public.revoke_portal_sessions_on_account_change() from public, anon, authenticated;
-revoke all on function public.revoke_portal_sessions_on_school_deactivation() from public, anon, authenticated;
-revoke all on function public.revoke_portal_sessions_on_sponsor_center_deactivation() from public, anon, authenticated;
 
 create or replace function public.revoke_portal_sessions_on_account_change()
 returns trigger
@@ -143,3 +140,7 @@ drop trigger if exists sponsor_assignments_revoke_portal_sessions_on_delete on p
 create trigger sponsor_assignments_revoke_portal_sessions_on_delete
 after delete on public.sponsor_center_students
 for each row execute function public.revoke_sponsor_portal_sessions_on_assignment_removal();
+
+revoke all on function public.revoke_portal_sessions_on_account_change() from public, anon, authenticated;
+revoke all on function public.revoke_portal_sessions_on_school_deactivation() from public, anon, authenticated;
+revoke all on function public.revoke_portal_sessions_on_sponsor_center_deactivation() from public, anon, authenticated;
