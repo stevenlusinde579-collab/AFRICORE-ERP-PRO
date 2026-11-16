@@ -264,6 +264,40 @@ export default function AddExpense() {
             setError("");
 
 
+            // Resolve the signed-in user's school first. Financial accounts
+            // are stored in finance.cash_accounts and must remain school-scoped.
+            const {
+                data: authData,
+                error: authError
+            } = await supabase.auth.getUser();
+
+            if (authError) {
+                throw authError;
+            }
+
+            if (!authData?.user?.id) {
+                throw new Error("User session haijapatikana.");
+            }
+
+            const {
+                data: profile,
+                error: profileError
+            } = await supabase
+                .from("profiles")
+                .select("school_id")
+                .eq("id", authData.user.id)
+                .maybeSingle();
+
+            if (profileError) {
+                throw profileError;
+            }
+
+            const schoolId = Number(profile?.school_id || 0);
+
+            if (!schoolId) {
+                throw new Error("School ID ya mtumiaji haijapatikana.");
+            }
+
             const [
                 expenseAccountsResult,
                 financialAccountsResult,
@@ -286,12 +320,22 @@ export default function AddExpense() {
                     }),
 
                 supabase
-                    .from("financial_accounts")
+                    .schema("finance")
+                    .from("cash_accounts")
                     .select(`
                         id,
+                        school_id,
                         account_name,
-                        current_balance
+                        account_type,
+                        provider_name,
+                        account_number,
+                        chart_of_account_id,
+                        opening_balance,
+                        current_balance,
+                        is_active
                     `)
+                    .eq("school_id", schoolId)
+                    .eq("is_active", true)
                     .order("account_name", {
                         ascending: true
                     }),
