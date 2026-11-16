@@ -7,6 +7,8 @@ import {
     isLikelyScannedPdfText,
     scoreExamTextQuality,
 } from "../services/pdfOcr.js";
+import { readPDF } from "../services/pdfReader.js";
+import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
 
 
 const createImageOnlyPdf = () => {
@@ -253,4 +255,27 @@ test("detects a long but structurally unusable extracted text layer for OCR fall
         "l I | 0O __ -- // " + (index + 1)
     ).join("\n");
     assert.equal(isLikelyScannedPdfText(fragments), true);
+});
+
+
+test("runs an image-only examination PDF through OCR, PDF reader and Rule-Based analysis", { timeout: 240000 }, async () => {
+    const pdfBuffer = createImageOnlyPdf();
+    const extractedText = await readPDF(pdfBuffer, { enableOcr: true });
+
+    assert.match(extractedText, /QUESTION\s*1/i);
+    assert.match(extractedText, /accounting/i);
+
+    const analysis = analyzePaperWithRules({
+        subjectName: "Accounting",
+        level: "Diploma",
+        examName: "OCR Integration Test",
+        pdfText: extractedText,
+    });
+
+    assert.equal(analysis.education_level_category, "tertiary");
+    assert.equal(analysis.total_questions, 1);
+    assert.equal(analysis.questions.length, 1);
+    assert.match(analysis.questions[0].question_text, /accounting equation/i);
+    assert.equal(analysis.questions[0].max_marks, 0);
+    assert.ok(analysis.recommendations.some(item => /confirm/i.test(item)));
 });
