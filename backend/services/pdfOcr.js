@@ -75,8 +75,19 @@ export const isLikelyScannedPdfText = (value) => {
     // Preserve short, genuinely readable papers. Trigger OCR for longer but
     // structurally weak extraction too (e.g. a scanned page with OCR-like
     // fragments, broken glyphs, or a few unrelated text-layer artefacts).
+    const hasExamStructure =
+        /^\s*(?:QUESTION\s*\d+|Q\s*\d+|\d{1,3}\s*[.)\-:]|SECTION\s+[A-F]|SEHEMU\s+[A-F])\b/im.test(raw);
+    const visibleCharacters = [...raw].filter(char => !/\s/.test(char));
+    const nonWordCharacters = visibleCharacters.filter(char => !/[\p{L}\p{N}]/u.test(char));
+    const symbolNoiseRatio = visibleCharacters.length
+        ? nonWordCharacters.length / visibleCharacters.length
+        : 0;
+    const structurallyNoisyExtraction =
+        !hasExamStructure && symbolNoiseRatio > 0.28;
     const weakLongExtraction = raw.length >= 120 &&
-        (usefulWords.length < 10 || scoreExamTextQuality(raw) < 30);
+        (usefulWords.length < 10 ||
+            scoreExamTextQuality(raw) < 30 ||
+            structurallyNoisyExtraction);
     return scannerWatermarkOnly ||
         (text.length < 100 && usefulWords.length < 5) ||
         usefulWords.length < 3 ||
