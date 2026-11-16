@@ -5,6 +5,7 @@ import {
     cleanOcrText,
     extractScannedPdfText,
     isLikelyScannedPdfText,
+    scoreExamTextQuality,
 } from "../services/pdfOcr.js";
 
 
@@ -223,4 +224,33 @@ test("cancels an in-flight OCR recognition when the request is aborted", async (
     controller.abort(new Error("test timeout"));
     await assert.rejects(analysis, /test timeout/);
     assert.equal(terminated, true);
+});
+
+test("scores complete examination text higher than weak text-layer fragments", () => {
+    const completePaper = [
+        "CHEMISTRY EXAMINATION",
+        "SECTION A (20 MARKS)",
+        "Answer all questions.",
+        "QUESTION 1. Define an element (5 marks).",
+        "QUESTION 2. Explain chemical bonding (5 marks).",
+        "SECTION B (40 MARKS)",
+        "QUESTION 3. Describe the periodic table (10 marks).",
+        "QUESTION 4. Explain acids and bases (10 marks).",
+    ].join("\n");
+    const weakFragments = "CamScanner 2026 1 l I | 0O 0O ____";
+    assert.ok(scoreExamTextQuality(completePaper) > scoreExamTextQuality(weakFragments));
+    assert.equal(isLikelyScannedPdfText(weakFragments), true);
+});
+
+test("does not trigger OCR solely because a short but readable question has few lines", () => {
+    const readable = "QUESTION 1. Define assets and explain two accounting concepts.";
+    assert.equal(isLikelyScannedPdfText(readable), false);
+    assert.ok(scoreExamTextQuality(readable) > 0);
+});
+
+test("detects a long but structurally unusable extracted text layer for OCR fallback", () => {
+    const fragments = Array.from({ length: 16 }, (_, index) =>
+        "l I | 0O __ -- // " + (index + 1)
+    ).join("\n");
+    assert.equal(isLikelyScannedPdfText(fragments), true);
 });
