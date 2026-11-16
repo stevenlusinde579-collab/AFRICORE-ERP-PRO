@@ -127,7 +127,7 @@ export const inferCurriculumTopic = ({ questionText, subjectName, level = "" }) 
             const score = uniqueEvidence.reduce((total, phrase) => {
                 const words = phrase.split(" ").length;
                 const generic = /^(read|reading|data|time|work|power|trade|bank|soil|crop|cell|force|area|mean)$/i.test(phrase);
-                return total + (generic ? 1 : Math.min(7, words * 2 + 1));
+                return total + (generic ? 1 : Math.min(10, words * 3 + 1));
             }, 0);
             return { subject, topic, sub_topic: subTopic, evidence: uniqueEvidence, score, raw_score: score };
         })
