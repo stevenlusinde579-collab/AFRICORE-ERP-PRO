@@ -5,6 +5,13 @@ import ParentLiveMeeting from "../components/ParentLiveMeeting";
 import { StudentReportPrint } from "./examination/ResultsAnalysis";
 
 const TOKEN_KEY = "africore_parent_portal_token";
+try {
+  for (const key of [TOKEN_KEY, "africore_sponsor_portal_token", "africore_sponsor_students", "africore_sponsor_center"]) {
+    const legacy = sessionStorage.getItem(key);
+    if (!localStorage.getItem(key) && legacy) localStorage.setItem(key, legacy);
+    sessionStorage.removeItem(key);
+  }
+} catch { /* Storage may be unavailable in privacy-restricted browsers. */ }
 const money = (value) => new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(value || 0));
 const dateText = (value) => value ? new Date(value).toLocaleDateString() : "-";
 
@@ -13,10 +20,10 @@ export default function ParentPortal() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginMode, setLoginMode] = useState("parent");
-  const [sponsorToken, setSponsorToken] = useState(sessionStorage.getItem("africore_sponsor_portal_token") || "");
-  const [sponsorStudents, setSponsorStudents] = useState(() => { try { return JSON.parse(sessionStorage.getItem("africore_sponsor_students") || "[]"); } catch { return []; } });
-  const [sponsorCenter, setSponsorCenter] = useState(() => { try { return JSON.parse(sessionStorage.getItem("africore_sponsor_center") || "null"); } catch { return null; } });
-  const [token, setToken] = useState(sessionStorage.getItem(TOKEN_KEY) || "");
+  const [sponsorToken, setSponsorToken] = useState(localStorage.getItem("africore_sponsor_portal_token") || "");
+  const [sponsorStudents, setSponsorStudents] = useState(() => { try { return JSON.parse(localStorage.getItem("africore_sponsor_students") || "[]"); } catch { return []; } });
+  const [sponsorCenter, setSponsorCenter] = useState(() => { try { return JSON.parse(localStorage.getItem("africore_sponsor_center") || "null"); } catch { return null; } });
+  const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || "");
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [portalHome, setPortalHome] = useState(true);
   const [showSponsorStudents, setShowSponsorStudents] = useState(false);
@@ -62,7 +69,7 @@ export default function ParentPortal() {
       setResultData(null);
     } catch (e) {
       setError(e.response?.data?.message || "Imeshindikana kupakia taarifa za mwanafunzi.");
-      sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
       setToken("");
     }
   };
@@ -79,15 +86,15 @@ export default function ParentPortal() {
     try {
       if (loginMode === "sponsor") {
         const response = await api.post("/sponsor-portal/login", { username, password });
-        sessionStorage.setItem("africore_sponsor_portal_token", response.data.token);
-        sessionStorage.setItem("africore_sponsor_students", JSON.stringify(response.data.students || []));
-        sessionStorage.setItem("africore_sponsor_center", JSON.stringify(response.data.center || null));
+        localStorage.setItem("africore_sponsor_portal_token", response.data.token);
+        localStorage.setItem("africore_sponsor_students", JSON.stringify(response.data.students || []));
+        localStorage.setItem("africore_sponsor_center", JSON.stringify(response.data.center || null));
         setSponsorToken(response.data.token); setSponsorStudents(response.data.students || []); setSponsorCenter(response.data.center || null);
         setPortalHome(true); setShowSponsorStudents(false);
         setPassword(""); setShowPassword(false); setNotice("Umeingia kama Sponsor. Chagua mwanafunzi unayetaka kuona taarifa zake.");
       } else {
         const response = await api.post("/parent-portal/login", { username, password });
-        sessionStorage.setItem(TOKEN_KEY, response.data.token);
+        localStorage.setItem(TOKEN_KEY, response.data.token);
         setLoginStudent(response.data.student || null);
         setPortalHome(true);
         setMustChangePassword(Boolean(response.data.must_change_password));
@@ -103,7 +110,7 @@ export default function ParentPortal() {
     setBusy(true); setError("");
     try {
       const response = await api.post("/sponsor-portal/select-student", { student_id: student.id }, { headers: { Authorization: "Bearer " + sponsorToken } });
-      sessionStorage.setItem(TOKEN_KEY, response.data.token);
+      localStorage.setItem(TOKEN_KEY, response.data.token);
       setLoginStudent(response.data.student || student);
       setPortalHome(false);
       setToken(response.data.token);
@@ -114,7 +121,7 @@ export default function ParentPortal() {
   const returnToPortalDashboard = () => {
     if (data?.portal_type === "Sponsor") {
       // End only the selected-student session; keep the Sponsor Manager session alive.
-      sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setData(null);
       setLoginStudent(null);
@@ -129,9 +136,13 @@ export default function ParentPortal() {
     setActiveTab("overview");
     setError("");
   };
-  const signOut = () => {
-    sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem("africore_sponsor_portal_token");
-    sessionStorage.removeItem("africore_sponsor_students"); sessionStorage.removeItem("africore_sponsor_center");
+  const signOut = async () => {
+    try {
+      if (sponsorToken) await api.post("/sponsor-portal/logout", {}, { headers: { Authorization: "Bearer " + sponsorToken } });
+      else if (token) await api.post("/parent-portal/logout", {}, { headers: { Authorization: "Bearer " + token } });
+    } catch (e) { console.warn("Portal server logout could not be confirmed:", e?.response?.data?.message || e?.message); }
+    localStorage.removeItem(TOKEN_KEY); localStorage.removeItem("africore_sponsor_portal_token");
+    localStorage.removeItem("africore_sponsor_students"); localStorage.removeItem("africore_sponsor_center");
     setToken(""); setSponsorToken(""); setSponsorStudents([]); setSponsorCenter(null); setData(null); setLoginStudent(null);
     setSelectedExam(""); setResultData(null); setMustChangePassword(false); setActiveTab("overview"); setLoginMode("parent"); setPortalHome(true); setShowSponsorStudents(false);
   };
@@ -218,7 +229,8 @@ export default function ParentPortal() {
     try {
       await api.post("/parent-portal/change-password", { current_password: currentPassword, new_password: newPassword }, authConfig);
       setCurrentPassword(""); setNewPassword(""); setMustChangePassword(false); setNotice("Password imebadilishwa kikamilifu. Tafadhali hifadhi password yako mpya.");
-      await loadDashboard(token);
+      await signOut();
+      setNotice("Password imebadilishwa. Ingia tena kwa password mpya kwenye vifaa vyako.");
     } catch (e) { setError(e.response?.data?.message || "Imeshindikana kubadilisha password."); }
     finally { setBusy(false); }
   };
