@@ -2,11 +2,11 @@ import express from "express";
 import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { supabase } from "../config/supabase.js";
+import { createPortalSession, getPortalSession, setPortalSessionStudent, revokePortalSession, revokePortalAccountSessions } from "../utils/portalSessions.js";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 const scrypt = promisify(crypto.scrypt);
-const SECRET = process.env.PARENT_PORTAL_JWT_SECRET || process.env.SUPABASE_SERVICE_KEY;
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://africorepro.vercel.app").replace(/\/$/, "");
 const attempts = new Map();
 
@@ -25,12 +25,6 @@ async function passwordMatches(password, salt, hash) {
   const actual = await scrypt(String(password), salt, 64);
   const expected = Buffer.from(String(hash || ""), "hex");
   return expected.length === actual.length && crypto.timingSafeEqual(actual, expected);
-}
-function tokenFor(payload) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const unsigned = header + "." + body;
-  return unsigned + "." + crypto.createHmac("sha256", SECRET).update(unsigned).digest("base64url");
 }
 async function sendSupervisorSms(schoolId, phoneValue, username, password, centerName) {
   const phone = normalizePhone(phoneValue);
@@ -335,7 +329,7 @@ router.post("/login", async (req, res) => {
     const update = await supabase.from("sponsor_portal_accounts")
       .update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
     if (update.error) throw update.error;
-    const token = tokenFor({ sponsor_account_id: account.id, sponsor_center_id: center.data.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 });
+    const { token } = await createPortalSession({ accountType: "sponsor", accountId: account.id, schoolId, centerId: center.data.id, req });
     return res.json({ success: true, token, center: { id: center.data.id, name: center.data.center_name }, students: (students.data || []).map(s => ({
       id: s.id, name: fullName(s), admission_number: s.admission_number || s.admission_no,
       class_name: classMap.get(String(s.current_class_id)) || "—",
@@ -347,28 +341,59 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/select-student", async (req, res) => {
-  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  const parts = token.split(".");
-  if (parts.length !== 3 || !SECRET) return res.status(401).json({ success: false, message: "Sponsor session haipo." });
-  let claims;
+  const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
   try {
-    const expected = crypto.createHmac("sha256", SECRET).update(parts[0] + "." + parts[1]).digest();
-    const signature = Buffer.from(parts[2], "base64url");
-    if (signature.length !== expected.length || !crypto.timingSafeEqual(signature, expected)) throw new Error("signature");
-    claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-  } catch { return res.status(401).json({ success: false, message: "Sponsor session si sahihi." }); }
-  if (!claims?.sponsor_account_id || claims.exp <= Math.floor(Date.now() / 1000)) return res.status(401).json({ success: false, message: "Sponsor session imeisha." });
-  const account = await supabase.from("sponsor_portal_accounts").select("id,school_id,center_id,is_active").eq("id", claims.sponsor_account_id).eq("school_id", claims.school_id).eq("center_id", claims.sponsor_center_id).eq("is_active", true).maybeSingle();
-  if (account.error || !account.data) return res.status(401).json({ success: false, message: "Sponsor account haipo." });
-  const studentId = Number(req.body?.student_id);
-  const assignment = await supabase.from("sponsor_center_students").select("student_id").eq("school_id", claims.school_id).eq("center_id", claims.sponsor_center_id).eq("student_id", studentId).maybeSingle();
-  if (assignment.error || !assignment.data) return res.status(403).json({ success: false, message: "Mwanafunzi huyu hajapangiwa kituo chako." });
-  const student = await supabase.from("students").select("id,school_id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id").eq("id", studentId).eq("school_id", claims.school_id).maybeSingle();
-  if (student.error || !student.data) return res.status(404).json({ success: false, message: "Mwanafunzi hayupo." });
-  const school = await supabase.from("schools").select("id,school_name,is_active").eq("id", claims.school_id).maybeSingle();
-  if (school.error || !school.data || school.data.is_active !== true) return res.status(403).json({ success: false, message: "Shule haijawezeshwa." });
-  const parentToken = tokenFor({ sponsor_account_id: claims.sponsor_account_id, sponsor_center_id: claims.sponsor_center_id, sponsor_student_id: studentId, student_id: studentId, school_id: Number(claims.school_id), exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 });
-  return res.json({ success: true, token: parentToken, student: { id: studentId, name: fullName(student.data), school_name: school.data.school_name, admission_number: student.data.admission_number || student.data.admission_no } });
+    const session = await getPortalSession(token);
+    if (!session || session.account_type !== "sponsor" || !session.center_id) {
+      return res.status(401).json({ success: false, message: "Sponsor session haipo au imefutwa." });
+    }
+    const account = await supabase.from("sponsor_portal_accounts")
+      .select("id,school_id,center_id,is_active")
+      .eq("id", session.account_id).eq("school_id", session.school_id)
+      .eq("center_id", session.center_id).eq("is_active", true).maybeSingle();
+    if (account.error || !account.data) return res.status(401).json({ success: false, message: "Sponsor account haipo." });
+    const studentId = Number(req.body?.student_id);
+    if (!Number.isInteger(studentId) || studentId <= 0) return res.status(400).json({ success: false, message: "Mwanafunzi sahihi anahitajika." });
+    const assignment = await supabase.from("sponsor_center_students").select("student_id")
+      .eq("school_id", session.school_id).eq("center_id", session.center_id).eq("student_id", studentId).maybeSingle();
+    if (assignment.error || !assignment.data) return res.status(403).json({ success: false, message: "Mwanafunzi huyu hajapangiwa kituo chako." });
+    const student = await supabase.from("students")
+      .select("id,school_id,first_name,middle_name,last_name,admission_number,admission_no,current_class_id")
+      .eq("id", studentId).eq("school_id", session.school_id).maybeSingle();
+    if (student.error || !student.data) return res.status(404).json({ success: false, message: "Mwanafunzi hayupo." });
+    const school = await supabase.from("schools").select("id,school_name,is_active").eq("id", session.school_id).maybeSingle();
+    if (school.error || !school.data || school.data.is_active !== true) return res.status(403).json({ success: false, message: "Shule haijawezeshwa." });
+    const updated = await setPortalSessionStudent(session.id, studentId);
+    if (!updated) return res.status(401).json({ success: false, message: "Sponsor session imefutwa. Ingia tena." });
+    return res.json({ success: true, token, student: { id: studentId, name: fullName(student.data), school_name: school.data.school_name, admission_number: student.data.admission_number || student.data.admission_no } });
+  } catch (error) {
+    console.error("SPONSOR SELECT STUDENT ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kufungua taarifa za mwanafunzi." });
+  }
+});
+
+router.post("/logout", async (req, res) => {
+  try {
+    const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    await revokePortalSession(token);
+    return res.json({ success: true, message: "Signed out." });
+  } catch (error) {
+    console.error("SPONSOR PORTAL LOGOUT ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to sign out." });
+  }
+});
+
+router.post("/revoke-all-sessions", async (req, res) => {
+  const token = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+  try {
+    const session = await getPortalSession(token);
+    if (!session || session.account_type !== "sponsor") return res.status(401).json({ success: false, message: "Sponsor session haipo." });
+    await revokePortalAccountSessions("sponsor", session.account_id);
+    return res.json({ success: true, message: "All Sponsor Portal sessions have been signed out." });
+  } catch (error) {
+    console.error("SPONSOR PORTAL REVOKE SESSIONS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to sign out all devices." });
+  }
 });
 
 export default router;
