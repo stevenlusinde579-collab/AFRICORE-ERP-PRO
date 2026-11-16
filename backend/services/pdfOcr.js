@@ -76,7 +76,7 @@ export const isLikelyScannedPdfText = (value) => {
     // structurally weak extraction too (e.g. a scanned page with OCR-like
     // fragments, broken glyphs, or a few unrelated text-layer artefacts).
     const hasExamStructure =
-        /^\s*(?:QUESTION\s*\d+|Q\s*\d+|\d{1,3}\s*[.)\-:]|SECTION\s+[A-F]|SEHEMU\s+[A-F])\b/im.test(raw);
+        /^\s*(?:QUESTION\s*\d+|Q\s*\d+|\d{1,3}\s*[.)\-:]|SECTION\s+[A-F]|SEHEMU\s+[A-F])(?=\s|$|[.)\-:])/im.test(raw);
     const visibleCharacters = [...raw].filter(char => !/\s/.test(char));
     const nonWordCharacters = visibleCharacters.filter(char => !/[\p{L}\p{N}]/u.test(char));
     const symbolNoiseRatio = visibleCharacters.length
