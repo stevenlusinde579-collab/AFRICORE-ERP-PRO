@@ -67,19 +67,6 @@ BEGIN
     END IF;
     v_definition := replace(v_definition, v_old, v_new);
 
-    v_old := 'if not found then' || chr(10) ||
-             '      raise exception ''Selected financial account does not belong to this school or is inactive'';' || chr(10) ||
-             '    end if;';
-    v_new := v_old || chr(10) ||
-             chr(10) ||
-             '    if coalesce(v_financial.current_balance, 0) < p_amount then' || chr(10) ||
-             '      raise exception ''Insufficient funds in selected financial account'';' || chr(10) ||
-             '    end if;';
-    IF position(v_old IN v_definition) = 0 THEN
-        RAISE EXCEPTION 'Expected financial account existence check was not found';
-    END IF;
-    v_definition := replace(v_definition, v_old, v_new);
-
     v_old := 'update public.financial_accounts';
     v_new := 'update finance.cash_accounts';
     IF position(v_old IN v_definition) = 0 THEN
