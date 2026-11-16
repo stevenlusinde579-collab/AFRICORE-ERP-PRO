@@ -102,36 +102,65 @@ const subjectMatches = (ruleSubject, subject) => {
     return (aliases[ruleSubject] || [ruleSubject.toLowerCase()]).some(alias => s.includes(alias));
 };
 
-export const inferCurriculumTopic = ({ questionText, subjectName }) => {
+const LEVEL_GROUPS = {
+    early_years: ["early_years", "primary"],
+    primary: ["primary"],
+    ordinary_secondary: ["ordinary_secondary", "primary"],
+    advanced_secondary: ["advanced_secondary", "ordinary_secondary"],
+    tertiary: ["tertiary", "advanced_secondary"],
+    general: ["early_years", "primary", "ordinary_secondary", "advanced_secondary", "tertiary"],
+};
+
+const classifyLevel = value => {
+    const level = normalise(value);
+    if (/baby class|nursery|kindergarten|pre[- ]?primary|early years/.test(level)) return "early_years";
+    if (/standard|std\.?|primary|grade [1-7]/.test(level)) return "primary";
+    if (/form [1-4]|form (one|two|three|four)|o[- ]?level|ordinary level/.test(level)) return "ordinary_secondary";
+    if (/form [5-6]|form (five|six)|a[- ]?level|advanced level/.test(level)) return "advanced_secondary";
+    if (/college|university|certificate|diploma|degree/.test(level)) return "tertiary";
+    return "general";
+};
+
+export const inferCurriculumTopic = ({ questionText, subjectName, level = "" }) => {
     const text = normalise(questionText);
+    const levelGroup = classifyLevel(level);
     const candidates = TOPIC_RULES
         .filter(([subject]) => subjectMatches(subject, subjectName))
         .map(([subject, topic, subTopic, patterns]) => {
             const evidence = patterns
-                .map(pattern => text.match(pattern))
-                .filter(Boolean)
+                .map(pattern => [...text.matchAll(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g"))])
+                .flat()
                 .map(match => match[0]);
             const uniqueEvidence = [...new Set(evidence.map(normalise))];
-            const score = uniqueEvidence.reduce((total, phrase) => total + Math.min(4, phrase.split(" ").length + 1), 0);
-            return { subject, topic, sub_topic: subTopic, evidence: uniqueEvidence, score };
+            // Specific multi-word concepts carry more weight than isolated generic words.
+            const score = uniqueEvidence.reduce((total, phrase) => {
+                const words = phrase.split(" ").length;
+                const generic = /^(read|reading|data|time|work|power|trade|bank|soil|crop|cell|force|area|mean)$/i.test(phrase);
+                return total + (generic ? 1 : Math.min(7, words * 2 + 1));
+            }, 0);
+            const levelFit = (LEVEL_GROUPS[levelGroup] || LEVEL_GROUPS.general).includes(levelGroup) ? 1 : 0;
+            return { subject, topic, sub_topic: subTopic, evidence: uniqueEvidence, score: score + levelFit, raw_score: score };
         })
-        .filter(item => item.score > 0)
+        .filter(item => item.raw_score > 0)
         .sort((a, b) => b.score - a.score);
 
     if (!candidates.length) {
-        return { topic: null, sub_topic: null, topic_confidence: 0, topic_evidence: null, topic_source: "not_identified" };
+        return { topic: null, sub_topic: null, topic_confidence: 0, topic_evidence: null, topic_source: "not_identified", topic_alternatives: [], curriculum_level: levelGroup };
     }
 
     const best = candidates[0];
-    const second = candidates[1];
+    const second = candidates.find(item => item.topic !== best.topic || item.sub_topic !== best.sub_topic);
     const margin = best.score - (second?.score || 0);
-    const confidence = Math.max(35, Math.min(95, Math.round(45 + best.score * 9 + margin * 5)));
+    const confidence = Math.max(20, Math.min(95, Math.round(35 + Math.min(6, best.raw_score) * 7 + Math.max(0, margin) * 6)));
+    const ambiguous = Boolean(second && margin <= 2);
     return {
-        topic: best.topic,
-        sub_topic: best.sub_topic,
+        topic: ambiguous ? null : best.topic,
+        sub_topic: ambiguous ? null : best.sub_topic,
         topic_confidence: confidence,
-        topic_evidence: best.evidence.slice(0, 3).join("; "),
-        topic_source: "question_text_rule_match",
+        topic_evidence: best.evidence.slice(0, 4).join("; "),
+        topic_source: ambiguous ? "ambiguous_rule_match" : "question_text_rule_match",
+        topic_alternatives: candidates.slice(0, 3).map(item => ({ topic: item.topic, sub_topic: item.sub_topic, evidence: item.evidence.slice(0, 2) })),
+        curriculum_level: levelGroup,
     };
 };
 
