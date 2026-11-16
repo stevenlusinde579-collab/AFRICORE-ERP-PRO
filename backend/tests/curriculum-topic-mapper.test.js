@@ -42,6 +42,39 @@ test("returns an honest unknown when question text has no topic evidence", () =>
     assert.equal(result.topic_source, "not_identified");
 });
 
+
+test("passes education-level context through the topic mapper", () => {
+    const result = inferCurriculumTopic({
+        subjectName: "Mathematics",
+        level: "Standard IV",
+        questionText: "Find the missing number in 24 + __ = 40.",
+    });
+    assert.equal(result.curriculum_level, "primary");
+    assert.equal(result.topic, "Number");
+});
+
+test("does not force a topic when question evidence is ambiguous", () => {
+    const result = inferCurriculumTopic({
+        subjectName: "English Language",
+        level: "Form II",
+        questionText: "Read the passage and identify the noun and tense used in the sentences.",
+    });
+    assert.equal(result.topic, null);
+    assert.equal(result.sub_topic, null);
+    assert.equal(result.topic_source, "ambiguous_rule_match");
+    assert.ok(result.topic_alternatives.length >= 2);
+});
+
+test("does not infer a topic from unrelated instruction words", () => {
+    const result = inferCurriculumTopic({
+        subjectName: "Chemistry",
+        level: "Form IV",
+        questionText: "Answer all questions. Write your examination number clearly.",
+    });
+    assert.equal(result.topic, null);
+    assert.equal(result.topic_confidence, 0);
+});
+
 test("includes topic confidence and evidence in Rule-Based question output", () => {
     const result = analyzePaperWithRules({
         subjectName: "English Language",
