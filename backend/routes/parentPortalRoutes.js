@@ -464,7 +464,7 @@ router.post("/login", async (req, res) => {
     const update = await supabase.from("parent_portal_accounts")
       .update({ last_login_at: new Date().toISOString() }).eq("id", account.id).eq("school_id", schoolId);
     if (update.error) throw update.error;
-    const token = tokenFor({ account_id: account.id, student_id: student.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12 });
+    const token = tokenFor({ account_id: account.id, student_id: student.id, school_id: schoolId, exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 });
     const classRow = student.current_class_id
       ? await supabase.from("classes").select("class_name").eq("id", student.current_class_id).eq("school_id", schoolId).maybeSingle()
       : { data: null };
