@@ -76,7 +76,7 @@ export const isLikelyScannedPdfText = (value) => {
     // structurally weak extraction too (e.g. a scanned page with OCR-like
     // fragments, broken glyphs, or a few unrelated text-layer artefacts).
     const weakLongExtraction = raw.length >= 120 &&
-        (usefulWords.length < 10 || scoreExamTextQuality(raw) < 24);
+        (usefulWords.length < 10 || scoreExamTextQuality(raw) < 30);
     return scannerWatermarkOnly ||
         (text.length < 100 && usefulWords.length < 5) ||
         usefulWords.length < 3 ||
