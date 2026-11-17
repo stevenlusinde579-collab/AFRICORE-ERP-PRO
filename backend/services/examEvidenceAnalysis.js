@@ -283,7 +283,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     }
 
     for (const question of questions) {
-        const rule = selections.find(item => item.scope === "PAPER" || item.scope === question.section);
+        const rule = selections.find(item => item.scope === question.section) || selections.find(item => item.scope === "PAPER");
         if (!rule) {
             question.is_selective = false;
             question.selection_required = false;
@@ -372,6 +372,15 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         }
     }
 
+    const hasPaperSelection = selections.some(item => item.scope === "PAPER" && item.mode !== "answer_all");
+    const hasSectionSelection = selections.some(item => item.scope !== "PAPER" && item.mode !== "answer_all");
+    if (hasPaperSelection && hasSectionSelection) {
+        diagnostics.push({
+            code: "CONFLICTING_SELECTION_RULES",
+            message: "Both paper-wide and section-specific selection rules were detected. Effective marks require educator review.",
+        });
+    }
+
     const totalMatch = String(sourceText || "").match(/\b(?:total\s+marks?|maximum\s+marks?|max\.?\s+marks?|paper\s+total)\s*[:=-]?\s*(\d+(?:\.\d+)?)/i);
     const declaredTotal = totalMatch ? Number(totalMatch[1]) : null;
     const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
@@ -381,7 +390,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     let effectiveCalculatedTotal = null;
     if (questions.length && questions.every(item => Number.isFinite(item.marks))) {
         const paperRule = selections.find(item => item.scope === "PAPER" && item.mode !== "answer_all");
-        if (paperRule) {
+        if (paperRule && !hasSectionSelection) {
             const selected = [...questions].sort((a, b) => b.marks - a.marks).slice(0, paperRule.required ?? questions.length);
             effectiveCalculatedTotal = selected.reduce((sum, item) => sum + item.marks, 0);
         } else {
