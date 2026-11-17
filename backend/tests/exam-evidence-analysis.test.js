@@ -134,3 +134,10 @@ test("keeps printed section totals separate when question marks are not evidence
     assert.ok(result.diagnostics.some(item => item.code === "SECTION_MARKS_UNALLOCATED"));
     assert.equal(result.questions[0].marks, null);
 });
+
+test("classifies Primary word-building, dotted blanks, dictation and comprehension tasks", () => {
+    assert.equal(classifyQuestion("Write the correct English word from the jumbled letters in brackets.").type, "word_formation");
+    assert.equal(classifyQuestion("Complete the routine by writing the verbs: ....................................").type, "fill_in_the_blanks");
+    assert.equal(classifyQuestion("Listen carefully to the sentences read by your invigilator then write them correctly.").type, "dictation");
+    assert.equal(classifyQuestion("Read the following passage and answer the questions that follow.").type, "reading_comprehension");
+});
