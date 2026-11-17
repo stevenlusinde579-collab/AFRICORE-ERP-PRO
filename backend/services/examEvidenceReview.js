@@ -148,16 +148,16 @@ export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestion
     return questions.map((question, index) => {
         const selection = selectionBySection.get(question.section);
         const subpartText = (question.subparts || [])
-            .map(part => \`\${part.printed_label}. \${part.text || ""}\`.trim())
+            .map(part => `${part.printed_label}. ${part.text || ""}`.trim())
             .filter(Boolean);
-        const questionText = [question.text, ...subpartText].filter(Boolean).join("\\n").trim();
+        const questionText = [question.text, ...subpartText].filter(Boolean).join("\n").trim();
         const markEvidence = (question.mark_evidence || [])
             .map(item => item.text || item.matched_text)
             .filter(Boolean)
             .join(" | ");
         const explanation = [
             question.classification?.reason,
-            question.marks_source ? \`Marks: \${question.marks_source}\` : null,
+            question.marks_source ? `Marks: ${question.marks_source}` : null,
             question.curriculum?.topic_evidence || null,
         ].filter(Boolean).join(" ");
         const confidence = Math.round(Math.min(
@@ -168,9 +168,9 @@ export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestion
         return {
             question_number: Number.isInteger(question.question_number) && question.question_number > 0
                 ? question.question_number : index + 1,
-            question_text: questionText || \`Question \${index + 1}\`,
-            section: \`Section \${question.section}\`,
-            section_type: \`Section \${question.section}\`,
+            question_text: questionText || `Question ${index + 1}`,
+            section: `Section ${question.section}`,
+            section_type: `Section ${question.section}`,
             max_marks: question.marks,
             mark_source: question.marks_source || "evidence_based_v2",
             mark_evidence: markEvidence || null,
@@ -186,7 +186,7 @@ export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestion
             selection_required: Boolean(selection),
             selection_count: selection ? selection.required : 0,
             selection_total: selection ? selection.available : 0,
-            selection_group: selection ? \`SECTION-\${question.section}-\${selection.required}-OF-\${selection.available}\` : null,
+            selection_group: selection ? `SECTION-${question.section}-${selection.required}-OF-${selection.available}` : null,
             selection_instruction: selection?.evidence_text || null,
         };
     });
