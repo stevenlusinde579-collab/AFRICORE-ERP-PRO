@@ -119,7 +119,7 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
     const pdfjs = options.getDocument || getDocument;
     const canvasFactory = options.createCanvas || createCanvas;
     const workerFactory = options.createWorker || createWorker;
-    const renderScale = Number(options.renderScale) > 0 ? Number(options.renderScale) : 1.35;
+    const renderScale = Number(options.renderScale) > 0 ? Number(options.renderScale) : 1.8;
     const signal = options.signal;
 
     let document;
