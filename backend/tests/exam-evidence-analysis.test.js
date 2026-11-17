@@ -81,7 +81,7 @@ test("maps question topic using the declared subject and education level", async
     const document = buildExamDocumentModel({
         level: "Form Four",
         subject: "Chemistry",
-        text: "SECTION A\\nQUESTION 1\\nExplain why acids turn blue litmus paper red."
+        text: "SECTION A\nQUESTION 1\nExplain why acids turn blue litmus paper red."
     });
     const result = analyzeExamEvidence({ document });
     assert.equal(result.questions[0].curriculum.curriculum_level, "ordinary_secondary");
