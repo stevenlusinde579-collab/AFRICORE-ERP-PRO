@@ -31,3 +31,8 @@ Each fixture should include:
 ## Promotion rule
 
 A fixture becomes golden only after teacher verification. Benchmark reports must show question detection, explicit-mark agreement, inferred-mark agreement, topic agreement, question-type agreement and selection-rule agreement separately.
+
+
+## Real-paper regression coverage (November 2026)
+
+The V2 parser has also been exercised against selectable-text extracts from the Business Studies Form One, Book-Keeping Form Three and Commerce Form Three examination papers. These are structural regression samples only; no teacher-verified answer or mark reference is claimed. Expected paper-level structures are 10 questions for Business Studies, 9 for Book-Keeping and 11 for Commerce, with section totals preserved independently. The Commerce Section C instruction to answer any two of three questions is checked as a selective group. Matching tables with A-I response options and two-column rows are included in parser regression tests.
