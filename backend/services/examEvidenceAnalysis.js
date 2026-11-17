@@ -151,6 +151,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             mark_evidence: questionMarkEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
             subparts,
             classification: classifyQuestion(text),
+            curriculum: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }),
             evidence: questionEvidence,
         };
     });
@@ -173,7 +174,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         selections.push({ ...selection, scope: item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
     }
 
-    const totalMatch = String(sourceText || "").match(/(?:total|max(?:imum)?|paper)\s*(?:marks?)?\s*[:=-]?\s*(\d+(?:\.\d+)?)\s*(?:marks?)?/i);
+    const totalMatch = String(sourceText || "").match(/\\b(?:total\\s+marks?|maximum\\s+marks?|max\\.?\\s+marks?|paper\\s+total)\\s*[:=-]?\\s*(\\d+(?:\\.\\d+)?)/i);
     const declaredTotal = totalMatch ? Number(totalMatch[1]) : null;
     const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
     const calculatedTotal = knownQuestionMarks.length === questions.length && questions.length
