@@ -86,3 +86,29 @@ test("normalizes equivalent historical AI question type labels", () => {
 });
 
 // Regression coverage includes historical AI label aliases.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { buildExamDocumentModel } from "../services/examDocumentModel.js";
+import { analyzeExamEvidence } from "../services/examEvidenceAnalysis.js";
+import inferCurriculumTopic from "../services/examCurriculumTopicMapperV2.js";
+
+test("commerce historical paper regression preserves structure and classifies response types", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const fixture = JSON.parse(readFileSync(join(here, "fixtures/exam-analysis-golden/commerce-form-four-2025-historical-ai-baseline.json"), "utf8"));
+    const document = buildExamDocumentModel({
+        text: fixture.extracted_text,
+        level: fixture.education_level,
+        subject: fixture.subject,
+    });
+    const candidate = analyzeExamEvidence({ document, sourceText: fixture.extracted_text });
+    const comparison = compareExamAnalysisToReference({ candidate, reference: fixture.reference });
+
+    assert.equal(document.questions.length, 11);
+    assert.equal(comparison.question_detection.f1, 1);
+    assert.equal(comparison.marks.agreement, 1);
+    assert.equal(comparison.selection.agreement, 1);
+    assert.ok(comparison.question_types.agreement >= 0.9);
+    assert.ok(candidate.questions.every(question => question.classification.type !== "unclassified"));
+});
