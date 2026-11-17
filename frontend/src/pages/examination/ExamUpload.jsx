@@ -1344,7 +1344,7 @@ formData.append(
                             type="button"
                             disabled={
                                 !selectedFile ||
-                                !selectedExamSubjectId
+                                !selectedExamSubjectId ||
                                 processing
                             }
                             onClick={
