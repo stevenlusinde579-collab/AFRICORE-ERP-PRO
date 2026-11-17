@@ -3,6 +3,7 @@ import express from "express";
 import {
     getSchools,
     getSchoolOverview,
+    getSchoolGeminiUsage,
     createSchool,
     updateSchool,
     getHeadmasters,
@@ -29,6 +30,7 @@ router.patch("/headmasters/:profileId/email", updateHeadmasterEmail);
 router.patch("/headmasters/:profileId/school", assignHeadmaster);
 
 router.get("/:id/overview", getSchoolOverview);
+router.get("/:id/gemini-usage", getSchoolGeminiUsage);
 router.get("/:id/sms-settings", getSchoolSmsSettings);
 router.put("/:id/sms-settings", saveSchoolSmsSettings);
 router.get("/", getSchools);
