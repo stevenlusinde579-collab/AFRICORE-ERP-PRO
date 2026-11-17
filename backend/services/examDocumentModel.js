@@ -204,10 +204,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             if (subpartMatch && currentQuestion) {
                 currentOption = null;
                 const label = String(subpartMatch[1] || subpartMatch[2]).toLowerCase();
-                const parentValue = currentSubpart ? romanValue(currentSubpart.printed_label) : null;
-                const childValue = romanValue(label);
-                const isRomanSequenceSibling = parentValue != null && childValue === parentValue + 1;
-                const nested = Boolean(currentSubpart && /^[ivxlcdm]+$/.test(label) && !isRomanSequenceSibling);
+                const nested = Boolean(currentSubpart && /^[a-z]$/.test(currentSubpart.printed_label) && /^[ivxlcdm]+$/.test(label));
                 const subpartContent = String(subpartMatch[3] || "");
                 const inlineMatchingOption = /^(.*?)\s{2,}([A-J])[.)]\s*(.+)$/.exec(subpartContent);
                 const part = {
