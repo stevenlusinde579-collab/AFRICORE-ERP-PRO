@@ -351,7 +351,9 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const key = [item.scope, selection.mode, selection.required, selection.available, selection.evidence_text].join("|");
         if (selectionKeys.has(key)) continue;
         selectionKeys.add(key);
-        selections.push({ ...selection, scope: selection.section_scope || item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
+        const scope = selection.section_scope || item.scope;
+        const available = selection.available ?? (scope !== "PAPER" ? questions.filter(question => question.section === scope).length : null);
+        selections.push({ ...selection, scope, available, evidence: { text: item.text, page: item.page, line: item.line } });
     }
 
     for (const question of questions) {
