@@ -341,3 +341,21 @@ test("reads split section marks, unpunctuated question labels and Section C sele
     assert.ok(result.questions.filter(item => item.section === "C").every(item => item.selection_count === 2 && item.selection_total === 3));
     assert.equal(result.totals.effective_calculated_total, 100);
 });
+
+test("recognises 'Answer two (2) questions from this section' as a section-scoped selection", () => {
+    const document = buildExamDocumentModel({
+        text: [
+            "SECTION A (16 MARKS)",
+            "1. Explain the concept.",
+            "SECTION C (30 MARKS)",
+            "Answer two (2) questions from this section.",
+            "9. Explain the first topic.",
+            "10. Explain the second topic.",
+            "11. Explain the third topic.",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.ok(result.questions.filter(item => item.section === "C").every(item => item.selection_count === 2 && item.selection_total === 3));
+    assert.ok(result.questions.filter(item => item.section === "C").every(item => item.marks === 15));
+    assert.equal(result.totals.effective_calculated_total, 46);
+});
