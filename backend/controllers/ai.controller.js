@@ -4,6 +4,8 @@ import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
 import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
+import { analyzeExaminationV2 } from "../services/examAnalysisV2.js";
+import { buildExamEvidenceReview } from "../services/examEvidenceReview.js";
 import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
 // ============================================================
@@ -2460,6 +2462,37 @@ export const analyzePaper =
                         examType,
                         curriculum,
                     });
+                    // Run V2 as a second evidence-based review over the same
+                    // selectable/OCR text. It is advisory only: it never replaces
+                    // Rule-Based questions or marks and cannot fail the main flow.
+                    if (pdfText.trim()) {
+                        try {
+                            const evidenceV2 = analyzeExaminationV2({
+                                text: pdfText,
+                                level,
+                                subject: subjectName,
+                            });
+                            const evidenceReview = buildExamEvidenceReview({
+                                v2Result: evidenceV2,
+                                ruleBasedQuestionCount: aiResult.questions?.length || 0,
+                            });
+                            aiResult.evidence_based_review = evidenceReview.metadata;
+                            aiResult.recommendations = [
+                                ...(Array.isArray(aiResult.recommendations) ? aiResult.recommendations : []),
+                                ...evidenceReview.recommendations,
+                            ];
+                            console.log("EVIDENCE-BASED V2 CROSS-CHECK COMPLETED:", {
+                                examId,
+                                examSubjectId,
+                                ruleBasedQuestions: aiResult.questions?.length || 0,
+                                evidenceQuestions: evidenceReview.metadata.question_count,
+                                warnings: evidenceReview.metadata.diagnostics.length,
+                                durationMs: Date.now() - ruleStartedAt,
+                            });
+                        } catch (evidenceError) {
+                            console.warn("EVIDENCE-BASED V2 CROSS-CHECK SKIPPED:", evidenceError?.message || evidenceError);
+                        }
+                    }
                     aiResult.analysis_method = "rule_based";
                     aiRawResponse = JSON.stringify(aiResult);
                     console.log("RULE-BASED EXAM ANALYSIS COMPLETED:", {

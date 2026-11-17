@@ -40,6 +40,10 @@ jobs:
             git commit -m "chore: sync backend OCR dependency lockfile"
             git push
           fi
+      - name: Install deterministic font for generated OCR fixture
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-dejavu-core
       - name: Install dependencies
         run: npm ci
       - name: Run OCR regression tests

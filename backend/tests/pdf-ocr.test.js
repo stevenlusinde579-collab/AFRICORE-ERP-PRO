@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import {
     cleanOcrText,
     extractScannedPdfText,
@@ -12,6 +12,7 @@ import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
 
 
 const createImageOnlyPdf = () => {
+    GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "DejaVuSans");
     const width = 1400;
     const height = 500;
     const canvas = createCanvas(width, height);
@@ -19,9 +20,9 @@ const createImageOnlyPdf = () => {
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, width, height);
     context.fillStyle = "#000000";
-    context.font = "bold 76px sans-serif";
+    context.font = "bold 76px DejaVuSans";
     context.fillText("QUESTION 1. ACCOUNTING", 55, 155);
-    context.font = "54px sans-serif";
+    context.font = "54px DejaVuSans";
     context.fillText("Explain the accounting equation.", 55, 275);
     context.fillText("Assets equal liabilities plus capital.", 55, 365);
     const jpeg = canvas.toBuffer("image/jpeg", 0.95);
