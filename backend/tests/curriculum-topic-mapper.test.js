@@ -108,3 +108,16 @@ test("maps Primary Science and Technology questions to relevant topic evidence",
     assert.equal(result.topic, "Human body and health");
     assert.ok(result.topic_evidence);
 });
+
+test("maps Primary Science syllabus competencies for inquiry, energy and ICT", () => {
+    const cases = [
+        ["Explain the concept of science and branches of science.", "Scientific concepts and inquiry"],
+        ["Describe types of energy and their uses.", "Energy"],
+        ["Explain how ICT is used in learning.", "ICT in learning"],
+        ["Design a simple computer program.", "Simple computer programming"],
+    ];
+    for (const [questionText, expectedTopic] of cases) {
+        const result = inferCurriculumTopic({ questionText, subjectName: "Science and Technology", level: "Standard IV" });
+        assert.equal(result.topic, expectedTopic, questionText);
+    }
+});
