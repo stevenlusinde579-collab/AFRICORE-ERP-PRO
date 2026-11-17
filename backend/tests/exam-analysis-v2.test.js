@@ -58,3 +58,42 @@ test("supports Baby Class activities, Primary tasks, A-Level Roman questions and
         assert.equal(result.decision.safe_to_auto_approve, false, sample.level);
     }
 });
+
+test("recognizes six Standard IV English tasks when question 4 is printed twice", () => {
+    const text = [
+        "IRINGA MUNICIPAL COUNCIL",
+        "MOCK EXAMINATION STD IV",
+        "SUBJECT: ENGLISH LANGUAGE",
+        "SECTION A: 30 MARKS",
+        "1. Listen carefully to the sentences read by your invigilator then write them correctly in the space provided.",
+        "i. First sentence",
+        "ii. Second sentence",
+        "iii. Third sentence",
+        "iv. Fourth sentence",
+        "v. Fifth sentence",
+        "2. Choose the most correct answer from the given alternatives and write its letter in the box provided.",
+        "i. My sister cooks food every day. Therefore, she is a teacher, cook, nurse or driver.",
+        "ii. Breakfast is the meal we take early in the morning.",
+        "3. Match the words from List A with the words with similar sounds in List B by writing the correct letter.",
+        "i. Blue - Two",
+        "ii. Night - Light",
+        "SECTION B: 10 MARKS",
+        "4. Write the correct English word from the jumbled letters in the brackets to make meaningful sentences.",
+        "i. She is a (tarms) girl in our class.",
+        "ii. Peter (dawelk) to school yesterday.",
+        "iii. She (dekoco) rice for dinner.",
+        "4. Complete Mary's daily routine by writing the verbs in the brackets into the correct form.",
+        "Mary (i) (wake up) at six o'clock every morning. She (ii) (make) her bed. Then she (iii) (help) her mother in the kitchen. After that, she (iv) (walk) to school with her friends.",
+        "SECTION C: 10 MARKS",
+        "6. Read the following passage carefully and then answer the questions that follow.",
+        "My name is Grace. I am in class four. I study at Furaha primary school.",
+        "i. What is the name of Grace's school?",
+        "ii. How many members are in Grace's family?",
+    ].join("\\n");
+    const result = analyzeExaminationV2({ level: "Standard IV", subject: "English Language", text });
+    assert.equal(result.document.summary.question_count, 6);
+    assert.deepEqual(result.analysis.questions.map(question => question.question_number), [1, 2, 3, 4, 5, 6]);
+    assert.equal(result.analysis.questions[4].classification.type, "fill_in_the_blanks");
+    assert.equal(result.analysis.questions[5].classification.type, "reading_comprehension");
+    assert.equal(result.validation.valid, true);
+});
