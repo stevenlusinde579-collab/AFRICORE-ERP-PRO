@@ -7,6 +7,7 @@ export const buildExamEvidenceReview = ({ v2Result, ruleBasedQuestionCount = 0 }
     const analysis = v2Result?.analysis || {};
     const documentQuestions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
     const questions = Array.isArray(analysis.questions) ? analysis.questions : [];
+    const questionCount = documentQuestions.length || questions.length;
     const types = {};
     for (const question of analysis.questions || []) {
         const type = question.classification?.type || "unclassified";
@@ -22,9 +23,9 @@ export const buildExamEvidenceReview = ({ v2Result, ruleBasedQuestionCount = 0 }
     }));
 
     const recommendations = [];
-    if (questions.length && Number(ruleBasedQuestionCount) !== questions.length) {
+    if (questionCount && Number(ruleBasedQuestionCount) !== questionCount) {
         recommendations.push(
-            `Evidence-based cross-check identified ${questions.length} question boundaries while Rule-Based Engine identified ${Number(ruleBasedQuestionCount) || 0}. Review the original PDF for missing, duplicated, or split questions before approval.`
+            `Evidence-based cross-check identified ${questionCount} question boundaries while Rule-Based Engine identified ${Number(ruleBasedQuestionCount) || 0}. Review the original PDF for missing, duplicated, or split questions before approval.`
         );
     }
     if (analysis.totals?.declared != null &&
@@ -49,7 +50,7 @@ export const buildExamEvidenceReview = ({ v2Result, ruleBasedQuestionCount = 0 }
         metadata: {
             engine: "evidence_based_v2",
             schema_version: v2Result?.schema_version || "2.0.0",
-            question_count: questions.length,
+            question_count: questionCount,
             rule_based_question_count: Number(ruleBasedQuestionCount) || 0,
             question_type_counts: types,
             quality: analysis.quality || null,
