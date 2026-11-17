@@ -128,7 +128,7 @@ test("keeps numbered paper instructions out of the examination question count", 
             "1. Explain the meaning of business.",
             "SECTION B (70 marks)",
             "2. Describe four business processes.",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(model.summary.question_count, 2);
     assert.deepEqual(model.questions.map(item => item.question_number), [1, 2]);
@@ -156,7 +156,7 @@ test("supports matching response options A through I without promoting option I 
             "I. Definition I",
             "SECTION B",
             "3. Explain four business processes.",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(model.summary.question_count, 2);
     assert.equal(model.questions[0].subparts.length, 5);
@@ -172,19 +172,19 @@ test("does not treat ordinary A-E enumerated examples as multiple-choice options
             "i. First item",
             "A. An example within the explanation",
             "ii. Second item",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(model.questions[0].subparts[0].options, undefined);
 });
 
 test("preserves page boundaries from PDF reader and extracted PDF page markers", () => {
     const pdfReaderMarkers = buildExamDocumentModel({
-        text: "SECTION A\\n1. First question.\\n--- PDF PAGE BREAK ---\\nContinuation of question.\\nSECTION B\\n2. Second question.",
+        text: "SECTION A\n1. First question.\n--- PDF PAGE BREAK ---\nContinuation of question.\nSECTION B\n2. Second question.",
     });
     assert.equal(pdfReaderMarkers.summary.page_count, 2);
     assert.match(pdfReaderMarkers.questions[0].text, /Continuation of question/);
     const extractedPageMarkers = buildExamDocumentModel({
-        text: "<PARSED TEXT OF PAGE: 1 / 2>\\nSECTION A\\n1. First question.\\n<PARSED TEXT OF PAGE: 2 / 2>\\nSECTION B\\n2. Second question.",
+        text: "<PARSED TEXT OF PAGE: 1 / 2>\nSECTION A\n1. First question.\n<PARSED TEXT OF PAGE: 2 / 2>\nSECTION B\n2. Second question.",
     });
     assert.equal(extractedPageMarkers.summary.page_count, 2);
 });
@@ -234,7 +234,7 @@ test("preserves two-column matching rows when list A and list B share one PDF te
             "iii. Exchange    C. Buying and selling goods and services",
             "iv. Consumption    D. Transforming raw materials into finished products",
             "v. Scarcity    E. Moving goods from production to consumption areas",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(model.summary.question_count, 1);
     assert.equal(model.questions[0].subparts.length, 5);
@@ -245,7 +245,7 @@ test("preserves two-column matching rows when list A and list B share one PDF te
 
 test("does not count the initial PDF page marker as an empty page", () => {
     const model = buildExamDocumentModel({
-        text: "<PARSED TEXT FOR PAGE: 1 / 2>\\nSECTION A\\n1. First question.\\n<PARSED TEXT FOR PAGE: 2 / 2>\\nSECTION B\\n2. Second question.",
+        text: "<PARSED TEXT FOR PAGE: 1 / 2>\nSECTION A\n1. First question.\n<PARSED TEXT FOR PAGE: 2 / 2>\nSECTION B\n2. Second question.",
     });
     assert.equal(model.summary.page_count, 2);
 });
@@ -265,7 +265,7 @@ test("keeps uppercase Roman MCQ items under an Arabic-numbered question", () => 
             "B. Option two",
             "C. Option three",
             "D. Option four",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(model.summary.question_count, 1);
     assert.deepEqual(model.questions[0].subparts.map(item => item.printed_label), ["i", "ii"]);
@@ -290,7 +290,7 @@ test("does not interpret the word 'item' in an MCQ instruction as an ITEM questi
             "C. TZS 1,282,500",
             "D. TZS 1,350,000",
             "E. TZS 275,000",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(model.summary.question_count, 1);
     assert.equal(model.questions[0].subparts.length, 2);
