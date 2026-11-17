@@ -204,7 +204,8 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             if (subpartMatch && currentQuestion) {
                 currentOption = null;
                 const label = String(subpartMatch[1] || subpartMatch[2]).toLowerCase();
-                const nested = Boolean(currentSubpart && /^[a-z]$/.test(currentSubpart.printed_label) && /^[ivxlcdm]+$/.test(label));
+                const hasLetteredParent = Boolean(currentQuestion?.subparts.some(part => part.printed_label === "a" || part.printed_label === "b"));
+                const nested = Boolean(currentSubpart && hasLetteredParent && /^[ivxlcdm]+$/.test(label));
                 const subpartContent = String(subpartMatch[3] || "");
                 const inlineMatchingOption = /^(.*?)\s{2,}([A-J])[.)]\s*(.+)$/.exec(subpartContent);
                 const part = {
