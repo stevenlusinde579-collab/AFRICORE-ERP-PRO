@@ -45,7 +45,7 @@ test("never auto-approves an analysis with incomplete marks or ambiguous structu
 
 test("supports Baby Class activities, Primary tasks, A-Level Roman questions and Diploma tasks", () => {
     const cases = [
-        { level: "Baby Class", subject: "General", text: "ACTIVITY 1 Colour the red circle." },
+        { level: "Baby Class", subject: "General", text: "ACTIVITY 1 Colour the red circle." },\n        { level: "Nursery", subject: "General", text: "Trace letter A.\\nColour the red circle.\\nCount five objects." },
         { level: "Standard IV", subject: "Mathematics", text: "TASK 1 Calculate 25 + 15." },
         { level: "Form Six", subject: "Physics", text: "I. Explain the principle of conservation of energy." },
         { level: "Diploma", subject: "Accounting", text: "TASK 1 Calculate depreciation using the straight-line method." },
