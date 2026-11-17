@@ -1146,8 +1146,7 @@ formData.append(
                             }
                             disabled={
                                 processing ||
-                                !selectedExamSubjectId ||
-                                
+                                !selectedExamSubjectId
                             }
                             className="flex min-h-[300px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -1345,8 +1344,7 @@ formData.append(
                             type="button"
                             disabled={
                                 !selectedFile ||
-                                !selectedExamSubjectId ||
-                                 ||
+                                !selectedExamSubjectId
                                 processing
                             }
                             onClick={
@@ -1355,7 +1353,6 @@ formData.append(
                             className={`flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white ${
                                 selectedFile &&
                                 selectedExamSubjectId &&
-                                
                                 !processing
                                     ? "bg-blue-600 hover:bg-blue-700"
                                     : "cursor-not-allowed bg-slate-300"
