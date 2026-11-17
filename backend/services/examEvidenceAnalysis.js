@@ -270,9 +270,12 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 rangeCount = romanValues[nearbyEnd] - romanValues[startToken] + 1;
             }
         }
-        const responseSlotCount = classification.type === "multiple_choice"
-            ? Math.max(subparts.length, rangeCount)
-            : (classification.type === "matching" ? subparts.length : subparts.length);
+        const romanResponseLabels = [...text.matchAll(/^\\s*\\(?((?:xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|iv|v|iii|ii|i))\\)?[.)]\\s+/gim)]
+            .map(match => match[1].toLowerCase());
+        const printedRomanResponseCount = new Set(romanResponseLabels).size;
+        const responseSlotCount = classification.type === "multiple_choice" || classification.type === "matching"
+            ? Math.max(subparts.length, rangeCount, printedRomanResponseCount)
+            : subparts.length;
         let curriculum = inferCurriculumTopic({ questionText: topicText, subjectName: document?.subject || "", level: document?.declared_level || "" });
         if (document?.subject === "Commerce" && classification.type === "multiple_choice" && subparts.length >= 4) {
             const itemTopics = subparts.map(part => inferCurriculumTopic({
