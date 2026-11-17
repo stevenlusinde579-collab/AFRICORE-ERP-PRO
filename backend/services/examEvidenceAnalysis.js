@@ -1,4 +1,4 @@
-import inferCurriculumTopic from "./curriculumTopicMapper.js";
+import inferCurriculumTopic from "./examCurriculumTopicMapperV2.js";
 
 /**
  * Evidence-backed interpretation layer for the V2 examination document model.
