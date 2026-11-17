@@ -44,7 +44,7 @@ const makeEvidence = (text, page, line, kind) => ({
 
 export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) => {
     const source = String(text || "").replace(/\r/g, "\n");
-    const pages = source.split(/\f|\n\s*---\s*PAGE\s+\d+\s*---\s*\n/i);
+    const pages = source.split(/\f|---\s*(?:PDF\s+)?PAGE(?:\s+\d+)?(?:\s+BREAK)?\s*---|<PARSED TEXT OF PAGE:\s*\d+[^>]*>/i);
     const document = {
         schema_version: "2.0.0",
         subject: String(subject || "").trim() || null,
