@@ -1,0 +1,140 @@
+{
+  "fixture_id": "commerce-form-four-2025-historical-ai-baseline",
+  "education_level": "Unknown Level",
+  "subject": "Commerce",
+  "paper_year": 2025,
+  "source_pdf": "Commerce-F4-2025.pdf",
+  "reference": {
+    "teacher_verified": false,
+    "source_type": "historical_ai_analysis",
+    "total_questions": 11,
+    "total_marks": "100.00",
+    "questions": [
+      {
+        "question_number": 1,
+        "section": "SECTION A",
+        "max_marks": 10,
+        "mark_source": "Inferred",
+        "topic": "General Commerce",
+        "question_type": "Multiple Choice",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 2,
+        "section": "SECTION A",
+        "max_marks": 6,
+        "mark_source": "Inferred",
+        "topic": "Taxation",
+        "question_type": "Matching",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 3,
+        "section": "SECTION B",
+        "max_marks": 9,
+        "mark_source": "Inferred",
+        "topic": "Commerce Basics",
+        "question_type": "Short Answer",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 4,
+        "section": "SECTION B",
+        "max_marks": 9,
+        "mark_source": "Inferred",
+        "topic": "Production",
+        "question_type": "Short Answer",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 5,
+        "section": "SECTION B",
+        "max_marks": 9,
+        "mark_source": "Inferred",
+        "topic": "Entrepreneurship",
+        "question_type": "Short Answer",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 6,
+        "section": "SECTION B",
+        "max_marks": 9,
+        "mark_source": "Inferred",
+        "topic": "Business Management",
+        "question_type": "Structured",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 7,
+        "section": "SECTION B",
+        "max_marks": 9,
+        "mark_source": "Inferred",
+        "topic": "International Trade",
+        "question_type": "Structured",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 8,
+        "section": "SECTION B",
+        "max_marks": 9,
+        "mark_source": "Inferred",
+        "topic": "Marketing",
+        "question_type": "Structured",
+        "selection_required": false,
+        "selection_count": 0,
+        "selection_total": 0
+      },
+      {
+        "question_number": 9,
+        "section": "SECTION C",
+        "max_marks": 15,
+        "mark_source": "Inferred",
+        "topic": "Communication",
+        "question_type": "Essay",
+        "selection_required": true,
+        "selection_count": 2,
+        "selection_total": 3
+      },
+      {
+        "question_number": 10,
+        "section": "SECTION C",
+        "max_marks": 15,
+        "mark_source": "Inferred",
+        "topic": "Entrepreneurship",
+        "question_type": "Essay",
+        "selection_required": true,
+        "selection_count": 2,
+        "selection_total": 3
+      },
+      {
+        "question_number": 11,
+        "section": "SECTION C",
+        "max_marks": 15,
+        "mark_source": "Inferred",
+        "topic": "Banking",
+        "question_type": "Essay",
+        "selection_required": true,
+        "selection_count": 2,
+        "selection_total": 3
+      }
+    ]
+  },
+  "verification_notes": [
+    "Historical saved AI Analysis used for parity measurement only; it is not teacher-verified ground truth.",
+    "Question 4 topic is Production in the historical AI result; V2 currently maps it to Commerce Basics and this difference needs educator review."
+  ]
+}
