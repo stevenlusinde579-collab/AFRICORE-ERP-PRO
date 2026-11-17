@@ -113,7 +113,7 @@ test("sums nested Roman subpart marks without double counting the parent", async
             "(i) First stage [2 marks].",
             "(ii) Second stage [3 marks].",
             "(b) Give one example [1 mark].",
-        ].join("\\n"),
+        ].join("\n"),
     });
     assert.equal(result.document.questions[0].subparts.length, 2);
     assert.equal(result.document.questions[0].subparts[0].children.length, 2);
