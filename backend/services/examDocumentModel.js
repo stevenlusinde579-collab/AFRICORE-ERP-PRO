@@ -45,6 +45,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
         subject: String(subject || "").trim() || null,
         declared_level: String(level || "").trim() || null,
         pages: [],
+        header_evidence: [],
         sections: [],
         questions: [],
         instructions: [],
@@ -155,7 +156,11 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             } else {
                 const section = currentSection || ensureSection();
                 section.evidence.push(evidence);
-                document.diagnostics.push({ code: "UNATTACHED_TEXT", page: pageIndex + 1, line: lineIndex + 1 });
+                if (!document.questions.length || section.questions.length === 0) {
+                    document.header_evidence.push(evidence);
+                } else {
+                    document.diagnostics.push({ code: "UNATTACHED_TEXT", page: pageIndex + 1, line: lineIndex + 1 });
+                }
             }
         });
     });
