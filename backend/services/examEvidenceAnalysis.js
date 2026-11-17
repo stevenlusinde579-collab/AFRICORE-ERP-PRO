@@ -105,6 +105,17 @@ const classifyQuestion = (text) => {
 
 const parseSelection = (text) => {
     const source = String(text || "").replace(/\s+/g, " ").trim();
+    const sectionSelection = source.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\s*\(\s*\d+\s*\))?\s+questions?\s+from\s+section\s+([A-F])\b/i);
+    if (sectionSelection) {
+        return {
+            required: toNumber(sectionSelection[1]),
+            available: null,
+            mode: "choose_count",
+            section_scope: sectionSelection[2].toUpperCase(),
+            evidence_text: sectionSelection[0],
+            confidence: 0.86,
+        };
+    }
     for (const pattern of SELECTION_PATTERNS) {
         const match = source.match(pattern);
         if (!match) continue;
@@ -297,7 +308,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const key = [item.scope, selection.mode, selection.required, selection.available, selection.evidence_text].join("|");
         if (selectionKeys.has(key)) continue;
         selectionKeys.add(key);
-        selections.push({ ...selection, scope: item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
+        selections.push({ ...selection, scope: selection.section_scope || item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
     }
 
     for (const question of questions) {
@@ -428,9 +439,15 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     }
 
     const sectionTotals = (document?.sections || []).map((section) => {
-        const markEvidence = uniqueEvidence(section.evidence)
+        const sectionEvidence = uniqueEvidence(section.evidence);
+        const markEvidence = sectionEvidence
             .map(item => ({ ...item, mark: extractMark(item.text) }))
             .filter(item => item.mark);
+        const combinedSectionText = sectionEvidence.map(item => item.text).join(" ");
+        const combinedSectionMark = extractMark(combinedSectionText);
+        if (!markEvidence.length && combinedSectionMark) {
+            markEvidence.push({ text: combinedSectionText, page: sectionEvidence[0]?.page ?? null, line: sectionEvidence[0]?.line ?? null, mark: combinedSectionMark });
+        }
         const declared = markEvidence[0]?.mark?.value ?? null;
         const sectionQuestions = questions.filter(question => question.section === section.name);
         const knownMarks = sectionQuestions.filter(question => Number.isFinite(question.marks));
