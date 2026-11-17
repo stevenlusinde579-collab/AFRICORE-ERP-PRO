@@ -80,6 +80,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             if (sectionMatch) {
                 currentQuestion = null;
                 currentSubpart = null;
+                currentNestedPart = null;
                 ensureSection(String(sectionMatch[1]).toUpperCase(), sectionMatch[2] || "");
                 currentSection.evidence.push(evidence);
                 return;
@@ -125,6 +126,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 currentSection.questions.push(currentQuestion);
                 document.questions.push(currentQuestion);
                 currentSubpart = null;
+                currentNestedPart = null;
                 return;
             }
 
@@ -133,7 +135,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 const label = String(subpartMatch[1] || subpartMatch[2]).toLowerCase();
                 const nested = Boolean(currentSubpart && /^[a-z]$/.test(currentSubpart.printed_label) && /^[ivxlcdm]+$/.test(label));
                 const part = {
-                    id: currentQuestion.id + "-part-" + (currentQuestion.subparts.length + 1) + (nested ? "-child-" + (currentSubpart.children.length + 1) : ""),
+                    id: nested ? currentSubpart.id + "-child-" + (currentSubpart.children.length + 1) : currentQuestion.id + "-part-" + (currentQuestion.subparts.length + 1),
                     printed_label: label,
                     text: String(subpartMatch[3] || "").trim(),
                     children: [],
@@ -159,7 +161,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             if (currentNestedPart) {
-                currentNestedPart.text = [currentNestedPart.text, line].filter(Boolean).join("\\n");
+                currentNestedPart.text = [currentNestedPart.text, line].filter(Boolean).join("\n");
                 currentNestedPart.evidence.push(evidence);
             } else if (currentSubpart) {
                 currentSubpart.text = [currentSubpart.text, line].filter(Boolean).join("\n");
