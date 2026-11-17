@@ -116,3 +116,21 @@ test("does not promote numbered instructions before the first section to questio
     assert.equal(model.summary.question_count, 1);
     assert.equal(model.questions[0].question_number, 1);
 });
+
+test("keeps numbered paper instructions out of the examination question count", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "INSTRUCTIONS:",
+            "1. This paper consists of sections A, B and C with ten questions.",
+            "2. Answer all questions in sections A, B and C.",
+            "3. Section A carries fifteen marks and Section B carries seventy marks.",
+            "SECTION A (15 marks)",
+            "1. Explain the meaning of business.",
+            "SECTION B (70 marks)",
+            "2. Describe four business processes.",
+        ].join("\\n"),
+    });
+    assert.equal(model.summary.question_count, 2);
+    assert.deepEqual(model.questions.map(item => item.question_number), [1, 2]);
+    assert.ok(model.instructions.some(item => /ten questions/.test(item.text)));
+});
