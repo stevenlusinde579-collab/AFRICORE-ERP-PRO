@@ -111,23 +111,32 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     const diagnostics = [];
     const questions = (document?.questions || []).map((question) => {
         const questionEvidence = uniqueEvidence(question.evidence);
-        const subparts = (question.subparts || []).map((part) => {
+        const analyzePart = (part) => {
             const evidence = uniqueEvidence(part.evidence);
             const markEvidence = evidence
                 .map((item) => ({ ...item, mark: extractMark(item.text) }))
                 .filter((item) => item.mark);
-            const text = [part.text, ...evidence.map((item) => item.text)].filter(Boolean).join("\n");
+            const children = (part.children || []).map(analyzePart);
+            const explicitMark = markEvidence[0]?.mark?.value ?? null;
+            const childTotal = children.length && children.every(child => Number.isFinite(child.marks))
+                ? children.reduce((sum, child) => sum + child.marks, 0)
+                : null;
+            const marks = explicitMark ?? childTotal;
+            const text = [part.text, ...children.map(child => child.text), ...evidence.map(item => item.text)].filter(Boolean).join("\n");
             return {
                 id: part.id,
                 printed_label: part.printed_label,
                 text: part.text || "",
-                marks: markEvidence.length ? markEvidence[0].mark.value : null,
-                mark_evidence: markEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
+                marks,
+                marks_source: explicitMark != null ? "explicit_subpart_evidence" :
+                    (childTotal != null ? "sum_of_explicit_nested_subpart_evidence" : "unknown"),
+                mark_evidence: markEvidence.map(item => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
                 classification: classifyQuestion(text),
+                children,
                 evidence,
             };
-        });
-
+        };
+        const subparts = (question.subparts || []).map(analyzePart);
         const questionMarkEvidence = questionEvidence
             .map((item) => ({ ...item, mark: extractMark(item.text) }))
             .filter((item) => item.mark);
