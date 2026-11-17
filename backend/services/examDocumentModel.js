@@ -38,7 +38,7 @@ const EARLY_YEARS_TASK = /^(?:trace|colour|color|match|circle|count|draw|join|wr
 const isDistinctRepeatedTask = (currentQuestion, repeatedQuestion, stem, rawIndent = 0) => {
     const nextStem = String(stem || "").trim();
     const previousStem = String(currentQuestion?.text || repeatedQuestion?.text || "").trim();
-    const commandVerb = /^(?:write|complete|read|match|choose|select|answer|attempt|explain|describe|discuss|calculate|solve|identify|name|state|list|mention|fill|circle|tick|underline|arrange|construct|draw|translate|correct|rewrite|replace|form|make|give|show|classify|compare|differentiate|summarise|summarize|tell|use|put|change|convert|work|find|trace|colour|color|count|join|label|mark|read|look|study|observe|record|measure|sort|connect|pick|select|supply|provide|write down|copy|pronounce|spell|say|describe|complete)\\b/i;
+    const commandVerb = /^(?:write|complete|read|match|choose|select|answer|attempt|explain|describe|discuss|calculate|solve|identify|name|state|list|mention|fill|circle|tick|underline|arrange|construct|draw|translate|correct|rewrite|replace|form|make|give|show|classify|compare|differentiate|summarise|summarize|tell|use|put|change|convert|work|find|trace|colour|color|count|join|label|mark|read|look|study|observe|record|measure|sort|connect|pick|select|supply|provide|write down|copy|pronounce|spell|say|describe|complete)\b/i;
     if (rawIndent > 4 || !commandVerb.test(nextStem) || nextStem.length < 18) return false;
     if (!currentQuestion || currentQuestion.id !== repeatedQuestion?.id) return false;
 
@@ -53,8 +53,8 @@ const isDistinctRepeatedTask = (currentQuestion, repeatedQuestion, stem, rawInde
     const next = normalize(nextStem);
     if (!next || previous === next) return false;
 
-    const left = new Set(previous.split(/\\s+/).filter(word => word.length > 2));
-    const right = new Set(next.split(/\\s+/).filter(word => word.length > 2));
+    const left = new Set(previous.split(/\s+/).filter(word => word.length > 2));
+    const right = new Set(next.split(/\s+/).filter(word => word.length > 2));
     const overlap = [...left].filter(word => right.has(word)).length;
     const similarity = overlap / Math.max(1, Math.min(left.size, right.size));
     return similarity < 0.65;
