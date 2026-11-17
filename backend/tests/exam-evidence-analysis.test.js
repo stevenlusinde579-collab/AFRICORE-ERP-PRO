@@ -340,7 +340,10 @@ test("reads split section marks, unpunctuated question labels and Section C sele
     assert.ok(result.questions.filter(item => item.section === "B").every(item => item.marks === 9));
     assert.ok(result.questions.filter(item => item.section === "C").every(item => item.marks === 15));
     assert.ok(result.questions.filter(item => item.section === "C").every(item => item.selection_count === 2 && item.selection_total === 3));
-    assert.equal(result.totals.effective_calculated_total, 100);
+    // Section A declares 16 marks but only 3 are explicitly evidenced.
+    // The engine must report the 13-mark gap rather than invent allocations.
+    assert.equal(result.totals.effective_calculated_total, 87);
+    assert.equal(result.diagnostics.some(item => item.code === "DECLARED_TOTAL_MISMATCH" && item.declared_total === 100 && item.calculated_total === 87), true);
 });
 
 test("recognises 'Answer two (2) questions from this section' as a section-scoped selection", () => {
