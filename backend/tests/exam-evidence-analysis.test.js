@@ -27,7 +27,8 @@ const sampleDocument = {
 
 test("extracts only explicit non-negative mark evidence", () => {
     assert.equal(extractMark("Explain the term [4 marks]").value, 4);
-    assert.equal(extractMark("State two reasons (2)"), null);\n    assert.equal(extractMark("State two reasons (2 marks)").value, 2);
+    assert.equal(extractMark("State two reasons (2)"), null);
+    assert.equal(extractMark("State two reasons (2 marks)").value, 2);
     assert.equal(extractMark("There are 5 students in the class."), null);
 });
 
