@@ -176,3 +176,15 @@ test("does not treat ordinary A-E enumerated examples as multiple-choice options
     });
     assert.equal(model.questions[0].subparts[0].options, undefined);
 });
+
+test("preserves page boundaries from PDF reader and extracted PDF page markers", () => {
+    const pdfReaderMarkers = buildExamDocumentModel({
+        text: "SECTION A\\n1. First question.\\n--- PDF PAGE BREAK ---\\nContinuation of question.\\nSECTION B\\n2. Second question.",
+    });
+    assert.equal(pdfReaderMarkers.summary.page_count, 2);
+    assert.match(pdfReaderMarkers.questions[0].text, /Continuation of question/);
+    const extractedPageMarkers = buildExamDocumentModel({
+        text: "<PARSED TEXT OF PAGE: 1 / 2>\\nSECTION A\\n1. First question.\\n<PARSED TEXT OF PAGE: 2 / 2>\\nSECTION B\\n2. Second question.",
+    });
+    assert.equal(extractedPageMarkers.summary.page_count, 2);
+});
