@@ -63,12 +63,21 @@ const classifyQuestion = (text) => {
     if (/\b(match the (?:following|items|words)|match items|column\s+[ab]|pair the following)\b/.test(value) || /\boanisha\b/i.test(value)) {
         return { type: "matching", confidence: 0.9, reason: "Matching instruction or pairing structure detected." };
     }
-    if (/\b(fill in the blanks?|complete the sentences?|fill the gaps?)\b/.test(value) ||
-        /\b(jaza nafasi|jaza mapengo)\b/i.test(value) || /_{2,}/.test(value)) {
+    if (/\b(fill in the blanks?|complete (?:the )?(?:sentences?|routine|words?)|fill the gaps?)\b/.test(value) ||
+        /\b(jaza nafasi|jaza mapengo)\b/i.test(value) || /_{2,}/.test(value) || /\.{5,}/.test(value)) {
         return { type: "fill_in_the_blanks", confidence: 0.86, reason: "Blank-completion structure detected." };
     }
     if (/\b(true or false|write true or false|kweli au si kweli)\b/i.test(value)) {
         return { type: "true_false", confidence: 0.9, reason: "True/false response format detected." };
+    }
+    if (/\b(jumbled letters|rearrange the letters|word formation|spell the word|spelling)\b/i.test(value)) {
+        return { type: "word_formation", confidence: 0.86, reason: "Word-building or spelling task detected." };
+    }
+    if (/\b(dictation|listen carefully to the sentences|write the sentences read)\b/i.test(value)) {
+        return { type: "dictation", confidence: 0.88, reason: "Listening and dictation task detected." };
+    }
+    if (/\b(read the (?:following )?passage|reading comprehension|answer the questions that follow)\b/i.test(value) || /\b(soma kifungu|soma habari)\b/i.test(value)) {
+        return { type: "reading_comprehension", confidence: 0.84, reason: "Passage-based comprehension task detected." };
     }
     const labelledOptions = value.match(/(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S[^\n]*/g) || [];
     if (/\b(multiple choice|choose the correct answer|choose the most correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:(?:la|ya) )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
