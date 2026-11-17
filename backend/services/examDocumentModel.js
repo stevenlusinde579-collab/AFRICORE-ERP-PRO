@@ -207,7 +207,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 const isRomanSequenceSibling = parentValue != null && childValue === parentValue + 1;
                 const nested = Boolean(currentSubpart && /^[ivxlcdm]+$/.test(label) && !isRomanSequenceSibling);
                 const subpartContent = String(subpartMatch[3] || "");
-                const inlineMatchingOption = /^(.*?)\s{2,}([A-I])[.)]\s*(.+)$/.exec(subpartContent);
+                const inlineMatchingOption = /^(.*?)\s{2,}([A-J])[.)]\s*(.+)$/.exec(subpartContent);
                 const part = {
                     id: nested ? currentSubpart.id + "-child-" + (currentSubpart.children.length + 1) : currentQuestion.id + "-part-" + (currentQuestion.subparts.length + 1),
                     printed_label: label,
