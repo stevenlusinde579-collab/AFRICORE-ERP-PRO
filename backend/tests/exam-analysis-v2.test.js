@@ -46,14 +46,14 @@ test("never auto-approves an analysis with incomplete marks or ambiguous structu
 test("supports Baby Class activities, Primary tasks, A-Level Roman questions and Diploma tasks", () => {
     const cases = [
         { level: "Baby Class", subject: "General", text: "ACTIVITY 1 Colour the red circle." },
-        { level: "Nursery", subject: "General", text: "Trace letter A.\nColour the red circle.\nCount five objects." },
+        { level: "Nursery", subject: "General", text: "Trace letter A.\nColour the red circle.\nCount five objects.", expectedQuestionCount: 3 },
         { level: "Standard IV", subject: "Mathematics", text: "TASK 1 Calculate 25 + 15." },
         { level: "Form Six", subject: "Physics", text: "I. Explain the principle of conservation of energy." },
         { level: "Diploma", subject: "Accounting", text: "TASK 1 Calculate depreciation using the straight-line method." },
     ];
     for (const sample of cases) {
         const result = analyzeExaminationV2(sample);
-        assert.equal(result.document.summary.question_count, 1, sample.level);
+        assert.equal(result.document.summary.question_count, sample.expectedQuestionCount || 1, sample.level);
         assert.equal(result.decision.ready_for_review, true, sample.level);
         assert.equal(result.decision.safe_to_auto_approve, false, sample.level);
     }
