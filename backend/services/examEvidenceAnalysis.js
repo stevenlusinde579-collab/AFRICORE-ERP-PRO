@@ -311,7 +311,10 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         uniqueEvidence(instruction.evidence).map((item) => ({ ...item, scope: instruction.scope || "PAPER" }))
     );
     const instructionTexts = new Set(instructionEvidence.map(item => String(item.text || "").trim().toLowerCase()));
-    const combinedInstructionText = instructionEvidence.map(item => String(item.text || "").trim()).filter(Boolean).join(" ");
+    const combinedInstructionText = [
+        ...(document?.header_evidence || []),
+        ...instructionEvidence,
+    ].map(item => String(item.text || "").trim()).filter(Boolean).join(" ");
     const allLines = [
         ...instructionEvidence,
         ...(combinedInstructionText ? [{ text: combinedInstructionText, page: null, line: null, scope: "PAPER" }] : []),
