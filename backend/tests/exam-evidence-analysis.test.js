@@ -141,3 +141,25 @@ test("classifies Primary word-building, dotted blanks, dictation and comprehensi
     assert.equal(classifyQuestion("Listen carefully to the sentences read by your invigilator then write them correctly.").type, "dictation");
     assert.equal(classifyQuestion("Read the following passage and answer the questions that follow.").type, "reading_comprehension");
 });
+
+test("adds evidence-backed Bloom levels, estimated difficulty and safe marking guidance", async () => {
+    const { buildExamDocumentModel } = await import("../services/examDocumentModel.js");
+    const document = buildExamDocumentModel({
+        level: "Form Four",
+        subject: "Chemistry",
+        text: [
+            "SECTION A",
+            "QUESTION 1 [2 marks]",
+            "Define an acid.",
+            "QUESTION 2 [12 marks]",
+            "Compare strong acids and weak acids.",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.equal(result.questions[0].bloom_level, "remembering");
+    assert.equal(result.questions[1].bloom_level, "analysing");
+    assert.equal(result.questions[1].difficulty_level, "challenging");
+    assert.match(result.questions[0].answer_expected, /definition/i);
+    assert.ok(result.questions[0].bloom_evidence);
+    assert.ok(result.quality.topic_coverage > 0);
+});
