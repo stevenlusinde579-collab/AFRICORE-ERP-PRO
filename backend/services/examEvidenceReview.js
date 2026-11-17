@@ -97,7 +97,8 @@ const toRuleBasedQuestionType = question => {
  */
 export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestionCount = 0 } = {}) => {
     const analysis = v2Result?.analysis || {};
-    const questions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
+    const documentQuestions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
+    const questions = Array.isArray(analysis.questions) ? analysis.questions : [];
     const expected = Number(expectedQuestionCount);
     const diagnostics = Array.isArray(v2Result?.diagnostics) ? v2Result.diagnostics : [];
     const blockingCodes = new Set([
