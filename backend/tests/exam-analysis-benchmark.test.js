@@ -66,3 +66,21 @@ test("separates explicit and inferred reference marks and checks selection rules
     assert.equal(result.marks.inferred_reference.agreement, 1);
     assert.equal(result.selection.agreement, 1);
 });
+
+test("normalizes equivalent historical AI question type labels", () => {
+    const result = compareExamAnalysisToReference({
+        candidate: { questions: [
+            { section: "A", question_number: 1, classification: { type: "multiple_choice" } },
+            { section: "A", question_number: 2, classification: { type: "matching" } },
+            { section: "B", question_number: 3, classification: { type: "structured_response" } },
+            { section: "B", question_number: 4, classification: { type: "extended_response" } },
+        ] },
+        reference: { questions: [
+            { section: "A", question_number: 1, question_type: "Multiple Choice" },
+            { section: "A", question_number: 2, question_type: "Matching" },
+            { section: "B", question_number: 3, question_type: "Short Answer" },
+            { section: "B", question_number: 4, question_type: "Essay" },
+        ] },
+    });
+    assert.equal(result.question_types.agreement, 1);
+});
