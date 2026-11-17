@@ -24,7 +24,8 @@ test("runs the V2 pipeline end-to-end without invoking Gemini or production cont
     assert.equal(result.analysis.questions[0].curriculum.topic, "Acids, bases and salts");
     assert.equal(result.analysis.questions[1].curriculum.topic, "Separation of mixtures");
     assert.equal(result.decision.ready_for_review, true);
-    assert.equal(result.decision.safe_to_auto_approve, true);
+    assert.equal(result.decision.safe_to_auto_approve, false);
+    assert.equal(result.decision.requires_human_review, true);
 });
 
 test("never auto-approves an analysis with incomplete marks or ambiguous structure", () => {
@@ -37,4 +38,19 @@ test("never auto-approves an analysis with incomplete marks or ambiguous structu
     assert.equal(result.decision.ready_for_review, true);
     assert.equal(result.decision.safe_to_auto_approve, false);
     assert.equal(result.decision.requires_human_review, true);
+});
+
+test("supports Baby Class activities, Primary tasks, A-Level Roman questions and Diploma tasks", () => {
+    const cases = [
+        { level: "Baby Class", subject: "General", text: "ACTIVITY 1 Colour the red circle." },
+        { level: "Standard IV", subject: "Mathematics", text: "TASK 1 Calculate 25 + 15." },
+        { level: "Form Six", subject: "Physics", text: "I. Explain the principle of conservation of energy." },
+        { level: "Diploma", subject: "Accounting", text: "TASK 1 Calculate depreciation using the straight-line method." },
+    ];
+    for (const sample of cases) {
+        const result = analyzeExaminationV2(sample);
+        assert.equal(result.document.summary.question_count, 1, sample.level);
+        assert.equal(result.decision.ready_for_review, true, sample.level);
+        assert.equal(result.decision.safe_to_auto_approve, false, sample.level);
+    }
 });
