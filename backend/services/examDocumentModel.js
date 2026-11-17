@@ -65,7 +65,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     let currentOption = null;
     let questionOrder = 0;
     const earlyYears = isEarlyYearsLevel(level, source);
-    const hasInstructionHeading = /^\s*(?:instructions|maelekezo)\s*:?\s*$/im.test(source.slice(0, 2000));
+    const hasInstructionHeading = /^\s*(?:instructions|maelekezo)\s*:?\s*$/im.test(source.slice(0, 5000));
 
     const ensureSection = (name = "UNSECTIONED", title = "") => {
         let section = document.sections.find(item => item.name === name);
@@ -122,7 +122,8 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
 
             // Numbered lines before the first examination section belong to the
             // paper instructions/header, not to the question list.
-            if (hasInstructionHeading && !currentSection && /^\d{1,3}\s*[.)\]:-]\s+/.test(line) &&
+            if (hasInstructionHeading && !currentSection &&
+                (/^\d{1,3}\s*[.)\]:-]\s+/.test(line) || /^\d{1,2}\s{2,}(?=[A-Za-z(])/.test(line)) &&
                 !/^(?:QUESTION|Q\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line)) {
                 document.instructions.push({ text: line, evidence: [evidence], scope: "PAPER" });
                 document.header_evidence.push(evidence);
