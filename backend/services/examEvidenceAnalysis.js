@@ -7,7 +7,7 @@
 
 const MARK_PATTERNS = [
     /\[\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)?\s*\]/i,
-    /\(\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*\)/i,
+    /\(\s*(\d+(?:\.\d+)?)\s*(?:(?:marks?|mks?)\s*)?\)/i,
     /(?:^|\s)(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
     /\bmarks?\s*[:=]\s*(\d+(?:\.\d+)?)/i,
 ];
@@ -64,9 +64,10 @@ const classifyQuestion = (text) => {
     if (/\b(fill in the blanks?|complete the sentences?)\b/.test(value) || /_{2,}/.test(value)) {
         return { type: "fill_in_the_blanks", confidence: 0.84, reason: "Blank-completion structure detected." };
     }
+    const labelledOptions = value.match(/(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S[^\n]*/g) || [];
     if (/\b(multiple choice|choose the correct answer|circle the correct|tick the correct)\b/.test(value) ||
-        /(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S/im.test(value)) {
-        return { type: "multiple_choice", confidence: 0.82, reason: "Answer options or choice instruction detected." };
+        labelledOptions.length >= 3) {
+        return { type: "multiple_choice", confidence: 0.82, reason: "Explicit choice instruction or at least three labelled answer options detected." };
     }
     if (/\b(experiment|laboratory|apparatus|specimen|draw and label|measure the|carry out an investigation|practical)\b/.test(value)) {
         return { type: "practical", confidence: 0.78, reason: "Practical activity language detected." };
