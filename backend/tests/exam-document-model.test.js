@@ -134,3 +134,45 @@ test("keeps numbered paper instructions out of the examination question count", 
     assert.deepEqual(model.questions.map(item => item.question_number), [1, 2]);
     assert.ok(model.instructions.some(item => /ten questions/.test(item.text)));
 });
+
+test("supports matching response options A through I without promoting option I to a main question", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "2. Match the descriptions in List A with List B.",
+            "i. Production",
+            "ii. Distribution",
+            "iii. Exchange",
+            "iv. Consumption",
+            "v. Scarcity",
+            "A. Definition A",
+            "B. Definition B",
+            "C. Definition C",
+            "D. Definition D",
+            "E. Definition E",
+            "F. Definition F",
+            "G. Definition G",
+            "H. Definition H",
+            "I. Definition I",
+            "SECTION B",
+            "3. Explain four business processes.",
+        ].join("\\n"),
+    });
+    assert.equal(model.summary.question_count, 2);
+    assert.equal(model.questions[0].subparts.length, 5);
+    assert.equal(model.questions[0].response_options.length, 9);
+    assert.equal(model.questions[1].question_number, 3);
+});
+
+test("does not treat ordinary A-E enumerated examples as multiple-choice options", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION B",
+            "3. Describe the following points.",
+            "i. First item",
+            "A. An example within the explanation",
+            "ii. Second item",
+        ].join("\\n"),
+    });
+    assert.equal(model.questions[0].subparts[0].options, undefined);
+});
