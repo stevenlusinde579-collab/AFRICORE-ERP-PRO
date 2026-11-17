@@ -48,3 +48,56 @@ test("does not create mismatch warnings when both engines agree and evidence is 
     });
     assert.deepEqual(result.recommendations, []);
 });
+
+test("converts only complete high-confidence V2 evidence into Rule-Based question records", () => {
+    const questions = [
+        { id: "q1", order: 1, question_number: 1, section: "A", text: "Choose the correct answer.", subparts: [], boundary_confidence: "high" },
+        { id: "q2", order: 2, question_number: 2, section: "C", text: "Explain the main factors.", subparts: [], boundary_confidence: "high" },
+    ];
+    const enriched = [
+        { ...questions[0], marks: 4, marks_source: "inferred_from_response_slots", mark_confidence: 0.86, mark_evidence: [], classification: { type: "multiple_choice", confidence: 0.9, reason: "Options detected" }, topic: "Accounting", sub_topic: "Assets", difficulty_level: "easy", bloom_level: "remembering", answer_expected: "Choose one option." },
+        { ...questions[1], marks: 6, marks_source: "inferred_from_selective_section_total", mark_confidence: 0.8, mark_evidence: [], classification: { type: "extended_response", confidence: 0.8, reason: "Extended prompt" }, topic: "Commerce", sub_topic: "Trade", difficulty_level: "challenging", bloom_level: "understanding", answer_expected: "Explain with points." },
+    ];
+    const result = buildRuleBasedQuestionsFromEvidence({
+        expectedQuestionCount: 2,
+        v2Result: {
+            document: { questions },
+            validation: { valid: true },
+            decision: { ready_for_review: true },
+            diagnostics: [],
+            analysis: {
+                questions: enriched,
+                quality: { status: "high" },
+                totals: { declared: 10, effective_calculated_total: 10 },
+                selection_rules: [{ scope: "C", mode: "choose_count", required: 1, available: 1, evidence_text: "Answer one question from section C" }],
+            },
+        },
+    });
+    assert.equal(result.length, 2);
+    assert.equal(result[0].question_type, "Multiple Choice");
+    assert.equal(result[0].max_marks, 4);
+    assert.equal(result[1].question_type, "Essay");
+    assert.equal(result[1].is_selective, true);
+    assert.equal(result[1].selection_count, 1);
+    assert.equal(result[1].selection_total, 1);
+});
+
+test("refuses to replace Rule-Based questions when V2 marks do not reconcile with the printed total", () => {
+    const question = { id: "q1", order: 1, question_number: 1, section: "A", text: "Explain.", subparts: [], boundary_confidence: "high" };
+    const result = buildRuleBasedQuestionsFromEvidence({
+        expectedQuestionCount: 1,
+        v2Result: {
+            document: { questions: [question] },
+            validation: { valid: true },
+            decision: { ready_for_review: true },
+            diagnostics: [],
+            analysis: {
+                questions: [{ ...question, marks: 8, marks_source: "inferred", mark_confidence: 0.8, classification: { type: "structured_response", confidence: 0.8 }, subparts: [] }],
+                quality: { status: "high" },
+                totals: { declared: 10, effective_calculated_total: 8 },
+                selection_rules: [],
+            },
+        },
+    });
+    assert.equal(result, null);
+});
