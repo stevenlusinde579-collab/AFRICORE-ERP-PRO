@@ -270,7 +270,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 rangeCount = romanValues[nearbyEnd] - romanValues[startToken] + 1;
             }
         }
-        const romanResponseLabels = [...text.matchAll(/^\\s*\\(?((?:xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|iv|v|iii|ii|i))\\)?[.)]\\s+/gim)]
+        const romanResponseLabels = [...text.matchAll(/^\s*\(?((?:xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|iv|v|iii|ii|i))\)?[.)]\s+/gim)]
             .map(match => match[1].toLowerCase());
         const printedRomanResponseCount = new Set(romanResponseLabels).size;
         const responseSlotCount = classification.type === "multiple_choice" || classification.type === "matching"
