@@ -172,6 +172,40 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         };
     });
 
+    const sectionTotals = (document?.sections || []).map((section) => {
+        const markEvidence = uniqueEvidence(section.evidence)
+            .map(item => ({ ...item, mark: extractMark(item.text) }))
+            .filter(item => item.mark);
+        const declared = markEvidence[0]?.mark?.value ?? null;
+        const sectionQuestions = questions.filter(question => question.section === section.name);
+        const knownMarks = sectionQuestions.filter(question => Number.isFinite(question.marks));
+        const calculated = sectionQuestions.length && knownMarks.length === sectionQuestions.length
+            ? knownMarks.reduce((sum, question) => sum + question.marks, 0)
+            : null;
+        if (declared != null && calculated == null) {
+            diagnostics.push({
+                code: "SECTION_MARKS_UNALLOCATED",
+                section: section.name,
+                declared_total: declared,
+                message: "A printed section total exists, but individual question marks are not all evidenced. No equal allocation has been assumed.",
+            });
+        } else if (declared != null && calculated != null && declared !== calculated) {
+            diagnostics.push({
+                code: "SECTION_TOTAL_MISMATCH",
+                section: section.name,
+                declared_total: declared,
+                calculated_total: calculated,
+                message: "The section total differs from the sum of evidenced question marks.",
+            });
+        }
+        return {
+            section: section.name,
+            declared_total: declared,
+            calculated_from_explicit_question_marks: calculated,
+            mark_evidence: markEvidence.map(item => ({ text: item.text, page: item.page, line: item.line, value: item.mark.value })),
+        };
+    });
+
     const instructionEvidence = (document?.instructions || []).flatMap((instruction) =>
         uniqueEvidence(instruction.evidence).map((item) => ({ ...item, scope: instruction.scope || "PAPER" }))
     );
@@ -224,6 +258,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         schema_version: "2.0.0",
         questions,
         selection_rules: selections,
+        section_totals: sectionTotals,
         totals: {
             declared: declaredTotal,
             calculated_from_explicit_evidence: calculatedTotal,
