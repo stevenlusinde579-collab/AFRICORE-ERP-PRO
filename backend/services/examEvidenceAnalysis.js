@@ -71,7 +71,7 @@ const classifyQuestion = (text) => {
         return { type: "true_false", confidence: 0.9, reason: "True/false response format detected." };
     }
     const labelledOptions = value.match(/(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S[^\n]*/g) || [];
-    if (/\b(multiple choice|choose the correct answer|choose the most correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:la )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
+    if (/\b(multiple choice|choose the correct answer|choose the most correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:(?:la|ya) )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
         labelledOptions.length >= 3) {
         return { type: "multiple_choice", confidence: 0.88, reason: "Choice instruction or labelled answer options detected." };
     }
