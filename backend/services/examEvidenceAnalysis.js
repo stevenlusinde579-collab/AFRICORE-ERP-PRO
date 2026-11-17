@@ -257,6 +257,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             : null;
         const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
         const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
+        const topicText = [question.text, ...subparts.map((part) => part.text)].filter(Boolean).join("\n");
         const classification = classifyQuestion(text);
         const textTokens = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
         const itemTokenIndex = textTokens.findIndex(token => token === "item" || token === "items");
@@ -272,7 +273,28 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const responseSlotCount = classification.type === "multiple_choice"
             ? Math.max(subparts.length, rangeCount)
             : (classification.type === "matching" ? subparts.length : subparts.length);
-        const curriculum = inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" });
+        let curriculum = inferCurriculumTopic({ questionText: topicText, subjectName: document?.subject || "", level: document?.declared_level || "" });
+        if (document?.subject === "Commerce" && classification.type === "multiple_choice" && subparts.length >= 4) {
+            const itemTopics = subparts.map(part => inferCurriculumTopic({
+                questionText: part.text,
+                subjectName: document?.subject || "",
+                level: document?.declared_level || "",
+            })).filter(item => item.topic);
+            const topicCounts = new Map();
+            for (const item of itemTopics) topicCounts.set(item.topic, (topicCounts.get(item.topic) || 0) + 1);
+            const dominant = [...topicCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+            if (itemTopics.length >= 3 && (!dominant || dominant[1] < 2)) {
+                curriculum = {
+                    topic: "General Commerce",
+                    sub_topic: "Mixed foundational commerce concepts",
+                    topic_confidence: 72,
+                    topic_evidence: "Multiple-choice items cover several distinct Commerce syllabus topics",
+                    topic_source: "mixed_topic_question",
+                    topic_alternatives: itemTopics.slice(0, 3).map(item => ({ topic: item.topic, evidence: item.topic_evidence })),
+                    curriculum_level: curriculum.curriculum_level,
+                };
+            }
+        }
         const bloom = inferBloomLevel(text);
         const difficulty = estimateDifficulty({ bloom, marks, subparts: subparts.length });
 
