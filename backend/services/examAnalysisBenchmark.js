@@ -3,7 +3,7 @@ const numberOrNull = value => {
     return Number.isFinite(number) ? number : null;
 };
 
-const normalizeSection = value => String(value || "UNSECTIONED").trim().toUpperCase().replace(/^SECTION\\s+/, "");
+const normalizeSection = value => String(value || "UNSECTIONED").trim().toUpperCase().replace(/^SECTION\s+/, "");
 const questionNumber = item => item.question_number ?? item.order ?? item.questionNumber ?? null;
 
 const groupByIdentity = questions => {
