@@ -3719,7 +3719,7 @@ export const analyzePaper =
                 }, { prompt: 0, candidates: 0, thoughts: 0, cached: 0, total: 0 });
                 const models = [...new Set(geminiUsageAttempts.map((item) => item?.model).filter(Boolean))];
                 const model = models.join(", ") || process.env.GEMINI_MODEL || "unknown";
-                const rateDate = new Date();
+                const rateDate = new Date(startedAt);
                 const futureRate = rateDate >= new Date("2027-01-01T00:00:00Z");
                 const knownFlash = models.length > 0 && models.every((name) => ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"].includes(name));
                 const inputRate = knownFlash ? (futureRate ? 1.5 : 0.75) : null;
