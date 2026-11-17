@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { analyzeExamEvidence, classifyQuestion, extractMark, parseSelection } from "../services/examEvidenceAnalysis.js";
+import { buildExamDocumentModel } from "../services/examDocumentModel.js";
 
 const evidence = (text, line = 1) => ({ text, page: 1, line, kind: "pdf_text" });
 
