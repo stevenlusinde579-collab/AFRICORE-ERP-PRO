@@ -9,7 +9,6 @@ import inferCurriculumTopic from "./curriculumTopicMapper.js";
 
 const MARK_PATTERNS = [
     /\[\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)?\s*\]/i,
-    /\(\s*(\d+(?:\.\d+)?)\s*(?:(?:marks?|mks?)\s*)?\)/i,
     /(?:^|\s)(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
     /\bmarks?\s*[:=]\s*(\d+(?:\.\d+)?)/i,
 ];
@@ -174,7 +173,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         selections.push({ ...selection, scope: item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
     }
 
-    const totalMatch = String(sourceText || "").match(/\\b(?:total\\s+marks?|maximum\\s+marks?|max\\.?\\s+marks?|paper\\s+total)\\s*[:=-]?\\s*(\\d+(?:\\.\\d+)?)/i);
+    const totalMatch = String(sourceText || "").match(/\b(?:total\s+marks?|maximum\s+marks?|max\.?\s+marks?|paper\s+total)\s*[:=-]?\s*(\d+(?:\.\d+)?)/i);
     const declaredTotal = totalMatch ? Number(totalMatch[1]) : null;
     const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
     const calculatedTotal = knownQuestionMarks.length === questions.length && questions.length
