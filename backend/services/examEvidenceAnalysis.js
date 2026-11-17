@@ -390,7 +390,9 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     let effectiveCalculatedTotal = null;
     if (questions.length && questions.every(item => Number.isFinite(item.marks))) {
         const paperRule = selections.find(item => item.scope === "PAPER" && item.mode !== "answer_all");
-        if (paperRule && !hasSectionSelection) {
+        if (hasPaperSelection && hasSectionSelection) {
+            effectiveCalculatedTotal = null;
+        } else if (paperRule) {
             const selected = [...questions].sort((a, b) => b.marks - a.marks).slice(0, paperRule.required ?? questions.length);
             effectiveCalculatedTotal = selected.reduce((sum, item) => sum + item.marks, 0);
         } else {
