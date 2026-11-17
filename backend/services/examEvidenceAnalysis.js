@@ -258,15 +258,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
         const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
         const topicText = [question.text, ...subparts.map((part) => part.text)].filter(Boolean).join("\n");
-        let classification = classifyQuestion(text);
-        if (classification.type === "structured_response" && Number.isFinite(marks) && marks >= 12 &&
-            subparts.length === 0 && /\b(explain|elaborate|discuss|justify|argue|describe|outline)\b/i.test(text)) {
-            classification = {
-                type: "extended_response",
-                confidence: 0.78,
-                reason: "High-mark open-ended prompt with an extended explanatory command detected.",
-            };
-        }
+        const classification = classifyQuestion(text);
         const textTokens = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
         const itemTokenIndex = textTokens.findIndex(token => token === "item" || token === "items");
         const romanValues = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12, xiii: 13, xiv: 14, xv: 15 };
@@ -494,6 +486,29 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             question.difficulty_confidence = difficulty.confidence;
             question.difficulty_evidence = difficulty.evidence;
         }
+    }
+
+    // Revisit open-ended response labels after section marks have been
+    // allocated from printed totals. The high-mark threshold is never used
+    // to invent marks; it only distinguishes extended responses from short
+    // structured answers once the allocation evidence exists.
+    for (const question of questions) {
+        if (question.classification?.type !== "structured_response" ||
+            !Number.isFinite(question.marks) || question.marks < 12 ||
+            (question.subparts || []).length > 0 ||
+            !/\b(explain|elaborate|discuss|justify|argue|describe|outline)\b/i.test(question.text || "")) {
+            continue;
+        }
+        question.classification = {
+            type: "extended_response",
+            confidence: 0.78,
+            reason: "High-mark open-ended prompt with an extended explanatory command detected.",
+        };
+        question.answer_expected = buildAnswerGuidance({
+            text: question.text,
+            classification: question.classification,
+            bloom: { level: question.bloom_level },
+        });
     }
 
     const sectionTotals = (document?.sections || []).map((section) => {
