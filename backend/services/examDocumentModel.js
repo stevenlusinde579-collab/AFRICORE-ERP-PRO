@@ -236,10 +236,13 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             } else if (currentQuestion) {
                 currentQuestion.text = [currentQuestion.text, line].filter(Boolean).join("\n");
                 currentQuestion.evidence.push(evidence);
+            } else if (!currentSection) {
+                // Keep cover-page and instruction text as document evidence.
+                // Do not create a fake UNSECTIONED section with unrelated marks.
+                document.header_evidence.push(evidence);
             } else {
-                const section = currentSection || ensureSection();
-                section.evidence.push(evidence);
-                if (!document.questions.length || section.questions.length === 0) {
+                currentSection.evidence.push(evidence);
+                if (currentSection.questions.length === 0) {
                     document.header_evidence.push(evidence);
                 } else {
                     document.diagnostics.push({ code: "UNATTACHED_TEXT", page: pageIndex + 1, line: lineIndex + 1 });
