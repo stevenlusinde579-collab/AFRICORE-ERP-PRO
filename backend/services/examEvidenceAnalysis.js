@@ -181,6 +181,7 @@ const buildAnswerGuidance = ({ text, classification, bloom } = {}) => {
     if (/\b(calculate|solve|compute|kokotoa|hesabu)\b/i.test(source)) return "Show the method, relevant working and final answer. Include correct units where required.";
     if (/\b(compare|contrast|linganisha)\b/i.test(source)) return "Present the relevant similarities and differences using clear, paired points.";
     if (/\b(explain|eleza|fafanua)\b/i.test(source)) return "Give clear reasons and explain how or why the stated idea or process occurs.";
+    if (/\b(define|fafanua maana ya)\b/i.test(source)) return "Give a clear and accurate definition of the named concept, including its essential distinguishing features.";
     if (/\b(list|state|name|taja|orodhesha)\b/i.test(source)) return "Provide the requested number of distinct, relevant points without repetition.";
     if (bloom?.level === "remembering") return "Give a concise, accurate response based on the taught concept. Confirm subject-specific content with the teacher's marking guide.";
     return "Address the command verb and every printed part of the question. A teacher-approved marking scheme is required for subject-specific answer content.";
