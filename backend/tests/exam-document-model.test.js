@@ -37,6 +37,6 @@ test("keeps question text split across lines and validates missing structure saf
     const model = buildExamDocumentModel({
         text: "GEOGRAPHY\nQUESTION 1\nExplain the causes\nof soil erosion.\n(a) Give two examples."
     });
-    assert.match(model.questions[0].text, /causes\\nof soil erosion/);
+    assert.match(model.questions[0].text, /causes\nof soil erosion/);
     assert.equal(validateExamDocumentModel(model).valid, true);
 });
