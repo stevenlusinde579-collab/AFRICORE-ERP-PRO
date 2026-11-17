@@ -89,7 +89,7 @@ test("recognizes six Standard IV English tasks when question 4 is printed twice"
         "My name is Grace. I am in class four. I study at Furaha primary school.",
         "i. What is the name of Grace's school?",
         "ii. How many members are in Grace's family?",
-    ].join("\\n");
+    ].join("\n");
     const result = analyzeExaminationV2({ level: "Standard IV", subject: "English Language", text });
     assert.equal(result.document.summary.question_count, 6);
     assert.deepEqual(result.analysis.questions.map(question => question.question_number), [1, 2, 3, 4, 5, 6]);
