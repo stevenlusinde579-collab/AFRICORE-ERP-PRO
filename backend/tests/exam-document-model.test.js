@@ -296,3 +296,30 @@ test("does not interpret the word 'item' in an MCQ instruction as an ITEM questi
     assert.equal(model.questions[0].subparts.length, 2);
     assert.equal(model.questions[0].subparts[0].options.length, 5);
 });
+
+test("splits continuation lines in two-column matching tables into List A text and List B options", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "2. Match the items in Column A with the responses in Column B.",
+            "i. Movement along the demand            A. Composite demand",
+            "   curve due to a change in price.      B. Joint demand",
+            "ii. Demand for a commodity               C. Derived demand",
+            "    mainly because of that               D. Change in demand",
+            "    commodity can be used to             E. Change in quantity demanded",
+            "    produce the desired product.         F. Price",
+            "iii. Demand for a commodity that        G. Money value",
+            "     has many uses.                      H. Competitive demand",
+            "iv. The table which shows the            I. Demand curve",
+            "    amount demanded at various prices.   J. Demand schedule",
+            "v. The exchange value of goods",
+            "   and services in terms of money.",
+            "vi. Goods which are demanded together.",
+        ].join("\n"),
+    });
+    assert.equal(model.summary.question_count, 1);
+    assert.equal(model.questions[0].subparts.length, 6);
+    assert.equal(model.questions[0].response_options.length, 10);
+    assert.match(model.questions[0].subparts[0].text, /curve due to a change in price/);
+    assert.match(model.questions[0].response_options[1].text, /Joint demand/);
+});
