@@ -44,7 +44,7 @@ const makeEvidence = (text, page, line, kind) => ({
 
 export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) => {
     const source = String(text || "").replace(/\r/g, "\n");
-    const pages = source.split(/\f|---\s*(?:PDF\s+)?PAGE(?:\s+\d+)?(?:\s+BREAK)?\s*---|<PARSED TEXT OF PAGE:\s*\d+[^>]*>/i);
+    const pages = source.split(/\f|---\s*(?:PDF\s+)?PAGE(?:\s+\d+)?(?:\s+BREAK)?\s*---|<PARSED TEXT (?:OF|FOR) PAGE:\s*\d+[^>]*>/i);
     const document = {
         schema_version: "2.0.0",
         subject: String(subject || "").trim() || null,
@@ -128,7 +128,11 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             const questionMatch = line.match(QUESTION_HEADER);
-            const isExplicitRomanQuestion = /^[IVXLCDM]{1,8}\s*[.)]/.test(line);
+            const currentPromptForBoundary = String(currentQuestion?.text || "");
+            const currentQuestionIsItemList = /\b(choose|select|match|matching|column|list A|list B|multiple choice|correct answer)\b/i.test(currentPromptForBoundary);
+            const previousQuestionIsRoman = Boolean(currentQuestion && /^[IVXLCDM]+$/.test(currentQuestion.printed_label) && !currentSubpart);
+            const isExplicitRomanQuestion = /^[IVXLCDM]{1,8}\s*[.)]/.test(line) &&
+                !currentQuestionIsItemList && (!currentQuestion || previousQuestionIsRoman);
             if (questionMatch && (/^(?:QUESTION|Q|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line) || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
                 const number = numberValue(questionMatch[1]);
                 const explicitLabel = /^(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line);
