@@ -61,7 +61,7 @@ const uniqueEvidence = (items) => {
 
 const classifyQuestion = (text) => {
     const value = String(text || "").toLowerCase();
-    if (/\b(match the (?:following|items|words)|match items|column\s+[ab]|pair the following)\b/.test(value) || /\boanisha\b/i.test(value)) {
+    if (/\b(match the (?:following|items|words|descriptions|terms|statements)|match items|column\s+[ab]|pair the following)\b/.test(value) || /\boanisha\b/i.test(value)) {
         return { type: "matching", confidence: 0.9, reason: "Matching instruction or pairing structure detected." };
     }
     if (/\b(dictation|listen carefully to the sentences|write the sentences read)\b/i.test(value)) {
@@ -71,7 +71,7 @@ const classifyQuestion = (text) => {
         return { type: "reading_comprehension", confidence: 0.84, reason: "Passage-based comprehension task detected." };
     }
     const labelledOptions = value.match(/(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S[^\n]*/g) || [];
-    if (/\b(multiple choice|choose the correct answer|choose the most correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:(?:la|ya) )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
+    if (/\b(multiple choice|choose the correct(?: answer)?|choose the most correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:(?:la|ya) )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
         labelledOptions.length >= 3) {
         return { type: "multiple_choice", confidence: 0.88, reason: "Choice instruction or labelled answer options detected." };
     }
@@ -258,7 +258,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
         const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
         const classification = classifyQuestion(text);
-        const textTokens = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\\s+/).filter(Boolean);
+        const textTokens = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
         const itemTokenIndex = textTokens.findIndex(token => token === "item" || token === "items");
         const romanValues = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12, xiii: 13, xiv: 14, xv: 15 };
         let rangeCount = 0;
