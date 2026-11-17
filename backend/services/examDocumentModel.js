@@ -65,7 +65,6 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     let questionOrder = 0;
     const earlyYears = isEarlyYearsLevel(level, source);
     const hasInstructionHeading = /^\s*(?:instructions|maelekezo)\s*:/im.test(source.slice(0, 2000));
-    if (earlyYears) ensureSection();
 
     const ensureSection = (name = "UNSECTIONED", title = "") => {
         let section = document.sections.find(item => item.name === name);
@@ -76,6 +75,8 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
         currentSection = section;
         return section;
     };
+
+    if (earlyYears) ensureSection();
 
     pages.forEach((pageText, pageIndex) => {
         const lines = pageText.split("\n");
