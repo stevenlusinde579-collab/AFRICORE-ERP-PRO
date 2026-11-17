@@ -93,8 +93,16 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 // when an explicit heading establishes a new task; otherwise it is
                 // treated as continuation evidence rather than silently duplicated.
                 if (repeated && !explicitLabel) {
-                    if (currentQuestion) currentQuestion.evidence.push(evidence);
-                    else document.diagnostics.push({ code: "AMBIGUOUS_REPEATED_LABEL", page: pageIndex + 1, line: lineIndex + 1, label: questionMatch[1] });
+                    document.diagnostics.push({
+                        code: "AMBIGUOUS_REPEATED_LABEL",
+                        severity: "warning",
+                        page: pageIndex + 1,
+                        line: lineIndex + 1,
+                        label: questionMatch[1],
+                        related_question_id: repeated.id,
+                        message: "Repeated question label in the same section was not merged or counted as a new question without stronger boundary evidence.",
+                    });
+                    if (currentQuestion) currentQuestion.evidence.push({ ...evidence, kind: "ambiguous_boundary" });
                     return;
                 }
                 currentSection = currentSection || ensureSection();
