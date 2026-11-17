@@ -316,12 +316,54 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         selections.push({ ...selection, scope: item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
     }
 
+    for (const question of questions) {
+        const rule = selections.find(item => item.scope === "PAPER" || item.scope === question.section);
+        if (!rule) {
+            question.is_selective = false;
+            question.selection_required = false;
+            question.selection_count = 0;
+            question.selection_total = 0;
+            question.selection_group = null;
+            question.selection_instruction = null;
+            continue;
+        }
+        const selective = rule.mode !== "answer_all";
+        const sectionCount = rule.scope === "PAPER"
+            ? questions.length
+            : questions.filter(item => item.section === question.section).length;
+        question.is_selective = selective;
+        question.selection_required = selective;
+        question.selection_count = selective ? (rule.required ?? 0) : 0;
+        question.selection_total = selective ? (rule.available ?? sectionCount) : 0;
+        question.selection_group = selective ? rule.scope : null;
+        question.selection_instruction = selective ? rule.evidence_text : null;
+    }
+
     const totalMatch = String(sourceText || "").match(/\b(?:total\s+marks?|maximum\s+marks?|max\.?\s+marks?|paper\s+total)\s*[:=-]?\s*(\d+(?:\.\d+)?)/i);
     const declaredTotal = totalMatch ? Number(totalMatch[1]) : null;
     const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
     const calculatedTotal = knownQuestionMarks.length === questions.length && questions.length
         ? knownQuestionMarks.reduce((sum, item) => sum + item.marks, 0)
         : null;
+    let effectiveCalculatedTotal = null;
+    if (questions.length && questions.every(item => Number.isFinite(item.marks))) {
+        const paperRule = selections.find(item => item.scope === "PAPER" && item.mode !== "answer_all");
+        if (paperRule) {
+            const selected = [...questions].sort((a, b) => b.marks - a.marks).slice(0, paperRule.required ?? questions.length);
+            effectiveCalculatedTotal = selected.reduce((sum, item) => sum + item.marks, 0);
+        } else {
+            let effectiveSum = 0;
+            for (const section of new Set(questions.map(item => item.section))) {
+                const sectionQuestions = questions.filter(item => item.section === section);
+                const sectionRule = selections.find(item => item.scope === section && item.mode !== "answer_all");
+                const counted = sectionRule
+                    ? [...sectionQuestions].sort((a, b) => b.marks - a.marks).slice(0, sectionRule.required ?? sectionQuestions.length)
+                    : sectionQuestions;
+                effectiveSum += counted.reduce((sum, item) => sum + item.marks, 0);
+            }
+            effectiveCalculatedTotal = effectiveSum;
+        }
+    }
 
     if (questions.some((item) => item.marks == null)) {
         diagnostics.push({
@@ -330,11 +372,11 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             affected_question_ids: questions.filter((item) => item.marks == null).map((item) => item.id),
         });
     }
-    if (declaredTotal != null && calculatedTotal != null && declaredTotal !== calculatedTotal) {
+    if (declaredTotal != null && effectiveCalculatedTotal != null && declaredTotal !== effectiveCalculatedTotal) {
         diagnostics.push({
             code: "DECLARED_TOTAL_MISMATCH",
             declared_total: declaredTotal,
-            calculated_total: calculatedTotal,
+            calculated_total: effectiveCalculatedTotal,
             message: "The printed paper total does not match the sum of detected question marks.",
         });
     }
@@ -353,6 +395,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         totals: {
             declared: declaredTotal,
             calculated_from_explicit_evidence: calculatedTotal,
+            effective_calculated_total: effectiveCalculatedTotal,
             marks_coverage: Number(markCoverage.toFixed(3)),
         },
         quality: {
