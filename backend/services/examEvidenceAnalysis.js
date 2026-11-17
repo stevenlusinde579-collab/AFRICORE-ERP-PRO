@@ -94,6 +94,9 @@ const classifyQuestion = (text) => {
         /\b(jaza nafasi|jaza mapengo)\b/i.test(value) || /_{2,}/.test(value) || /\.{5,}/.test(value)) {
         return { type: "fill_in_the_blanks", confidence: 0.86, reason: "Blank-completion structure detected." };
     }
+    if (/\b(trace|colour|color|count|circle|paint|cut|paste|sing|recite|point|repeat|connect|tick|underline|trace|chora|paka|hesabu|zungushia|unganisha)\b/i.test(value)) {
+        return { type: "activity", confidence: 0.82, reason: "Learner activity prompt detected." };
+    }
     if (/\b(calculate|solve|show that|work out|give reasons|explain|describe|state|define|list|identify|taja|eleza|fafanua|ainisha|linganisha|hesabu|kokotoa|onyesha|andika)\b/i.test(value)) {
         return { type: "structured_response", confidence: 0.72, reason: "Structured response command detected." };
     }
