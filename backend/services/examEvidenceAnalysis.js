@@ -362,8 +362,8 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     // A broken header line can flatten "Answer all questions in sections A
     // and B and two questions from section C" into a misleading global
     // answer-all instruction. A specific section selection takes precedence.
-    const hasSectionSelection = selections.some(item => item.scope !== "PAPER" && item.mode !== "answer_all");
-    if (hasSectionSelection) {
+    const hasSpecificSectionSelection = selections.some(item => item.scope !== "PAPER" && item.mode !== "answer_all");
+    if (hasSpecificSectionSelection) {
         for (let index = selections.length - 1; index >= 0; index -= 1) {
             if (selections[index].scope === "PAPER" && selections[index].mode === "answer_all") {
                 selections.splice(index, 1);
