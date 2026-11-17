@@ -323,3 +323,19 @@ test("splits continuation lines in two-column matching tables into List A text a
     assert.match(model.questions[0].subparts[0].text, /curve due to a change in price/);
     assert.match(model.questions[0].response_options[1].text, /Joint demand/);
 });
+
+test("keeps wrapped List A continuation under its item instead of appending it to the last List B option", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "2. Match items in Column A with responses in Column B.",
+            "iv. The table which shows the            I. Demand curve",
+            "    amount of a commodity that is        J. Demand schedule",
+            "            demanded at various prices by",
+            "             the consumers.",
+        ].join("\n"),
+    });
+    assert.equal(model.questions[0].response_options.length, 2);
+    assert.match(model.questions[0].subparts[0].text, /demanded at various prices by/);
+    assert.doesNotMatch(model.questions[0].response_options[1].text, /demanded at various prices by/);
+});
