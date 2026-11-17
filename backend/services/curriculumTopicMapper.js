@@ -25,7 +25,7 @@ const TOPIC_RULES = [
 
     ["Chemistry", "Atomic structure", "Atoms, isotopes and subatomic particles", [/\b(atom|proton|neutron|electron|isotope|atomic number|mass number)\b/i]],
     ["Chemistry", "Chemical bonding", "Ionic and covalent bonding", [/\b(ionic bond|covalent bond|metallic bond|chemical bond|bonding)\b/i]],
-    ["Chemistry", "Acids, bases and salts", "Acidity, alkalinity and neutralisation", [/\b(acids?|alkalis?|bases?|neutralisation|neutralization|ph scale|salt preparation)\b/i]],
+    ["Chemistry", "Acids, bases and salts", "Acidity, alkalinity and neutralisation", [/\b(acid|alkali|base|neutralisation|neutralization|ph scale|salt preparation)\b/i]],
     ["Chemistry", "Chemical reactions", "Reaction types and equations", [/\b(chemical reaction|reactant|product|balanced equation|oxidation|reduction|redox)\b/i]],
     ["Chemistry", "Periodic table", "Periodic trends and groups", [/\b(periodic table|group [0-8]|periodic trend|atomic radius|electronegativity)\b/i]],
     ["Chemistry", "Separation of mixtures", "Filtration, distillation and chromatography", [/\b(mixture|filtration|distillation|chromatography|decantation|separation technique)\b/i]],
@@ -78,17 +78,6 @@ const TOPIC_RULES = [
     ["Kiswahili", "Fasihi", "Fasihi simulizi na andishi", [/\b(fasihi|methali|nahau|tamthilia|riwaya|ushairi|hadithi)\b/i]],
     ["Kiswahili", "Ufahamu", "Ufahamu wa habari na matini", [/\b(ufahamu|soma kifungu|jibu maswali kutokana na habari)\b/i]],
     ["Kiswahili", "Insha", "Uandishi wa insha na barua", [/\b(insha|barua rasmi|barua ya kirafiki|utungaji)\b/i]],
-    ["Science and Technology", "Scientific concepts and inquiry", "Concepts and branches of science and scientific theories", [/\b(concept of science|branches of science|scientific theory|scientific method|dhana ya sayansi|matawi ya sayansi|nadharia za kisayansi)\b/i]],
-    ["Science and Technology", "ICT in learning", "Use of information and communication technology in learning", [/\b(ict|information and communication technology|computer|digital device|tehama|kompyuta)\b/i]],
-    ["Science and Technology", "Simple computer programming", "Design and use simple computer programs", [/\b(programming|computer program|coding|algorithm|programu sahili|kubuni programu|msimbo)\b/i]],
-    ["Science and Technology", "Scientific investigation", "Observation, experiments and scientific methods", [/\b(scientific investigation|experiment|observation|investigation|majaribio|uchunguzi)\b/i]],
-    ["Science and Technology", "Living things", "Living and non-living things", [/\b(living things?|non[- ]living|organism|plants?|animals?|viumbe hai|kiumbe hai|mimea|wanyama)\b/i]],
-    ["Science and Technology", "Human body and health", "Sense organs, body systems and health", [/\b(sense organs?|eye|ear|nose|tongue|skin|hearing|sight|smell|taste|touch|health|hygiene|organs?|milango ya fahamu|jicho|sikio|pua|ulimi|ngozi|usafi|upumuaji)\b/i]],
-    ["Science and Technology", "Matter", "Materials and states of matter", [/\b(states? of matter|solid|liquid|gas|materials?|matter|hali za mada|hewa|gesi|kimiminika|imara)\b/i]],
-    ["Science and Technology", "Energy", "Sources and forms of energy", [/\b(energy|sun|light|heat|sound|electricity|source of energy|nishati|jua|mwanga|joto|sauti|umeme)\b/i]],
-    ["Science and Technology", "Force and motion", "Forces, movement and simple machines", [/\b(force|motion|movement|friction|gravity|machines?|nguvu|mwendo)\b/i]],
-    ["Science and Technology", "Environment", "Environment, conservation and ecosystems", [/\b(environment|pollution|conservation|habitat|food chain|mazingira|uhifadhi)\b/i]],
-    ["Science and Technology", "Earth and space", "The Earth, weather and space", [/\b(earth|planet|solar system|weather|rain|cloud|sunrise|sunset|dunia|hali ya hewa|mvua)\b/i]],
 ];
 
 const normalise = value => String(value || "").toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
@@ -109,7 +98,6 @@ const subjectMatches = (ruleSubject, subject) => {
         "Commerce": ["commerce"],
         "Agriculture": ["agriculture", "agricultural science"],
         "Kiswahili": ["kiswahili", "swahili"],
-        "Science and Technology": ["science and technology", "science", "general science"],
     };
     return (aliases[ruleSubject] || [ruleSubject.toLowerCase()]).some(alias => s.includes(alias));
 };
