@@ -1883,9 +1883,7 @@ export const askGemini =
         };
 
         try {
-            const requestResult = await makeGeminiRequest(payload, true);
-            const response = requestResult.response;
-            const usageAttempts = [...requestResult.usageAttempts];
+            const response = await makeGeminiRequest(payload);
 
             const rawText =
                 extractGeminiText(
@@ -1893,7 +1891,7 @@ export const askGemini =
                 );
 
             try {
-                return { text: cleanGeminiJson(rawText), usageAttempts };
+                return cleanGeminiJson(rawText);
             } catch (
                 error
             ) {
@@ -2060,10 +2058,9 @@ export const askGeminiWithPDF =
         };
 
         try {
-            const response =
-                await makeGeminiRequest(
-                    payload
-                );
+            const requestResult = await makeGeminiRequest(payload, true);
+            const response = requestResult.response;
+            const usageAttempts = [...requestResult.usageAttempts];
 
             const rawText =
                 extractGeminiText(
@@ -2071,7 +2068,7 @@ export const askGeminiWithPDF =
                 );
 
             try {
-                return cleanGeminiJson(rawText);
+                return { text: cleanGeminiJson(rawText), usageAttempts };
             } catch (firstParseError) {
                 // A malformed JSON response should not immediately fail a
                 // valid uploaded paper. Retry once with the same PDF and a
