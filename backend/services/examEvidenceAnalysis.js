@@ -10,6 +10,7 @@ import inferCurriculumTopic from "./curriculumTopicMapper.js";
 const MARK_PATTERNS = [
     /\[\s*(?:alama\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?|alama)?\s*\]/i,
     /\(\s*alama\s+(\d+(?:\.\d+)?)\s*\)/i,
+    /\(\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*\)/i,
     /(?:^|\s)(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
     /\b(?:marks?|alama)\s*[:=]?\s*(\d+(?:\.\d+)?)/i,
 ];
