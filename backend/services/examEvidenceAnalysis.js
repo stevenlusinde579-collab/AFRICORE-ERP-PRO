@@ -124,6 +124,68 @@ const parseSelection = (text) => {
     return null;
 };
 
+const inferBloomLevel = (text) => {
+    const source = String(text || "").toLowerCase();
+    const levels = [
+        ["creating", /\b(design|construct|compose|develop|formulate|create|propose|tunga|buni)\b/i],
+        ["evaluating", /\b(evaluate|assess|justify|recommend|critique|defend|tathmini|toa hoja)\b/i],
+        ["analysing", /\b(compare|contrast|distinguish|classify|examine|analyse|analyze|categorise|categorize|linganisha|ainisha)\b/i],
+        ["applying", /\b(calculate|solve|apply|use|demonstrate|perform|compute|kokotoa|hesabu|tumia)\b/i],
+        ["understanding", /\b(explain|describe|summarise|summarize|interpret|discuss|eleza|fafanua)\b/i],
+        ["remembering", /\b(define|state|list|name|identify|mention|recall|taja|orodhesha)\b/i],
+    ];
+    const match = levels.find(([, pattern]) => pattern.test(source));
+    if (!match) return { level: "unknown", confidence: 0, evidence: null };
+    const evidence = source.match(match[1])?.[0] || null;
+    return { level: match[0], confidence: 0.82, evidence };
+};
+
+const estimateDifficulty = ({ bloom, marks, subparts = 0 } = {}) => {
+    const base = {
+        remembering: "easy",
+        understanding: "moderate",
+        applying: "moderate",
+        analysing: "challenging",
+        evaluating: "challenging",
+        creating: "challenging",
+    }[bloom?.level] || "unknown";
+    if (base === "unknown") return { level: "unknown", confidence: 0, evidence: null };
+    const reasons = [bloom.level + " cognitive demand"];
+    let level = base;
+    if (Number.isFinite(marks) && marks >= 10 && level !== "challenging") {
+        level = "challenging";
+        reasons.push("10 or more marks");
+    }
+    if (subparts >= 4 && level !== "challenging") {
+        level = "challenging";
+        reasons.push("four or more response parts");
+    }
+    return { level, confidence: 0.62, evidence: reasons.join("; ") };
+};
+
+const buildAnswerGuidance = ({ text, classification, bloom } = {}) => {
+    const source = String(text || "").toLowerCase();
+    switch (classification?.type) {
+        case "multiple_choice": return "Select the single best option and write its letter. Confirm the correct option against the teacher-approved answer key.";
+        case "matching": return "Match each item in the first list or column with its corresponding item in the second. Mark each response slot separately.";
+        case "fill_in_the_blanks": return "Supply the missing word or phrase in each blank, preserving the meaning and grammar of the sentence.";
+        case "true_false": return "Mark each statement as true or false according to the taught content.";
+        case "dictation": return "Transcribe the dictated words or sentences accurately. Apply the teacher's rubric for spelling, word order and punctuation.";
+        case "reading_comprehension": return "Answer each item using relevant evidence from the supplied passage. Avoid unsupported information.";
+        case "practical": return "Carry out the stated procedure safely, record observations and present the requested results, drawings or labels.";
+        case "sequencing": return "Arrange the given items in the requested order and show the sequence clearly.";
+        case "word_formation": return "Rearrange or complete the letters to form the correct word, then use it in the requested context.";
+        case "activity": return "Complete the stated age-appropriate learner activity. The teacher should confirm the expected response and rubric against the worksheet.";
+        case "extended_response": return "Provide a coherent and relevant composition that addresses the prompt. Assess it with the teacher-approved writing rubric.";
+    }
+    if (/\b(calculate|solve|compute|kokotoa|hesabu)\b/i.test(source)) return "Show the method, relevant working and final answer. Include correct units where required.";
+    if (/\b(compare|contrast|linganisha)\b/i.test(source)) return "Present the relevant similarities and differences using clear, paired points.";
+    if (/\b(explain|eleza|fafanua)\b/i.test(source)) return "Give clear reasons and explain how or why the stated idea or process occurs.";
+    if (/\b(list|state|name|taja|orodhesha)\b/i.test(source)) return "Provide the requested number of distinct, relevant points without repetition.";
+    if (bloom?.level === "remembering") return "Give a concise, accurate response based on the taught concept. Confirm subject-specific content with the teacher's marking guide.";
+    return "Address the command verb and every printed part of the question. A teacher-approved marking scheme is required for subject-specific answer content.";
+};
+
 /**
  * @param {object} document - Output from buildExamDocumentModel.
  * @param {string} sourceText - Full extracted PDF text, used only for paper-level totals/instructions.
@@ -181,6 +243,15 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             subparts,
             classification: classifyQuestion(text),
             curriculum: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }),
+            topic: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }).topic,
+            sub_topic: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }).sub_topic,
+            bloom_level: inferBloomLevel(text).level,
+            bloom_confidence: inferBloomLevel(text).confidence,
+            bloom_evidence: inferBloomLevel(text).evidence,
+            difficulty_level: estimateDifficulty({ bloom: inferBloomLevel(text), marks, subparts: subparts.length }).level,
+            difficulty_confidence: estimateDifficulty({ bloom: inferBloomLevel(text), marks, subparts: subparts.length }).confidence,
+            difficulty_evidence: estimateDifficulty({ bloom: inferBloomLevel(text), marks, subparts: subparts.length }).evidence,
+            answer_expected: buildAnswerGuidance({ text, classification: classifyQuestion(text), bloom: inferBloomLevel(text) }),
             evidence: questionEvidence,
         };
     });
@@ -265,7 +336,8 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     const classified = questions.filter((item) => item.classification.type !== "unclassified").length;
     const markCoverage = questions.length ? knownQuestionMarks.length / questions.length : 0;
     const classificationCoverage = questions.length ? classified / questions.length : 0;
-    const confidence = Number((0.55 * markCoverage + 0.45 * classificationCoverage).toFixed(3));
+    const topicCoverage = questions.length ? questions.filter(item => item.curriculum?.topic).length / questions.length : 0;
+    const confidence = Number((0.4 * markCoverage + 0.35 * classificationCoverage + 0.25 * topicCoverage).toFixed(3));
 
     return {
         schema_version: "2.0.0",
@@ -281,6 +353,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             confidence,
             classification_coverage: Number(classificationCoverage.toFixed(3)),
             marks_coverage: Number(markCoverage.toFixed(3)),
+            topic_coverage: Number(topicCoverage.toFixed(3)),
             status: confidence >= 0.85 ? "high" : confidence >= 0.6 ? "review_required" : "low_evidence",
         },
         diagnostics,
