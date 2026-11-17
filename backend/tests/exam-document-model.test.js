@@ -249,3 +249,25 @@ test("does not count the initial PDF page marker as an empty page", () => {
     });
     assert.equal(model.summary.page_count, 2);
 });
+
+test("keeps uppercase Roman MCQ items under an Arabic-numbered question", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "1. For each item choose the correct answer.",
+            "I. First item asks a question.",
+            "A. Option one",
+            "B. Option two",
+            "C. Option three",
+            "D. Option four",
+            "II. Second item asks a question.",
+            "A. Option one",
+            "B. Option two",
+            "C. Option three",
+            "D. Option four",
+        ].join("\\n"),
+    });
+    assert.equal(model.summary.question_count, 1);
+    assert.deepEqual(model.questions[0].subparts.map(item => item.printed_label), ["i", "ii"]);
+    assert.equal(model.questions[0].subparts[0].options.length, 4);
+});
