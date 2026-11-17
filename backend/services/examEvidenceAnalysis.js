@@ -201,12 +201,17 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 .map((item) => ({ ...item, mark: extractMark(item.text) }))
                 .filter((item) => item.mark);
             const children = (part.children || []).map(analyzePart);
+            const options = Array.isArray(part.options) ? part.options : [];
             const explicitMark = markEvidence[0]?.mark?.value ?? null;
             const childTotal = children.length && children.every(child => Number.isFinite(child.marks))
                 ? children.reduce((sum, child) => sum + child.marks, 0)
                 : null;
             const marks = explicitMark ?? childTotal;
-            const text = [part.text, ...children.map(child => child.text), ...evidence.map(item => item.text)].filter(Boolean).join("\n");
+            const text = [part.text, ...children.map(child => child.text), ...options.map(option => option.text), ...evidence.map(item => item.text)].filter(Boolean).join("\n");
+            const classification = classifyQuestion(text);
+            const curriculum = inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" });
+            const bloom = inferBloomLevel(text);
+            const difficulty = estimateDifficulty({ bloom, marks, subparts: children.length });
             return {
                 id: part.id,
                 printed_label: part.printed_label,
@@ -215,7 +220,18 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 marks_source: explicitMark != null ? "explicit_subpart_evidence" :
                     (childTotal != null ? "sum_of_explicit_nested_subpart_evidence" : "unknown"),
                 mark_evidence: markEvidence.map(item => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
-                classification: classifyQuestion(text),
+                classification,
+                curriculum,
+                topic: curriculum.topic,
+                sub_topic: curriculum.sub_topic,
+                bloom_level: bloom.level,
+                bloom_confidence: bloom.confidence,
+                bloom_evidence: bloom.evidence,
+                difficulty_level: difficulty.level,
+                difficulty_confidence: difficulty.confidence,
+                difficulty_evidence: difficulty.evidence,
+                answer_expected: buildAnswerGuidance({ text, classification, bloom }),
+                options,
                 children,
                 evidence,
             };
@@ -247,6 +263,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 (subparts.length && subpartMarks != null ? "sum_of_explicit_subpart_evidence" : "unknown"),
             mark_evidence: questionMarkEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
             subparts,
+            response_options: Array.isArray(question.response_options) ? question.response_options : [],
             classification,
             curriculum,
             topic: curriculum.topic,
