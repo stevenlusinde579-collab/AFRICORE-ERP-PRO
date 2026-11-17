@@ -65,3 +65,54 @@ test("preserves unnumbered and mixed early-years activity prompts as separate ta
     });
     assert.equal(mixed.summary.question_count, 3);
 });
+
+test("keeps Roman response items as siblings and stores MCQ options under their item", () => {
+    const model = buildExamDocumentModel({
+        level: "Form One",
+        subject: "Business Studies",
+        text: [
+            "SECTION A (15 marks) Answer all questions in this section",
+            "1. Choose the correct answer.",
+            "i. First question item",
+            "A. First option",
+            "B. Second option",
+            "C. Third option",
+            "D. Fourth option",
+            "ii. Second question item",
+            "A. First option",
+            "B. Second option",
+            "C. Third option",
+            "D. Fourth option",
+            "2. Match the items in List A with List B.",
+            "i. Production",
+            "ii. Distribution",
+            "iii. Exchange",
+            "iv. Consumption",
+            "v. Scarcity",
+            "A. Definition A",
+            "B. Definition B",
+            "C. Definition C",
+        ].join("\n"),
+    });
+    assert.equal(model.summary.question_count, 2);
+    assert.equal(model.questions[0].subparts.length, 2);
+    assert.equal(model.questions[0].subparts[0].options.length, 4);
+    assert.equal(model.questions[1].subparts.length, 5);
+    assert.equal(model.questions[1].response_options.length, 3);
+    assert.equal(model.questions[0].subparts[1].printed_label, "ii");
+});
+
+test("does not promote numbered instructions before the first section to questions", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "INSTRUCTIONS:",
+            "1. This paper consists of section A, B and C with total of 10 questions",
+            "2. Answer all questions in section A, B and C",
+            "3. Section A carries fifteen (15) marks, section B 70 marks and section C fifteen (15) marks.",
+            "SECTION A (15 marks)",
+            "1. Explain the term.",
+        ].join("\n"),
+    });
+    assert.equal(model.summary.question_count, 1);
+    assert.equal(model.questions[0].question_number, 1);
+});
