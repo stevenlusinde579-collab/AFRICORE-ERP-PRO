@@ -84,7 +84,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             const questionMatch = line.match(QUESTION_HEADER);
-            if (questionMatch && (/^(?:QUESTION|Q(?:UESTION)?\\.?|ACTIVITY|TASK|EXERCISE|ITEM)\\b/i.test(line) || /^\\s*\\d{1,3}\\s*[.)\\]:-]/.test(line)) && !ADMIN_LINE.test(questionMatch[2] || "")) {
+            if (questionMatch && (/^(?:QUESTION|Q|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line) || /^\s*\d{1,3}\s*[.)\]:-]/.test(line)) && !ADMIN_LINE.test(questionMatch[2] || "")) {
                 const number = numberValue(questionMatch[1]);
                 const explicitLabel = /^(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line);
                 const prior = currentSection?.questions || [];
