@@ -223,3 +223,29 @@ test("recognises sequential uppercase Roman main questions when no Arabic questi
     assert.equal(model.summary.question_count, 3);
     assert.deepEqual(model.questions.map(item => item.printed_label), ["I", "II", "III"]);
 });
+
+test("preserves two-column matching rows when list A and list B share one PDF text line", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "2. Match the descriptions in List A with List B.",
+            "i. Production    A. The act of using goods and services to satisfy needs",
+            "ii. Distribution    B. Shortage in supply of resources",
+            "iii. Exchange    C. Buying and selling goods and services",
+            "iv. Consumption    D. Transforming raw materials into finished products",
+            "v. Scarcity    E. Moving goods from production to consumption areas",
+        ].join("\\n"),
+    });
+    assert.equal(model.summary.question_count, 1);
+    assert.equal(model.questions[0].subparts.length, 5);
+    assert.equal(model.questions[0].response_options.length, 5);
+    assert.equal(model.questions[0].subparts[0].text, "Production");
+    assert.match(model.questions[0].response_options[0].text, /using goods and services/);
+});
+
+test("does not count the initial PDF page marker as an empty page", () => {
+    const model = buildExamDocumentModel({
+        text: "<PARSED TEXT FOR PAGE: 1 / 2>\\nSECTION A\\n1. First question.\\n<PARSED TEXT FOR PAGE: 2 / 2>\\nSECTION B\\n2. Second question.",
+    });
+    assert.equal(model.summary.page_count, 2);
+});
