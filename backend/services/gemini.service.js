@@ -2057,10 +2057,12 @@ export const askGeminiWithPDF =
             },
         };
 
+        let usageAttempts = [];
+
         try {
             const requestResult = await makeGeminiRequest(payload, true);
             const response = requestResult.response;
-            const usageAttempts = [...requestResult.usageAttempts];
+            usageAttempts = [...requestResult.usageAttempts];
 
             const rawText =
                 extractGeminiText(
@@ -2153,6 +2155,7 @@ export const askGeminiWithPDF =
         } catch (
             error
         ) {
+            if (usageAttempts.length) error.usageAttempts = usageAttempts;
             console.error(
                 "============================================================"
             );
