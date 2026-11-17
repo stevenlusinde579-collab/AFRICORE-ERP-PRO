@@ -25,7 +25,7 @@ const TOPIC_RULES = [
 
     ["Chemistry", "Atomic structure", "Atoms, isotopes and subatomic particles", [/\b(atom|proton|neutron|electron|isotope|atomic number|mass number)\b/i]],
     ["Chemistry", "Chemical bonding", "Ionic and covalent bonding", [/\b(ionic bond|covalent bond|metallic bond|chemical bond|bonding)\b/i]],
-    ["Chemistry", "Acids, bases and salts", "Acidity, alkalinity and neutralisation", [/\b(acid|alkali|base|neutralisation|neutralization|ph scale|salt preparation)\b/i]],
+    ["Chemistry", "Acids, bases and salts", "Acidity, alkalinity and neutralisation", [/\b(acids?|alkalis?|bases?|neutralisation|neutralization|ph scale|salt preparation)\b/i]],
     ["Chemistry", "Chemical reactions", "Reaction types and equations", [/\b(chemical reaction|reactant|product|balanced equation|oxidation|reduction|redox)\b/i]],
     ["Chemistry", "Periodic table", "Periodic trends and groups", [/\b(periodic table|group [0-8]|periodic trend|atomic radius|electronegativity)\b/i]],
     ["Chemistry", "Separation of mixtures", "Filtration, distillation and chromatography", [/\b(mixture|filtration|distillation|chromatography|decantation|separation technique)\b/i]],
