@@ -118,7 +118,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
 
             // Numbered lines before the first examination section belong to the
             // paper instructions/header, not to the question list.
-            if (!currentSection && /^\d{1,3}\s*[.)\]:-]\s+/.test(line) &&
+            if (hasInstructionHeading && !currentSection && /^\d{1,3}\s*[.)\]:-]\s+/.test(line) &&
                 !/^(?:QUESTION|Q\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line)) {
                 document.instructions.push({ text: line, evidence: [evidence], scope: "PAPER" });
                 document.header_evidence.push(evidence);
