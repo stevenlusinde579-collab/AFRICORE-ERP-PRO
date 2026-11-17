@@ -22,10 +22,8 @@ export const analyzeExaminationV2 = ({ text, level = "", subject = "" } = {}) =>
         ["NO_QUESTION_BOUNDARIES", "AMBIGUOUS_REPEATED_LABEL", "UNATTACHED_TEXT", "EMPTY_QUESTION"].includes(item.code)
     );
     const readyForReview = !hasStructuralErrors && document.questions.length > 0;
-    const safeToAutoApprove = readyForReview &&
-        !hasBoundaryWarnings &&
-        analysis.quality.status === "high" &&
-        diagnostics.length === 0;
+    // Educator approval is mandatory; V2 never auto-approves an examination.
+    const safeToAutoApprove = false;
 
     return {
         schema_version: "2.0.0",
@@ -37,10 +35,10 @@ export const analyzeExaminationV2 = ({ text, level = "", subject = "" } = {}) =>
         decision: {
             ready_for_review: readyForReview,
             safe_to_auto_approve: safeToAutoApprove,
-            requires_human_review: !safeToAutoApprove,
-            reason: safeToAutoApprove
-                ? "All configured evidence and structural checks passed."
-                : "Human review is required because one or more structure, evidence, or confidence checks are incomplete.",
+            requires_human_review: true,
+            reason: hasStructuralErrors || hasBoundaryWarnings || analysis.quality.status !== "high"
+                ? "Human review is required because structure, evidence, or confidence checks are incomplete."
+                : "Evidence checks passed; authorised educator approval is still mandatory.",
         },
     };
 };
