@@ -229,6 +229,10 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             : null;
         const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
         const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
+        const classification = classifyQuestion(text);
+        const curriculum = inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" });
+        const bloom = inferBloomLevel(text);
+        const difficulty = estimateDifficulty({ bloom, marks, subparts: subparts.length });
 
         return {
             id: question.id,
@@ -241,17 +245,17 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 (subparts.length && subpartMarks != null ? "sum_of_explicit_subpart_evidence" : "unknown"),
             mark_evidence: questionMarkEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
             subparts,
-            classification: classifyQuestion(text),
-            curriculum: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }),
-            topic: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }).topic,
-            sub_topic: inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" }).sub_topic,
-            bloom_level: inferBloomLevel(text).level,
-            bloom_confidence: inferBloomLevel(text).confidence,
-            bloom_evidence: inferBloomLevel(text).evidence,
-            difficulty_level: estimateDifficulty({ bloom: inferBloomLevel(text), marks, subparts: subparts.length }).level,
-            difficulty_confidence: estimateDifficulty({ bloom: inferBloomLevel(text), marks, subparts: subparts.length }).confidence,
-            difficulty_evidence: estimateDifficulty({ bloom: inferBloomLevel(text), marks, subparts: subparts.length }).evidence,
-            answer_expected: buildAnswerGuidance({ text, classification: classifyQuestion(text), bloom: inferBloomLevel(text) }),
+            classification,
+            curriculum,
+            topic: curriculum.topic,
+            sub_topic: curriculum.sub_topic,
+            bloom_level: bloom.level,
+            bloom_confidence: bloom.confidence,
+            bloom_evidence: bloom.evidence,
+            difficulty_level: difficulty.level,
+            difficulty_confidence: difficulty.confidence,
+            difficulty_evidence: difficulty.evidence,
+            answer_expected: buildAnswerGuidance({ text, classification, bloom }),
             evidence: questionEvidence,
         };
     });
