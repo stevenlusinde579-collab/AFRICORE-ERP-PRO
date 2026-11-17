@@ -128,7 +128,7 @@ test("keeps printed section totals separate when question marks are not evidence
         subject: "Science and Technology",
         text: "SECTION A (Alama 22)\nQUESTION 1\nChagua jibu sahihi."
     });
-    const result = analyzeExamEvidence({ document, sourceText: "SECTION A (Alama 22)\\nQUESTION 1\\nChagua jibu sahihi." });
+    const result = analyzeExamEvidence({ document, sourceText: "SECTION A (Alama 22)\nQUESTION 1\nChagua jibu sahihi." });
     assert.equal(result.section_totals[0].declared_total, 22);
     assert.equal(result.section_totals[0].calculated_from_explicit_question_marks, null);
     assert.ok(result.diagnostics.some(item => item.code === "SECTION_MARKS_UNALLOCATED"));
