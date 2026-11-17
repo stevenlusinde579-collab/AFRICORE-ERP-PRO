@@ -63,7 +63,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     let currentNestedPart = null;
     let currentOption = null;
     let questionOrder = 0;
-    const earlyYears = isEarlyYearsLevel(level, source);
+    const earlyYears = isEarlyYearsLevel(level, source);\n    const hasInstructionHeading = /^\\s*(?:instructions|maelekezo)\\s*:/im.test(source.slice(0, 2000));\n    if (earlyYears) ensureSection();
 
     const ensureSection = (name = "UNSECTIONED", title = "") => {
         let section = document.sections.find(item => item.name === name);
