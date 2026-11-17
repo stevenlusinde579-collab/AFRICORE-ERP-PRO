@@ -40,3 +40,13 @@ test("keeps question text split across lines and validates missing structure saf
     assert.match(model.questions[0].text, /causes\nof soil erosion/);
     assert.equal(validateExamDocumentModel(model).valid, true);
 });
+
+test("builds nested letter and Roman subparts without flattening their parent-child relationship", () => {
+    const model = buildExamDocumentModel({
+        text: "SECTION A\\nQUESTION 1\\n(a) Explain the process.\\n(i) First stage [2 marks].\\n(ii) Second stage [3 marks].\\n(b) Give one example."
+    });
+    assert.equal(model.questions[0].subparts.length, 2);
+    assert.equal(model.questions[0].subparts[0].children.length, 2);
+    assert.equal(model.questions[0].subparts[0].children[1].printed_label, "ii");
+    assert.equal(model.summary.subpart_count, 4);
+});
