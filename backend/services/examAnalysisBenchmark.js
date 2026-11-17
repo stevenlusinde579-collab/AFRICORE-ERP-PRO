@@ -3,6 +3,23 @@ const numberOrNull = value => {
     return Number.isFinite(number) ? number : null;
 };
 
+const normalizeQuestionType = value => {
+    const type = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const aliases = {
+        mcq: "multiple_choice",
+        multiple_choice: "multiple_choice",
+        short_answer: "structured_response",
+        structured: "structured_response",
+        structured_answer: "structured_response",
+        essay: "extended_response",
+        composition: "extended_response",
+        long_answer: "extended_response",
+        fill_in_the_blank: "fill_in_the_blanks",
+        true_or_false: "true_false",
+    };
+    return aliases[type] || type;
+};
+
 const normalizeSection = value => String(value || "UNSECTIONED").trim().toUpperCase().replace(/^SECTION\s+/, "");
 const questionNumber = item => item.question_number ?? item.order ?? item.questionNumber ?? null;
 
