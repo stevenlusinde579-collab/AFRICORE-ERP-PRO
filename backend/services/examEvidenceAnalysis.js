@@ -97,7 +97,7 @@ const classifyQuestion = (text) => {
     if (/\b(trace|colour|color|count|circle|paint|cut|paste|sing|recite|point|repeat|connect|tick|underline|trace|chora|paka|hesabu|zungushia|unganisha)\b/i.test(value)) {
         return { type: "activity", confidence: 0.82, reason: "Learner activity prompt detected." };
     }
-    if (/\b(calculate|solve|show that|work out|give reasons|explain|describe|state|define|list|identify|taja|eleza|fafanua|ainisha|linganisha|hesabu|kokotoa|onyesha|andika)\b/i.test(value)) {
+    if (/\b(calculate|solve|show that|work out|give reasons|explain|describe|state|define|list|identify|justify|argue|elaborate|differentiate|distinguish|discuss|outline|illustrate|compare|contrast|how (?:are|is|do|does)|used in|taja|eleza|fafanua|ainisha|linganisha|hesabu|kokotoa|onyesha|andika)\b/i.test(value)) {
         return { type: "structured_response", confidence: 0.72, reason: "Structured response command detected." };
     }
     return { type: "unclassified", confidence: 0.25, reason: "No reliable question-type evidence found." };
@@ -258,7 +258,15 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
         const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
         const topicText = [question.text, ...subparts.map((part) => part.text)].filter(Boolean).join("\n");
-        const classification = classifyQuestion(text);
+        let classification = classifyQuestion(text);
+        if (classification.type === "structured_response" && Number.isFinite(marks) && marks >= 12 &&
+            subparts.length === 0 && /\b(explain|elaborate|discuss|justify|argue|describe|outline)\b/i.test(text)) {
+            classification = {
+                type: "extended_response",
+                confidence: 0.78,
+                reason: "High-mark open-ended prompt with an extended explanatory command detected.",
+            };
+        }
         const textTokens = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
         const itemTokenIndex = textTokens.findIndex(token => token === "item" || token === "items");
         const romanValues = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12, xiii: 13, xiv: 14, xv: 15 };
