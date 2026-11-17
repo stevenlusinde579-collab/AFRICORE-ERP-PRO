@@ -90,7 +90,7 @@ const classifyQuestion = (text) => {
     if (/\b(essay|composition|write an essay|write a story|andika insha|utungaji)\b/.test(value)) {
         return { type: "extended_response", confidence: 0.8, reason: "Extended writing instruction detected." };
     }
-    if (/\b(fill in the blanks?|complete (?:the )?(?:sentences?|routine|words?)|fill the gaps?)\b/.test(value) ||
+    if (/\b(fill in the blanks?|complete\b.{0,70}\b(?:sentences?|routine|words?|verbs?|paragraph|passage)|fill the gaps?|verbs? in the brackets?\b.{0,60}\bcorrect form)\b/.test(value) ||
         /\b(jaza nafasi|jaza mapengo)\b/i.test(value) || /_{2,}/.test(value) || /\.{5,}/.test(value)) {
         return { type: "fill_in_the_blanks", confidence: 0.86, reason: "Blank-completion structure detected." };
     }
