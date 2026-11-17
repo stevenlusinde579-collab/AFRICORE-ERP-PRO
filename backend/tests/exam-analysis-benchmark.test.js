@@ -84,3 +84,5 @@ test("normalizes equivalent historical AI question type labels", () => {
     });
     assert.equal(result.question_types.agreement, 1);
 });
+
+// Regression coverage includes historical AI label aliases.
