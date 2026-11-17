@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildExamEvidenceReview } from "../services/examEvidenceReview.js";
+import { buildExamEvidenceReview, buildRuleBasedQuestionsFromEvidence } from "../services/examEvidenceReview.js";
 
 test("builds advisory evidence review without changing Rule-Based question records", () => {
     const result = buildExamEvidenceReview({
