@@ -50,3 +50,18 @@ test("builds nested letter and Roman subparts without flattening their parent-ch
     assert.equal(model.questions[0].subparts[0].children[1].printed_label, "ii");
     assert.equal(model.summary.subpart_count, 4);
 });
+
+test("preserves unnumbered and mixed early-years activity prompts as separate tasks", () => {
+    const unnumbered = buildExamDocumentModel({
+        level: "Baby Class",
+        text: "BABY CLASS\\nTrace letter A.\\nColour the red circle.\\nCount five objects."
+    });
+    assert.equal(unnumbered.summary.question_count, 3);
+    assert.match(unnumbered.questions[0].text, /Trace letter A/);
+    assert.match(unnumbered.questions[1].text, /Colour the red circle/);
+    const mixed = buildExamDocumentModel({
+        level: "Nursery",
+        text: "ACTIVITY 1 Trace letter A.\\nColour the red circle.\\nCount five objects."
+    });
+    assert.equal(mixed.summary.question_count, 3);
+});
