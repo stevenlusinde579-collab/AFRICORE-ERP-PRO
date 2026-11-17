@@ -9,7 +9,7 @@
 const QUESTION_HEADER = /^\s*(?:(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\s*(?:NO\.?|NUMBER)?\s*)?(\d{1,3}|[ivxlcdm]{1,8})\s*[.)\]:-]?\s*(.*)$/i;
 const SECTION_HEADER = /^\s*(?:SECTION|PART|SEHEMU)\s+([A-F]|[IVXLCDM]+|\d+)\b\s*[:.)-]?\s*(.*)$/i;
 const SUBPART_HEADER = /^\s*(?:\(\s*([a-z]|[ivxlcdm]+)\s*\)|([a-z]|[ivxlcdm]+)[.)])\s*(.*)$/i;
-const ADMIN_LINE = /^(?:answer all questions|answer any|attempt all|attempt any|jibu maswali yote|write your (?:name|examination number)|do not open|this paper consists|all answers must)/i;
+const ADMIN_LINE = /^(?:answer all questions|answer any|attempt all|attempt any|jibu maswali yote|write your (?:name|examination number)|do not open|this paper consists|all answers must|total marks?|maximum marks?|max\\.? marks?|paper total|end of (?:the )?examination)/i;
 
 const romanValue = (value) => {
     const token = String(value || "").toUpperCase();
