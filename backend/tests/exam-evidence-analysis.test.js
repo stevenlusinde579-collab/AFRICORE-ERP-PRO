@@ -120,3 +120,17 @@ test("sums nested Roman subpart marks without double counting the parent", async
     assert.equal(result.analysis.questions[0].subparts[0].marks, 5);
     assert.equal(result.analysis.questions[0].marks, 6);
 });
+
+test("keeps printed section totals separate when question marks are not evidenced", async () => {
+    const { buildExamDocumentModel } = await import("../services/examDocumentModel.js");
+    const document = buildExamDocumentModel({
+        level: "Primary",
+        subject: "Science and Technology",
+        text: "SECTION A (Alama 22)\\nQUESTION 1\\nChagua jibu sahihi."
+    });
+    const result = analyzeExamEvidence({ document, sourceText: "SECTION A (Alama 22)\\nQUESTION 1\\nChagua jibu sahihi." });
+    assert.equal(result.section_totals[0].declared_total, 22);
+    assert.equal(result.section_totals[0].calculated_from_explicit_question_marks, null);
+    assert.ok(result.diagnostics.some(item => item.code === "SECTION_MARKS_UNALLOCATED"));
+    assert.equal(result.questions[0].marks, null);
+});
