@@ -35,6 +35,31 @@ const isEarlyYearsLevel = (level, text) =>
 
 const EARLY_YEARS_TASK = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|fafanua)\b/i;
 
+const isDistinctRepeatedTask = (currentQuestion, repeatedQuestion, stem, rawIndent = 0) => {
+    const nextStem = String(stem || "").trim();
+    const previousStem = String(currentQuestion?.text || repeatedQuestion?.text || "").trim();
+    const commandVerb = /^(?:write|complete|read|match|choose|select|answer|attempt|explain|describe|discuss|calculate|solve|identify|name|state|list|mention|fill|circle|tick|underline|arrange|construct|draw|translate|correct|rewrite|replace|form|make|give|show|classify|compare|differentiate|summarise|summarize|tell|use|put|change|convert|work|find|trace|colour|color|count|join|label|mark|read|look|study|observe|record|measure|sort|connect|pick|select|supply|provide|write down|copy|pronounce|spell|say|describe|complete)\\b/i;
+    if (rawIndent > 4 || !commandVerb.test(nextStem) || nextStem.length < 18) return false;
+    if (!currentQuestion || currentQuestion.id !== repeatedQuestion?.id) return false;
+
+    // A second label is a new main question only if the previous occurrence
+    // already contains a complete task body and the new line starts a distinct
+    // command. This avoids counting repeated OCR headers or numbered subparts.
+    const priorHasBody = (currentQuestion.subparts || []).length > 0 || previousStem.length >= 65;
+    if (!priorHasBody) return false;
+
+    const normalize = value => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const previous = normalize(previousStem);
+    const next = normalize(nextStem);
+    if (!next || previous === next) return false;
+
+    const left = new Set(previous.split(/\\s+/).filter(word => word.length > 2));
+    const right = new Set(next.split(/\\s+/).filter(word => word.length > 2));
+    const overlap = [...left].filter(word => right.has(word)).length;
+    const similarity = overlap / Math.max(1, Math.min(left.size, right.size));
+    return similarity < 0.65;
+};
+
 const makeEvidence = (text, page, line, kind) => ({
     text,
     page,
@@ -139,11 +164,14 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 const number = numberValue(questionMatch[1]);
                 const explicitLabel = hasExplicitQuestionPrefix;
                 const prior = currentSection?.questions || [];
-                const repeated = prior.find(item => item.printed_label === String(questionMatch[1]).toUpperCase());
+                const repeated = prior.slice().reverse().find(item => item.printed_label === String(questionMatch[1]).toUpperCase());
                 // A repeated printed label is retained as a distinct occurrence only
                 // when an explicit heading establishes a new task; otherwise it is
                 // treated as continuation evidence rather than silently duplicated.
-                if (repeated && !explicitLabel) {
+                const repeatedIsNewTask = repeated
+                    ? isDistinctRepeatedTask(currentQuestion, repeated, questionMatch[2], rawIndent)
+                    : false;
+                if (repeated && !explicitLabel && !repeatedIsNewTask) {
                     document.diagnostics.push({
                         code: "AMBIGUOUS_REPEATED_LABEL",
                         severity: "warning",
@@ -151,18 +179,31 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                         line: lineIndex + 1,
                         label: questionMatch[1],
                         related_question_id: repeated.id,
-                        message: "Repeated question label in the same section was not merged or counted as a new question without stronger boundary evidence.",
+                        message: "Repeated question label lacked sufficient evidence of a new independent task.",
                     });
                     if (currentQuestion) currentQuestion.evidence.push({ ...evidence, kind: "ambiguous_boundary" });
                     return;
                 }
                 currentSection = currentSection || ensureSection();
                 questionOrder += 1;
+                if (repeated && (explicitLabel || repeatedIsNewTask)) {
+                    document.diagnostics.push({
+                        code: "REPEATED_LABEL_RENUMBERED",
+                        severity: "info",
+                        page: pageIndex + 1,
+                        line: lineIndex + 1,
+                        printed_label: String(questionMatch[1]).toUpperCase(),
+                        assigned_question_number: questionOrder,
+                        related_question_id: repeated.id,
+                        message: "A distinct task reused an earlier printed question number; it was retained as a separate question and assigned the next reading-order number.",
+                    });
+                }
                 currentQuestion = {
                     id: "question-" + questionOrder,
                     order: questionOrder,
                     printed_label: String(questionMatch[1]).toUpperCase(),
-                    question_number: number,
+                    printed_question_number: number,
+                    question_number: repeated && (explicitLabel || repeatedIsNewTask) ? questionOrder : number,
                     text: String(questionMatch[2] || "").trim(),
                     subparts: [],
                     evidence: [evidence],
