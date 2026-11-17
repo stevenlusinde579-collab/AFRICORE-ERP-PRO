@@ -21,6 +21,18 @@ const sampleDocument = {
                 { id: "q2b", printed_label: "b", text: "Complete pairs", evidence: [evidence("(b) Complete pairs (2 marks)", 4)] },
             ],
         },
+        {
+            id: "q3", order: 3, printed_label: "3", section: "A",
+            text: "Fill in the blank.",
+            evidence: [evidence("3. Fill in the blank [0 marks].", 5)],
+            subparts: [],
+        },
+        {
+            id: "q4", order: 4, printed_label: "4", section: "A",
+            text: "List the answer.",
+            evidence: [evidence("4. List the answer [0 marks].", 6)],
+            subparts: [],
+        },
     ],
     instructions: [{ text: "Answer any TWO out of FOUR questions.", scope: "A", evidence: [evidence("Answer any TWO out of FOUR questions.", 2)] }],
 };
@@ -52,6 +64,10 @@ test("builds marks from explicit question or complete subpart evidence and flags
     assert.equal(result.questions[0].marks, 5);
     assert.equal(result.questions[1].marks, 5);
     assert.equal(result.questions[1].marks_source, "sum_of_explicit_subpart_evidence");
+    assert.equal(result.questions[0].is_selective, true);
+    assert.equal(result.questions[0].selection_count, 2);
+    assert.equal(result.questions[0].selection_total, 4);
+    assert.equal(result.totals.effective_calculated_total, 10);
     assert.equal(result.totals.calculated_from_explicit_evidence, 10);
     assert.equal(result.totals.declared, 10);
     assert.equal(result.selection_rules[0].required, 2);
