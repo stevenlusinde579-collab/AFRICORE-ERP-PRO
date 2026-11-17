@@ -262,40 +262,6 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         };
     });
 
-    const sectionTotals = (document?.sections || []).map((section) => {
-        const markEvidence = uniqueEvidence(section.evidence)
-            .map(item => ({ ...item, mark: extractMark(item.text) }))
-            .filter(item => item.mark);
-        const declared = markEvidence[0]?.mark?.value ?? null;
-        const sectionQuestions = questions.filter(question => question.section === section.name);
-        const knownMarks = sectionQuestions.filter(question => Number.isFinite(question.marks));
-        const calculated = sectionQuestions.length && knownMarks.length === sectionQuestions.length
-            ? knownMarks.reduce((sum, question) => sum + question.marks, 0)
-            : null;
-        if (declared != null && calculated == null) {
-            diagnostics.push({
-                code: "SECTION_MARKS_UNALLOCATED",
-                section: section.name,
-                declared_total: declared,
-                message: "A printed section total exists, but individual question marks are not all evidenced. No equal allocation has been assumed.",
-            });
-        } else if (declared != null && calculated != null && declared !== calculated) {
-            diagnostics.push({
-                code: "SECTION_TOTAL_MISMATCH",
-                section: section.name,
-                declared_total: declared,
-                calculated_total: calculated,
-                message: "The section total differs from the sum of evidenced question marks.",
-            });
-        }
-        return {
-            section: section.name,
-            declared_total: declared,
-            calculated_from_explicit_question_marks: calculated,
-            mark_evidence: markEvidence.map(item => ({ text: item.text, page: item.page, line: item.line, value: item.mark.value })),
-        };
-    });
-
     const instructionEvidence = (document?.instructions || []).flatMap((instruction) =>
         uniqueEvidence(instruction.evidence).map((item) => ({ ...item, scope: instruction.scope || "PAPER" }))
     );
@@ -337,6 +303,73 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         question.selection_total = selective ? (rule.available ?? sectionCount) : 0;
         question.selection_group = selective ? rule.scope : null;
         question.selection_instruction = selective ? rule.evidence_text : null;
+    }
+
+    const sectionTotals = (document?.sections || []).map((section) => {
+        const markEvidence = uniqueEvidence(section.evidence)
+            .map(item => ({ ...item, mark: extractMark(item.text) }))
+            .filter(item => item.mark);
+        const declared = markEvidence[0]?.mark?.value ?? null;
+        const sectionQuestions = questions.filter(question => question.section === section.name);
+        const knownMarks = sectionQuestions.filter(question => Number.isFinite(question.marks));
+        const sectionRule = selections.find(item => item.scope === section.name && item.mode !== "answer_all");
+        const allQuestionMarksTotal = sectionQuestions.length && knownMarks.length === sectionQuestions.length
+            ? knownMarks.reduce((sum, question) => sum + question.marks, 0)
+            : null;
+        const countedQuestions = sectionRule
+            ? [...sectionQuestions].sort((a, b) => b.marks - a.marks).slice(0, sectionRule.required ?? sectionQuestions.length)
+            : sectionQuestions;
+        const calculated = allQuestionMarksTotal == null
+            ? null
+            : countedQuestions.reduce((sum, question) => sum + question.marks, 0);
+        if (declared != null && calculated == null) {
+            diagnostics.push({
+                code: "SECTION_MARKS_UNALLOCATED",
+                section: section.name,
+                declared_total: declared,
+                message: "A printed section total exists, but individual question marks are not all evidenced. No equal allocation has been assumed.",
+            });
+        } else if (declared != null && calculated != null && declared !== calculated) {
+            diagnostics.push({
+                code: "SECTION_TOTAL_MISMATCH",
+                section: section.name,
+                declared_total: declared,
+                calculated_total: calculated,
+                message: "The section total differs from the sum of evidenced question marks.",
+            });
+        }
+        return {
+            section: section.name,
+            declared_total: declared,
+            calculated_from_explicit_question_marks: calculated,
+            all_detected_question_marks_total: allQuestionMarksTotal,
+            selection_applied: Boolean(sectionRule),
+            mark_evidence: markEvidence.map(item => ({ text: item.text, page: item.page, line: item.line, value: item.mark.value })),
+        };
+    });
+
+    for (const rule of selections.filter(item => item.mode !== "answer_all")) {
+        const availableCount = rule.scope === "PAPER"
+            ? questions.length
+            : questions.filter(item => item.section === rule.scope).length;
+        if (rule.required != null && rule.available != null && rule.required > rule.available) {
+            diagnostics.push({
+                code: "INVALID_SELECTION_RULE",
+                scope: rule.scope,
+                required: rule.required,
+                available: rule.available,
+                message: "The required answer count exceeds the printed selection pool.",
+            });
+        }
+        if (rule.available != null && rule.available > availableCount) {
+            diagnostics.push({
+                code: "SELECTION_POOL_MISMATCH",
+                scope: rule.scope,
+                printed_available: rule.available,
+                detected_questions: availableCount,
+                message: "The printed selection pool contains more questions than the document model detected.",
+            });
+        }
     }
 
     const totalMatch = String(sourceText || "").match(/\b(?:total\s+marks?|maximum\s+marks?|max\.?\s+marks?|paper\s+total)\s*[:=-]?\s*(\d+(?:\.\d+)?)/i);
