@@ -21,6 +21,9 @@ test("runs the V2 pipeline end-to-end without invoking Gemini or production cont
     assert.equal(result.engine, "evidence_based_v2");
     assert.equal(result.document.summary.question_count, 2);
     assert.equal(result.analysis.totals.declared, 10);
+    assert.equal(result.analysis.totals.calculated_from_explicit_evidence, 10);
+    assert.equal(result.analysis.questions[0].marks, 5);
+    assert.equal(result.analysis.questions[1].marks, 5);
     assert.equal(result.analysis.questions[0].curriculum.topic, "Acids, bases and salts");
     assert.equal(result.analysis.questions[1].curriculum.topic, "Separation of mixtures");
     assert.equal(result.decision.ready_for_review, true);
