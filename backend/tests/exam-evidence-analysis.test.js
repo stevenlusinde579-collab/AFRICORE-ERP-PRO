@@ -88,3 +88,35 @@ test("maps question topic using the declared subject and education level", async
     assert.equal(result.questions[0].curriculum.topic, "Acids, bases and salts");
     assert.ok(result.questions[0].curriculum.topic_evidence);
 });
+
+test("understands Swahili marks, matching, multiple choice and selection instructions", () => {
+    assert.equal(extractMark("(Alama 22)").value, 22);
+    assert.equal(classifyQuestion("Oanisha milango ya fahamu kutoka orodha A na B").type, "matching");
+    assert.equal(classifyQuestion("Chagua herufi ya jibu sahihi kisha uandike").type, "multiple_choice");
+    const selection = parseSelection("Chagua maswali mawili kati ya yafuatayo");
+    assert.equal(selection.required, 2);
+    assert.equal(selection.mode, "choose_count");
+    const englishSelection = parseSelection("Answer any two of the following three questions");
+    assert.equal(englishSelection.required, 2);
+    assert.equal(englishSelection.available, 3);
+});
+
+test("sums nested Roman subpart marks without double counting the parent", async () => {
+    const { analyzeExaminationV2 } = await import("../services/examAnalysisV2.js");
+    const result = analyzeExaminationV2({
+        level: "Standard IV",
+        subject: "Science and Technology",
+        text: [
+            "SECTION A",
+            "QUESTION 1",
+            "(a) Explain the process.",
+            "(i) First stage [2 marks].",
+            "(ii) Second stage [3 marks].",
+            "(b) Give one example [1 mark].",
+        ].join("\\n"),
+    });
+    assert.equal(result.document.questions[0].subparts.length, 2);
+    assert.equal(result.document.questions[0].subparts[0].children.length, 2);
+    assert.equal(result.analysis.questions[0].subparts[0].marks, 5);
+    assert.equal(result.analysis.questions[0].marks, 6);
+});
