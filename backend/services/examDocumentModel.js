@@ -129,12 +129,13 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             const questionMatch = line.match(QUESTION_HEADER);
+            const hasExplicitQuestionPrefix = /^(?:QUESTION|Q\.?|ACTIVITY|TASK|EXERCISE|ITEM)\s*(?:NO\.?|NUMBER)?\s*(?:\d{1,3}|[ivxlcdm]{1,8})\b/i.test(line);
             const previousQuestionIsRoman = Boolean(currentQuestion && /^[IVXLCDM]+$/.test(currentQuestion.printed_label) && !currentSubpart);
             const isExplicitRomanQuestion = /^[IVXLCDM]{1,8}\s*[.)]/.test(line) &&
                 (!currentQuestion || previousQuestionIsRoman);
-            if (questionMatch && (/^(?:QUESTION|Q|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line) || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
+            if (questionMatch && (hasExplicitQuestionPrefix || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
                 const number = numberValue(questionMatch[1]);
-                const explicitLabel = /^(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line);
+                const explicitLabel = hasExplicitQuestionPrefix;
                 const prior = currentSection?.questions || [];
                 const repeated = prior.find(item => item.printed_label === String(questionMatch[1]).toUpperCase());
                 // A repeated printed label is retained as a distinct occurrence only
