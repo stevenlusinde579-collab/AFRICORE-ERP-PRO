@@ -75,4 +75,121 @@ export const buildExamEvidenceReview = ({ v2Result, ruleBasedQuestionCount = 0 }
     };
 };
 
+
+const formatLabel = value => String(value || "Unknown")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+
+const toRuleBasedQuestionType = question => {
+    const type = question.classification?.type || "unclassified";
+    if (type === "multiple_choice") return "Multiple Choice";
+    if (type === "matching") return "Matching";
+    if (type === "extended_response") return "Essay";
+    if (type === "structured_response") return (question.subparts || []).length ? "Structured" : "Short Answer";
+    return formatLabel(type);
+};
+
+/**
+ * Only returns replacement rows when V2 has complete, high-confidence
+ * structural/marks evidence and its count agrees with the paper's printed
+ * expected count. Otherwise the caller must retain existing Rule-Based rows.
+ */
+export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestionCount = 0 } = {}) => {
+    const analysis = v2Result?.analysis || {};
+    const questions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
+    const expected = Number(expectedQuestionCount);
+    const diagnostics = Array.isArray(v2Result?.diagnostics) ? v2Result.diagnostics : [];
+    const blockingCodes = new Set([
+        "NO_QUESTION_BOUNDARIES",
+        "AMBIGUOUS_REPEATED_LABEL",
+        "UNATTACHED_TEXT",
+        "EMPTY_QUESTION",
+        "DOCUMENT_VALIDATION_ERROR",
+        "SECTION_MARKS_UNALLOCATED",
+        "SECTION_TOTAL_MISMATCH",
+        "SECTION_MARKS_OVERALLOCATED",
+        "DECLARED_TOTAL_MISMATCH",
+        "INVALID_SELECTION_RULE",
+        "SELECTION_POOL_MISMATCH",
+    ]);
+
+    if (!v2Result?.validation?.valid || !v2Result?.decision?.ready_for_review ||
+        analysis.quality?.status !== "high" || !Number.isInteger(expected) ||
+        expected <= 0 || questions.length !== expected || !questions.length ||
+        diagnostics.some(item => blockingCodes.has(item.code))) {
+        return null;
+    }
+
+    const declaredTotal = Number(analysis.totals?.declared);
+    const effectiveTotal = Number(analysis.totals?.effective_calculated_total);
+    if (Number.isFinite(declaredTotal) && declaredTotal > 0 &&
+        (!Number.isFinite(effectiveTotal) || Math.abs(declaredTotal - effectiveTotal) > 0.01)) {
+        return null;
+    }
+
+    if (questions.some(question =>
+        !Number.isFinite(question.marks) || question.marks <= 0 ||
+        !Number.isFinite(question.mark_confidence) || question.mark_confidence < 0.7 ||
+        !question.classification || question.classification.type === "unclassified" ||
+        question.boundary_confidence === "low"
+    )) {
+        return null;
+    }
+
+    const selectionBySection = new Map();
+    for (const rule of analysis.selection_rules || []) {
+        if (rule.mode === "choose_count" && rule.scope && rule.scope !== "PAPER" &&
+            Number.isFinite(rule.required) && Number.isFinite(rule.available)) {
+            selectionBySection.set(rule.scope, rule);
+        }
+    }
+
+    return questions.map((question, index) => {
+        const selection = selectionBySection.get(question.section);
+        const subpartText = (question.subparts || [])
+            .map(part => \`\${part.printed_label}. \${part.text || ""}\`.trim())
+            .filter(Boolean);
+        const questionText = [question.text, ...subpartText].filter(Boolean).join("\\n").trim();
+        const markEvidence = (question.mark_evidence || [])
+            .map(item => item.text || item.matched_text)
+            .filter(Boolean)
+            .join(" | ");
+        const explanation = [
+            question.classification?.reason,
+            question.marks_source ? \`Marks: \${question.marks_source}\` : null,
+            question.curriculum?.topic_evidence || null,
+        ].filter(Boolean).join(" ");
+        const confidence = Math.round(Math.min(
+            Number(question.classification?.confidence) || 0.7,
+            Number(question.mark_confidence) || 0.7
+        ) * 100);
+
+        return {
+            question_number: Number.isInteger(question.question_number) && question.question_number > 0
+                ? question.question_number : index + 1,
+            question_text: questionText || \`Question \${index + 1}\`,
+            section: \`Section \${question.section}\`,
+            section_type: \`Section \${question.section}\`,
+            max_marks: question.marks,
+            mark_source: question.marks_source || "evidence_based_v2",
+            mark_evidence: markEvidence || null,
+            topic: question.topic || null,
+            sub_topic: question.sub_topic || null,
+            difficulty_level: formatLabel(question.difficulty_level),
+            bloom_level: formatLabel(question.bloom_level),
+            question_type: toRuleBasedQuestionType(question),
+            answer_expected: question.answer_expected || null,
+            ai_confidence: confidence,
+            ai_explanation: explanation || "Detected by evidence-based V2 document analysis.",
+            is_selective: Boolean(selection),
+            selection_required: Boolean(selection),
+            selection_count: selection ? selection.required : 0,
+            selection_total: selection ? selection.available : 0,
+            selection_group: selection ? \`SECTION-\${question.section}-\${selection.required}-OF-\${selection.available}\` : null,
+            selection_instruction: selection?.evidence_text || null,
+        };
+    });
+};
+
+
 export default buildExamEvidenceReview;
