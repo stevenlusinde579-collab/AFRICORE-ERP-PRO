@@ -380,6 +380,9 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const remainingMarks = Number((declaredSectionMarks - knownTotal).toFixed(4));
         const unmarkedQuestions = sectionQuestions.filter(question => !Number.isFinite(question.marks));
         if (!unmarkedQuestions.length) continue;
+        // A single isolated question in a short/partial extract is not enough
+        // evidence to assign the entire section total to that question.
+        if (sectionQuestions.length === 1 && questions.length < 3 && !sectionRule) continue;
         if (remainingMarks < 0) {
             diagnostics.push({
                 code: "SECTION_MARKS_OVERALLOCATED",
@@ -431,9 +434,16 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const declared = markEvidence[0]?.mark?.value ?? null;
         const sectionQuestions = questions.filter(question => question.section === section.name);
         const knownMarks = sectionQuestions.filter(question => Number.isFinite(question.marks));
+        const explicitMarks = sectionQuestions.filter(question =>
+            question.marks_source === "explicit_question_evidence" ||
+            question.marks_source === "sum_of_explicit_subpart_evidence"
+        );
         const sectionRule = selections.find(item => item.scope === section.name && item.mode !== "answer_all");
         const allQuestionMarksTotal = sectionQuestions.length && knownMarks.length === sectionQuestions.length
             ? knownMarks.reduce((sum, question) => sum + question.marks, 0)
+            : null;
+        const explicitQuestionMarksTotal = sectionQuestions.length && explicitMarks.length === sectionQuestions.length
+            ? explicitMarks.reduce((sum, question) => sum + question.marks, 0)
             : null;
         const countedQuestions = sectionRule
             ? [...sectionQuestions].sort((a, b) => b.marks - a.marks).slice(0, sectionRule.required ?? sectionQuestions.length)
@@ -460,7 +470,8 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         return {
             section: section.name,
             declared_total: declared,
-            calculated_from_explicit_question_marks: calculated,
+            calculated_from_explicit_question_marks: explicitQuestionMarksTotal,
+            calculated_from_detected_question_marks: calculated,
             all_detected_question_marks_total: allQuestionMarksTotal,
             selection_applied: Boolean(sectionRule),
             mark_evidence: markEvidence.map(item => ({ text: item.text, page: item.page, line: item.line, value: item.mark.value })),
@@ -510,9 +521,19 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             ? sectionDeclaredTotals.reduce((sum, value) => sum + value, 0)
             : null);
     const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
+    const explicitQuestionMarks = questions.filter(item =>
+        item.marks_source === "explicit_question_evidence" ||
+        item.marks_source === "sum_of_explicit_subpart_evidence"
+    );
     const calculatedTotal = knownQuestionMarks.length === questions.length && questions.length
         ? knownQuestionMarks.reduce((sum, item) => sum + item.marks, 0)
         : null;
+    const explicitCalculatedTotal = explicitQuestionMarks.length === questions.length && questions.length
+        ? explicitQuestionMarks.reduce((sum, item) => sum + item.marks, 0)
+        : null;
+    const inferredMarksTotal = questions
+        .filter(item => Number.isFinite(item.marks) && String(item.marks_source || "").startsWith("inferred_"))
+        .reduce((sum, item) => sum + item.marks, 0);
     let effectiveCalculatedTotal = null;
     if (questions.length && questions.every(item => Number.isFinite(item.marks))) {
         const paperRule = selections.find(item => item.scope === "PAPER" && item.mode !== "answer_all");
@@ -564,7 +585,9 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         section_totals: sectionTotals,
         totals: {
             declared: declaredTotal,
-            calculated_from_explicit_evidence: calculatedTotal,
+            calculated_from_explicit_evidence: explicitCalculatedTotal,
+            calculated_from_detected_evidence: calculatedTotal,
+            inferred_marks_total: Number(inferredMarksTotal.toFixed(4)),
             effective_calculated_total: effectiveCalculatedTotal,
             marks_coverage: Number(markCoverage.toFixed(3)),
         },
