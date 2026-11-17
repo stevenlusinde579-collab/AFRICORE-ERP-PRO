@@ -6,9 +6,9 @@
  * structure that later analysis stages can consume and validate.
  */
 
-const QUESTION_HEADER = /^\\s*(?:(?:QUESTION|Q(?:UESTION)?\\.?|ACTIVITY|TASK|EXERCISE|ITEM)\\s*(?:NO\\.?|NUMBER)?\\s*)?(\\d{1,3}|[ivxlcdm]{1,8})\\s*[.)\\]:-]?\\s*(.*)$/i;
-const SECTION_HEADER = /^\\s*(?:SECTION|PART|SEHEMU)\\s+([A-F]|[IVXLCDM]+|\\d+)\\b\\s*[:.)-]?\\s*(.*)$/i;
-const SUBPART_HEADER = /^\\s*(?:\\(\\s*([a-z]|[ivxlcdm]+)\\s*\\)|([a-z]|[ivxlcdm]+)[.)])\\s*(.*)$/i;
+const QUESTION_HEADER = /^\s*(?:(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\s*(?:NO\.?|NUMBER)?\s*)?(\d{1,3}|[ivxlcdm]{1,8})\s*[.)\]:-]?\s*(.*)$/i;
+const SECTION_HEADER = /^\s*(?:SECTION|PART|SEHEMU)\s+([A-F]|[IVXLCDM]+|\d+)\b\s*[:.)-]?\s*(.*)$/i;
+const SUBPART_HEADER = /^\s*(?:\(\s*([a-z]|[ivxlcdm]+)\s*\)|([a-z]|[ivxlcdm]+)[.)])\s*(.*)$/i;
 const ADMIN_LINE = /^(?:answer all questions|answer any|attempt all|attempt any|jibu maswali yote|write your (?:name|examination number)|do not open|this paper consists|all answers must)/i;
 
 const romanValue = (value) => {
@@ -26,7 +26,7 @@ const romanValue = (value) => {
 
 const numberValue = (token) => {
     const value = String(token || "").trim();
-    if (/^\\d+$/.test(value)) return Number(value);
+    if (/^\d+$/.test(value)) return Number(value);
     return romanValue(value);
 };
 
@@ -38,8 +38,8 @@ const makeEvidence = (text, page, line, kind) => ({
 });
 
 export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) => {
-    const source = String(text || "").replace(/\\r/g, "\\n");
-    const pages = source.split(/\\f|\\n\\s*---\\s*PAGE\\s+\\d+\\s*---\\s*\\n/i);
+    const source = String(text || "").replace(/\r/g, "\n");
+    const pages = source.split(/\f|\n\s*---\s*PAGE\s+\d+\s*---\s*\n/i);
     const document = {
         schema_version: "2.0.0",
         subject: String(subject || "").trim() || null,
@@ -67,10 +67,10 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     };
 
     pages.forEach((pageText, pageIndex) => {
-        const lines = pageText.split("\\n");
+        const lines = pageText.split("\n");
         document.pages.push({ page: pageIndex + 1, line_count: lines.length });
         lines.forEach((rawLine, lineIndex) => {
-            const line = rawLine.replace(/[\\t ]+/g, " ").trim();
+            const line = rawLine.replace(/[\t ]+/g, " ").trim();
             if (!line) return;
             const evidence = makeEvidence(line, pageIndex + 1, lineIndex + 1, "pdf_text");
 
@@ -84,9 +84,9 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             const questionMatch = line.match(QUESTION_HEADER);
-            if (questionMatch && !ADMIN_LINE.test(questionMatch[2] || "")) {
+            if (questionMatch && (/^(?:QUESTION|Q(?:UESTION)?\\.?|ACTIVITY|TASK|EXERCISE|ITEM)\\b/i.test(line) || /^\\s*\\d{1,3}\\s*[.)\\]:-]/.test(line)) && !ADMIN_LINE.test(questionMatch[2] || "")) {
                 const number = numberValue(questionMatch[1]);
-                const explicitLabel = /^(?:QUESTION|Q(?:UESTION)?\\.?|ACTIVITY|TASK|EXERCISE|ITEM)\\b/i.test(line);
+                const explicitLabel = /^(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line);
                 const prior = currentSection?.questions || [];
                 const repeated = prior.find(item => item.printed_label === String(questionMatch[1]).toUpperCase());
                 // A repeated printed label is retained as a distinct occurrence only
@@ -138,10 +138,10 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             if (currentSubpart) {
-                currentSubpart.text = [currentSubpart.text, line].filter(Boolean).join("\\n");
+                currentSubpart.text = [currentSubpart.text, line].filter(Boolean).join("\n");
                 currentSubpart.evidence.push(evidence);
             } else if (currentQuestion) {
-                currentQuestion.text = [currentQuestion.text, line].filter(Boolean).join("\\n");
+                currentQuestion.text = [currentQuestion.text, line].filter(Boolean).join("\n");
                 currentQuestion.evidence.push(evidence);
             } else {
                 const section = currentSection || ensureSection();
