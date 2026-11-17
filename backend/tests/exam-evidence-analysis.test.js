@@ -200,5 +200,5 @@ test("analyses each MCQ response item and preserves answer options in the V2 res
     assert.equal(result.questions[0].subparts[0].classification.type, "multiple_choice");
     assert.equal(result.questions[0].subparts[0].options.length, 4);
     assert.equal(result.questions[0].subparts[0].topic, "Business ownership");
-    assert.equal(result.questions[0].subparts[0].bloom_level, "understanding");
+    assert.equal(result.questions[0].subparts[0].bloom_level, "remembering");
 });
