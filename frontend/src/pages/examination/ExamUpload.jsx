@@ -43,10 +43,7 @@ function ExamUpload() {
     const [selectedFile, setSelectedFile] =
         useState(null);
 
-    const [analysisMethod, setAnalysisMethod] =
-        useState("");
-
-    const [loadingSubjects, setLoadingSubjects] =
+const [loadingSubjects, setLoadingSubjects] =
         useState(true);
 
     const [processing, setProcessing] =
@@ -656,15 +653,7 @@ function ExamUpload() {
             return;
 
         }
-
-
-        if (!analysisMethod) {
-            setError("Chagua njia ya kuchambua mtihani kabla ya kuchagua PDF.");
-            return;
-        }
-
-
-        if (!selectedFile) {
+if (!selectedFile) {
 
             setError(
                 "Chagua PDF ya examination kwanza."
@@ -719,14 +708,7 @@ function ExamUpload() {
                     selectedExamSubjectId
                 )
             );
-
-            formData.append(
-                "analysis_method",
-                analysisMethod
-            );
-
-
-            formData.append(
+formData.append(
                 "storage_bucket",
                 "exam-papers"
             );
@@ -739,12 +721,12 @@ function ExamUpload() {
 
 
             console.log(
-                "SENDING EXAMINATION PAPER TO SELECTED ANALYSIS ENGINE:",
+                "SENDING EXAMINATION PAPER TO GEMINI AI:",
                 {
                     examId,
                     examSubjectId:
                         selectedExamSubjectId,
-                    analysisMethod,
+
                     storageBucket:
                         "exam-papers",
                     storagePath,
@@ -833,8 +815,6 @@ function ExamUpload() {
 
                         aiAnalysisResponse:
                             aiResponse.data,
-
-                        analysisMethod
 
                     }
                 }
@@ -1131,55 +1111,9 @@ function ExamUpload() {
                     )}
 
 
-                    {/* ANALYSIS METHOD - MUST BE CHOSEN BEFORE PDF UPLOAD */}
-                    <div className="mb-7">
-                        <h2 className="mb-2 text-base font-bold text-slate-900">
-                            Choose Examination Analysis Method
-                        </h2>
-                        <p className="mb-4 text-sm text-slate-500">
-                            Chagua engine kabla ya kuchagua na kupakia PDF. Njia zote zinatumia validation na approval workflow ile ile.
-                        </p>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <button
-                                type="button"
-                                disabled={processing}
-                                onClick={() => setAnalysisMethod("rule_based")}
-                                className={`rounded-xl border-2 p-5 text-left transition ${analysisMethod === "rule_based" ? "border-emerald-600 bg-emerald-50 ring-2 ring-emerald-100" : "border-slate-200 bg-white hover:border-emerald-300"}`}
-                            >
-                                <span className="flex items-center justify-between gap-3">
-                                    <span className="font-bold text-slate-900">Rule-Based Engine</span>
-                                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">Cost-saving</span>
-                                </span>
-                                <span className="mt-2 block text-sm leading-6 text-slate-600">
-                                    Huchambua maandishi na muundo wa PDF bila kutumia Gemini API. Inafaa kwa PDF zenye maandishi yanayosomeka na numbering iliyo wazi.
-                                </span>
-                                <span className="mt-3 block text-xs font-semibold text-emerald-800">
-                                    {analysisMethod === "rule_based" ? "Selected" : "Select Rule-Based Engine"}
-                                </span>
-                            </button>
-                            <button
-                                type="button"
-                                disabled={processing}
-                                onClick={() => setAnalysisMethod("ai")}
-                                className={`rounded-xl border-2 p-5 text-left transition ${analysisMethod === "ai" ? "border-indigo-600 bg-indigo-50 ring-2 ring-indigo-100" : "border-slate-200 bg-white hover:border-indigo-300"}`}
-                            >
-                                <span className="flex items-center justify-between gap-3">
-                                    <span className="font-bold text-slate-900">AI Analysis (Gemini)</span>
-                                    <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-800">Advanced</span>
-                                </span>
-                                <span className="mt-2 block text-sm leading-6 text-slate-600">
-                                    Hutumia Gemini kutafsiri maudhui ya mtihani, ikiwemo PDF zilizochanganuliwa (scanned) na maswali yenye muundo mgumu.
-                                </span>
-                                <span className="mt-3 block text-xs font-semibold text-indigo-800">
-                                    {analysisMethod === "ai" ? "Selected" : "Select AI Analysis"}
-                                </span>
-                            </button>
-                        </div>
-                        {!analysisMethod && (
-                            <p className="mt-3 text-sm font-medium text-amber-700">
-                                Tafadhali chagua engine moja kabla ya kuendelea na PDF.
-                            </p>
-                        )}
+                    <div className="mb-7 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                        <h2 className="text-base font-bold text-indigo-950">AI Examination Analysis</h2>
+                        <p className="mt-2 text-sm leading-6 text-indigo-900">Gemini AI huchambua PDF nzima kwa kuzingatia ngazi ya elimu, maelekezo, maswali, vipengele na alama. OCR hutumika kusaidia kusoma PDF zilizochanganuliwa (scanned).</p>
                     </div>
 
                     {/* FILE INPUT */}
@@ -1212,8 +1146,7 @@ function ExamUpload() {
                             }
                             disabled={
                                 processing ||
-                                !selectedExamSubjectId ||
-                                !analysisMethod
+                                !selectedExamSubjectId
                             }
                             className="flex min-h-[300px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -1412,7 +1345,6 @@ function ExamUpload() {
                             disabled={
                                 !selectedFile ||
                                 !selectedExamSubjectId ||
-                                !analysisMethod ||
                                 processing
                             }
                             onClick={
@@ -1421,7 +1353,6 @@ function ExamUpload() {
                             className={`flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white ${
                                 selectedFile &&
                                 selectedExamSubjectId &&
-                                analysisMethod &&
                                 !processing
                                     ? "bg-blue-600 hover:bg-blue-700"
                                     : "cursor-not-allowed bg-slate-300"

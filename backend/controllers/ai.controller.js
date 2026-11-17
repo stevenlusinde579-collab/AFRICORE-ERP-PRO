@@ -3,9 +3,6 @@ import { supabase } from "../config/supabase.js";
 import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
-import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
-import { analyzeExaminationV2 } from "../services/examAnalysisV2.js";
-import { buildExamEvidenceReview, buildRuleBasedQuestionsFromEvidence } from "../services/examEvidenceReview.js";
 import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
 // ============================================================
@@ -2435,123 +2432,12 @@ export const analyzePaper =
             // The frontend receives only a safe message.
             // ------------------------------------------------
 
-            const analysisMethod = String(req.body?.analysis_method || "ai").trim().toLowerCase();
-            if (!["ai", "rule_based"].includes(analysisMethod)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid analysis method. Choose AI Analysis or Rule-Based Engine.",
-                });
-            }
-
+            // All examination papers are analysed by Gemini AI.
+            // Ignore legacy analysis_method values from older clients.
+            const analysisMethod = "ai";
             let aiResult;
             let aiRawResponse;
 
-            if (analysisMethod === "rule_based") {
-                const ruleStartedAt = Date.now();
-                try {
-                    aiResult = analyzePaperWithRules({
-                        pdfText,
-                        structuralQuestions,
-                        sectionTotals,
-                        expectedQuestionCount,
-                        globalSelection,
-                        gradingCriteria,
-                        subjectName,
-                        level,
-                        examName,
-                        examType,
-                        curriculum,
-                    });
-                    // Run V2 as a second evidence-based review over the same
-                    // selectable/OCR text. It is advisory only: it never replaces
-                    // Rule-Based questions or marks and cannot fail the main flow.
-                    if (pdfText.trim()) {
-                        try {
-                            const evidenceV2 = analyzeExaminationV2({
-                                text: pdfText,
-                                level,
-                                subject: subjectName,
-                            });
-                            const originalRuleBasedQuestionCount = aiResult.questions?.length || 0;
-                            const evidenceReview = buildExamEvidenceReview({
-                                v2Result: evidenceV2,
-                                ruleBasedQuestionCount: originalRuleBasedQuestionCount,
-                            });
-                            const evidenceQuestions = buildRuleBasedQuestionsFromEvidence({
-                                v2Result: evidenceV2,
-                                expectedQuestionCount,
-                            });
-                            if (evidenceQuestions) {
-                                // Adopt V2 boundaries and marks only when all questions
-                                // are detected, confidence is high, selection is valid,
-                                // and effective marks reconcile with the printed total.
-                                aiResult.questions = evidenceQuestions;
-                                aiResult.total_marks = evidenceV2.analysis.totals.declared ??
-                                    evidenceV2.analysis.totals.effective_calculated_total ??
-                                    aiResult.total_marks;
-                                evidenceReview.metadata.applied_to_rule_based_questions = true;
-                                evidenceReview.metadata.applied_question_count = evidenceQuestions.length;
-                                evidenceReview.recommendations = evidenceReview.recommendations.filter(
-                                    item => !item.startsWith("Evidence-based cross-check identified ")
-                                );
-                                evidenceReview.recommendations.push(
-                                    `Rule-Based Engine used the evidence-based V2 structure for all ${evidenceQuestions.length} questions because question boundaries, marks and the printed paper total passed the confidence checks. Teacher approval is still required.`
-                                );
-                            } else {
-                                evidenceReview.metadata.applied_to_rule_based_questions = false;
-                                evidenceReview.metadata.applied_question_count = 0;
-                            }
-                            aiResult.evidence_based_review = evidenceReview.metadata;
-                            aiResult.recommendations = [
-                                ...(Array.isArray(aiResult.recommendations) ? aiResult.recommendations : []),
-                                ...evidenceReview.recommendations,
-                            ];
-                            console.log("EVIDENCE-BASED V2 CROSS-CHECK COMPLETED:", {
-                                examId,
-                                examSubjectId,
-                                originalRuleBasedQuestions: originalRuleBasedQuestionCount,
-                                finalRuleBasedQuestions: aiResult.questions?.length || 0,
-                                evidenceQuestions: evidenceReview.metadata.question_count,
-                                adoptedV2Structure: Boolean(evidenceQuestions),
-                                warnings: evidenceReview.metadata.diagnostics.length,
-                                durationMs: Date.now() - ruleStartedAt,
-                            });
-                        } catch (evidenceError) {
-                            console.warn("EVIDENCE-BASED V2 CROSS-CHECK SKIPPED:", evidenceError?.message || evidenceError);
-                        }
-                    }
-                    aiResult.analysis_method = "rule_based";
-                    aiRawResponse = JSON.stringify(aiResult);
-                    console.log("RULE-BASED EXAM ANALYSIS COMPLETED:", {
-                        examId,
-                        examSubjectId,
-                        examPaperId,
-                        questions: aiResult.questions?.length || 0,
-                        durationMs: Date.now() - ruleStartedAt,
-                    });
-                } catch (ruleError) {
-                    console.error("RULE-BASED EXAM ANALYSIS ERROR:", ruleError);
-                    const safeMessage = ruleError?.message ||
-                        "The paper was saved, but Rule-Based Engine could not analyse its structure. Try AI Analysis (Gemini) for scanned or complex papers.";
-                    await updatePaperStatus(examPaperId, {
-                        status: "Failed",
-                        aiStatus: "Failed",
-                        errorMessage: safeMessage,
-                    });
-                    return res.status(200).json({
-                        success: false,
-                        paper_saved: true,
-                        analysis_completed: false,
-                        ai_status: "Failed",
-                        analysis_method: analysisMethod,
-                        exam_id: examId,
-                        exam_subject_id: examSubjectId,
-                        exam_paper_id: examPaperId,
-                        reused_paper: reusedPaper,
-                        message: safeMessage,
-                    });
-                }
-            } else {
                 const aiStartedAt = Date.now();
     
     
@@ -2750,7 +2636,6 @@ export const analyzePaper =
     
     
                 aiResult.analysis_method = "ai";
-            }
 
             const rawQuestions =
                 Array.isArray(
@@ -3417,17 +3302,7 @@ export const analyzePaper =
                 // PostgreSQL's exam_questions_max_marks_check permits NULL
                 // for marks that genuinely require teacher confirmation, but
                 // rejects numeric zero. Keep zero in analysis metadata while
-                // persisting an unknown mark as NULL in exam_questions.
-                .map((record, index) => {
-                    const sourceQuestion = questions[index];
-                    const hasUnconfirmedRuleMarks =
-                        analysisMethod === "rule_based" &&
-                        sourceQuestion?.mark_source === "uncertain_teacher_confirmation_required" &&
-                        Number(record.max_marks) <= 0;
-                    return hasUnconfirmedRuleMarks
-                        ? { ...record, max_marks: null }
-                        : record;
-                });
+                // persisting an unknown mark as NULL in exam_questions.;
 
             // ------------------------------------------------
             // FINAL VALIDATION
@@ -3451,20 +3326,7 @@ export const analyzePaper =
 
                 const rowMarks = Number(row.max_marks);
                 const hasValidMarks = Number.isFinite(rowMarks) && rowMarks > 0;
-                // mark_source is analysis metadata, not an exam_questions DB
-                // column. sanitizeExamQuestionRecord intentionally omits it,
-                // so resolve the source from the normalized in-memory question.
-                const sourceQuestion = questions.find((candidate) =>
-                    Number(candidate.question_number) === Number(row.question_number) &&
-                    String(candidate.section || "") === String(row.section || "") &&
-                    String(candidate.question_text || "") === String(row.question_text || "")
-                );
-                const isExplicitlyUncertainRuleMark =
-                    analysisMethod === "rule_based" &&
-                    rowMarks === 0 &&
-                    sourceQuestion?.mark_source === "uncertain_teacher_confirmation_required";
-
-                if (!hasValidMarks && !isExplicitlyUncertainRuleMark) {
+                if (!hasValidMarks) {
                     throw new Error(
                         `Invalid max_marks for Q${row.question_number}.`
                     );
@@ -3557,25 +3419,9 @@ export const analyzePaper =
                     0
                 );
 
-            const zeroMarkRows = examQuestionRecords.filter(
-                (row) => Number(row.max_marks) === 0
-            );
-            const allQuestionsHaveExplicitlyUncertainRuleMarks =
-                analysisMethod === "rule_based" &&
-                examQuestionRecords.length > 0 &&
-                zeroMarkRows.length === examQuestionRecords.length &&
-                zeroMarkRows.every((row) =>
-                    questions.some((candidate) =>
-                        Number(candidate.question_number) === Number(row.question_number) &&
-                        String(candidate.section || "") === String(row.section || "") &&
-                        String(candidate.question_text || "") === String(row.question_text || "") &&
-                        candidate.mark_source === "uncertain_teacher_confirmation_required"
-                    )
-                );
-
             if (
                 !Number.isFinite(finalRawQuestionMarks) ||
-                (finalRawQuestionMarks <= 0 && !allQuestionsHaveExplicitlyUncertainRuleMarks)
+                finalRawQuestionMarks <= 0
             ) {
                 throw new Error(
                     "Final question marks are invalid."
@@ -3840,20 +3686,9 @@ export const analyzePaper =
                         question.max_marks
                     );
 
-                const matchingSourceQuestion = questions.find((candidate) =>
-                    Number(candidate.question_number) === Number(question.question_number) &&
-                    String(candidate.section || "") === String(question.section || "") &&
-                    String(candidate.question_text || "") === String(question.question_text || "")
-                );
-                const isExplicitlyUncertainRuleMark =
-                    analysisMethod === "rule_based" &&
-                    marks === 0 &&
-                    matchingSourceQuestion?.mark_source === "uncertain_teacher_confirmation_required";
-
                 if (
                     !Number.isFinite(marks) ||
-                    marks < 0 ||
-                    (marks === 0 && !isExplicitlyUncertainRuleMark)
+                    marks <= 0
                 ) {
                     throw new Error(
                         `Database returned invalid max_marks for Q${question.question_number}.`

@@ -653,12 +653,7 @@ export default function AIAnalysisDashboard() {
 
     const initialAnalysisResponse =
         location?.state?.aiAnalysisResponse || null;
-
-    const selectedAnalysisMethod =
-        location?.state?.analysisMethod || "ai";
-
-
-    const selectedExamSubjectId =
+const selectedExamSubjectId =
         useMemo(() => {
             const state =
                 location?.state ||
@@ -1380,13 +1375,7 @@ export default function AIAnalysisDashboard() {
                         normalizedSubjectId
                     )
                 );
-
-                formData.append(
-                    "analysis_method",
-                    selectedAnalysisMethod
-                );
-
-                try {
+try {
                     if (
                         mountedRef.current
                     ) {
@@ -1892,7 +1881,7 @@ export default function AIAnalysisDashboard() {
         selectedExamSubjectId,
         selectedFile,
         initialAnalysisResponse,
-        selectedAnalysisMethod,
+
         getFileKey,
         analyzePaper,
         loadAnalysis,
