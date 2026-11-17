@@ -97,3 +97,14 @@ test("registers official TIE curriculum sources for all school education levels"
         assert.equal(levels[key].status, "official_source_registered", key);
     }
 });
+
+test("maps Primary Science and Technology questions to relevant topic evidence", () => {
+    const result = inferCurriculumTopic({
+        questionText: "Oanisha milango ya fahamu na kazi zake. Jicho hutumika katika kuona.",
+        subjectName: "Science and Technology",
+        level: "Primary"
+    });
+    assert.equal(result.curriculum_level, "primary");
+    assert.equal(result.topic, "Human body and health");
+    assert.ok(result.topic_evidence);
+});
