@@ -17,7 +17,7 @@ const MARK_PATTERNS = [
 
 const SELECTION_PATTERNS = [
     /(?:answer|attempt|choose|select|chagua|jibu)\s+(?:any\s+)?(?:maswali\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s+(?:out\s+of|from|of the following|kati ya)\s+(\d+|\w+)/i,
-    /(?:answer|attempt|choose|select|chagua|jibu)\s+(?:any\s+)?(?:maswali\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)(?:\s*\(\s*\d+\s*\))?\s+(?:questions?|items?|maswali?)/i,
+    /(?:answer|attempt|choose|select|chagua|jibu)\s+(?:any\s+)?(?:maswali\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)(?:\s*\(\s*\d+\s*\))?\s*(?:questions?|items?|maswali?)/i,
     /(?:chagua|jibu)\s+(?:maswali\s+)?(\d+|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s+kati ya\s+(?:yafuatayo|yaliyo chini)/i,
 ];
 
