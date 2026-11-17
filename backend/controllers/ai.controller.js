@@ -1768,6 +1768,61 @@ const updatePaperStatus = async (
     return data;
 };
 
+
+const persistGeminiUsageLog = async ({
+    schoolId, examId, examSubjectId, examPaperId, analysisId = null,
+    usageAttempts = [], startedAt = Date.now()
+}) => {
+    try {
+        const successfulUsage = usageAttempts.filter((item) => item?.success && item?.usageMetadata);
+        const totals = successfulUsage.reduce((sum, item) => {
+            const meta = item.usageMetadata || {};
+            sum.prompt += Number(meta.promptTokenCount ?? meta.prompt_token_count ?? 0);
+            sum.candidates += Number(meta.candidatesTokenCount ?? meta.candidates_token_count ?? meta.outputTokenCount ?? 0);
+            sum.thoughts += Number(meta.thoughtsTokenCount ?? meta.thoughts_token_count ?? 0);
+            sum.cached += Number(meta.cachedContentTokenCount ?? meta.cached_content_token_count ?? 0);
+            sum.total += Number(meta.totalTokenCount ?? meta.total_token_count ?? 0);
+            return sum;
+        }, { prompt: 0, candidates: 0, thoughts: 0, cached: 0, total: 0 });
+        const models = [...new Set(usageAttempts.map((item) => item?.model).filter(Boolean))];
+        const knownFlash = models.length > 0 && models.every((name) => ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"].includes(name));
+        const futureRate = new Date(startedAt) >= new Date("2027-01-01T00:00:00Z");
+        const inputRate = knownFlash ? (futureRate ? 1.5 : 0.75) : null;
+        const outputRate = knownFlash ? (futureRate ? 7.5 : 3.75) : null;
+        const hasUsage = successfulUsage.length > 0 && totals.total > 0;
+        const costUsd = knownFlash && hasUsage
+            ? ((Math.max(0, totals.prompt - totals.cached) * inputRate) + ((totals.candidates + totals.thoughts) * outputRate) + (totals.cached * (futureRate ? 0.15 : 0.075))) / 1000000
+            : null;
+        const fx = Number(process.env.GEMINI_USD_TO_TZS);
+        const row = {
+            school_id: Number(schoolId), exam_id: examId, exam_subject_id: examSubjectId,
+            exam_paper_id: examPaperId, analysis_id: analysisId,
+            model: models.join(", ") || process.env.GEMINI_MODEL || "unknown",
+            request_count: usageAttempts.length || 1,
+            retry_count: Math.max(0, usageAttempts.length - 1),
+            fallback_count: Math.max(0, models.length - 1),
+            prompt_tokens: hasUsage ? totals.prompt : null,
+            candidates_tokens: hasUsage ? totals.candidates : null,
+            thoughts_tokens: hasUsage ? totals.thoughts : null,
+            cached_content_tokens: hasUsage ? totals.cached : null,
+            total_tokens: hasUsage ? totals.total : null,
+            input_price_per_million_usd: inputRate,
+            output_price_per_million_usd: outputRate,
+            estimated_cost_usd: costUsd,
+            usd_to_tzs: Number.isFinite(fx) && fx > 0 ? fx : null,
+            estimated_cost_tzs: costUsd !== null && Number.isFinite(fx) && fx > 0 ? costUsd * fx : null,
+            pricing_status: !hasUsage ? "missing_usage_metadata" : !knownFlash ? "missing_model_rate" : "estimated",
+            pricing_source: "Google Gemini Developer API Standard paid-tier pricing, dated by analysis start. Cached input is priced separately. Configure GEMINI_USD_TO_TZS for TZS.",
+            duration_ms: Math.max(0, Date.now() - startedAt)
+        };
+        if (!Number.isInteger(row.school_id) || row.school_id <= 0 || usageAttempts.length === 0) return;
+        const { error } = await supabase.from("gemini_usage_logs").insert(row);
+        if (error) console.error("GEMINI USAGE LOG INSERT FAILED:", error.message);
+    } catch (error) {
+        console.error("GEMINI USAGE LOGGING FAILED:", error?.message || error);
+    }
+};
+
 // ============================================================
 // ANALYZE PAPER
 // ============================================================
@@ -2457,6 +2512,8 @@ export const analyzePaper =
                 } catch (
                     error
                 ) {
+                    geminiUsageAttempts.push(...(error?.usageAttempts || []));
+                    await persistGeminiUsageLog({ schoolId: exam.school_id, examId, examSubjectId, examPaperId, usageAttempts: geminiUsageAttempts, startedAt: aiStartedAt });
                     console.error(
                         "GEMINI ANALYSIS ERROR:",
                         error
@@ -2607,6 +2664,8 @@ export const analyzePaper =
                             })
                         );
                     } catch (recoveryError) {
+                        geminiUsageAttempts.push(...(recoveryError?.usageAttempts || []));
+                        await persistGeminiUsageLog({ schoolId: exam.school_id, examId, examSubjectId, examPaperId, usageAttempts: geminiUsageAttempts, startedAt: aiStartedAt });
                         console.error(
                             "AI JSON RECOVERY FAILED:",
                             errorDetails(recoveryError)
@@ -3704,64 +3763,16 @@ export const analyzePaper =
             // and verified. From this point onward, failures must not mark
             // the AI analysis itself as Failed.
 
-            // Record Gemini usage after the analysis is durably saved. This is
-            // best-effort: an audit-log failure must never invalidate exam results.
-            try {
-                const successfulUsage = geminiUsageAttempts.filter((item) => item?.success && item?.usageMetadata);
-                const tokenTotals = successfulUsage.reduce((totals, item) => {
-                    const meta = item.usageMetadata || {};
-                    totals.prompt += Number(meta.promptTokenCount ?? meta.prompt_token_count ?? 0);
-                    totals.candidates += Number(meta.candidatesTokenCount ?? meta.candidates_token_count ?? meta.outputTokenCount ?? 0);
-                    totals.thoughts += Number(meta.thoughtsTokenCount ?? meta.thoughts_token_count ?? 0);
-                    totals.cached += Number(meta.cachedContentTokenCount ?? meta.cached_content_token_count ?? 0);
-                    totals.total += Number(meta.totalTokenCount ?? meta.total_token_count ?? 0);
-                    return totals;
-                }, { prompt: 0, candidates: 0, thoughts: 0, cached: 0, total: 0 });
-                const models = [...new Set(geminiUsageAttempts.map((item) => item?.model).filter(Boolean))];
-                const model = models.join(", ") || process.env.GEMINI_MODEL || "unknown";
-                const rateDate = new Date(startedAt);
-                const futureRate = rateDate >= new Date("2027-01-01T00:00:00Z");
-                const knownFlash = models.length > 0 && models.every((name) => ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"].includes(name));
-                const inputRate = knownFlash ? (futureRate ? 1.5 : 0.75) : null;
-                const outputRate = knownFlash ? (futureRate ? 7.5 : 3.75) : null;
-                const hasUsage = successfulUsage.length > 0 && tokenTotals.total > 0;
-                const estimatedUsd = knownFlash && hasUsage
-                    ? ((Math.max(0, tokenTotals.prompt - tokenTotals.cached) * inputRate) + ((tokenTotals.candidates + tokenTotals.thoughts) * outputRate) + (tokenTotals.cached * (futureRate ? 0.15 : 0.075))) / 1000000
-                    : null;
-                const fx = Number(process.env.GEMINI_USD_TO_TZS);
-                const usageLog = {
-                    school_id: Number(exam.school_id),
-                    exam_id: examId,
-                    exam_subject_id: examSubjectId,
-                    exam_paper_id: examPaperId,
-                    analysis_id: analysisInsert?.data?.id || null,
-                    model,
-                    request_count: geminiUsageAttempts.length || 1,
-                    retry_count: Math.max(0, geminiUsageAttempts.length - 1),
-                    fallback_count: Math.max(0, models.length - 1),
-                    prompt_tokens: hasUsage ? tokenTotals.prompt : null,
-                    candidates_tokens: hasUsage ? tokenTotals.candidates : null,
-                    thoughts_tokens: hasUsage ? tokenTotals.thoughts : null,
-                    cached_content_tokens: hasUsage ? tokenTotals.cached : null,
-                    total_tokens: hasUsage ? tokenTotals.total : null,
-                    input_price_per_million_usd: inputRate,
-                    output_price_per_million_usd: outputRate,
-                    estimated_cost_usd: estimatedUsd,
-                    usd_to_tzs: Number.isFinite(fx) && fx > 0 ? fx : null,
-                    estimated_cost_tzs: estimatedUsd !== null && Number.isFinite(fx) && fx > 0 ? estimatedUsd * fx : null,
-                    pricing_status: !hasUsage ? "missing_usage_metadata" : !knownFlash ? "missing_model_rate" : "estimated",
-                    pricing_source: "Google Gemini Developer API Standard paid-tier pricing; rates dated by analysis date. Cached input priced separately. USD/TZS requires GEMINI_USD_TO_TZS.",
-                    duration_ms: Date.now() - aiStartedAt
-                };
-                if (Number.isInteger(usageLog.school_id) && usageLog.school_id > 0) {
-                    const { error: usageInsertError } = await supabase.from("gemini_usage_logs").insert(usageLog);
-                    if (usageInsertError) console.error("GEMINI USAGE LOG INSERT FAILED:", usageInsertError.message);
-                } else {
-                    console.error("GEMINI USAGE LOG SKIPPED: exam school_id is unavailable.");
-                }
-            } catch (usageLogError) {
-                console.error("GEMINI USAGE LOGGING FAILED:", usageLogError?.message || usageLogError);
-            }
+            // Persist usage for this successfully saved paper (best effort).
+            await persistGeminiUsageLog({
+                schoolId: exam.school_id,
+                examId,
+                examSubjectId,
+                examPaperId,
+                analysisId: analysisInsert?.data?.id || null,
+                usageAttempts: geminiUsageAttempts,
+                startedAt: aiStartedAt
+            });
 
             analysisPersistedAndVerified = true;
 
