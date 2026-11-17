@@ -280,3 +280,18 @@ test("runs an image-only examination PDF through OCR, PDF reader and Rule-Based 
     assert.equal(analysis.questions[0].max_marks, 0);
     assert.ok(analysis.recommendations.some(item => /confirm/i.test(item)));
 });
+
+test("triggers OCR cross-check when extracted main-question headings repeat", () => {
+    const duplicateNumberPaper = [
+        "SECTION A",
+        "1. Listen carefully and write the sentences.",
+        "2. Choose the correct answer.",
+        "3. Match the words in List A and List B.",
+        "SECTION B",
+        "4. Write the correct word from the jumbled letters.",
+        "4. Complete Mary's daily routine.",
+        "SECTION C",
+        "6. Read the passage and answer the questions.",
+    ].join("\n");
+    assert.equal(isLikelyScannedPdfText(duplicateNumberPaper), true);
+});
