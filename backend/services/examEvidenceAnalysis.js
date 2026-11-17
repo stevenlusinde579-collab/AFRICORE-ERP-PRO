@@ -8,9 +8,10 @@ import inferCurriculumTopic from "./curriculumTopicMapper.js";
  */
 
 const MARK_PATTERNS = [
-    /\[\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)?\s*\]/i,
+    /\[\s*(?:alama\s*)?(\d+(?:\.\d+)?)\s*(?:marks?|mks?|alama)?\s*\]/i,
+    /\(\s*alama\s+(\d+(?:\.\d+)?)\s*\)/i,
     /(?:^|\s)(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
-    /\bmarks?\s*[:=]\s*(\d+(?:\.\d+)?)/i,
+    /\b(?:marks?|alama)\s*[:=]?\s*(\d+(?:\.\d+)?)/i,
 ];
 
 const SELECTION_PATTERNS = [
@@ -70,7 +71,7 @@ const classifyQuestion = (text) => {
         return { type: "true_false", confidence: 0.9, reason: "True/false response format detected." };
     }
     const labelledOptions = value.match(/(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S[^\n]*/g) || [];
-    if (/\b(multiple choice|choose the correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:la )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
+    if (/\b(multiple choice|choose the correct answer|choose the most correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:la )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
         labelledOptions.length >= 3) {
         return { type: "multiple_choice", confidence: 0.88, reason: "Choice instruction or labelled answer options detected." };
     }
@@ -174,9 +175,11 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     const instructionEvidence = (document?.instructions || []).flatMap((instruction) =>
         uniqueEvidence(instruction.evidence).map((item) => ({ ...item, scope: instruction.scope || "PAPER" }))
     );
+    const instructionTexts = new Set(instructionEvidence.map(item => String(item.text || "").trim().toLowerCase()));
     const allLines = [
         ...instructionEvidence,
-        ...String(sourceText || "").split(/\r?\n/).map((text, index) => ({ text: text.trim(), page: null, line: index + 1, scope: "PAPER" })).filter((item) => item.text),
+        ...String(sourceText || "").split(/\r?\n/).map((text, index) => ({ text: text.trim(), page: null, line: index + 1, scope: "PAPER" }))
+            .filter((item) => item.text && !instructionTexts.has(item.text.toLowerCase())),
     ];
     const selections = [];
     const selectionKeys = new Set();
