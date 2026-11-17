@@ -101,3 +101,23 @@ test("refuses to replace Rule-Based questions when V2 marks do not reconcile wit
     });
     assert.equal(result, null);
 });
+
+test("uses V2-detected question count when the PDF has no printed total question count", () => {
+    const rows = [{ id: "q1", order: 1, question_number: 1, section: "A", text: "Explain.", subparts: [], boundary_confidence: "high" }];
+    const enriched = [{ ...rows[0], marks: 5, mark_confidence: 0.9, classification: { type: "structured_response", confidence: 0.9 } }];
+    const result = buildRuleBasedQuestionsFromEvidence({
+        v2Result: {
+            document: { questions: rows },
+            validation: { valid: true },
+            decision: { ready_for_review: true },
+            diagnostics: [],
+            analysis: {
+                questions: enriched,
+                quality: { status: "high" },
+                totals: { declared: null, effective_calculated_total: 5 },
+                selection_rules: [],
+            },
+        },
+    });
+    assert.equal(result.length, 1);
+});

@@ -77,6 +77,13 @@ export const isLikelyScannedPdfText = (value) => {
     // fragments, broken glyphs, or a few unrelated text-layer artefacts).
     const hasExamStructure =
         /^\s*(?:QUESTION\s*\d+|Q\s*\d+|\d{1,3}\s*[.)\-:]|SECTION\s+[A-F]|SEHEMU\s+[A-F])(?=\s|$|[.)\-:])/im.test(raw);
+    const numberedHeadings = [...raw.matchAll(/^\s*(?:QUESTION\s*)?(\d{1,2})\s*[.)\-:]\s+\S/gim)]
+        .map(match => Number(match[1]));
+    const headingCounts = new Map();
+    for (const number of numberedHeadings) {
+        headingCounts.set(number, (headingCounts.get(number) || 0) + 1);
+    }
+    const repeatedQuestionHeading = [...headingCounts.values()].some(count => count > 1);
     const visibleCharacters = [...raw].filter(char => !/\s/.test(char));
     const nonWordCharacters = visibleCharacters.filter(char => !/[\p{L}\p{N}]/u.test(char));
     const symbolNoiseRatio = visibleCharacters.length
@@ -88,7 +95,7 @@ export const isLikelyScannedPdfText = (value) => {
         (usefulWords.length < 10 ||
             scoreExamTextQuality(raw) < 30 ||
             structurallyNoisyExtraction);
-    return scannerWatermarkOnly ||
+    return scannerWatermarkOnly || repeatedQuestionHeading ||
         (text.length < 100 && usefulWords.length < 5) ||
         usefulWords.length < 3 ||
         weakLongExtraction;
@@ -119,7 +126,7 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
     const pdfjs = options.getDocument || getDocument;
     const canvasFactory = options.createCanvas || createCanvas;
     const workerFactory = options.createWorker || createWorker;
-    const renderScale = Number(options.renderScale) > 0 ? Number(options.renderScale) : 1.35;
+    const renderScale = Number(options.renderScale) > 0 ? Number(options.renderScale) : 1.8;
     const signal = options.signal;
 
     let document;

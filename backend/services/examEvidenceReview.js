@@ -102,7 +102,10 @@ export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestion
     const analysis = v2Result?.analysis || {};
     const documentQuestions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
     const questions = Array.isArray(analysis.questions) ? analysis.questions : [];
-    const expected = Number(expectedQuestionCount);
+    const requestedExpected = Number(expectedQuestionCount);
+    const expected = Number.isInteger(requestedExpected) && requestedExpected > 0
+        ? requestedExpected
+        : documentQuestions.length;
     const diagnostics = Array.isArray(v2Result?.diagnostics) ? v2Result.diagnostics : [];
     const blockingCodes = new Set([
         "NO_QUESTION_BOUNDARIES",
