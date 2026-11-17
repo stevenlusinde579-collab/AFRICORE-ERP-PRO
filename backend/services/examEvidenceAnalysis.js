@@ -258,6 +258,20 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
         const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
         const classification = classifyQuestion(text);
+        const textTokens = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\\s+/).filter(Boolean);
+        const itemTokenIndex = textTokens.findIndex(token => token === "item" || token === "items");
+        const romanValues = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12, xiii: 13, xiv: 14, xv: 15 };
+        let rangeCount = 0;
+        if (itemTokenIndex >= 0) {
+            const startToken = textTokens[itemTokenIndex + 1];
+            const nearbyEnd = textTokens.slice(itemTokenIndex + 2, itemTokenIndex + 6).find(token => Number.isFinite(romanValues[token]));
+            if (Number.isFinite(romanValues[startToken]) && Number.isFinite(romanValues[nearbyEnd]) && romanValues[nearbyEnd] >= romanValues[startToken]) {
+                rangeCount = romanValues[nearbyEnd] - romanValues[startToken] + 1;
+            }
+        }
+        const responseSlotCount = classification.type === "multiple_choice"
+            ? Math.max(subparts.length, rangeCount)
+            : (classification.type === "matching" ? subparts.length : subparts.length);
         const curriculum = inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" });
         const bloom = inferBloomLevel(text);
         const difficulty = estimateDifficulty({ bloom, marks, subparts: subparts.length });
@@ -276,6 +290,8 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             mark_confidence: explicitQuestionMark != null ? 1 : (subparts.length && subpartMarks != null ? 1 : 0),
             subparts,
             response_options: Array.isArray(question.response_options) ? question.response_options : [],
+            response_slot_count: responseSlotCount,
+            unobserved_response_slots: Math.max(0, responseSlotCount - subparts.length),
             classification,
             curriculum,
             topic: curriculum.topic,
@@ -295,8 +311,10 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         uniqueEvidence(instruction.evidence).map((item) => ({ ...item, scope: instruction.scope || "PAPER" }))
     );
     const instructionTexts = new Set(instructionEvidence.map(item => String(item.text || "").trim().toLowerCase()));
+    const combinedInstructionText = instructionEvidence.map(item => String(item.text || "").trim()).filter(Boolean).join(" ");
     const allLines = [
         ...instructionEvidence,
+        ...(combinedInstructionText ? [{ text: combinedInstructionText, page: null, line: null, scope: "PAPER" }] : []),
         ...String(sourceText || "").split(/\r?\n/).map((text, index) => ({ text: text.trim(), page: null, line: index + 1, scope: "PAPER" }))
             .filter((item) => item.text && !instructionTexts.has(item.text.toLowerCase())),
     ];
@@ -355,7 +373,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         for (const question of sectionQuestions) {
             if (Number.isFinite(question.marks)) continue;
             const type = question.classification?.type;
-            const itemCount = Array.isArray(question.subparts) ? question.subparts.length : 0;
+            const itemCount = Number.isFinite(question.response_slot_count) ? question.response_slot_count : (Array.isArray(question.subparts) ? question.subparts.length : 0);
             if ((type === "multiple_choice" || type === "matching") && itemCount > 0) {
                 question.marks = itemCount;
                 question.marks_source = "inferred_from_response_slots";
