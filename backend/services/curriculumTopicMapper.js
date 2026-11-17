@@ -78,6 +78,14 @@ const TOPIC_RULES = [
     ["Kiswahili", "Fasihi", "Fasihi simulizi na andishi", [/\b(fasihi|methali|nahau|tamthilia|riwaya|ushairi|hadithi)\b/i]],
     ["Kiswahili", "Ufahamu", "Ufahamu wa habari na matini", [/\b(ufahamu|soma kifungu|jibu maswali kutokana na habari)\b/i]],
     ["Kiswahili", "Insha", "Uandishi wa insha na barua", [/\b(insha|barua rasmi|barua ya kirafiki|utungaji)\b/i]],
+    ["Science and Technology", "Scientific investigation", "Observation, experiments and scientific methods", [/\b(science|scientist|scientific investigation|experiment|observation|investigation|majaribio|uchunguzi)\b/i]],
+    ["Science and Technology", "Living things", "Living and non-living things", [/\b(living things?|non[- ]living|organism|plants?|animals?|viumbe hai|kiumbe hai|mimea|wanyama)\b/i]],
+    ["Science and Technology", "Human body and health", "Sense organs, body systems and health", [/\b(sense organs?|eye|ear|nose|tongue|skin|hearing|sight|smell|taste|touch|health|hygiene|organs?|milango ya fahamu|jicho|sikio|pua|ulimi|ngozi|usafi|upumuaji)\b/i]],
+    ["Science and Technology", "Matter", "Materials and states of matter", [/\b(states? of matter|solid|liquid|gas|materials?|matter|hali za mada|hewa|gesi|kimiminika|imara)\b/i]],
+    ["Science and Technology", "Energy", "Sources and forms of energy", [/\b(energy|sun|light|heat|sound|electricity|source of energy|nishati|jua|mwanga|joto|sauti|umeme)\b/i]],
+    ["Science and Technology", "Force and motion", "Forces, movement and simple machines", [/\b(force|motion|movement|friction|gravity|machines?|nguvu|mwendo)\b/i]],
+    ["Science and Technology", "Environment", "Environment, conservation and ecosystems", [/\b(environment|pollution|conservation|habitat|food chain|mazingira|uhifadhi)\b/i]],
+    ["Science and Technology", "Earth and space", "The Earth, weather and space", [/\b(earth|planet|solar system|weather|rain|cloud|sunrise|sunset|dunia|hali ya hewa|mvua)\b/i]],
 ];
 
 const normalise = value => String(value || "").toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
@@ -98,6 +106,7 @@ const subjectMatches = (ruleSubject, subject) => {
         "Commerce": ["commerce"],
         "Agriculture": ["agriculture", "agricultural science"],
         "Kiswahili": ["kiswahili", "swahili"],
+        "Science and Technology": ["science and technology", "science", "general science"],
     };
     return (aliases[ruleSubject] || [ruleSubject.toLowerCase()]).some(alias => s.includes(alias));
 };
