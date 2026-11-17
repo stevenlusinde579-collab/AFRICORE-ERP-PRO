@@ -83,6 +83,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
         const lines = pageText.split("\n");
         document.pages.push({ page: pageIndex + 1, line_count: lines.length });
         lines.forEach((rawLine, lineIndex) => {
+            const rawIndent = (rawLine.match(/^\s*/) || [""])[0].length;
             const line = rawLine.replace(/\t/g, " ").trim();
             if (!line) return;
             const evidence = makeEvidence(line, pageIndex + 1, lineIndex + 1, "pdf_text");
@@ -107,7 +108,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             const isMultipleChoicePool = /\b(choose|select|multiple choice|correct answer|following alternatives|which of the following)\b/i.test(currentPrompt);
             if (optionMatch && currentQuestion && (isMatchingPool || (isMultipleChoicePool && /^[A-E]$/.test(optionMatch[1])))) {
                 const target = isMatchingPool ? currentQuestion : (currentSubpart || currentQuestion);
-                const option = { label: optionMatch[1], text: optionMatch[2].trim(), evidence: [evidence] };
+                const option = { label: optionMatch[1], text: optionMatch[2].trim(), column_indent: rawLine.indexOf(optionMatch[1]), evidence: [evidence] };
                 if (target === currentQuestion) {
                     target.response_options = target.response_options || [];
                     target.response_options.push(option);
@@ -225,7 +226,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                     currentNestedPart = null;
                 }
                 if (inlineMatchingOption) {
-                    const option = { label: inlineMatchingOption[2], text: inlineMatchingOption[3].trim(), evidence: [evidence] };
+                    const option = { label: inlineMatchingOption[2], text: inlineMatchingOption[3].trim(), column_indent: rawLine.indexOf(inlineMatchingOption[2]), evidence: [evidence] };
                     currentQuestion.response_options = currentQuestion.response_options || [];
                     currentQuestion.response_options.push(option);
                     currentOption = option;
@@ -256,14 +257,26 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 const option = {
                     label: inlineOptionContinuation[2],
                     text: inlineOptionContinuation[3].trim(),
+                    column_indent: rawLine.indexOf(inlineOptionContinuation[2]),
                     evidence: [evidence],
                 };
                 currentQuestion.response_options = currentQuestion.response_options || [];
                 currentQuestion.response_options.push(option);
                 currentOption = option;
             } else if (currentOption) {
-                currentOption.text = [currentOption.text, line].filter(Boolean).join("\n");
-                currentOption.evidence.push(evidence);
+                const leftColumnContinuation = Boolean(
+                    currentQuestion && currentSubpart &&
+                    /\b(match|matching|column|list A|list B|pair the following)\b/i.test(currentQuestion.text) &&
+                    Number.isFinite(currentOption.column_indent) &&
+                    currentOption.column_indent - rawIndent >= 8
+                );
+                if (leftColumnContinuation) {
+                    currentSubpart.text = [currentSubpart.text, line].filter(Boolean).join("\n");
+                    currentSubpart.evidence.push(evidence);
+                } else {
+                    currentOption.text = [currentOption.text, line].filter(Boolean).join("\n");
+                    currentOption.evidence.push(evidence);
+                }
             } else if (currentNestedPart) {
                 currentNestedPart.text = [currentNestedPart.text, line].filter(Boolean).join("\n");
                 currentNestedPart.evidence.push(evidence);
