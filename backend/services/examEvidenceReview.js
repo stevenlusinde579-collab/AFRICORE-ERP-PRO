@@ -5,7 +5,8 @@
  */
 export const buildExamEvidenceReview = ({ v2Result, ruleBasedQuestionCount = 0 } = {}) => {
     const analysis = v2Result?.analysis || {};
-    const questions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
+    const documentQuestions = Array.isArray(v2Result?.document?.questions) ? v2Result.document.questions : [];
+    const questions = Array.isArray(analysis.questions) ? analysis.questions : [];
     const types = {};
     for (const question of analysis.questions || []) {
         const type = question.classification?.type || "unclassified";
@@ -115,7 +116,7 @@ export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestion
 
     if (!v2Result?.validation?.valid || !v2Result?.decision?.ready_for_review ||
         analysis.quality?.status !== "high" || !Number.isInteger(expected) ||
-        expected <= 0 || questions.length !== expected || !questions.length ||
+        expected <= 0 || documentQuestions.length !== expected || questions.length !== expected || !questions.length ||
         diagnostics.some(item => blockingCodes.has(item.code))) {
         return null;
     }
@@ -131,7 +132,7 @@ export const buildRuleBasedQuestionsFromEvidence = ({ v2Result, expectedQuestion
         !Number.isFinite(question.marks) || question.marks <= 0 ||
         !Number.isFinite(question.mark_confidence) || question.mark_confidence < 0.7 ||
         !question.classification || question.classification.type === "unclassified" ||
-        question.boundary_confidence === "low"
+        documentQuestions.find(item => item.id === question.id)?.boundary_confidence === "low"
     )) {
         return null;
     }
