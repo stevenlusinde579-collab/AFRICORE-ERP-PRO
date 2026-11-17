@@ -195,6 +195,16 @@ export const extractScannedPdfText = async (buffer, options = {}) => {
                 const renderTask = page.render({ canvasContext: context, viewport });
                 await awaitWithAbort(renderTask.promise, signal, () => renderTask.cancel());
                 throwIfAborted(signal);
+                const renderedPixels = typeof context.getImageData === "function"
+                    ? context.getImageData(0, 0, width, height).data
+                    : null;
+                if (renderedPixels) {
+                    let darkPixels = 0;
+                    for (let index = 0; index < renderedPixels.length; index += 4) {
+                        if (renderedPixels[index] < 80 && renderedPixels[index + 1] < 80 && renderedPixels[index + 2] < 80 && renderedPixels[index + 3] > 0) darkPixels += 1;
+                    }
+                    console.log("PDF OCR RENDER CHECK:", { page: pageNumber, width, height, darkPixels });
+                }
                 const image = canvas.toBuffer("image/png");
                 const pageStartedAt = Date.now();
                 const result = await awaitWithAbort(worker.recognize(image), signal, terminateWorker);
