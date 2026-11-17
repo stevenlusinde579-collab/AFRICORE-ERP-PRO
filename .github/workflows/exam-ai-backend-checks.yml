@@ -37,7 +37,7 @@ jobs:
           node --check backend/services/examDocumentModel.js
           node --check backend/services/examEvidenceAnalysis.js
           node --check backend/services/examAnalysisV2.js
-          node --check backend/services/curriculumTopicMapper.js
+          node --check backend/services/curriculumTopicMapper.js\n          node --check backend/services/examCurriculumTopicMapperV2.js
           node --check backend/services/examAnalysisBenchmark.js
           node --check backend/services/examPdfAnalysisV2.js
 
