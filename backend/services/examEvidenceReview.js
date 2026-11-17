@@ -57,8 +57,10 @@ export const buildExamEvidenceReview = ({ v2Result, ruleBasedQuestionCount = 0 }
             section_totals: (analysis.section_totals || []).map(section => ({
                 section: section.section,
                 declared_total: section.declared_total ?? null,
-                calculated_total: section.calculated_total ?? null,
-                effective_total: section.effective_total ?? null,
+                calculated_total: section.calculated_from_detected_question_marks ?? null,
+                explicit_question_marks_total: section.calculated_from_explicit_question_marks ?? null,
+                all_detected_question_marks_total: section.all_detected_question_marks_total ?? null,
+                selection_applied: Boolean(section.selection_applied),
                 question_count: section.question_count ?? null,
             })),
             selection_rules: (analysis.selection_rules || []).map(rule => ({
@@ -86,7 +88,7 @@ const toRuleBasedQuestionType = question => {
     if (type === "multiple_choice") return "Multiple Choice";
     if (type === "matching") return "Matching";
     if (type === "extended_response") return "Essay";
-    if (type === "structured_response") return (question.subparts || []).length ? "Structured" : "Short Answer";
+    if (type === "structured_response") return "Short Answer";
     return formatLabel(type);
 };
 
