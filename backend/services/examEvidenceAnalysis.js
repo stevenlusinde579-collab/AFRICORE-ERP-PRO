@@ -356,10 +356,12 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     // Infer missing question marks from printed section totals, matching the
     // established AI Analysis behaviour while preserving the inference source.
     for (const section of document?.sections || []) {
-        const sectionMarkEvidence = uniqueEvidence(section.evidence)
+        const sectionEvidence = uniqueEvidence(section.evidence);
+        const sectionMarkEvidence = sectionEvidence
             .map(item => ({ ...item, mark: extractMark(item.text) }))
             .filter(item => item.mark);
-        const declaredSectionMarks = sectionMarkEvidence[0]?.mark?.value ?? null;
+        const combinedSectionMark = extractMark(sectionEvidence.map(item => item.text).join(" "));
+        const declaredSectionMarks = sectionMarkEvidence[0]?.mark?.value ?? combinedSectionMark?.value ?? null;
         if (!Number.isFinite(declaredSectionMarks)) continue;
 
         const sectionQuestions = questions.filter(question => question.section === section.name);
