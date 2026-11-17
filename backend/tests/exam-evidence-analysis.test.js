@@ -179,3 +179,26 @@ test("adds evidence-backed Bloom levels, estimated difficulty and safe marking g
     assert.ok(result.questions[0].bloom_evidence);
     assert.ok(result.quality.topic_coverage > 0);
 });
+
+test("analyses each MCQ response item and preserves answer options in the V2 result", async () => {
+    const { buildExamDocumentModel } = await import("../services/examDocumentModel.js");
+    const document = buildExamDocumentModel({
+        level: "Form One",
+        subject: "Business Studies",
+        text: [
+            "SECTION A",
+            "1. Choose the correct answer.",
+            "i. Which business is a sole proprietorship?",
+            "A. A company owned by several people",
+            "B. A partnership",
+            "C. A shop owned by one person",
+            "D. A public corporation",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.equal(result.questions[0].subparts.length, 1);
+    assert.equal(result.questions[0].subparts[0].classification.type, "multiple_choice");
+    assert.equal(result.questions[0].subparts[0].options.length, 4);
+    assert.equal(result.questions[0].subparts[0].topic, "Business ownership");
+    assert.equal(result.questions[0].subparts[0].bloom_level, "understanding");
+});
