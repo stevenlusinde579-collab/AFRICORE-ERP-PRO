@@ -92,7 +92,6 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { buildExamDocumentModel } from "../services/examDocumentModel.js";
 import { analyzeExamEvidence } from "../services/examEvidenceAnalysis.js";
-import inferCurriculumTopic from "../services/examCurriculumTopicMapperV2.js";
 
 test("commerce historical paper regression preserves structure and classifies response types", () => {
     const here = dirname(fileURLToPath(import.meta.url));
