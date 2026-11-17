@@ -105,7 +105,7 @@ const classifyQuestion = (text) => {
 
 const parseSelection = (text) => {
     const source = String(text || "").replace(/\s+/g, " ").trim();
-    const sectionSelection = source.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\s*\(\s*\d+\s*\))?\s+questions?\s+from\s+section\s+([A-F])\b/i);
+    const sectionSelection = source.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\s*\(\s*\d+\s*\))?\s+questions?\s+from\s+section\b[\s\S]{0,60}?\b([A-F])\b/i);
     if (sectionSelection) {
         return {
             required: toNumber(sectionSelection[1]),
@@ -312,8 +312,8 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     );
     const instructionTexts = new Set(instructionEvidence.map(item => String(item.text || "").trim().toLowerCase()));
     const combinedInstructionText = [
-        ...(document?.header_evidence || []),
-        ...instructionEvidence,
+        ...(document?.header_evidence || []).filter(item => item.page === 1),
+        ...instructionEvidence.filter(item => item.scope === "PAPER" && item.page === 1),
     ].map(item => String(item.text || "").trim()).filter(Boolean).join(" ");
     const allLines = [
         ...instructionEvidence,
