@@ -30,6 +30,11 @@ const numberValue = (token) => {
     return romanValue(value);
 };
 
+const isEarlyYearsLevel = (level, text) =>
+    /\b(baby\s*class|nursery|kindergarten|pre[- ]?primary|early\s+years|early\s+childhood)\b/i.test(String(level || "") + " " + String(text || "").slice(0, 5000));
+
+const EARLY_YEARS_TASK = /^(?:trace|colour|color|match|circle|count|draw|join|write|name|identify|sing|recite|sort|complete|fill|read|point|arrange|paint|cut|paste|show|say|repeat|tick|underline|connect|taja|chora|paka(?:\s+rangi)?|oanisha|hesabu|unganisha|andika|soma|zungushia|jaza|onyesha|fafanua)\b/i;
+
 const makeEvidence = (text, page, line, kind) => ({
     text,
     page,
@@ -57,6 +62,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     let currentSubpart = null;
     let currentNestedPart = null;
     let questionOrder = 0;
+    const earlyYears = isEarlyYearsLevel(level, source);
 
     const ensureSection = (name = "UNSECTIONED", title = "") => {
         let section = document.sections.find(item => item.name === name);
@@ -130,6 +136,27 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 return;
             }
 
+            if (earlyYears && currentQuestion && EARLY_YEARS_TASK.test(line)) {
+                currentQuestion = {
+                    id: "question-" + (++questionOrder),
+                    order: questionOrder,
+                    printed_label: "ACTIVITY " + questionOrder,
+                    question_number: questionOrder,
+                    text: line,
+                    subparts: [],
+                    evidence: [evidence],
+                    mark_evidence: [],
+                    section: currentSection?.name || "UNSECTIONED",
+                    boundary_confidence: "medium",
+                };
+                currentSection = currentSection || ensureSection();
+                currentSection.questions.push(currentQuestion);
+                document.questions.push(currentQuestion);
+                currentSubpart = null;
+                currentNestedPart = null;
+                return;
+            }
+
             const subpartMatch = line.match(SUBPART_HEADER);
             if (subpartMatch && currentQuestion) {
                 const label = String(subpartMatch[1] || subpartMatch[2]).toLowerCase();
@@ -187,6 +214,35 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     for (const question of document.questions) {
         if (!question.text && !question.subparts.length) {
             document.diagnostics.push({ code: "EMPTY_QUESTION", question_id: question.id, severity: "warning" });
+        }
+    }
+
+    if (earlyYears && document.questions.length === 0) {
+        for (const section of document.sections) {
+            let currentTask = null;
+            for (const item of section.evidence || []) {
+                const line = String(item.text || "").trim();
+                if (!line || SECTION_HEADER.test(line) || ADMIN_LINE.test(line)) continue;
+                if (EARLY_YEARS_TASK.test(line)) {
+                    currentTask = {
+                        id: "question-" + (++questionOrder),
+                        order: questionOrder,
+                        printed_label: "ACTIVITY " + questionOrder,
+                        question_number: questionOrder,
+                        text: line,
+                        subparts: [],
+                        evidence: [item],
+                        mark_evidence: [],
+                        section: section.name,
+                        boundary_confidence: "medium",
+                    };
+                    section.questions.push(currentTask);
+                    document.questions.push(currentTask);
+                } else if (currentTask) {
+                    currentTask.text = [currentTask.text, line].filter(Boolean).join("\n");
+                    currentTask.evidence.push(item);
+                }
+            }
         }
     }
 
