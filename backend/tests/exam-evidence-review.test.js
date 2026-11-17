@@ -26,7 +26,7 @@ test("builds advisory evidence review without changing Rule-Based question recor
     assert.equal(result.metadata.rule_based_question_count, 10);
     assert.equal(result.metadata.question_type_counts.multiple_choice, 1);
     assert.equal(result.metadata.requires_human_review, true);
-    assert.equal(result.recommendations.length, 3);
+    assert.equal(result.recommendations.length, 4);
     assert.match(result.recommendations.join(" "), /11 question boundaries/);
     assert.match(result.recommendations.join(" "), /printed total is 100/);
 });
