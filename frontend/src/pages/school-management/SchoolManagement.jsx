@@ -49,6 +49,10 @@ export default function SchoolManagement() {
     const [editingSchool, setEditingSchool] = useState(null);
     const [form, setForm] = useState(EMPTY_FORM);
     const [smsSchool, setSmsSchool] = useState(null);
+    const [usageSchool, setUsageSchool] = useState(null);
+    const [usageData, setUsageData] = useState(null);
+    const [usageLoading, setUsageLoading] = useState(false);
+    const [usageError, setUsageError] = useState("");
     const [smsForm, setSmsForm] = useState({ sender_id: "", api_key: "", secret_key: "", approval_status: "pending", approval_note: "" });
     const [smsConfigured, setSmsConfigured] = useState(false);
     const [smsLoading, setSmsLoading] = useState(false);
@@ -260,6 +264,27 @@ export default function SchoolManagement() {
         } finally {
             setAssigningSchoolId(null);
         }
+    };
+
+    const openGeminiUsage = async (school) => {
+        setUsageSchool(school);
+        setUsageData(null);
+        setUsageError("");
+        setUsageLoading(true);
+        try {
+            const response = await api.get(`/schools/${school.id}/gemini-usage`);
+            setUsageData(response?.data?.usage || null);
+        } catch (loadError) {
+            setUsageError(displayError(loadError));
+        } finally {
+            setUsageLoading(false);
+        }
+    };
+
+    const closeGeminiUsage = () => {
+        setUsageSchool(null);
+        setUsageData(null);
+        setUsageError("");
     };
 
     const openSmsSettings = async (school) => {
@@ -487,6 +512,37 @@ export default function SchoolManagement() {
                         </div>
                     )}
                 </section>
+
+                {usageSchool && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="Gemini AI usage">
+                        <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+                            <div className="flex items-start justify-between gap-4">
+                                <div><h2 className="text-xl font-bold text-slate-900">Gemini AI Usage</h2><p className="mt-1 text-sm text-slate-500">{usageSchool.school_name}</p></div>
+                                <button type="button" onClick={closeGeminiUsage} className="rounded-lg border px-3 py-2 text-sm">Close</button>
+                            </div>
+                            {usageLoading ? <p className="py-12 text-center text-slate-500">Loading usage records...</p> : usageError ? <p role="alert" className="mt-5 rounded-lg bg-rose-50 p-4 text-sm text-rose-700">{usageError}</p> : usageData && (
+                                <>
+                                    <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                        {[
+                                            ["Analyses", usageData.total_analyses ?? 0],
+                                            ["Total tokens", Number(usageData.total_tokens || 0).toLocaleString()],
+                                            ["Estimated USD", usageData.estimated_cost_usd == null ? "Not fully priced" : `${Number(usageData.estimated_cost_usd).toFixed(6)}`],
+                                            ["Estimated TZS", usageData.estimated_cost_tzs == null ? "Set FX rate" : `TZS ${Number(usageData.estimated_cost_tzs).toLocaleString(undefined,{maximumFractionDigits:2})}`]
+                                        ].map(([label,value]) => <div key={label} className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-xl font-bold text-slate-900">{value}</p></div>)}
+                                    </div>
+                                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                                        <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="text-slate-500">Input tokens</span><strong className="float-right">{Number(usageData.input_tokens||0).toLocaleString()}</strong></div>
+                                        <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="text-slate-500">Output + thinking</span><strong className="float-right">{Number(usageData.output_tokens||0).toLocaleString()}</strong></div>
+                                        <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="text-slate-500">Retries</span><strong className="float-right">{Number(usageData.total_retries||0).toLocaleString()}</strong></div>
+                                    </div>
+                                    {Number(usageData.unpriced_analyses||0)>0 && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{usageData.unpriced_analyses} analysis record(s) have missing token metadata or model pricing; totals may be incomplete.</p>}
+                                    <h3 className="mt-6 font-semibold text-slate-900">Recent analysis usage</h3>
+                                    <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="p-3">Date</th><th className="p-3">Paper ID</th><th className="p-3">Model</th><th className="p-3">Tokens</th><th className="p-3">Estimated cost</th></tr></thead><tbody>{(usageData.recent||[]).map((item)=><tr key={item.id} className="border-t"><td className="p-3">{item.created_at ? new Date(item.created_at).toLocaleString() : "—"}</td><td className="p-3">{item.exam_paper_id ?? "—"}</td><td className="p-3">{item.model}</td><td className="p-3">{Number(item.total_tokens||0).toLocaleString()}</td><td className="p-3">{item.estimated_cost_usd == null ? "Not priced" : `${Number(item.estimated_cost_usd).toFixed(6)}`}</td></tr>)}</tbody></table></div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {smsSchool && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="presentation">
