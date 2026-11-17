@@ -188,3 +188,38 @@ test("preserves page boundaries from PDF reader and extracted PDF page markers",
     });
     assert.equal(extractedPageMarkers.summary.page_count, 2);
 });
+
+test("treats uppercase Roman item labels under MCQ stems as subparts, not new questions", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "1. For each item choose the correct answer.",
+            "I. First item asks a question.",
+            "A. Option one",
+            "B. Option two",
+            "C. Option three",
+            "D. Option four",
+            "II. Second item asks a question.",
+            "A. Option one",
+            "B. Option two",
+            "C. Option three",
+            "D. Option four",
+        ].join("\n"),
+    });
+    assert.equal(model.summary.question_count, 1);
+    assert.deepEqual(model.questions[0].subparts.map(item => item.printed_label), ["i", "ii"]);
+    assert.equal(model.questions[0].subparts[0].options.length, 4);
+});
+
+test("recognises sequential uppercase Roman main questions when no Arabic question stem exists", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "I. Explain the first concept.",
+            "II. Explain the second concept.",
+            "III. Explain the third concept.",
+        ].join("\n"),
+    });
+    assert.equal(model.summary.question_count, 3);
+    assert.deepEqual(model.questions.map(item => item.printed_label), ["I", "II", "III"]);
+});
