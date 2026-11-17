@@ -35,6 +35,10 @@ export const compareExamAnalysisToReference = ({ candidate, reference } = {}) =>
     let extra = 0;
     let marksCompared = 0;
     let marksExact = 0;
+    let explicitReferenceMarksCompared = 0;
+    let explicitReferenceMarksExact = 0;
+    let inferredReferenceMarksCompared = 0;
+    let inferredReferenceMarksExact = 0;
     let topicsCompared = 0;
     let topicsExact = 0;
     let typesCompared = 0;
@@ -55,7 +59,15 @@ export const compareExamAnalysisToReference = ({ candidate, reference } = {}) =>
             const actualMarks = numberOrNull(candidateQuestion.marks ?? candidateQuestion.max_marks);
             if (expectedMarks != null) {
                 marksCompared += 1;
-                if (actualMarks != null && Math.abs(expectedMarks - actualMarks) <= 0.01) marksExact += 1;
+                const exact = actualMarks != null && Math.abs(expectedMarks - actualMarks) <= 0.01;
+                if (exact) marksExact += 1;
+                if (referenceQuestion.mark_source === "inferred_from_section_structure") {
+                    inferredReferenceMarksCompared += 1;
+                    if (exact) inferredReferenceMarksExact += 1;
+                } else {
+                    explicitReferenceMarksCompared += 1;
+                    if (exact) explicitReferenceMarksExact += 1;
+                }
             }
 
             const expectedTopic = String(referenceQuestion.topic || "").trim().toLowerCase();
@@ -78,6 +90,26 @@ export const compareExamAnalysisToReference = ({ candidate, reference } = {}) =>
     const recall = referenceQuestions.length ? matched / referenceQuestions.length : 0;
     const f1 = precision + recall ? (2 * precision * recall) / (precision + recall) : 0;
     const rate = (correct, total) => total ? Number((correct / total).toFixed(3)) : null;
+    const candidateSelections = candidate?.selection_rules || candidate?.analysis?.selection_rules || [];
+    const expectedSelections = [];
+    const seenExpectedSelections = new Set();
+    for (const item of referenceQuestions) {
+        if (!(item.is_selective || item.selection_required || Number(item.selection_count) > 0)) continue;
+        const key = normalizeSection(item.section) + ":" + String(item.selection_group || item.selection_instruction || item.selection_count);
+        if (seenExpectedSelections.has(key)) continue;
+        seenExpectedSelections.add(key);
+        expectedSelections.push({
+            section: normalizeSection(item.section),
+            required: numberOrNull(item.selection_count),
+            available: numberOrNull(item.selection_total),
+        });
+    }
+    let selectionMatches = 0;
+    for (const expected of expectedSelections) {
+        const actual = candidateSelections.find(item => normalizeSection(item.scope || item.section) === expected.section);
+        if (actual && (expected.required == null || numberOrNull(actual.required) === expected.required) &&
+            (expected.available == null || numberOrNull(actual.available) === expected.available)) selectionMatches += 1;
+    }
 
     return {
         comparison_type: reference?.teacher_verified === true ? "teacher_verified_accuracy" : "historical_ai_baseline_parity",
@@ -98,6 +130,21 @@ export const compareExamAnalysisToReference = ({ candidate, reference } = {}) =>
             compared: marksCompared,
             exact_matches: marksExact,
             agreement: rate(marksExact, marksCompared),
+            explicit_reference: {
+                compared: explicitReferenceMarksCompared,
+                exact_matches: explicitReferenceMarksExact,
+                agreement: rate(explicitReferenceMarksExact, explicitReferenceMarksCompared),
+            },
+            inferred_reference: {
+                compared: inferredReferenceMarksCompared,
+                exact_matches: inferredReferenceMarksExact,
+                agreement: rate(inferredReferenceMarksExact, inferredReferenceMarksCompared),
+            },
+        },
+        selection: {
+            reference_rules: expectedSelections.length,
+            matched_rules: selectionMatches,
+            agreement: rate(selectionMatches, expectedSelections.length),
         },
         topics: {
             compared: topicsCompared,
