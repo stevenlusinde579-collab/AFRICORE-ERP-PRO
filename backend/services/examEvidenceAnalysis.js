@@ -262,6 +262,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
             marks_source: explicitQuestionMark != null ? "explicit_question_evidence" :
                 (subparts.length && subpartMarks != null ? "sum_of_explicit_subpart_evidence" : "unknown"),
             mark_evidence: questionMarkEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
+            mark_confidence: explicitQuestionMark != null ? 1 : (subparts.length && subpartMarks != null ? 1 : 0),
             subparts,
             response_options: Array.isArray(question.response_options) ? question.response_options : [],
             classification,
@@ -322,6 +323,107 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         question.selection_instruction = selective ? rule.evidence_text : null;
     }
 
+
+    // Infer missing question marks from printed section totals, matching the
+    // established AI Analysis behaviour while preserving the inference source.
+    for (const section of document?.sections || []) {
+        const sectionMarkEvidence = uniqueEvidence(section.evidence)
+            .map(item => ({ ...item, mark: extractMark(item.text) }))
+            .filter(item => item.mark);
+        const declaredSectionMarks = sectionMarkEvidence[0]?.mark?.value ?? null;
+        if (!Number.isFinite(declaredSectionMarks)) continue;
+
+        const sectionQuestions = questions.filter(question => question.section === section.name);
+        if (!sectionQuestions.length) continue;
+        const sectionRule = selections.find(item => item.scope === section.name && item.mode !== "answer_all");
+        let knownTotal = sectionQuestions.reduce((sum, question) =>
+            sum + (Number.isFinite(question.marks) ? question.marks : 0), 0);
+
+        // Objective one-response-per-item formats have stronger evidence than
+        // equal allocation across essay/structured questions.
+        for (const question of sectionQuestions) {
+            if (Number.isFinite(question.marks)) continue;
+            const type = question.classification?.type;
+            const itemCount = Array.isArray(question.subparts) ? question.subparts.length : 0;
+            if ((type === "multiple_choice" || type === "matching") && itemCount > 0) {
+                question.marks = itemCount;
+                question.marks_source = "inferred_from_response_slots";
+                question.mark_confidence = 0.86;
+                question.mark_evidence = [
+                    ...(question.mark_evidence || []),
+                    {
+                        text: `${itemCount} detected ${type === "multiple_choice" ? "multiple-choice" : "matching"} response items; one mark per item inferred`,
+                        value: itemCount,
+                        source: "inferred_from_response_slots",
+                        confidence: 0.86,
+                    },
+                ];
+                for (const part of question.subparts) {
+                    if (Number.isFinite(part.marks)) continue;
+                    part.marks = 1;
+                    part.marks_source = "inferred_from_response_slot";
+                    part.mark_confidence = 0.86;
+                    part.mark_evidence = [
+                        ...(part.mark_evidence || []),
+                        { text: "One mark per detected objective response item inferred from question structure", value: 1, source: "inferred_from_response_slot", confidence: 0.86 },
+                    ];
+                }
+                knownTotal += itemCount;
+                const bloom = { level: question.bloom_level, confidence: question.bloom_confidence, evidence: question.bloom_evidence };
+                const difficulty = estimateDifficulty({ bloom, marks: question.marks, subparts: question.subparts.length });
+                question.difficulty_level = difficulty.level;
+                question.difficulty_confidence = difficulty.confidence;
+                question.difficulty_evidence = difficulty.evidence;
+            }
+        }
+
+        const remainingMarks = Number((declaredSectionMarks - knownTotal).toFixed(4));
+        const unmarkedQuestions = sectionQuestions.filter(question => !Number.isFinite(question.marks));
+        if (!unmarkedQuestions.length) continue;
+        if (remainingMarks < 0) {
+            diagnostics.push({
+                code: "SECTION_MARKS_OVERALLOCATED",
+                section: section.name,
+                declared_total: declaredSectionMarks,
+                allocated_total: knownTotal,
+                message: "Explicit and response-slot marks exceed the printed section total; remaining marks were not redistributed.",
+            });
+            continue;
+        }
+
+        const requiredAnswers = sectionRule?.required;
+        const alreadyMarkedQuestions = sectionQuestions.length - unmarkedQuestions.length;
+        const allocationSlots = sectionRule
+            ? (Number.isFinite(requiredAnswers) ? requiredAnswers - alreadyMarkedQuestions : 0)
+            : unmarkedQuestions.length;
+        if (allocationSlots <= 0 || remainingMarks === 0) continue;
+
+        const perQuestionMarks = Number((remainingMarks / allocationSlots).toFixed(4));
+        if (!Number.isFinite(perQuestionMarks) || perQuestionMarks < 0) continue;
+        const selective = Boolean(sectionRule);
+        for (const question of unmarkedQuestions) {
+            question.marks = perQuestionMarks;
+            question.marks_source = selective ? "inferred_from_selective_section_total" : "inferred_from_section_structure";
+            question.mark_confidence = selective ? 0.8 : 0.72;
+            question.mark_evidence = [
+                ...(question.mark_evidence || []),
+                {
+                    text: selective
+                        ? `Section ${section.name} declares ${declaredSectionMarks} marks and requires ${requiredAnswers} of ${sectionQuestions.length} questions; ${perQuestionMarks} marks per selected question inferred.`
+                        : `Section ${section.name} declares ${declaredSectionMarks} marks; after preserving ${knownTotal} known/response-slot marks, the remaining ${remainingMarks} marks are equally distributed across ${unmarkedQuestions.length} unmarked questions.`,
+                    value: perQuestionMarks,
+                    source: selective ? "inferred_from_selective_section_total" : "inferred_from_section_structure",
+                    confidence: selective ? 0.8 : 0.72,
+                },
+            ];
+            const bloom = { level: question.bloom_level, confidence: question.bloom_confidence, evidence: question.bloom_evidence };
+            const difficulty = estimateDifficulty({ bloom, marks: question.marks, subparts: question.subparts.length });
+            question.difficulty_level = difficulty.level;
+            question.difficulty_confidence = difficulty.confidence;
+            question.difficulty_evidence = difficulty.evidence;
+        }
+    }
+
     const sectionTotals = (document?.sections || []).map((section) => {
         const markEvidence = uniqueEvidence(section.evidence)
             .map(item => ({ ...item, mark: extractMark(item.text) }))
@@ -344,7 +446,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 code: "SECTION_MARKS_UNALLOCATED",
                 section: section.name,
                 declared_total: declared,
-                message: "A printed section total exists, but individual question marks are not all evidenced. No equal allocation has been assumed.",
+                message: "A printed section total exists, but the engine could not safely allocate marks from the detected question and selection structure.",
             });
         } else if (declared != null && calculated != null && declared !== calculated) {
             diagnostics.push({
@@ -436,7 +538,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     if (questions.some((item) => item.marks == null)) {
         diagnostics.push({
             code: "QUESTION_MARKS_INCOMPLETE",
-            message: "One or more questions do not have explicit, traceable mark evidence.",
+            message: "One or more questions still have no explicit or safely inferred mark allocation.",
             affected_question_ids: questions.filter((item) => item.marks == null).map((item) => item.id),
         });
     }
