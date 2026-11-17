@@ -92,6 +92,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { buildExamDocumentModel } from "../services/examDocumentModel.js";
 import { analyzeExamEvidence } from "../services/examEvidenceAnalysis.js";
+import { analyzeExaminationV2 } from "../services/examAnalysisV2.js";
+import { buildRuleBasedQuestionsFromEvidence } from "../services/examEvidenceReview.js";
 
 test("commerce historical paper regression preserves structure and classifies response types", () => {
     const here = dirname(fileURLToPath(import.meta.url));
@@ -111,3 +113,28 @@ test("commerce historical paper regression preserves structure and classifies re
     assert.ok(comparison.question_types.agreement >= 0.9);
     assert.ok(candidate.questions.every(question => question.classification.type !== "unclassified"));
 });
+
+test("Commerce 2025 V2 evidence can safely repair missing Rule-Based question boundaries and marks", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const fixture = JSON.parse(readFileSync(join(here, "fixtures/exam-analysis-golden/commerce-form-four-2025-historical-ai-baseline.json"), "utf8"));
+    const v2Result = analyzeExaminationV2({
+        text: fixture.extracted_text,
+        level: fixture.education_level,
+        subject: fixture.subject,
+    });
+    const questions = buildRuleBasedQuestionsFromEvidence({
+        v2Result,
+        expectedQuestionCount: 11,
+    });
+
+    assert.equal(questions.length, 11);
+    assert.deepEqual(questions.map(question => question.question_number), Array.from({ length: 11 }, (_, index) => index + 1));
+    assert.equal(questions[0].max_marks, 10);
+    assert.equal(questions[1].max_marks, 6);
+    assert.ok(questions.slice(2, 8).every(question => question.max_marks === 9));
+    assert.ok(questions.slice(8).every(question => question.max_marks === 15 && question.is_selective));
+    assert.ok(questions.slice(8).every(question => question.selection_count === 2 && question.selection_total === 3));
+    assert.equal(questions.reduce((sum, question) => sum + question.max_marks, 0), 115);
+    assert.equal(v2Result.analysis.totals.effective_calculated_total, 100);
+});
+

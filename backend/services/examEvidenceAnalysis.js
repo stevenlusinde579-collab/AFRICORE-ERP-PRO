@@ -351,12 +351,24 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     for (const item of allLines) {
         const selection = parseSelection(item.text);
         if (!selection) continue;
-        const key = [item.scope, selection.mode, selection.required, selection.available, selection.evidence_text].join("|");
+        const scope = selection.section_scope || item.scope;
+        const key = [scope, selection.mode, selection.required, selection.available].join("|");
         if (selectionKeys.has(key)) continue;
         selectionKeys.add(key);
-        const scope = selection.section_scope || item.scope;
         const available = selection.available ?? (scope !== "PAPER" ? questions.filter(question => question.section === scope).length : null);
         selections.push({ ...selection, scope, available, evidence: { text: item.text, page: item.page, line: item.line } });
+    }
+
+    // A broken header line can flatten "Answer all questions in sections A
+    // and B and two questions from section C" into a misleading global
+    // answer-all instruction. A specific section selection takes precedence.
+    const hasSpecificSectionSelection = selections.some(item => item.scope !== "PAPER" && item.mode !== "answer_all");
+    if (hasSpecificSectionSelection) {
+        for (let index = selections.length - 1; index >= 0; index -= 1) {
+            if (selections[index].scope === "PAPER" && selections[index].mode === "answer_all") {
+                selections.splice(index, 1);
+            }
+        }
     }
 
     for (const question of questions) {

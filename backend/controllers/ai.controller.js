@@ -5,7 +5,7 @@ import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
 import { analyzePaperWithRules } from "../services/ruleBasedExamAnalysis.js";
 import { analyzeExaminationV2 } from "../services/examAnalysisV2.js";
-import { buildExamEvidenceReview } from "../services/examEvidenceReview.js";
+import { buildExamEvidenceReview, buildRuleBasedQuestionsFromEvidence } from "../services/examEvidenceReview.js";
 import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 
 // ============================================================
@@ -2472,10 +2472,35 @@ export const analyzePaper =
                                 level,
                                 subject: subjectName,
                             });
+                            const originalRuleBasedQuestionCount = aiResult.questions?.length || 0;
                             const evidenceReview = buildExamEvidenceReview({
                                 v2Result: evidenceV2,
-                                ruleBasedQuestionCount: aiResult.questions?.length || 0,
+                                ruleBasedQuestionCount: originalRuleBasedQuestionCount,
                             });
+                            const evidenceQuestions = buildRuleBasedQuestionsFromEvidence({
+                                v2Result: evidenceV2,
+                                expectedQuestionCount,
+                            });
+                            if (evidenceQuestions) {
+                                // Adopt V2 boundaries and marks only when all questions
+                                // are detected, confidence is high, selection is valid,
+                                // and effective marks reconcile with the printed total.
+                                aiResult.questions = evidenceQuestions;
+                                aiResult.total_marks = evidenceV2.analysis.totals.declared ??
+                                    evidenceV2.analysis.totals.effective_calculated_total ??
+                                    aiResult.total_marks;
+                                evidenceReview.metadata.applied_to_rule_based_questions = true;
+                                evidenceReview.metadata.applied_question_count = evidenceQuestions.length;
+                                evidenceReview.recommendations = evidenceReview.recommendations.filter(
+                                    item => !item.startsWith("Evidence-based cross-check identified ")
+                                );
+                                evidenceReview.recommendations.push(
+                                    `Rule-Based Engine used the evidence-based V2 structure for all ${evidenceQuestions.length} questions because question boundaries, marks and the printed paper total passed the confidence checks. Teacher approval is still required.`
+                                );
+                            } else {
+                                evidenceReview.metadata.applied_to_rule_based_questions = false;
+                                evidenceReview.metadata.applied_question_count = 0;
+                            }
                             aiResult.evidence_based_review = evidenceReview.metadata;
                             aiResult.recommendations = [
                                 ...(Array.isArray(aiResult.recommendations) ? aiResult.recommendations : []),
@@ -2484,8 +2509,10 @@ export const analyzePaper =
                             console.log("EVIDENCE-BASED V2 CROSS-CHECK COMPLETED:", {
                                 examId,
                                 examSubjectId,
-                                ruleBasedQuestions: aiResult.questions?.length || 0,
+                                originalRuleBasedQuestions: originalRuleBasedQuestionCount,
+                                finalRuleBasedQuestions: aiResult.questions?.length || 0,
                                 evidenceQuestions: evidenceReview.metadata.question_count,
+                                adoptedV2Structure: Boolean(evidenceQuestions),
                                 warnings: evidenceReview.metadata.diagnostics.length,
                                 durationMs: Date.now() - ruleStartedAt,
                             });
