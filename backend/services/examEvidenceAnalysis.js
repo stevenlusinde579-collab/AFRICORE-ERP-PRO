@@ -1,0 +1,220 @@
+/**
+ * Evidence-backed interpretation layer for the V2 examination document model.
+ *
+ * This stage deliberately reports evidence and ambiguity instead of guessing.
+ * It is additive and is not wired into the live Rule-Based or Gemini pipeline.
+ */
+
+const MARK_PATTERNS = [
+    /\[\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)?\s*\]/i,
+    /\(\s*(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\s*\)/i,
+    /(?:^|\s)(\d+(?:\.\d+)?)\s*(?:marks?|mks?)\b/i,
+    /\bmarks?\s*[:=]\s*(\d+(?:\.\d+)?)/i,
+];
+
+const SELECTION_PATTERNS = [
+    /(?:answer|attempt|choose|select)\s+(?:any\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:out\s+of|from)\s+(\d+|\w+)/i,
+    /(?:answer|attempt|choose|select)\s+(?:any\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:questions?|items?)/i,
+    /(?:jibu|chagua)\s+(?:maswali\s+)?(\d+|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)/i,
+];
+
+const NUMBER_WORDS = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+    moja: 1, mawili: 2, matatu: 3, manne: 4, matano: 5,
+    sita: 6, saba: 7, nane: 8, tisa: 9, kumi: 10,
+};
+
+const toNumber = (value) => {
+    if (value == null) return null;
+    const token = String(value).toLowerCase();
+    if (/^\d+(?:\.\d+)?$/.test(token)) return Number(token);
+    return NUMBER_WORDS[token] ?? null;
+};
+
+const extractMark = (text) => {
+    const source = String(text || "");
+    for (const pattern of MARK_PATTERNS) {
+        const match = source.match(pattern);
+        if (match) {
+            const value = Number(match[1]);
+            if (Number.isFinite(value) && value >= 0) {
+                return { value, text: match[0].trim() };
+            }
+        }
+    }
+    return null;
+};
+
+const uniqueEvidence = (items) => {
+    const seen = new Set();
+    return (items || []).filter((item) => {
+        const key = [item.page, item.line, item.text].join(":");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+};
+
+const classifyQuestion = (text) => {
+    const value = String(text || "").toLowerCase();
+    if (/\b(match the (?:following|items)|match items|column\s+[ab]|pair the following)\b/.test(value)) {
+        return { type: "matching", confidence: 0.88, reason: "Matching instruction detected in question text." };
+    }
+    if (/\b(fill in the blanks?|complete the sentences?)\b/.test(value) || /_{2,}/.test(value)) {
+        return { type: "fill_in_the_blanks", confidence: 0.84, reason: "Blank-completion structure detected." };
+    }
+    if (/\b(multiple choice|choose the correct answer|circle the correct|tick the correct)\b/.test(value) ||
+        /(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S/im.test(value)) {
+        return { type: "multiple_choice", confidence: 0.82, reason: "Answer options or choice instruction detected." };
+    }
+    if (/\b(experiment|laboratory|apparatus|specimen|draw and label|measure the|carry out an investigation|practical)\b/.test(value)) {
+        return { type: "practical", confidence: 0.78, reason: "Practical activity language detected." };
+    }
+    if (/\b(essay|composition|write an essay|write a story)\b/.test(value)) {
+        return { type: "extended_response", confidence: 0.78, reason: "Extended writing instruction detected." };
+    }
+    if (/\b(calculate|solve|show that|work out|give reasons|explain|describe|state|define|list|identify)\b/.test(value)) {
+        return { type: "structured_response", confidence: 0.65, reason: "Structured response command detected." };
+    }
+    return { type: "unclassified", confidence: 0.25, reason: "No reliable question-type evidence found." };
+};
+
+const parseSelection = (text) => {
+    const source = String(text || "").replace(/\s+/g, " ").trim();
+    for (const pattern of SELECTION_PATTERNS) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const required = toNumber(match[1]);
+        const available = match[2] ? toNumber(match[2]) : null;
+        return {
+            required,
+            available,
+            mode: available == null ? "choose_count" : "choose_from_pool",
+            evidence_text: match[0],
+            confidence: required == null ? 0.45 : (available == null ? 0.78 : 0.9),
+        };
+    }
+    if (/\b(answer|attempt) all (?:the )?(?:questions|items)\b/i.test(source) || /\bjibu maswali yote\b/i.test(source)) {
+        return { required: null, available: null, mode: "answer_all", evidence_text: source, confidence: 0.96 };
+    }
+    return null;
+};
+
+/**
+ * @param {object} document - Output from buildExamDocumentModel.
+ * @param {string} sourceText - Full extracted PDF text, used only for paper-level totals/instructions.
+ */
+export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
+    const diagnostics = [];
+    const questions = (document?.questions || []).map((question) => {
+        const questionEvidence = uniqueEvidence(question.evidence);
+        const subparts = (question.subparts || []).map((part) => {
+            const evidence = uniqueEvidence(part.evidence);
+            const markEvidence = evidence
+                .map((item) => ({ ...item, mark: extractMark(item.text) }))
+                .filter((item) => item.mark);
+            const text = [part.text, ...evidence.map((item) => item.text)].filter(Boolean).join("\n");
+            return {
+                id: part.id,
+                printed_label: part.printed_label,
+                text: part.text || "",
+                marks: markEvidence.length ? markEvidence[0].mark.value : null,
+                mark_evidence: markEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
+                classification: classifyQuestion(text),
+                evidence,
+            };
+        });
+
+        const questionMarkEvidence = questionEvidence
+            .map((item) => ({ ...item, mark: extractMark(item.text) }))
+            .filter((item) => item.mark);
+        const explicitQuestionMark = questionMarkEvidence[0]?.mark?.value ?? null;
+        const subpartMarks = subparts.every((part) => Number.isFinite(part.marks))
+            ? subparts.reduce((sum, part) => sum + part.marks, 0)
+            : null;
+        const marks = explicitQuestionMark ?? (subparts.length && subpartMarks != null ? subpartMarks : null);
+        const text = [question.text, ...subparts.map((part) => part.text), ...questionEvidence.map((item) => item.text)].filter(Boolean).join("\n");
+
+        return {
+            id: question.id,
+            order: question.order,
+            printed_label: question.printed_label,
+            section: question.section,
+            text: question.text || "",
+            marks,
+            marks_source: explicitQuestionMark != null ? "explicit_question_evidence" :
+                (subparts.length && subpartMarks != null ? "sum_of_explicit_subpart_evidence" : "unknown"),
+            mark_evidence: questionMarkEvidence.map((item) => ({ ...item, value: item.mark.value, matched_text: item.mark.text })),
+            subparts,
+            classification: classifyQuestion(text),
+            evidence: questionEvidence,
+        };
+    });
+
+    const instructionEvidence = (document?.instructions || []).flatMap((instruction) =>
+        uniqueEvidence(instruction.evidence).map((item) => ({ ...item, scope: instruction.scope || "PAPER" }))
+    );
+    const allLines = [
+        ...instructionEvidence,
+        ...String(sourceText || "").split(/\r?\n/).map((text, index) => ({ text: text.trim(), page: null, line: index + 1, scope: "PAPER" })).filter((item) => item.text),
+    ];
+    const selections = [];
+    const selectionKeys = new Set();
+    for (const item of allLines) {
+        const selection = parseSelection(item.text);
+        if (!selection) continue;
+        const key = [item.scope, selection.mode, selection.required, selection.available, selection.evidence_text].join("|");
+        if (selectionKeys.has(key)) continue;
+        selectionKeys.add(key);
+        selections.push({ ...selection, scope: item.scope, evidence: { text: item.text, page: item.page, line: item.line } });
+    }
+
+    const totalMatch = String(sourceText || "").match(/(?:total|max(?:imum)?|paper)\s*(?:marks?)?\s*[:=-]?\s*(\d+(?:\.\d+)?)\s*(?:marks?)?/i);
+    const declaredTotal = totalMatch ? Number(totalMatch[1]) : null;
+    const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
+    const calculatedTotal = knownQuestionMarks.length === questions.length && questions.length
+        ? knownQuestionMarks.reduce((sum, item) => sum + item.marks, 0)
+        : null;
+
+    if (questions.some((item) => item.marks == null)) {
+        diagnostics.push({
+            code: "QUESTION_MARKS_INCOMPLETE",
+            message: "One or more questions do not have explicit, traceable mark evidence.",
+            affected_question_ids: questions.filter((item) => item.marks == null).map((item) => item.id),
+        });
+    }
+    if (declaredTotal != null && calculatedTotal != null && declaredTotal !== calculatedTotal) {
+        diagnostics.push({
+            code: "DECLARED_TOTAL_MISMATCH",
+            declared_total: declaredTotal,
+            calculated_total: calculatedTotal,
+            message: "The printed paper total does not match the sum of detected question marks.",
+        });
+    }
+
+    const classified = questions.filter((item) => item.classification.type !== "unclassified").length;
+    const markCoverage = questions.length ? knownQuestionMarks.length / questions.length : 0;
+    const classificationCoverage = questions.length ? classified / questions.length : 0;
+    const confidence = Number((0.55 * markCoverage + 0.45 * classificationCoverage).toFixed(3));
+
+    return {
+        schema_version: "2.0.0",
+        questions,
+        selection_rules: selections,
+        totals: {
+            declared: declaredTotal,
+            calculated_from_explicit_evidence: calculatedTotal,
+            marks_coverage: Number(markCoverage.toFixed(3)),
+        },
+        quality: {
+            confidence,
+            classification_coverage: Number(classificationCoverage.toFixed(3)),
+            marks_coverage: Number(markCoverage.toFixed(3)),
+            status: confidence >= 0.85 ? "high" : confidence >= 0.6 ? "review_required" : "low_evidence",
+        },
+        diagnostics,
+    };
+};
+
+export { classifyQuestion, extractMark, parseSelection };
