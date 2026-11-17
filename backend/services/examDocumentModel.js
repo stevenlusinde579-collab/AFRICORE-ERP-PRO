@@ -243,7 +243,25 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 return;
             }
 
-            if (currentOption) {
+            const inlineOptionContinuation = currentQuestion &&
+                /\\b(match|matching|column|list A|list B|pair the following)\\b/i.test(currentQuestion.text)
+                ? /^(.*?)\\s{2,}([A-J])[.)]\\s*(.+)$/.exec(line)
+                : null;
+            if (inlineOptionContinuation) {
+                const leftContinuation = inlineOptionContinuation[1].trim();
+                if (leftContinuation && currentSubpart) {
+                    currentSubpart.text = [currentSubpart.text, leftContinuation].filter(Boolean).join("\\n");
+                    currentSubpart.evidence.push(evidence);
+                }
+                const option = {
+                    label: inlineOptionContinuation[2],
+                    text: inlineOptionContinuation[3].trim(),
+                    evidence: [evidence],
+                };
+                currentQuestion.response_options = currentQuestion.response_options || [];
+                currentQuestion.response_options.push(option);
+                currentOption = option;
+            } else if (currentOption) {
                 currentOption.text = [currentOption.text, line].filter(Boolean).join("\n");
                 currentOption.evidence.push(evidence);
             } else if (currentNestedPart) {
