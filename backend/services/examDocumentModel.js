@@ -100,9 +100,11 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 return;
             }
 
-            const optionMatch = line.match(/^([A-E])[.)]\s+(.+)$/);
-            if (optionMatch && currentQuestion && (currentSubpart || /\b(choose|match|column|list A|multiple choice)\b/i.test(currentQuestion.text))) {
-                const isMatchingPool = /\b(match|column|list A)\b/i.test(currentQuestion.text);
+            const optionMatch = line.match(/^([A-I])[.)]\s+(.+)$/);
+            const currentPrompt = [currentQuestion?.text, currentSubpart?.text].filter(Boolean).join(" ");
+            const isMatchingPool = /\b(match|matching|column|list A|list B|pair the following)\b/i.test(currentPrompt);
+            const isMultipleChoicePool = /\b(choose|select|multiple choice|correct answer|following alternatives|which of the following)\b/i.test(currentPrompt);
+            if (optionMatch && currentQuestion && (isMatchingPool || (isMultipleChoicePool && /^[A-E]$/.test(optionMatch[1])))) {
                 const target = isMatchingPool ? currentQuestion : (currentSubpart || currentQuestion);
                 const option = { label: optionMatch[1], text: optionMatch[2].trim(), evidence: [evidence] };
                 if (target === currentQuestion) {
