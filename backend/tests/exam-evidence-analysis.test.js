@@ -204,22 +204,20 @@ test("analyses each MCQ response item and preserves answer options in the V2 res
 });
 
 test("infers objective item marks then distributes the remaining section marks", () => {
+    const mcqItems = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"].flatMap(label => [
+        `${label}. Item ${label}?`,
+        "A. A",
+        "B. B",
+        "C. C",
+        "D. D",
+    ]);
     const document = buildExamDocumentModel({
         level: "Form Three",
         subject: "Commerce",
         text: [
             "SECTION A (16 MARKS)",
             "1. Choose the correct answer.",
-            "i. Item one?",
-            "A. A",
-            "B. B",
-            "C. C",
-            "D. D",
-            "ii. Item two?",
-            "A. A",
-            "B. B",
-            "C. C",
-            "D. D",
+            ...mcqItems,
             "2. Match the following items in List A with List B.",
             "i. First term",
             "ii. Second term",
