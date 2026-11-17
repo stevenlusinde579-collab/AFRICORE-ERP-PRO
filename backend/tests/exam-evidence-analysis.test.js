@@ -27,7 +27,7 @@ const sampleDocument = {
 
 test("extracts only explicit non-negative mark evidence", () => {
     assert.equal(extractMark("Explain the term [4 marks]").value, 4);
-    assert.equal(extractMark("State two reasons (2)").value, 2);
+    assert.equal(extractMark("State two reasons (2)"), null);\n    assert.equal(extractMark("State two reasons (2 marks)").value, 2);
     assert.equal(extractMark("There are 5 students in the class."), null);
 });
 
@@ -73,4 +73,17 @@ test("does not invent marks when one subpart has no printed mark", () => {
     const result = analyzeExamEvidence({ document: doc });
     assert.equal(result.questions[0].marks, null);
     assert.ok(result.diagnostics.some((item) => item.code === "QUESTION_MARKS_INCOMPLETE"));
+});
+
+test("maps question topic using the declared subject and education level", async () => {
+    const { buildExamDocumentModel } = await import("../services/examDocumentModel.js");
+    const document = buildExamDocumentModel({
+        level: "Form Four",
+        subject: "Chemistry",
+        text: "SECTION A\\nQUESTION 1\\nExplain why acids turn blue litmus paper red."
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.equal(result.questions[0].curriculum.curriculum_level, "ordinary_secondary");
+    assert.equal(result.questions[0].curriculum.topic, "Acids, bases and salts");
+    assert.ok(result.questions[0].curriculum.topic_evidence);
 });
