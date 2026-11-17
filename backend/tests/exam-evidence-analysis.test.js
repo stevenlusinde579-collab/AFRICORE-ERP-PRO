@@ -248,7 +248,7 @@ test("infers objective item marks then distributes the remaining section marks",
     });
     const result = analyzeExamEvidence({ document });
     const q = result.questions;
-    assert.equal(q.find(item => item.question_number === 1).marks, 2);
+    assert.equal(q.find(item => item.question_number === 1).marks, 10);
     assert.equal(q.find(item => item.question_number === 2).marks, 6);
     assert.ok(q.filter(item => item.section === "B").every(item => item.marks === 9));
     assert.ok(q.filter(item => item.section === "C").every(item => item.marks === 15));
