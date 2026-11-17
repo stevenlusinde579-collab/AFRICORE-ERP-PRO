@@ -271,3 +271,28 @@ test("keeps uppercase Roman MCQ items under an Arabic-numbered question", () => 
     assert.deepEqual(model.questions[0].subparts.map(item => item.printed_label), ["i", "ii"]);
     assert.equal(model.questions[0].subparts[0].options.length, 4);
 });
+
+test("does not interpret the word 'item' in an MCQ instruction as an ITEM question heading", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "1. For each of the item(i-x) choose the correct answer then write its letter beside the",
+            "item number in the space provided",
+            "i. How much will the opening balance be?",
+            "A. TZS 50,000",
+            "B. TZS 620,000",
+            "C. TZS 660,000",
+            "D. TZS 500,000",
+            "E. TZS 540,000",
+            "ii. What is the amount to be paid?",
+            "A. TZS 1,275,000",
+            "B. TZS 217,500",
+            "C. TZS 1,282,500",
+            "D. TZS 1,350,000",
+            "E. TZS 275,000",
+        ].join("\\n"),
+    });
+    assert.equal(model.summary.question_count, 1);
+    assert.equal(model.questions[0].subparts.length, 2);
+    assert.equal(model.questions[0].subparts[0].options.length, 5);
+});
