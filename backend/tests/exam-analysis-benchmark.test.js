@@ -45,3 +45,24 @@ test("reports missing and extra questions without hiding count differences", () 
     assert.equal(result.counts.missing, 1);
     assert.equal(result.counts.extra, 1);
 });
+
+test("separates explicit and inferred reference marks and checks selection rules", () => {
+    const result = compareExamAnalysisToReference({
+        candidate: {
+            questions: [
+                { section: "A", question_number: 1, marks: 5 },
+                { section: "C", question_number: 2, marks: 4 },
+            ],
+            selection_rules: [{ scope: "C", required: 2, available: 3 }],
+        },
+        reference: {
+            questions: [
+                { section: "A", question_number: 1, max_marks: 5, mark_source: "printed_on_paper" },
+                { section: "C", question_number: 2, max_marks: 4, mark_source: "inferred_from_section_structure", selection_required: true, selection_count: 2, selection_total: 3 },
+            ],
+        },
+    });
+    assert.equal(result.marks.explicit_reference.agreement, 1);
+    assert.equal(result.marks.inferred_reference.agreement, 1);
+    assert.equal(result.selection.agreement, 1);
+});
