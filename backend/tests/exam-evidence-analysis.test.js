@@ -298,3 +298,46 @@ test("does not invent question marks when the paper has no printed section total
     assert.ok(result.questions.every(item => item.marks == null));
     assert.equal(result.diagnostics.some(item => item.code === "QUESTION_MARKS_INCOMPLETE"), true);
 });
+
+test("reads split section marks, unpunctuated question labels and Section C selection instructions", () => {
+    const document = buildExamDocumentModel({
+        text: [
+            "Instructions",
+            "1 This paper consists of sections A, B and C.",
+            "2 Answer all questions in sections A and B and two (2) questions from section C.",
+            "SECTION A (16",
+            "Marks)",
+            "1    For each item choose the correct answer.",
+            "i. First MCQ item?",
+            "A. One",
+            "B. Two",
+            "C. Three",
+            "D. Four",
+            "2    Match the items in List A with List B.",
+            "i. First matching item",
+            "ii. Second matching item",
+            "A. Response one",
+            "B. Response two",
+            "SECTION B (54 MARKS)",
+            "3    Explain the first topic.",
+            "4    Explain the second topic.",
+            "5    Explain the third topic.",
+            "6    Explain the fourth topic.",
+            "7    Explain the fifth topic.",
+            "8    Explain the sixth topic.",
+            "SECTION C (30 MARKS)",
+            "9    Explain the ninth topic.",
+            "10   Explain the tenth topic.",
+            "11   Explain the eleventh topic.",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.equal(document.summary.question_count, 11);
+    assert.equal(result.section_totals.find(item => item.section === "A").declared_total, 16);
+    assert.equal(result.questions.find(item => item.question_number === 1).marks, 1);
+    assert.equal(result.questions.find(item => item.question_number === 2).marks, 2);
+    assert.ok(result.questions.filter(item => item.section === "B").every(item => item.marks === 9));
+    assert.ok(result.questions.filter(item => item.section === "C").every(item => item.marks === 15));
+    assert.ok(result.questions.filter(item => item.section === "C").every(item => item.selection_count === 2 && item.selection_total === 3));
+    assert.equal(result.totals.effective_calculated_total, 100);
+});
