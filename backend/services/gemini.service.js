@@ -948,8 +948,10 @@ const makeGeminiRequestInternal =
 
 const makeGeminiRequest =
     async (
-        payload
+        payload,
+        includeUsage = false
     ) => {
+        const usageAttempts = [];
         let lastError =
             null;
 
@@ -1034,10 +1036,12 @@ const makeGeminiRequest =
                         "============================================================"
                     );
 
-                    return response;
+                    usageAttempts.push({ model: currentModel, success: true, usageMetadata: response?.usageMetadata || response?.usage_metadata || null });
+                    return includeUsage ? { response, usageAttempts } : response;
                 } catch (
                     error
                 ) {
+                    usageAttempts.push({ model: currentModel, success: false, status: error?.response?.status || null });
                     lastError =
                         error;
 
@@ -1879,10 +1883,7 @@ export const askGemini =
         };
 
         try {
-            const response =
-                await makeGeminiRequest(
-                    payload
-                );
+            const response = await makeGeminiRequest(payload);
 
             const rawText =
                 extractGeminiText(
@@ -1890,9 +1891,7 @@ export const askGemini =
                 );
 
             try {
-                return cleanGeminiJson(
-                    rawText
-                );
+                return cleanGeminiJson(rawText);
             } catch (
                 error
             ) {
@@ -2058,11 +2057,12 @@ export const askGeminiWithPDF =
             },
         };
 
+        let usageAttempts = [];
+
         try {
-            const response =
-                await makeGeminiRequest(
-                    payload
-                );
+            const requestResult = await makeGeminiRequest(payload, true);
+            const response = requestResult.response;
+            usageAttempts = [...requestResult.usageAttempts];
 
             const rawText =
                 extractGeminiText(
@@ -2070,7 +2070,7 @@ export const askGeminiWithPDF =
                 );
 
             try {
-                return cleanGeminiJson(rawText);
+                return { text: cleanGeminiJson(rawText), usageAttempts };
             } catch (firstParseError) {
                 // A malformed JSON response should not immediately fail a
                 // valid uploaded paper. Retry once with the same PDF and a
@@ -2121,11 +2121,12 @@ export const askGeminiWithPDF =
                     },
                 };
 
-                const retryResponse = await makeGeminiRequest(retryPayload);
-                const retryText = extractGeminiText(retryResponse);
+                const retryRequestResult = await makeGeminiRequest(retryPayload, true);
+                usageAttempts.push(...retryRequestResult.usageAttempts);
+                const retryText = extractGeminiText(retryRequestResult.response);
 
                 try {
-                    return cleanGeminiJson(retryText);
+                    return { text: cleanGeminiJson(retryText), usageAttempts };
                 } catch (retryParseError) {
                     console.error(
                         "GEMINI PDF JSON RETRY FAILED:",
@@ -2154,6 +2155,7 @@ export const askGeminiWithPDF =
         } catch (
             error
         ) {
+            if (usageAttempts.length) error.usageAttempts = usageAttempts;
             console.error(
                 "============================================================"
             );

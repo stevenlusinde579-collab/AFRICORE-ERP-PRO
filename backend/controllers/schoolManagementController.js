@@ -912,3 +912,32 @@ export const saveSchoolSmsSettings = async (req, res) => {
         return res.status(500).json({ success: false, message: "Imeshindikana kuhifadhi mipangilio ya SMS. Tafadhali kagua taarifa na ujaribu tena." });
     }
 };
+
+
+/**
+ * GET /api/schools/:id/gemini-usage
+ * Super Admin only. Aggregated usage is read through a service-role RPC.
+ */
+export const getSchoolGeminiUsage = async (req, res) => {
+    try {
+        const schoolId = Number(req.params.id);
+        if (!Number.isInteger(schoolId) || schoolId <= 0) {
+            return res.status(400).json({ success: false, message: "A valid school ID is required." });
+        }
+        const { data: school, error: schoolError } = await supabase
+            .from("schools").select("id,school_name").eq("id", schoolId).maybeSingle();
+        if (schoolError) throw schoolError;
+        if (!school) return res.status(404).json({ success: false, message: "School was not found." });
+        const { data, error } = await supabase.rpc("get_school_gemini_usage_summary", { p_school_id: schoolId });
+        if (error) throw error;
+        return res.json({ success: true, school, usage: data || {
+            school_id: schoolId, total_analyses: 0, total_requests: 0,
+            total_retries: 0, input_tokens: 0, output_tokens: 0,
+            total_tokens: 0, estimated_cost_usd: 0, estimated_cost_tzs: 0,
+            unpriced_analyses: 0, monthly: [], recent: []
+        } });
+    } catch (error) {
+        console.error("SCHOOL GEMINI USAGE ERROR:", error);
+        return res.status(500).json({ success: false, message: "Unable to load Gemini usage for this school." });
+    }
+};
