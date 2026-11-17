@@ -126,7 +126,7 @@ test("keeps printed section totals separate when question marks are not evidence
     const document = buildExamDocumentModel({
         level: "Primary",
         subject: "Science and Technology",
-        text: "SECTION A (Alama 22)\\nQUESTION 1\\nChagua jibu sahihi."
+        text: "SECTION A (Alama 22)\nQUESTION 1\nChagua jibu sahihi."
     });
     const result = analyzeExamEvidence({ document, sourceText: "SECTION A (Alama 22)\\nQUESTION 1\\nChagua jibu sahihi." });
     assert.equal(result.section_totals[0].declared_total, 22);
