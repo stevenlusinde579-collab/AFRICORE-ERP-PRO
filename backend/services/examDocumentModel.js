@@ -65,7 +65,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     let currentOption = null;
     let questionOrder = 0;
     const earlyYears = isEarlyYearsLevel(level, source);
-    const hasInstructionHeading = /^\s*(?:instructions|maelekezo)\s*:/im.test(source.slice(0, 2000));
+    const hasInstructionHeading = /^\s*(?:instructions|maelekezo)\s*:?\s*$/im.test(source.slice(0, 2000));
 
     const ensureSection = (name = "UNSECTIONED", title = "") => {
         let section = document.sections.find(item => item.name === name);
@@ -134,7 +134,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             const previousQuestionIsRoman = Boolean(currentQuestion && /^[IVXLCDM]+$/.test(currentQuestion.printed_label) && !currentSubpart);
             const isExplicitRomanQuestion = /^[IVXLCDM]{1,8}\s*[.)]/.test(line) &&
                 (!currentQuestion || previousQuestionIsRoman);
-            if (questionMatch && (hasExplicitQuestionPrefix || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
+            if (questionMatch && (hasExplicitQuestionPrefix || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || /^\s*\d{1,2}\s{2,}(?=[A-Za-z(])/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
                 const number = numberValue(questionMatch[1]);
                 const explicitLabel = hasExplicitQuestionPrefix;
                 const prior = currentSection?.questions || [];
