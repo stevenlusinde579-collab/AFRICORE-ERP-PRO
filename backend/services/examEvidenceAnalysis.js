@@ -132,7 +132,7 @@ const inferBloomLevel = (text) => {
         ["analysing", /\b(compare|contrast|distinguish|classify|examine|analyse|analyze|categorise|categorize|linganisha|ainisha)\b/i],
         ["applying", /\b(calculate|solve|apply|use|demonstrate|perform|compute|kokotoa|hesabu|tumia)\b/i],
         ["understanding", /\b(explain|describe|summarise|summarize|interpret|discuss|eleza|fafanua)\b/i],
-        ["remembering", /\b(define|state|list|name|identify|mention|recall|taja|orodhesha)\b/i],
+        ["remembering", /\b(define|state|list|name|identify|mention|recall|which of the following|which business|who is|what is|choose the correct|select the correct|taja|orodhesha)\b/i],
     ];
     const match = levels.find(([, pattern]) => pattern.test(source));
     if (!match) return { level: "unknown", confidence: 0, evidence: null };
@@ -207,7 +207,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
                 ? children.reduce((sum, child) => sum + child.marks, 0)
                 : null;
             const marks = explicitMark ?? childTotal;
-            const text = [part.text, ...children.map(child => child.text), ...options.map(option => option.text), ...evidence.map(item => item.text)].filter(Boolean).join("\n");
+            const text = [part.text, ...children.map(child => child.text), ...options.map(option => `${option.label}. ${option.text}`), ...evidence.map(item => item.text)].filter(Boolean).join("\n");
             const classification = classifyQuestion(text);
             const curriculum = inferCurriculumTopic({ questionText: text, subjectName: document?.subject || "", level: document?.declared_level || "" });
             const bloom = inferBloomLevel(text);
