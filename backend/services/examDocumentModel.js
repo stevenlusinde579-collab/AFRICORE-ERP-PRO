@@ -44,7 +44,8 @@ const makeEvidence = (text, page, line, kind) => ({
 
 export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) => {
     const source = String(text || "").replace(/\r/g, "\n");
-    const pages = source.split(/\f|---\s*(?:PDF\s+)?PAGE(?:\s+\d+)?(?:\s+BREAK)?\s*---|<PARSED TEXT (?:OF|FOR) PAGE:\s*\d+[^>]*>/i);
+    const pageParts = source.split(/\f|---\s*(?:PDF\s+)?PAGE(?:\s+\d+)?(?:\s+BREAK)?\s*---|<PARSED TEXT (?:OF|FOR) PAGE:\s*\d+[^>]*>/i);
+    const pages = pageParts.length > 1 && !pageParts[0].trim() ? pageParts.slice(1) : pageParts;
     const document = {
         schema_version: "2.0.0",
         subject: String(subject || "").trim() || null,
@@ -82,7 +83,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
         const lines = pageText.split("\n");
         document.pages.push({ page: pageIndex + 1, line_count: lines.length });
         lines.forEach((rawLine, lineIndex) => {
-            const line = rawLine.replace(/[\t ]+/g, " ").trim();
+            const line = rawLine.replace(/\t/g, " ").trim();
             if (!line) return;
             const evidence = makeEvidence(line, pageIndex + 1, lineIndex + 1, "pdf_text");
 
@@ -206,10 +207,12 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 const childValue = romanValue(label);
                 const isRomanSequenceSibling = parentValue != null && childValue === parentValue + 1;
                 const nested = Boolean(currentSubpart && /^[ivxlcdm]+$/.test(label) && !isRomanSequenceSibling);
+                const subpartContent = String(subpartMatch[3] || "");
+                const inlineMatchingOption = /^(.*?)\\s{2,}([A-I])[.)]\\s*(.+)$/.exec(subpartContent);
                 const part = {
                     id: nested ? currentSubpart.id + "-child-" + (currentSubpart.children.length + 1) : currentQuestion.id + "-part-" + (currentQuestion.subparts.length + 1),
                     printed_label: label,
-                    text: String(subpartMatch[3] || "").trim(),
+                    text: (inlineMatchingOption ? inlineMatchingOption[1] : subpartContent).trim(),
                     children: [],
                     evidence: [evidence],
                     mark_evidence: [],
@@ -221,6 +224,14 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                     currentQuestion.subparts.push(part);
                     currentSubpart = part;
                     currentNestedPart = null;
+                }
+                if (inlineMatchingOption) {
+                    const option = { label: inlineMatchingOption[2], text: inlineMatchingOption[3].trim(), evidence: [evidence] };
+                    currentQuestion.response_options = currentQuestion.response_options || [];
+                    currentQuestion.response_options.push(option);
+                    currentOption = option;
+                } else {
+                    currentOption = null;
                 }
                 return;
             }
