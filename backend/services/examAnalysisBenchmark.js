@@ -77,8 +77,8 @@ export const compareExamAnalysisToReference = ({ candidate, reference } = {}) =>
                 if (actualTopic && expectedTopic === actualTopic) topicsExact += 1;
             }
 
-            const expectedType = String(referenceQuestion.question_type || "").trim().toLowerCase();
-            const actualType = String(candidateQuestion.classification?.type ?? candidateQuestion.question_type ?? "").trim().toLowerCase();
+            const expectedType = normalizeQuestionType(referenceQuestion.question_type);
+            const actualType = normalizeQuestionType(candidateQuestion.classification?.type ?? candidateQuestion.question_type);
             if (expectedType) {
                 typesCompared += 1;
                 if (actualType && expectedType === actualType) typesExact += 1;
