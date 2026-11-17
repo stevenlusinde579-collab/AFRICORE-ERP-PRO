@@ -15,9 +15,9 @@ const MARK_PATTERNS = [
 ];
 
 const SELECTION_PATTERNS = [
-    /(?:answer|attempt|choose|select)\s+(?:any\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:out\s+of|from)\s+(\d+|\w+)/i,
-    /(?:answer|attempt|choose|select)\s+(?:any\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:questions?|items?)/i,
-    /(?:jibu|chagua)\s+(?:maswali\s+)?(\d+|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)/i,
+    /(?:answer|attempt|choose|select|chagua|jibu)\s+(?:any\s+)?(?:maswali\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s+(?:out\s+of|from|of the following|kati ya)\s+(\d+|\w+)/i,
+    /(?:answer|attempt|choose|select|chagua|jibu)\s+(?:any\s+)?(?:maswali\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s+(?:questions?|items?|maswali?)/i,
+    /(?:chagua|jibu)\s+(?:maswali\s+)?(\d+|moja|mawili|matatu|manne|matano|sita|saba|nane|tisa|kumi)\s+kati ya\s+(?:yafuatayo|yaliyo chini)/i,
 ];
 
 const NUMBER_WORDS = {
