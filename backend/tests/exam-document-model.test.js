@@ -339,3 +339,18 @@ test("keeps wrapped List A continuation under its item instead of appending it t
     assert.match(model.questions[0].subparts[0].text, /demanded at various prices by/);
     assert.doesNotMatch(model.questions[0].response_options[1].text, /demanded at various prices by/);
 });
+
+test("does not nest non-consecutive Roman subparts when PDF extraction omits item labels", () => {
+    const model = buildExamDocumentModel({
+        text: [
+            "SECTION A",
+            "1. For each item choose the correct answer.",
+            "(i) First item",
+            "(iv) Fourth item",
+            "(v) Fifth item",
+            "(vi) Sixth item",
+        ].join("\n"),
+    });
+    assert.deepEqual(model.questions[0].subparts.map(item => item.printed_label), ["i", "iv", "v", "vi"]);
+    assert.ok(model.questions[0].subparts.every(item => item.children.length === 0));
+});
