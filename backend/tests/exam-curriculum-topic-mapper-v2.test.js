@@ -26,3 +26,21 @@ test("keeps Chemistry plural acid concepts mapped to acids, bases and salts", ()
     });
     assert.equal(result.topic, "Acids, bases and salts");
 });
+
+test("maps Business Studies topics across Form One examination concepts", () => {
+    const cases = [
+        ["Identify the form of business known as sole proprietorship.", "Business ownership"],
+        ["Explain the four business processes: production, distribution, exchange and consumption.", "Business processes"],
+        ["State the four factors of production: land, labour, capital and entrepreneurship.", "Factors of production"],
+        ["Explain the importance of entrepreneurship in Tanzania.", "Entrepreneurship"],
+        ["Describe leadership, communication, networking and financial management skills.", "Entrepreneurial skills"],
+        ["Classify vaccines, cigarettes and public libraries into merit and demerit goods.", "Classification of goods"],
+        ["Explain the relationship between Business Studies, Mathematics, Music and Agriculture.", "Related disciplines"],
+    ];
+    for (const [questionText, expectedTopic] of cases) {
+        const result = inferCurriculumTopic({ questionText, subjectName: "Business Studies", level: "Form One" });
+        assert.equal(result.topic, expectedTopic, questionText);
+        assert.equal(result.curriculum_level, "ordinary_secondary");
+        assert.ok(result.topic_evidence);
+    }
+});
