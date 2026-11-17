@@ -9,7 +9,7 @@
 const QUESTION_HEADER = /^\s*(?:(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\s*(?:NO\.?|NUMBER)?\s*)?(\d{1,3}|[ivxlcdm]{1,8})\s*[.)\]:-]?\s*(.*)$/i;
 const SECTION_HEADER = /^\s*(?:SECTION|PART|SEHEMU)\s+([A-F]|[IVXLCDM]+|\d+)\b\s*[:.)-]?\s*(.*)$/i;
 const SUBPART_HEADER = /^\s*(?:\(\s*([a-z]|[ivxlcdm]+)\s*\)|([a-z]|[ivxlcdm]+)[.)])\s*(.*)$/i;
-const ADMIN_LINE = /^(?:answer all questions|answer any|answer (?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\s*\(\s*\d+\s*\))?\s+questions?\s+from this section|attempt all|attempt any|jibu maswali yote|majibu yote yaandikwe|zingatia usafi|kwa matumizi ya mtahini|namba ya swali|jumla\b|ukurasa wa \d+|write your (?:name|examination number)|do not open|this paper consists|this paper consist|section [a-f] carries|all writing must|cellular phones|non programmable calculator|all answers must|total marks?|maximum marks?|max[.]? marks?|paper total|end of (?:the )?examination)/i;
+const ADMIN_LINE = /^(?:answer all questions|answer any|answer (?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:\s*\(\s*\d+\s*\))?\s*questions?\s+from this section|attempt all|attempt any|jibu maswali yote|majibu yote yaandikwe|zingatia usafi|kwa matumizi ya mtahini|namba ya swali|jumla\b|ukurasa wa \d+|write your (?:name|examination number)|do not open|this paper consists|this paper consist|section [a-f] carries|all writing must|cellular phones|non programmable calculator|all answers must|total marks?|maximum marks?|max[.]? marks?|paper total|end of (?:the )?examination)/i;
 
 const romanValue = (value) => {
     const token = String(value || "").toUpperCase();
