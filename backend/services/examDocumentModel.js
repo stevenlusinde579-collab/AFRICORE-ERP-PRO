@@ -101,7 +101,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 return;
             }
 
-            const optionMatch = line.match(/^([A-I])[.)]\s+(.+)$/);
+            const optionMatch = line.match(/^([A-J])[.)]\s+(.+)$/);
             const currentPrompt = [currentQuestion?.text, currentSubpart?.text].filter(Boolean).join(" ");
             const isMatchingPool = /\b(match|matching|column|list A|list B|pair the following)\b/i.test(currentPrompt);
             const isMultipleChoicePool = /\b(choose|select|multiple choice|correct answer|following alternatives|which of the following)\b/i.test(currentPrompt);
@@ -244,13 +244,13 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             const inlineOptionContinuation = currentQuestion &&
-                /\\b(match|matching|column|list A|list B|pair the following)\\b/i.test(currentQuestion.text)
-                ? /^(.*?)\\s{2,}([A-J])[.)]\\s*(.+)$/.exec(line)
+                /\b(match|matching|column|list A|list B|pair the following)\b/i.test(currentQuestion.text)
+                ? /^(.*?)\s{2,}([A-J])[.)]\s*(.+)$/.exec(line)
                 : null;
             if (inlineOptionContinuation) {
                 const leftContinuation = inlineOptionContinuation[1].trim();
                 if (leftContinuation && currentSubpart) {
-                    currentSubpart.text = [currentSubpart.text, leftContinuation].filter(Boolean).join("\\n");
+                    currentSubpart.text = [currentSubpart.text, leftContinuation].filter(Boolean).join("\n");
                     currentSubpart.evidence.push(evidence);
                 }
                 const option = {
