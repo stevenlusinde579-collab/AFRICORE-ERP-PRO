@@ -382,7 +382,14 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
     }
 
     const totalMatch = String(sourceText || "").match(/\b(?:total\s+marks?|maximum\s+marks?|max\.?\s+marks?|paper\s+total)\s*[:=-]?\s*(\d+(?:\.\d+)?)/i);
-    const declaredTotal = totalMatch ? Number(totalMatch[1]) : null;
+    const sectionDeclaredTotals = sectionTotals
+        .map(item => item.declared_total)
+        .filter(Number.isFinite);
+    const declaredTotal = totalMatch
+        ? Number(totalMatch[1])
+        : (sectionTotals.length > 0 && sectionDeclaredTotals.length === sectionTotals.length
+            ? sectionDeclaredTotals.reduce((sum, value) => sum + value, 0)
+            : null);
     const knownQuestionMarks = questions.filter((item) => Number.isFinite(item.marks));
     const calculatedTotal = knownQuestionMarks.length === questions.length && questions.length
         ? knownQuestionMarks.reduce((sum, item) => sum + item.marks, 0)
