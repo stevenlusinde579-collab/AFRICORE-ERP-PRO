@@ -202,3 +202,101 @@ test("analyses each MCQ response item and preserves answer options in the V2 res
     assert.equal(result.questions[0].subparts[0].topic, "Business ownership");
     assert.equal(result.questions[0].subparts[0].bloom_level, "remembering");
 });
+
+test("infers objective item marks then distributes the remaining section marks", () => {
+    const document = buildExamDocumentModel({
+        level: "Form Three",
+        subject: "Commerce",
+        text: [
+            "SECTION A (16 MARKS)",
+            "1. Choose the correct answer.",
+            "i. Item one?",
+            "A. A",
+            "B. B",
+            "C. C",
+            "D. D",
+            "ii. Item two?",
+            "A. A",
+            "B. B",
+            "C. C",
+            "D. D",
+            "2. Match the following items in List A with List B.",
+            "i. First term",
+            "ii. Second term",
+            "iii. Third term",
+            "iv. Fourth term",
+            "v. Fifth term",
+            "vi. Sixth term",
+            "A. One",
+            "B. Two",
+            "C. Three",
+            "D. Four",
+            "E. Five",
+            "F. Six",
+            "SECTION B (54 MARKS)",
+            "Answer all questions",
+            "3. Explain the first topic.",
+            "4. Explain the second topic.",
+            "5. Explain the third topic.",
+            "6. Explain the fourth topic.",
+            "7. Explain the fifth topic.",
+            "8. Explain the sixth topic.",
+            "SECTION C (30 MARKS)",
+            "Answer any TWO questions",
+            "9. Explain topic nine.",
+            "10. Explain topic ten.",
+            "11. Explain topic eleven.",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    const q = result.questions;
+    assert.equal(q.find(item => item.question_number === 1).marks, 2);
+    assert.equal(q.find(item => item.question_number === 2).marks, 6);
+    assert.ok(q.filter(item => item.section === "B").every(item => item.marks === 9));
+    assert.ok(q.filter(item => item.section === "C").every(item => item.marks === 15));
+    assert.equal(result.totals.declared, 100);
+    assert.equal(result.totals.effective_calculated_total, 100);
+    assert.equal(result.quality.marks_coverage, 1);
+    assert.equal(result.diagnostics.some(item => item.code === "SECTION_MARKS_UNALLOCATED"), false);
+});
+
+test("preserves explicit marks before allocating the remaining section total", () => {
+    const document = buildExamDocumentModel({
+        text: [
+            "SECTION B (30 MARKS)",
+            "1. Explain the first topic. (10 marks)",
+            "2. Explain the second topic.",
+            "3. Explain the third topic.",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.equal(result.questions[0].marks, 10);
+    assert.equal(result.questions[1].marks, 10);
+    assert.equal(result.questions[2].marks, 10);
+    assert.equal(result.questions[0].marks_source, "explicit_question_evidence");
+    assert.equal(result.questions[1].marks_source, "inferred_from_section_structure");
+});
+
+test("allocates selective section marks by the number of questions learners must answer", () => {
+    const document = buildExamDocumentModel({
+        text: [
+            "SECTION C (30 MARKS)",
+            "Answer any two questions out of the following three.",
+            "9. Explain the first topic.",
+            "10. Explain the second topic.",
+            "11. Explain the third topic.",
+        ].join("\n"),
+    });
+    const result = analyzeExamEvidence({ document });
+    assert.ok(result.questions.every(item => item.marks === 15));
+    assert.ok(result.questions.every(item => item.marks_source === "inferred_from_selective_section_total"));
+    assert.equal(result.totals.effective_calculated_total, 30);
+    assert.equal(result.totals.calculated_from_explicit_evidence, null);
+});
+
+test("does not invent question marks when the paper has no printed section total", () => {
+    const document = buildExamDocumentModel({ text: "SECTION A\n1. Explain the concept.\n2. Describe the process." });
+    const result = analyzeExamEvidence({ document });
+    assert.ok(result.questions.every(item => item.marks == null));
+    assert.equal(result.diagnostics.some(item => item.code === "QUESTION_MARKS_INCOMPLETE"), true);
+});
