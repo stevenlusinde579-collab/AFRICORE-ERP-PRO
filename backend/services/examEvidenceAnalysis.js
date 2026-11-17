@@ -238,6 +238,7 @@ export const analyzeExamEvidence = ({ document, sourceText = "" } = {}) => {
         return {
             id: question.id,
             order: question.order,
+            question_number: question.question_number ?? null,
             printed_label: question.printed_label,
             section: question.section,
             text: question.text || "",
