@@ -129,11 +129,9 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             }
 
             const questionMatch = line.match(QUESTION_HEADER);
-            const currentPromptForBoundary = String(currentQuestion?.text || "");
-            const currentQuestionIsItemList = /\b(choose|select|match|matching|column|list A|list B|multiple choice|correct answer)\b/i.test(currentPromptForBoundary);
             const previousQuestionIsRoman = Boolean(currentQuestion && /^[IVXLCDM]+$/.test(currentQuestion.printed_label) && !currentSubpart);
             const isExplicitRomanQuestion = /^[IVXLCDM]{1,8}\s*[.)]/.test(line) &&
-                !currentQuestionIsItemList && (!currentQuestion || previousQuestionIsRoman);
+                (!currentQuestion || previousQuestionIsRoman);
             if (questionMatch && (/^(?:QUESTION|Q|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line) || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
                 const number = numberValue(questionMatch[1]);
                 const explicitLabel = /^(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line);
