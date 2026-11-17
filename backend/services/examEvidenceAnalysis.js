@@ -59,25 +59,32 @@ const uniqueEvidence = (items) => {
 
 const classifyQuestion = (text) => {
     const value = String(text || "").toLowerCase();
-    if (/\b(match the (?:following|items)|match items|column\s+[ab]|pair the following)\b/.test(value)) {
-        return { type: "matching", confidence: 0.88, reason: "Matching instruction detected in question text." };
+    if (/\b(match the (?:following|items|words)|match items|column\s+[ab]|pair the following)\b/.test(value) || /\boanisha\b/i.test(value)) {
+        return { type: "matching", confidence: 0.9, reason: "Matching instruction or pairing structure detected." };
     }
-    if (/\b(fill in the blanks?|complete the sentences?)\b/.test(value) || /_{2,}/.test(value)) {
-        return { type: "fill_in_the_blanks", confidence: 0.84, reason: "Blank-completion structure detected." };
+    if (/\b(fill in the blanks?|complete the sentences?|fill the gaps?)\b/.test(value) ||
+        /\b(jaza nafasi|jaza mapengo)\b/i.test(value) || /_{2,}/.test(value)) {
+        return { type: "fill_in_the_blanks", confidence: 0.86, reason: "Blank-completion structure detected." };
+    }
+    if (/\b(true or false|write true or false|kweli au si kweli)\b/i.test(value)) {
+        return { type: "true_false", confidence: 0.9, reason: "True/false response format detected." };
     }
     const labelledOptions = value.match(/(?:^|\n)\s*(?:\(?[a-d]\)|[a-d][.)])\s+\S[^\n]*/g) || [];
-    if (/\b(multiple choice|choose the correct answer|circle the correct|tick the correct)\b/.test(value) ||
+    if (/\b(multiple choice|choose the correct answer|circle the correct|tick the correct|chagua (?:herufi|jibu) (?:la )?jibu sahihi|chagua jibu sahihi)\b/i.test(value) ||
         labelledOptions.length >= 3) {
-        return { type: "multiple_choice", confidence: 0.82, reason: "Explicit choice instruction or at least three labelled answer options detected." };
+        return { type: "multiple_choice", confidence: 0.88, reason: "Choice instruction or labelled answer options detected." };
     }
-    if (/\b(experiment|laboratory|apparatus|specimen|draw and label|measure the|carry out an investigation|practical)\b/.test(value)) {
-        return { type: "practical", confidence: 0.78, reason: "Practical activity language detected." };
+    if (/\b(arrange .*order|put .*sequence|sequence the following|pangilia .*mfuatano)\b/i.test(value)) {
+        return { type: "sequencing", confidence: 0.86, reason: "Ordering or sequencing instruction detected." };
     }
-    if (/\b(essay|composition|write an essay|write a story)\b/.test(value)) {
-        return { type: "extended_response", confidence: 0.78, reason: "Extended writing instruction detected." };
+    if (/\b(experiment|laboratory|apparatus|specimen|draw and label|measure the|carry out an investigation|practical|chunguza|fanya jaribio)\b/i.test(value)) {
+        return { type: "practical", confidence: 0.8, reason: "Practical activity language detected." };
     }
-    if (/\b(calculate|solve|show that|work out|give reasons|explain|describe|state|define|list|identify)\b/.test(value)) {
-        return { type: "structured_response", confidence: 0.65, reason: "Structured response command detected." };
+    if (/\b(essay|composition|write an essay|write a story|andika insha|utungaji)\b/i.test(value)) {
+        return { type: "extended_response", confidence: 0.8, reason: "Extended writing instruction detected." };
+    }
+    if (/\b(calculate|solve|show that|work out|give reasons|explain|describe|state|define|list|identify|taja|eleza|fafanua|ainisha|linganisha|hesabu|kokotoa|onyesha|andika)\b/i.test(value)) {
+        return { type: "structured_response", confidence: 0.72, reason: "Structured response command detected." };
     }
     return { type: "unclassified", confidence: 0.25, reason: "No reliable question-type evidence found." };
 };
