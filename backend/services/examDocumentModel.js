@@ -113,6 +113,15 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
                 return;
             }
 
+            // Numbered lines before the first examination section belong to the
+            // paper instructions/header, not to the question list.
+            if (!currentSection && /^\d{1,3}\s*[.)\]:-]\s+/.test(line) &&
+                !/^(?:QUESTION|Q\.?|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line)) {
+                document.instructions.push({ text: line, evidence: [evidence], scope: "PAPER" });
+                document.header_evidence.push(evidence);
+                return;
+            }
+
             const questionMatch = line.match(QUESTION_HEADER);
             const isExplicitRomanQuestion = /^[IVXLCDM]{1,8}\s*[.)]/.test(line);
             if (questionMatch && (/^(?:QUESTION|Q|ACTIVITY|TASK|EXERCISE|ITEM)\b/i.test(line) || /^\s*\d{1,3}\s*[.)\]:-]/.test(line) || isExplicitRomanQuestion) && !ADMIN_LINE.test(questionMatch[2] || "")) {
