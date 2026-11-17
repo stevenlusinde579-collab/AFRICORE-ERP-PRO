@@ -9,7 +9,7 @@
 const QUESTION_HEADER = /^\s*(?:(?:QUESTION|Q(?:UESTION)?\.?|ACTIVITY|TASK|EXERCISE|ITEM)\s*(?:NO\.?|NUMBER)?\s*)?(\d{1,3}|[ivxlcdm]{1,8})\s*[.)\]:-]?\s*(.*)$/i;
 const SECTION_HEADER = /^\s*(?:SECTION|PART|SEHEMU)\s+([A-F]|[IVXLCDM]+|\d+)\b\s*[:.)-]?\s*(.*)$/i;
 const SUBPART_HEADER = /^\s*(?:\(\s*([a-z]|[ivxlcdm]+)\s*\)|([a-z]|[ivxlcdm]+)[.)])\s*(.*)$/i;
-const ADMIN_LINE = /^(?:answer all questions|answer any|attempt all|attempt any|jibu maswali yote|write your (?:name|examination number)|do not open|this paper consists|all answers must|total marks?|maximum marks?|max\\.? marks?|paper total|end of (?:the )?examination)/i;
+const ADMIN_LINE = /^(?:answer all questions|answer any|attempt all|attempt any|jibu maswali yote|majibu yote yaandikwe|zingatia usafi|kwa matumizi ya mtahini|namba ya swali|jumla\b|ukurasa wa \d+|write your (?:name|examination number)|do not open|this paper consists|all answers must|total marks?|maximum marks?|max[.]? marks?|paper total|end of (?:the )?examination)/i;
 
 const romanValue = (value) => {
     const token = String(value || "").toUpperCase();
@@ -55,6 +55,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
     let currentSection = null;
     let currentQuestion = null;
     let currentSubpart = null;
+    let currentNestedPart = null;
     let questionOrder = 0;
 
     const ensureSection = (name = "UNSECTIONED", title = "") => {
@@ -130,24 +131,37 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
             const subpartMatch = line.match(SUBPART_HEADER);
             if (subpartMatch && currentQuestion) {
                 const label = String(subpartMatch[1] || subpartMatch[2]).toLowerCase();
-                currentSubpart = {
-                    id: currentQuestion.id + "-part-" + (currentQuestion.subparts.length + 1),
+                const nested = Boolean(currentSubpart && /^[a-z]$/.test(currentSubpart.printed_label) && /^[ivxlcdm]+$/.test(label));
+                const part = {
+                    id: currentQuestion.id + "-part-" + (currentQuestion.subparts.length + 1) + (nested ? "-child-" + (currentSubpart.children.length + 1) : ""),
                     printed_label: label,
                     text: String(subpartMatch[3] || "").trim(),
+                    children: [],
                     evidence: [evidence],
                     mark_evidence: [],
                 };
-                currentQuestion.subparts.push(currentSubpart);
+                if (nested) {
+                    currentSubpart.children.push(part);
+                    currentNestedPart = part;
+                } else {
+                    currentQuestion.subparts.push(part);
+                    currentSubpart = part;
+                    currentNestedPart = null;
+                }
                 return;
             }
 
             if (ADMIN_LINE.test(line)) {
                 document.instructions.push({ text: line, evidence: [evidence], scope: currentSection?.name || "PAPER" });
                 currentSubpart = null;
+                currentNestedPart = null;
                 return;
             }
 
-            if (currentSubpart) {
+            if (currentNestedPart) {
+                currentNestedPart.text = [currentNestedPart.text, line].filter(Boolean).join("\\n");
+                currentNestedPart.evidence.push(evidence);
+            } else if (currentSubpart) {
                 currentSubpart.text = [currentSubpart.text, line].filter(Boolean).join("\n");
                 currentSubpart.evidence.push(evidence);
             } else if (currentQuestion) {
@@ -179,7 +193,7 @@ export const buildExamDocumentModel = ({ text, level = "", subject = "" } = {}) 
         section_count: document.sections.length,
         question_count: document.questions.length,
         instruction_count: document.instructions.length,
-        subpart_count: document.questions.reduce((sum, question) => sum + question.subparts.length, 0),
+        subpart_count: document.questions.reduce((sum, question) => sum + question.subparts.reduce((partSum, part) => partSum + 1 + (part.children?.length || 0), 0), 0),
     };
     return document;
 };
@@ -196,6 +210,9 @@ export const validateExamDocumentModel = (document) => {
         if (!question.text && !question.subparts?.length) warnings.push("Question " + question.id + " has no readable stem or subparts.");
         for (const part of question.subparts || []) {
             if (!part.evidence?.length) warnings.push("Subpart " + part.id + " has no source evidence.");
+            for (const child of part.children || []) {
+                if (!child.evidence?.length) warnings.push("Nested subpart " + child.id + " has no source evidence.");
+            }
         }
     }
     return { valid: errors.length === 0, errors, warnings };
