@@ -99,7 +99,6 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
         "parent",
         "student",
         "class teacher",
-        "teacher on duty",
         "matron",
         "patron",
         "security officer",
@@ -288,8 +287,7 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
         "deputy headmaster",
         "academic master",
         "subject teacher",
-        "class teacher",
-        "teacher on duty"
+        "class teacher"
       ]
     },
 
@@ -309,7 +307,6 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
         "parent",
         "student",
         "class teacher",
-        "teacher on duty",
         "matron",
         "patron",
         "security officer",
