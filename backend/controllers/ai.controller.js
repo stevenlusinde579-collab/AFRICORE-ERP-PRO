@@ -4,6 +4,7 @@ import { readPDF } from "../services/pdfReader.js";
 import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
 import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
+import { reserveGeminiAiSlot, updateGeminiReservationStatus } from "../services/aiUsageControlService.js";
 
 // ============================================================
 // AI ANALYSIS LOCKS
@@ -2026,6 +2027,16 @@ export const analyzePaper =
                 throw error;
             }
 
+            // Enforce tenant ownership independently of the client-supplied exam ID.
+            if (req.access?.isSuperAdmin !== true &&
+                Number(req.profile?.school_id) !== Number(exam.school_id)) {
+                return res.status(403).json({
+                    success: false,
+                    code: "SCHOOL_SCOPE_MISMATCH",
+                    message: "You cannot analyse an examination belonging to another school."
+                });
+            }
+
             if (
                 Number(
                     examSubject.exam_id
@@ -2321,6 +2332,34 @@ export const analyzePaper =
 
             examPaperId =
                 examPaper.id;
+
+            // Reserve a school/year upload slot before any Gemini request.
+            // Database transaction serializes requests per school policy.
+            const quota = await reserveGeminiAiSlot({
+                schoolId: exam.school_id,
+                examId,
+                examPaperId,
+                actorUserId: req.user?.id,
+            });
+
+            if (quota.allowed !== true) {
+                await updatePaperStatus(examPaperId, {
+                    status: "Blocked",
+                    aiStatus: "Blocked",
+                    errorMessage: quota.message || "AI usage limit reached. Contact the system administrator.",
+                });
+                return res.status(429).json({
+                    success: false,
+                    code: quota.code || "AI_USAGE_LIMIT_REACHED",
+                    message: quota.message || "AI usage limit reached. Contact the system administrator.",
+                    usage: quota,
+                });
+            }
+
+            console.log(
+                "AI USAGE QUOTA RESERVED:",
+                quota
+            );
 
             console.log(
                 "EXAM PAPER ID:",
@@ -3773,6 +3812,8 @@ export const analyzePaper =
                 usageAttempts: geminiUsageAttempts,
                 startedAt: aiStartedAt
             });
+
+            await updateGeminiReservationStatus({ schoolId: exam.school_id, examPaperId, status: "completed" });
 
             analysisPersistedAndVerified = true;
 
