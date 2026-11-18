@@ -5,6 +5,7 @@ import cors from "cors";
 
 import examRoutes from "./routes/examRoutes.js";
 import aiRoutes from "./routes/ai.routes.js";
+import aiUsageRoutes from "./routes/aiUsage.routes.js";
 import resultAnalysisRoutes from "./routes/resultAnalysisRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import teacherRoutes from "./routes/teacherRoutes.js";
@@ -82,6 +83,11 @@ app.use(
 app.use(
     "/api/ai",
     aiRoutes
+);
+
+app.use(
+    "/api/ai-usage",
+    aiUsageRoutes
 );
 
 
