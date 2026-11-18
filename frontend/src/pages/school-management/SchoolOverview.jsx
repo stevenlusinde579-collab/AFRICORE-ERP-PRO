@@ -223,7 +223,8 @@ export default function SchoolOverview() {
                 ))}
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">\n                <h2 className="font-bold text-slate-900">Maelezo ya hesabu</h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="font-bold text-slate-900">Maelezo ya hesabu</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                     Jumla ya watumiaji wanaotumika inahesabiwa kwa kujumlisha wanafunzi wenye status na student_status zote mbili Active, pamoja na Staff na Non-Staff wenye status Active. Rekodi zisizo hai zinaonyeshwa kando na hazifutwi. Kwa Staff na Non-Staff, status iliyoachwa wazi huhesabiwa kama Active ili kuendana na orodha ya wafanyakazi. Takwimu zinahusu shule hii pekee na zinaweza kusasishwa kwa kubonyeza Refresh.
                 </p>
