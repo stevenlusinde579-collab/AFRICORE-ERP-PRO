@@ -18,6 +18,8 @@ const {
 
 schoolId,
 
+activeAcademicYearId,
+
 schoolName,
 
 registrationNumber,
@@ -131,6 +133,8 @@ error:tableError
 
 
 id,
+
+academic_year_id,
 
 
 day_name,
