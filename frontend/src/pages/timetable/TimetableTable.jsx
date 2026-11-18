@@ -178,15 +178,24 @@ last_name
 `)
 
 
-.eq("school_id", Number(schoolId))\n.order("id");
+.eq("school_id", Number(schoolId))
+.order("id");
 
 
 
 
 
-const levelTimetable = (levelTimetable || []).filter((item) =>\n    item.classes?.academic_level === academicLevel\n);\n\nconsole.log("TIMETABLE:",levelTimetable);
+const levelTimetable = (tableData || []).filter((item) =>
+    item.classes?.academic_level === academicLevel
+);
 
-console.log("ERROR:",tableError);\n\nif (tableError) {\n    console.error("TIMETABLE LOAD ERROR:", tableError);\n}
+console.log("TIMETABLE:",levelTimetable);
+
+console.log("ERROR:",tableError);
+
+if (tableError) {
+    console.error("TIMETABLE LOAD ERROR:", tableError);
+}
 
 
 
