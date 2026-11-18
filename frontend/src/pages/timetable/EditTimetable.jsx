@@ -144,7 +144,8 @@ const {data:classData}=await supabase
 
 
 
-const currentClassLevel = (classData || []).find((classItem) => Number(classItem.id) === Number(item.class_id))?.academic_level || "";\nsetClasses((classData || []).filter((classItem) => classItem.academic_level === currentClassLevel));
+const currentClassLevel = (classData || []).find((classItem) => Number(classItem.id) === Number(item.class_id))?.academic_level || "";
+setClasses((classData || []).filter((classItem) => classItem.academic_level === currentClassLevel));
 
 
 
