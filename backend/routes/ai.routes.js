@@ -1,4 +1,5 @@
 import express from "express";
+import { authenticateUser } from "../middleware/authMiddleware.js";
 import multer from "multer";
 
 import {
@@ -38,6 +39,8 @@ router.get(
 // ============================================================
 // AI ANALYSIS — EXAM SUBJECT
 // ============================================================
+
+router.use(authenticateUser);
 
 router.get(
     "/analysis/:examId/:examSubjectId",

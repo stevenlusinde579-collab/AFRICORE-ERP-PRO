@@ -122,6 +122,13 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
       roles: ["super admin"],
       superAdminOnly: true
     },
+    {
+      name: "AI Usage Monitoring",
+      path: "/system/ai-usage",
+      icon: <FaRobot />,
+      roles: ["super admin"],
+      superAdminOnly: true
+    },
 
     {
       name: superAdmin ? "Add Headmaster" : "Staff & Non-Staff",

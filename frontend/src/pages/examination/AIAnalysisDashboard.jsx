@@ -1030,12 +1030,18 @@ const selectedExamSubjectId =
                         }
                     }
 
+                    const { data: authSessionData, error: authSessionError } = await supabase.auth.getSession();
+                    if (authSessionError || !authSessionData?.session?.access_token) {
+                        throw new Error("Your login session could not be verified. Please sign in again.");
+                    }
+
                     const response = await axios.get(
                         `${API_URL}/ai/analysis/${examId}/${normalizedSubjectId}`,
                         {
                             params: { _t: Date.now() },
                             timeout: 30000,
                             headers: {
+                                Authorization: `Bearer ${authSessionData.session.access_token}`,
                                 "Cache-Control": "no-cache",
                                 Pragma: "no-cache",
                             },
@@ -1400,6 +1406,11 @@ try {
                         );
                     }
 
+                    const { data: uploadSessionData, error: uploadSessionError } = await supabase.auth.getSession();
+                    if (uploadSessionError || !uploadSessionData?.session?.access_token) {
+                        throw new Error("Your login session could not be verified. Please sign in again.");
+                    }
+
                     const response =
                         await axios.post(
                             `${API_URL}/ai/analyze-paper`,
@@ -1411,6 +1422,7 @@ try {
                                     1000,
 
                                 headers: {
+                                    Authorization: `Bearer ${uploadSessionData.session.access_token}`,
                                     "Content-Type":
                                         "multipart/form-data",
                                 },

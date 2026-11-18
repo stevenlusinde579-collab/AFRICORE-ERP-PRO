@@ -744,11 +744,19 @@ formData.append(
             // DO NOT SET Content-Type MANUALLY.
             // Browser/Axios will create the multipart boundary.
 
+            const { data: authSessionData, error: authSessionError } = await supabase.auth.getSession();
+            if (authSessionError || !authSessionData?.session?.access_token) {
+                throw new Error("Your login session could not be verified. Please sign in again.");
+            }
+
             const aiResponse =
                 await axios.post(
                     `${API_URL}/ai/analyze-paper`,
                     formData,
                     {
+                        headers: {
+                            Authorization: `Bearer ${authSessionData.session.access_token}`,
+                        },
                         maxContentLength:
                             Infinity,
 

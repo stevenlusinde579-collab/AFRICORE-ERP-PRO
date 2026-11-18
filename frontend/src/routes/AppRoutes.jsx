@@ -27,6 +27,7 @@ import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
 /* SCHOOL MANAGEMENT */
 import SchoolManagement from "../pages/school-management/SchoolManagement";
+import AIUsageMonitoring from "../pages/school-management/AIUsageMonitoring";
 import SchoolOverview from "../pages/school-management/SchoolOverview";
 import AddHeadmaster from "../pages/school-management/AddHeadmaster";
 import HeadmasterProfile from "../pages/school-management/HeadmasterProfile";
@@ -342,6 +343,10 @@ export default function AppRoutes() {
                     <Route
                         path="school-management"
                         element={<SchoolManagement />}
+                    />
+                    <Route
+                        path="system/ai-usage"
+                        element={<AIUsageMonitoring />}
                     />
                 </Route>
 
