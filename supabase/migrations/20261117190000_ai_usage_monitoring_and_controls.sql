@@ -121,6 +121,22 @@ begin
       and usage_year = v_year
       and exam_paper_id = p_exam_paper_id;
 
+    -- Ensure the paper and exam really belong to the school passed by the backend.
+    if not exists (
+        select 1
+        from public.exam_papers ep
+        join public.exams e on e.id = ep.exam_id
+        where ep.id = p_exam_paper_id
+          and ep.exam_id = p_exam_id
+          and e.school_id = p_school_id
+    ) then
+        return jsonb_build_object(
+            'allowed', false,
+            'code', 'USAGE_CONTEXT_MISMATCH',
+            'message', 'The examination paper does not belong to this school and examination.'
+        );
+    end if;
+
     if not v_policy.is_enabled then
         return jsonb_build_object(
             'allowed', false,
