@@ -51,31 +51,15 @@ export const updateAiUsagePolicy = async (req, res) => {
             return res.status(400).json({ success: false, message: "Provide valid AI status, annual upload limit and exams-per-upload limit." });
         }
 
-        const { data: oldPolicy, error: readError } = await supabase
-            .from("gemini_ai_usage_policies").select("*").eq("school_id", schoolId).maybeSingle();
-        if (readError) throw readError;
-
-        const values = {
-            school_id: schoolId,
-            is_enabled,
-            annual_upload_limit: Number(annual_upload_limit),
-            exams_per_upload_limit: Number(exams_per_upload_limit),
-            admin_note: String(admin_note || "").trim().slice(0, 1000) || null,
-            updated_by: req.user.id,
-            updated_at: new Date().toISOString(),
-        };
-        const { data, error } = await supabase
-            .from("gemini_ai_usage_policies").upsert(values, { onConflict: "school_id" }).select("*").single();
-        if (error) throw error;
-
-        const { error: auditError } = await supabase.from("gemini_ai_usage_policy_audit").insert({
-            school_id: schoolId,
-            actor_user_id: req.user.id,
-            action: "policy_updated",
-            old_values: oldPolicy || null,
-            new_values: data,
+        const { data, error } = await supabase.rpc("set_gemini_ai_usage_policy", {
+            p_school_id: schoolId,
+            p_is_enabled: is_enabled,
+            p_annual_upload_limit: Number(annual_upload_limit),
+            p_exams_per_upload_limit: Number(exams_per_upload_limit),
+            p_admin_note: String(admin_note || "").trim().slice(0, 1000) || null,
+            p_actor_user_id: req.user.id,
         });
-        if (auditError) console.error("AI USAGE POLICY AUDIT FAILED:", auditError.message);
+        if (error) throw error;
 
         return res.json({ success: true, message: "AI usage policy updated.", policy: data });
     } catch (error) {
