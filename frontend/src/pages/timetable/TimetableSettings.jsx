@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../../services/supabase";
+import { supabase } from "../../services/supabase";\nimport { useSchool } from "../../context/SchoolContext";
 
 
 function TimetableSettings(){
 
 
-const schoolId = 1;
+const { schoolId, loading: schoolLoading } = useSchool();
 
 
 const [form,setForm]=useState({
@@ -36,7 +36,7 @@ loadSettings();
 
 
 
-const loadSettings=async()=>{
+const loadSettings=async()=>{\nif (!schoolId) return;
 
 
 const {data,error}=await supabase
