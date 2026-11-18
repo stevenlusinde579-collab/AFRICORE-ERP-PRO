@@ -74,21 +74,76 @@ export const getSchoolOverview = async (req, res) => {
             return res.status(404).json({ success: false, message: "School was not found." });
         }
 
-        const [studentsResult, staffResult, nonStaffResult] = await Promise.all([
+        // Keep the school overview aligned with the operational lists:
+        // students are active only when BOTH status fields are Active;
+        // teacher records with a missing status are treated as Active because
+        // the staff directory displays a missing status as "Active".
+        const [
+            studentsTotalResult,
+            studentsActiveResult,
+            staffTotalResult,
+            staffActiveResult,
+            nonStaffTotalResult,
+            nonStaffActiveResult
+        ] = await Promise.all([
             supabase.from("students").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
-            supabase.from("teachers").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("staff_type", "Staff"),
-            supabase.from("teachers").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("staff_type", "Non-Staff")
+            supabase.from("students").select("id", { count: "exact", head: true })
+                .eq("school_id", schoolId).eq("status", "Active").eq("student_status", "Active"),
+            supabase.from("teachers").select("id", { count: "exact", head: true })
+                .eq("school_id", schoolId).eq("staff_type", "Staff"),
+            supabase.from("teachers").select("id", { count: "exact", head: true })
+                .eq("school_id", schoolId).eq("staff_type", "Staff")
+                .or("status.eq.Active,status.is.null"),
+            supabase.from("teachers").select("id", { count: "exact", head: true })
+                .eq("school_id", schoolId).eq("staff_type", "Non-Staff"),
+            supabase.from("teachers").select("id", { count: "exact", head: true })
+                .eq("school_id", schoolId).eq("staff_type", "Non-Staff")
+                .or("status.eq.Active,status.is.null")
         ]);
-        const queryError = [studentsResult.error, staffResult.error, nonStaffResult.error].find(Boolean);
+        const queryError = [
+            studentsTotalResult.error,
+            studentsActiveResult.error,
+            staffTotalResult.error,
+            staffActiveResult.error,
+            nonStaffTotalResult.error,
+            nonStaffActiveResult.error
+        ].find(Boolean);
         if (queryError) throw queryError;
 
-        const students = studentsResult.count || 0;
-        const staff = staffResult.count || 0;
-        const nonStaff = nonStaffResult.count || 0;
+        const totalStudents = studentsTotalResult.count || 0;
+        const activeStudents = studentsActiveResult.count || 0;
+        const totalStaff = staffTotalResult.count || 0;
+        const activeStaff = staffActiveResult.count || 0;
+        const totalNonStaff = nonStaffTotalResult.count || 0;
+        const activeNonStaff = nonStaffActiveResult.count || 0;
+
+        const inactiveStudents = Math.max(0, totalStudents - activeStudents);
+        const inactiveStaff = Math.max(0, totalStaff - activeStaff);
+        const inactiveNonStaff = Math.max(0, totalNonStaff - activeNonStaff);
+        const totalUsers = activeStudents + activeStaff + activeNonStaff;
+        const totalRegisteredUsers = totalStudents + totalStaff + totalNonStaff;
+
         return res.json({
             success: true,
             school,
-            overview: { students, staff, nonStaff, totalUsers: students + staff + nonStaff }
+            overview: {
+                // Backward-compatible fields now represent ACTIVE users only.
+                students: activeStudents,
+                staff: activeStaff,
+                nonStaff: activeNonStaff,
+                totalUsers,
+                activeStudents,
+                inactiveStudents,
+                totalStudents,
+                activeStaff,
+                inactiveStaff,
+                totalStaff,
+                activeNonStaff,
+                inactiveNonStaff,
+                totalNonStaff,
+                totalRegisteredUsers,
+                inactiveUsers: inactiveStudents + inactiveStaff + inactiveNonStaff
+            }
         });
     } catch (error) {
         console.error("SCHOOL MANAGEMENT - SCHOOL OVERVIEW ERROR:", error);
