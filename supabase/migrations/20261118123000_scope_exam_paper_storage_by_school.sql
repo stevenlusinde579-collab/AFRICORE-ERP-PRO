@@ -1,13 +1,14 @@
 begin;
 
--- Exam PDFs are stored as private objects. Legacy upload paths are not
--- consistently keyed by exam_id, so use the Storage owner recorded by
--- Supabase and resolve that owner's current school from public.profiles.
--- This preserves access for files with a valid owner/profile mapping while
--- denying orphaned ownerless objects until they are safely reconciled.
+-- Exam PDFs are private objects. Current upload code stores files as:
+--   <exam_id>/<exam_subject_id>/<filename>.pdf
+-- Older objects may have legacy paths, so read access accepts either a
+-- verified exam-to-school relationship or a verified uploader profile.
+-- New uploads must use the current exam-id path and the authenticated
+-- uploader must belong to that same school.
 --
--- Existing permissive bucket policies are intentionally retained for
--- compatibility; these restrictive policies are ANDed with them.
+-- These restrictive policies are ANDed with the existing permissive
+-- bucket policies; they do not grant access by themselves.
 
 drop policy if exists af_score_exam_papers_school_select
   on storage.objects;
@@ -19,6 +20,12 @@ create policy af_score_exam_papers_school_select
   using (
     bucket_id <> 'exam-papers'
     or public.is_current_user_super_admin()
+    or exists (
+      select 1
+      from public.exams e
+      where e.id::text = split_part(storage.objects.name, '/', 1)
+        and e.school_id = public.get_current_user_school_id()
+    )
     or exists (
       select 1
       from public.profiles owner_profile
@@ -41,9 +48,12 @@ create policy af_score_exam_papers_school_insert
       storage.objects.owner_id = (select auth.uid())::text
       and exists (
         select 1
-        from public.profiles owner_profile
-        where owner_profile.id = (select auth.uid())
-          and owner_profile.school_id = public.get_current_user_school_id()
+        from public.profiles uploader
+        join public.exams e
+          on e.id::text = split_part(storage.objects.name, '/', 1)
+        where uploader.id = (select auth.uid())
+          and uploader.school_id = public.get_current_user_school_id()
+          and e.school_id = uploader.school_id
       )
     )
   );
@@ -60,6 +70,12 @@ create policy af_score_exam_papers_school_update
     or public.is_current_user_super_admin()
     or exists (
       select 1
+      from public.exams e
+      where e.id::text = split_part(storage.objects.name, '/', 1)
+        and e.school_id = public.get_current_user_school_id()
+    )
+    or exists (
+      select 1
       from public.profiles owner_profile
       where owner_profile.id::text = storage.objects.owner_id
         and owner_profile.school_id = public.get_current_user_school_id()
@@ -72,9 +88,12 @@ create policy af_score_exam_papers_school_update
       storage.objects.owner_id = (select auth.uid())::text
       and exists (
         select 1
-        from public.profiles owner_profile
-        where owner_profile.id = (select auth.uid())
-          and owner_profile.school_id = public.get_current_user_school_id()
+        from public.profiles uploader
+        join public.exams e
+          on e.id::text = split_part(storage.objects.name, '/', 1)
+        where uploader.id = (select auth.uid())
+          and uploader.school_id = public.get_current_user_school_id()
+          and e.school_id = uploader.school_id
       )
     )
   );
@@ -89,6 +108,12 @@ create policy af_score_exam_papers_school_delete
   using (
     bucket_id <> 'exam-papers'
     or public.is_current_user_super_admin()
+    or exists (
+      select 1
+      from public.exams e
+      where e.id::text = split_part(storage.objects.name, '/', 1)
+        and e.school_id = public.get_current_user_school_id()
+    )
     or exists (
       select 1
       from public.profiles owner_profile
