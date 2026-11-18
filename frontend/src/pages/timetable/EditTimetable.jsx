@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../services/supabase";
+import { useSchool } from "../../context/SchoolContext";
 
 
 function EditTimetable(){
@@ -8,6 +9,7 @@ function EditTimetable(){
 const {id}=useParams();
 
 const navigate=useNavigate();
+const { schoolId, loading: schoolLoading } = useSchool();
 
 
 const [classes,setClasses]=useState([]);
@@ -51,10 +53,8 @@ session:""
 
 
 useEffect(()=>{
-
-loadData();
-
-},[]);
+if (!schoolLoading && schoolId) loadData();
+},[schoolLoading,schoolId,id]);
 
 
 
@@ -77,7 +77,7 @@ const {data:item,error}=await supabase
 .select("*")
 
 .eq("id",id)
-
+.eq("school_id", Number(schoolId))
 .single();
 
 
@@ -133,6 +133,8 @@ const {data:classData}=await supabase
 .from("classes")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .eq("is_active", true)
 
@@ -200,6 +202,8 @@ const {data:teacherData}=await supabase
 .from("teachers")
 
 .select("*")
+
+.eq("school_id", Number(schoolId))
 
 .order("first_name");
 
@@ -296,7 +300,8 @@ session:form.session
 
 })
 
-.eq("id",id);
+.eq("id",id)
+.eq("school_id", Number(schoolId));
 
 
 
