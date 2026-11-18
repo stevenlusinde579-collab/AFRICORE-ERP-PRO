@@ -1861,6 +1861,8 @@ export const analyzePaper =
         let analysisPersistedAndVerified =
             false;
 
+        let analysisSchoolId = null;
+
         try {
             if (
                 !Number.isInteger(
@@ -2011,6 +2013,8 @@ export const analyzePaper =
 
             const exam =
                 examResult.data;
+
+            analysisSchoolId = Number(exam.school_id);
 
             if (!exam) {
                 const error =
@@ -4030,6 +4034,13 @@ export const analyzePaper =
                 }
 
                 try {
+                    if (analysisSchoolId) {
+                        await updateGeminiReservationStatus({
+                            schoolId: analysisSchoolId,
+                            examPaperId,
+                            status: "failed",
+                        });
+                    }
                     await updatePaperStatus(
                         examPaperId,
                         {
