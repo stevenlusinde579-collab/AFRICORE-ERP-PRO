@@ -4,7 +4,7 @@ import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 
 
-function TimetableTable(){
+function TimetableTable({ academicLevel }){
 
 
 const navigate = useNavigate();
@@ -71,7 +71,7 @@ loadTimetable();
 
 }
 
-},[schoolLoading,schoolId]);
+},[schoolLoading,schoolId,academicLevel]);
 
 
 
@@ -178,15 +178,15 @@ last_name
 `)
 
 
-.order("id");
+.eq("school_id", Number(schoolId))\n.order("id");
 
 
 
 
 
-console.log("TIMETABLE:",tableData);
+const levelTimetable = (levelTimetable || []).filter((item) =>\n    item.classes?.academic_level === academicLevel\n);\n\nconsole.log("TIMETABLE:",levelTimetable);
 
-console.log("ERROR:",tableError);
+console.log("ERROR:",tableError);\n\nif (tableError) {\n    console.error("TIMETABLE LOAD ERROR:", tableError);\n}
 
 
 
@@ -344,7 +344,7 @@ console.log("SCHOOL FROM SCHOOL CONTEXT:",schoolData);
 
 
 
-setTimetable(tableData || []);
+setTimetable(levelTimetable || []);
 
 setSettings(settingData);
 
@@ -911,7 +911,7 @@ Email: ${email}
 
 <h3 style="margin-top:15px;">
 
-CLASS TIMETABLE
+${String(academicLevel || "").toUpperCase()} CLASS TIMETABLE
 
 </h3>
 
