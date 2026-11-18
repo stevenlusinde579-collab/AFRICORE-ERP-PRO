@@ -186,7 +186,9 @@ last_name
 
 
 const levelTimetable = (tableData || []).filter((item) =>
-    item.classes?.academic_level === academicLevel
+    item.classes?.academic_level === academicLevel &&
+    (!activeAcademicYearId || !item.academic_year_id ||
+        Number(item.academic_year_id) === Number(activeAcademicYearId))
 );
 
 console.log("TIMETABLE:",levelTimetable);
