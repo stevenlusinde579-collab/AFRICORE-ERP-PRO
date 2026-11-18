@@ -375,3 +375,63 @@ revoke all on function public.get_ai_usage_admin_overview(integer) from public, 
 revoke all on function public.get_ai_usage_school_detail(bigint,integer) from public, anon, authenticated;
 grant execute on function public.get_ai_usage_admin_overview(integer) to service_role;
 grant execute on function public.get_ai_usage_school_detail(bigint,integer) to service_role;
+
+
+-- Apply policy changes and audit record atomically.
+create or replace function public.set_gemini_ai_usage_policy(
+    p_school_id bigint,
+    p_is_enabled boolean,
+    p_annual_upload_limit integer,
+    p_exams_per_upload_limit integer,
+    p_admin_note text,
+    p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_old public.gemini_ai_usage_policies%rowtype;
+    v_new public.gemini_ai_usage_policies%rowtype;
+begin
+    if p_school_id is null or p_school_id <= 0
+       or p_is_enabled is null
+       or p_annual_upload_limit is null or p_annual_upload_limit < 0 or p_annual_upload_limit > 10000
+       or p_exams_per_upload_limit is null or p_exams_per_upload_limit < 0 or p_exams_per_upload_limit > 1000 then
+        raise exception 'Invalid AI usage policy values';
+    end if;
+
+    select * into v_old from public.gemini_ai_usage_policies
+    where school_id = p_school_id for update;
+
+    insert into public.gemini_ai_usage_policies
+        (school_id, is_enabled, annual_upload_limit, exams_per_upload_limit, admin_note, updated_by, updated_at)
+    values
+        (p_school_id, p_is_enabled, p_annual_upload_limit, p_exams_per_upload_limit,
+         nullif(left(trim(coalesce(p_admin_note,'')),1000),''), p_actor_user_id, now())
+    on conflict (school_id) do update set
+        is_enabled = excluded.is_enabled,
+        annual_upload_limit = excluded.annual_upload_limit,
+        exams_per_upload_limit = excluded.exams_per_upload_limit,
+        admin_note = excluded.admin_note,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+    returning * into v_new;
+
+    insert into public.gemini_ai_usage_policy_audit
+        (school_id, actor_user_id, action, old_values, new_values)
+    values (
+        p_school_id,
+        p_actor_user_id,
+        case when v_old.school_id is null then 'policy_created' else 'policy_updated' end,
+        case when v_old.school_id is null then null else to_jsonb(v_old) end,
+        to_jsonb(v_new)
+    );
+
+    return to_jsonb(v_new);
+end;
+$$;
+
+revoke all on function public.set_gemini_ai_usage_policy(bigint,boolean,integer,integer,text,uuid) from public, anon, authenticated;
+grant execute on function public.set_gemini_ai_usage_policy(bigint,boolean,integer,integer,text,uuid) to service_role;
