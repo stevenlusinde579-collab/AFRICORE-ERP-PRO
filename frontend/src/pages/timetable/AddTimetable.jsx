@@ -148,10 +148,9 @@ function AddTimetable() {
 
         const { data: teacherBusy, error: teacherCheckError } = await supabase
             .from("class_timetables")
-            .select("id")
+            .select("id, period_id, start_time, end_time")
             .eq("school_id", Number(schoolId))
             .eq("teacher_id", Number(form.teacher_id))
-            .eq("period_id", Number(form.period_id))
             .eq("day_name", form.day_name);
 
         if (teacherCheckError) {
@@ -160,8 +159,24 @@ function AddTimetable() {
             return;
         }
 
-        if (teacherBusy?.length) {
-            setMessage("This teacher is already assigned to another class at this time.");
+        const toMinutes = (value) => {
+            if (!value) return null;
+            const [hours, minutes] = String(value).slice(0, 5).split(":").map(Number);
+            return (hours * 60) + minutes;
+        };
+        const newStart = toMinutes(form.start_time);
+        const newEnd = toMinutes(form.end_time);
+        const hasTeacherConflict = (teacherBusy || []).some((item) => {
+            const busyStart = toMinutes(item.start_time);
+            const busyEnd = toMinutes(item.end_time);
+            if (newStart !== null && newEnd !== null && busyStart !== null && busyEnd !== null) {
+                return newStart < busyEnd && newEnd > busyStart;
+            }
+            return Number(item.period_id) === Number(form.period_id);
+        });
+
+        if (hasTeacherConflict) {
+            setMessage("This teacher is already assigned to another class during an overlapping time.");
             setLoading(false);
             return;
         }
