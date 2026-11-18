@@ -26,7 +26,18 @@ export default function SchoolOverview() {
         students: 0,
         staff: 0,
         nonStaff: 0,
-        totalUsers: 0
+        totalUsers: 0,
+        totalStudents: 0,
+        activeStudents: 0,
+        inactiveStudents: 0,
+        activeStaff: 0,
+        inactiveStaff: 0,
+        totalStaff: 0,
+        activeNonStaff: 0,
+        inactiveNonStaff: 0,
+        totalNonStaff: 0,
+        totalRegisteredUsers: 0,
+        inactiveUsers: 0
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -61,25 +72,46 @@ export default function SchoolOverview() {
 
     const cards = [
         {
-            label: "Wanafunzi",
-            value: overview.students,
-            description: "Jumla ya wanafunzi waliosajiliwa",
+            label: "Wanafunzi hai",
+            value: overview.activeStudents ?? overview.students,
+            description: "Wanafunzi wenye status Active na student_status Active",
             icon: <MdSchool />,
             iconClass: "bg-blue-50 text-blue-700"
         },
         {
-            label: "Staff",
-            value: overview.staff,
-            description: "Watumishi wenye aina ya Staff",
+            label: "Wanafunzi wasio hai",
+            value: overview.inactiveStudents,
+            description: "Rekodi za wanafunzi zisizo Active",
+            icon: <MdSchool />,
+            iconClass: "bg-rose-50 text-rose-700"
+        },
+        {
+            label: "Staff hai",
+            value: overview.activeStaff ?? overview.staff,
+            description: "Staff wenye status Active",
             icon: <MdWork />,
             iconClass: "bg-emerald-50 text-emerald-700"
         },
         {
-            label: "Non-Staff",
-            value: overview.nonStaff,
-            description: "Watumishi wenye aina ya Non-Staff",
+            label: "Staff wasio hai",
+            value: overview.inactiveStaff,
+            description: "Staff wenye status isiyo Active",
+            icon: <MdWork />,
+            iconClass: "bg-rose-50 text-rose-700"
+        },
+        {
+            label: "Non-Staff hai",
+            value: overview.activeNonStaff ?? overview.nonStaff,
+            description: "Non-Staff wenye status Active",
             icon: <MdGroups />,
             iconClass: "bg-amber-50 text-amber-700"
+        },
+        {
+            label: "Non-Staff wasio hai",
+            value: overview.inactiveNonStaff,
+            description: "Non-Staff wenye status isiyo Active",
+            icon: <MdGroups />,
+            iconClass: "bg-rose-50 text-rose-700"
         }
     ];
 
@@ -172,7 +204,9 @@ export default function SchoolOverview() {
                         </div>
                         <span className="rounded-2xl bg-indigo-100 p-3 text-2xl text-indigo-800"><MdPeople /></span>
                     </div>
-                    <p className="mt-3 text-xs text-indigo-700">Wanafunzi + Staff + Non-Staff</p>
+                    <p className="mt-3 text-xs text-indigo-700">Watumiaji hai pekee (wanafunzi + Staff + Non-Staff)</p>
+                    <p className="mt-1 text-xs text-slate-500">Jumla ya rekodi zote: {loading ? "—" : numberFormat(overview.totalRegisteredUsers)}</p>
+                    <p className="mt-1 text-xs text-rose-600">Wasio hai: {loading ? "—" : numberFormat(overview.inactiveUsers)}</p>
                 </article>
             </section>
 
@@ -189,9 +223,10 @@ export default function SchoolOverview() {
                 ))}
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">\n                <h2 className="font-bold text-slate-900">Maelezo ya hesabu</h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="font-bold text-slate-900">Maelezo ya hesabu</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Jumla ya watumiaji inahesabiwa kwa kujumlisha idadi ya wanafunzi, Staff na Non-Staff wa shule hii pekee. Takwimu hupakiwa kutoka kwenye rekodi za shule husika na zinaweza kusasishwa kwa kubonyeza Refresh.
+                    Jumla ya watumiaji wanaotumika inahesabiwa kwa kujumlisha wanafunzi wenye status na student_status zote mbili Active, pamoja na Staff na Non-Staff wenye status Active. Rekodi zisizo hai zinaonyeshwa kando na hazifutwi. Kwa Staff na Non-Staff, status iliyoachwa wazi huhesabiwa kama Active ili kuendana na orodha ya wafanyakazi. Takwimu zinahusu shule hii pekee na zinaweza kusasishwa kwa kubonyeza Refresh.
                 </p>
                 {school && (
                     <div className="mt-4">
