@@ -249,7 +249,7 @@ cost_totals as (
            coalesce(sum(l.total_tokens),0)::bigint as total_tokens,
            coalesce(sum(l.prompt_tokens),0)::bigint as input_tokens,
            coalesce(sum(coalesce(l.candidates_tokens,0) + coalesce(l.thoughts_tokens,0)),0)::bigint as output_tokens,
-           coalesce(sum(l.estimated_cost_usd),0)::numeric as estimated_cost_usd,
+           case when bool_or(l.estimated_cost_usd is null) then null else coalesce(sum(l.estimated_cost_usd),0)::numeric end as estimated_cost_usd,
            case when bool_or(l.estimated_cost_tzs is null) then null else coalesce(sum(l.estimated_cost_tzs),0)::numeric end as estimated_cost_tzs,
            count(*) filter (where l.pricing_status <> 'estimated')::integer as unpriced_analyses,
            max(l.created_at) as last_analysis_at
@@ -274,7 +274,7 @@ select coalesce(jsonb_agg(jsonb_build_object(
     'input_tokens', coalesce(c.input_tokens,0),
     'output_tokens', coalesce(c.output_tokens,0),
     'total_tokens', coalesce(c.total_tokens,0),
-    'estimated_cost_usd', coalesce(c.estimated_cost_usd,0),
+    'estimated_cost_usd', c.estimated_cost_usd,
     'estimated_cost_tzs', c.estimated_cost_tzs,
     'unpriced_analyses', coalesce(c.unpriced_analyses,0),
     'last_upload_at', r.last_upload_at,
@@ -311,7 +311,7 @@ monthly_costs as (
     select to_char(date_trunc('month', l.created_at at time zone 'Africa/Dar_es_Salaam'), 'YYYY-MM') as month,
            count(*)::integer as analyses,
            coalesce(sum(l.total_tokens),0)::bigint as tokens,
-           coalesce(sum(l.estimated_cost_usd),0)::numeric as cost_usd,
+           case when bool_or(l.estimated_cost_usd is null) then null else coalesce(sum(l.estimated_cost_usd),0)::numeric end as cost_usd,
            case when bool_or(l.estimated_cost_tzs is null) then null else coalesce(sum(l.estimated_cost_tzs),0)::numeric end as cost_tzs
     from public.gemini_usage_logs l, selected_year y
     where l.school_id = p_school_id
