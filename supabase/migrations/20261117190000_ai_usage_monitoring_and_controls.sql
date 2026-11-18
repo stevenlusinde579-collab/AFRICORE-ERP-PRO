@@ -367,7 +367,22 @@ select jsonb_build_object(
     ) from public.gemini_ai_usage_reservations r, selected_year y where r.school_id = p_school_id and r.usage_year = y.year),
     'batches', coalesce((select jsonb_agg(to_jsonb(b) order by b.last_upload_at desc) from reservation_batches b),'[]'::jsonb),
     'monthly', coalesce((select jsonb_agg(to_jsonb(m) order by m.month desc) from monthly_costs m),'[]'::jsonb),
-    'recent', coalesce((select items from recent_logs),'[]'::jsonb)
+    'recent', coalesce((select items from recent_logs),'[]'::jsonb),
+    'audit', coalesce((
+        select jsonb_agg(jsonb_build_object(
+            'action', a.action,
+            'old_values', a.old_values,
+            'new_values', a.new_values,
+            'created_at', a.created_at,
+            'actor_user_id', a.actor_user_id
+        ) order by a.created_at desc)
+        from (
+            select * from public.gemini_ai_usage_policy_audit
+            where school_id = p_school_id
+            order by created_at desc
+            limit 30
+        ) a
+    ), '[]'::jsonb)
 );
 $$;
 
