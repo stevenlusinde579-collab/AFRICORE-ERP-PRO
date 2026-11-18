@@ -2026,8 +2026,6 @@ export const analyzePaper =
             const exam =
                 examResult.data;
 
-            analysisSchoolId = Number(exam.school_id);
-
             if (!exam) {
                 const error =
                     new Error(
@@ -2042,6 +2040,8 @@ export const analyzePaper =
 
                 throw error;
             }
+
+            analysisSchoolId = Number(exam.school_id);
 
             // Enforce tenant ownership independently of the client-supplied exam ID.
             if (req.access?.isSuperAdmin !== true &&
