@@ -22,7 +22,6 @@ import ParentPortalManagement from "../pages/ParentPortalManagement";
 import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/dashboard/Dashboard";
-import TeacherOnDutyDashboard from "../pages/dashboard/TeacherOnDutyDashboard";
 import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
 /* SCHOOL MANAGEMENT */
