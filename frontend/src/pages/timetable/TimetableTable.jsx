@@ -1076,6 +1076,19 @@ Loading timetable...
 
 }
 
+if (!loading && !schoolLoading && timetable.length === 0) {
+    return (
+        <div className="bg-white rounded-xl shadow p-6 text-center">
+            <h3 className="text-lg font-bold text-slate-800">
+                No {String(academicLevel || "").toUpperCase()} timetable entries yet
+            </h3>
+            <p className="text-slate-500 mt-2">
+                Add lessons for this education level to start building its timetable.
+            </p>
+        </div>
+    );
+}
+
 
 
 
