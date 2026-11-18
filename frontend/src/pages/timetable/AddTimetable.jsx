@@ -132,7 +132,8 @@ function AddTimetable() {
             .eq("school_id", Number(schoolId))
             .eq("class_id", Number(form.class_id))
             .eq("period_id", Number(form.period_id))
-            .eq("day_name", form.day_name);
+            .eq("day_name", form.day_name)
+            .or(`academic_year_id.is.null,academic_year_id.eq.${Number(activeAcademicYearId)}`);
 
         if (checkError) {
             setMessage(checkError.message);
@@ -151,7 +152,8 @@ function AddTimetable() {
             .select("id, period_id, start_time, end_time")
             .eq("school_id", Number(schoolId))
             .eq("teacher_id", Number(form.teacher_id))
-            .eq("day_name", form.day_name);
+            .eq("day_name", form.day_name)
+            .or(`academic_year_id.is.null,academic_year_id.eq.${Number(activeAcademicYearId)}`);
 
         if (teacherCheckError) {
             setMessage(teacherCheckError.message);
