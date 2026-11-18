@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 
@@ -12,7 +12,7 @@ const { schoolId, loading: schoolLoading } = useSchool();
 
 const [classes,setClasses]=useState([]);
 const [subjects,setSubjects]=useState([]);
-const [teachers,setTeachers]=useState([]);
+const [teachers,setTeachers]=useState([]);\nconst [selectedLevel,setSelectedLevel]=useState(requestedLevel);
 
 
 const [loading,setLoading]=useState(false);
