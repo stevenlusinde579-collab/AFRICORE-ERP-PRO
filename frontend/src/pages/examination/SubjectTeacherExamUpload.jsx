@@ -1321,12 +1321,18 @@ function SubjectTeacherExamUpload() {
                 // AI BACKEND
                 // =================================================
 
+                const { data: authSessionData, error: authSessionError } = await supabase.auth.getSession();
+                if (authSessionError || !authSessionData?.session?.access_token) {
+                    throw new Error("Your login session could not be verified. Please sign in again.");
+                }
+
                 const response =
                     await axios.post(
                         `${API_URL}/ai/analyze-paper`,
                         formData,
                         {
                             headers: {
+                                Authorization: `Bearer ${authSessionData.session.access_token}`,
                                 "Content-Type":
                                     "multipart/form-data",
                             },
