@@ -73,7 +73,8 @@ export default function AIUsageMonitoring() {
         exams: sum.exams + Number(s.exams_used || 0),
         tokens: sum.tokens + Number(s.total_tokens || 0),
         costUsd: sum.costUsd + Number(s.estimated_cost_usd || 0),
-    }), { uploads: 0, exams: 0, tokens: 0, costUsd: 0 }), [schools]);
+        costUnknown: sum.costUnknown || s.estimated_cost_usd === null || s.estimated_cost_usd === undefined,
+    }), { uploads: 0, exams: 0, tokens: 0, costUsd: 0, costUnknown: false }), [schools]);
 
     const savePolicy = async () => {
         if (!selectedSchoolId) return;
@@ -119,7 +120,7 @@ export default function AIUsageMonitoring() {
             <Metric label="Schools monitored" value={number(schools.length)} />
             <Metric label="Annual uploads used" value={number(totals.uploads)} hint={`Across all schools in ${year}`} />
             <Metric label="Examination papers" value={number(totals.exams)} hint="Papers submitted for AI analysis" />
-            <Metric label="Estimated Gemini cost" value={money(totals.costUsd, "USD")} hint="Based on recorded token usage" />
+            <Metric label="Estimated Gemini cost" value={totals.costUnknown ? "Not available" : money(totals.costUsd, "USD")} hint="Based on recorded token usage" />
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
