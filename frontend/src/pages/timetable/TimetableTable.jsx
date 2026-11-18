@@ -214,7 +214,7 @@ const periodData=[
 ...new Map(
 
 
-(tableData || [])
+(levelTimetable || [])
 
 
 .filter(item=>item.period_id)
