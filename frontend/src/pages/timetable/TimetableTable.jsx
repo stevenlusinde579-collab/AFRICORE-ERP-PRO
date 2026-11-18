@@ -4,7 +4,7 @@ import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 
 
-function TimetableTable(){
+function TimetableTable({ academicLevel }){
 
 
 const navigate = useNavigate();
@@ -17,6 +17,8 @@ const navigate = useNavigate();
 const {
 
 schoolId,
+
+activeAcademicYearId,
 
 schoolName,
 
@@ -71,7 +73,7 @@ loadTimetable();
 
 }
 
-},[schoolLoading,schoolId]);
+},[schoolLoading,schoolId,academicLevel]);
 
 
 
@@ -132,6 +134,8 @@ error:tableError
 
 id,
 
+academic_year_id,
+
 
 day_name,
 
@@ -178,15 +182,26 @@ last_name
 `)
 
 
+.eq("school_id", Number(schoolId))
 .order("id");
 
 
 
 
 
-console.log("TIMETABLE:",tableData);
+const levelTimetable = (tableData || []).filter((item) =>
+    item.classes?.academic_level === academicLevel &&
+    (!activeAcademicYearId || !item.academic_year_id ||
+        Number(item.academic_year_id) === Number(activeAcademicYearId))
+);
+
+console.log("TIMETABLE:",levelTimetable);
 
 console.log("ERROR:",tableError);
+
+if (tableError) {
+    console.error("TIMETABLE LOAD ERROR:", tableError);
+}
 
 
 
@@ -205,7 +220,7 @@ const periodData=[
 ...new Map(
 
 
-(tableData || [])
+(levelTimetable || [])
 
 
 .filter(item=>item.period_id)
@@ -344,7 +359,7 @@ console.log("SCHOOL FROM SCHOOL CONTEXT:",schoolData);
 
 
 
-setTimetable(tableData || []);
+setTimetable(levelTimetable || []);
 
 setSettings(settingData);
 
@@ -911,7 +926,7 @@ Email: ${email}
 
 <h3 style="margin-top:15px;">
 
-CLASS TIMETABLE
+${String(academicLevel || "").toUpperCase()} CLASS TIMETABLE
 
 </h3>
 
@@ -1065,6 +1080,19 @@ Loading timetable...
 );
 
 
+}
+
+if (!loading && !schoolLoading && timetable.length === 0) {
+    return (
+        <div className="bg-white rounded-xl shadow p-6 text-center">
+            <h3 className="text-lg font-bold text-slate-800">
+                No {String(academicLevel || "").toUpperCase()} timetable entries yet
+            </h3>
+            <p className="text-slate-500 mt-2">
+                Add lessons for this education level to start building its timetable.
+            </p>
+        </div>
+    );
 }
 
 
