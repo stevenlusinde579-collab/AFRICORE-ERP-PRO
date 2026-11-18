@@ -148,7 +148,7 @@ begin
         );
     end if;
 
-    if found then
+    if v_existing.id is not null then
         if v_existing.exam_id <> p_exam_id then
             return jsonb_build_object('allowed', false, 'code', 'USAGE_CONTEXT_MISMATCH');
         end if;
