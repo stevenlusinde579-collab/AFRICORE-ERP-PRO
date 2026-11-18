@@ -254,6 +254,18 @@ const throwSupabaseError = (
     throw supabaseError;
 };
 
+const hasExamSchoolAccess = async (req, examId) => {
+    const { data, error } = await supabase
+        .from("exams")
+        .select("school_id")
+        .eq("id", examId)
+        .maybeSingle();
+    throwSupabaseError(error, "Unable to verify examination school.");
+    if (!data) return false;
+    return req.access?.isSuperAdmin === true ||
+        Number(req.profile?.school_id) === Number(data.school_id);
+};
+
 // ============================================================
 // FILE HASH
 // ============================================================
@@ -4181,6 +4193,14 @@ export const getAIAnalysis =
                     });
             }
 
+            if (!(await hasExamSchoolAccess(req, examId))) {
+                return res.status(403).json({
+                    success: false,
+                    code: "SCHOOL_SCOPE_MISMATCH",
+                    message: "You cannot view AI analysis belonging to another school.",
+                });
+            }
+
             const {
                 data,
                 error,
@@ -4333,6 +4353,14 @@ export const getAIAnalysisByExamSubject =
                         message:
                             "Exam subject does not belong to this examination.",
                     });
+            }
+
+            if (!(await hasExamSchoolAccess(req, examId))) {
+                return res.status(403).json({
+                    success: false,
+                    code: "SCHOOL_SCOPE_MISMATCH",
+                    message: "You cannot view AI analysis belonging to another school.",
+                });
             }
 
             const [
