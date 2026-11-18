@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import PricingSection from "./PricingSection";
 
 import {
     FaArrowRight,
@@ -228,6 +229,14 @@ function LandingPage() {
 
                                 <button
                                     type="button"
+                                    onClick={() => scrollToSection("pricing")}
+                                    className="text-sm text-cyan-300 hover:text-cyan-200 transition font-semibold"
+                                >
+                                    Pricing / Bei
+                                </button>
+
+                                <button
+                                    type="button"
                                     onClick={() => scrollToSection("about")}
                                     className="text-sm text-slate-300 hover:text-white transition"
                                 >
@@ -319,6 +328,14 @@ function LandingPage() {
                                     className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5"
                                 >
                                     Features
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => scrollToSection("pricing")}
+                                    className="w-full text-left px-4 py-3 rounded-lg text-cyan-300 hover:bg-white/5"
+                                >
+                                    Pricing / Bei
                                 </button>
 
                                 <button
@@ -644,6 +661,8 @@ function LandingPage() {
                     </div>
                 </div>
             </section>
+
+            <PricingSection />
 
             {/* ABOUT */}
             <section id="about" className="py-28 bg-white text-slate-900">
