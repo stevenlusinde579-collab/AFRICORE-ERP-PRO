@@ -354,7 +354,6 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
         "parent",
         "student",
         "class teacher",
-        "teacher on duty",
         "matron",
         "patron",
         "security officer",
