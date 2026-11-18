@@ -173,11 +173,25 @@ export default function AIUsageMonitoring() {
                         <tbody className="divide-y divide-slate-100">{(detail.batches || []).map(b => <tr key={b.exam_id}><td className="p-2">{b.exam_id}</td><td className="p-2">{b.papers_used}</td><td className="p-2">{b.completed}</td><td className="p-2">{b.failed}</td><td className="p-2">{b.last_upload_at ? new Date(b.last_upload_at).toLocaleString() : "—"}</td></tr>)}{!detail.batches?.length && <tr><td colSpan="5" className="p-4 text-center text-slate-500">No upload batches recorded for this year.</td></tr>}</tbody>
                     </table>
                 </div>
+                <h3 className="mt-6 font-semibold text-slate-900">Monthly usage and cost</h3>
+                <div className="mt-2 overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Month</th><th className="p-2">Analyses</th><th className="p-2">Tokens</th><th className="p-2">Cost USD</th><th className="p-2">Cost TZS</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100">{(detail.monthly || []).map(m => <tr key={m.month}><td className="p-2">{m.month}</td><td className="p-2">{number(m.analyses)}</td><td className="p-2">{number(m.tokens)}</td><td className="p-2">{money(m.cost_usd, "USD")}</td><td className="p-2">{money(m.cost_tzs)}</td></tr>)}{!detail.monthly?.length && <tr><td colSpan="5" className="p-4 text-center text-slate-500">No monthly usage recorded.</td></tr>}</tbody>
+                    </table>
+                </div>
                 <h3 className="mt-6 font-semibold text-slate-900">Recent Gemini analyses</h3>
                 <div className="mt-2 overflow-x-auto">
                     <table className="min-w-full text-sm">
                         <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Date</th><th className="p-2">Exam / Paper</th><th className="p-2">Model</th><th className="p-2">Tokens</th><th className="p-2">Cost USD</th><th className="p-2">Pricing</th></tr></thead>
                         <tbody className="divide-y divide-slate-100">{(detail.recent || []).map(r => <tr key={r.id}><td className="p-2 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td><td className="p-2">{r.exam_id} / {r.exam_paper_id}</td><td className="p-2">{r.model}</td><td className="p-2">{number(r.total_tokens)}</td><td className="p-2">{money(r.estimated_cost_usd, "USD")}</td><td className="p-2">{r.pricing_status}</td></tr>)}{!detail.recent?.length && <tr><td colSpan="6" className="p-4 text-center text-slate-500">No Gemini logs for this year.</td></tr>}</tbody>
+                    </table>
+                </div>
+                <h3 className="mt-6 font-semibold text-slate-900">Super Admin change history</h3>
+                <div className="mt-2 overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Date</th><th className="p-2">Action</th><th className="p-2">Previous allowance</th><th className="p-2">New allowance</th><th className="p-2">Admin</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100">{(detail.audit || []).map((a,i) => <tr key={`${a.created_at}-${i}`}><td className="p-2 whitespace-nowrap">{new Date(a.created_at).toLocaleString()}</td><td className="p-2">{a.action}</td><td className="p-2">{a.old_values ? `${a.old_values.annual_upload_limit} × ${a.old_values.exams_per_upload_limit}` : "—"}</td><td className="p-2">{a.new_values ? `${a.new_values.annual_upload_limit} × ${a.new_values.exams_per_upload_limit}` : "—"}</td><td className="p-2">{a.actor_user_id || "—"}</td></tr>)}{!detail.audit?.length && <tr><td colSpan="5" className="p-4 text-center text-slate-500">No policy changes recorded.</td></tr>}</tbody>
                     </table>
                 </div>
             </section>
