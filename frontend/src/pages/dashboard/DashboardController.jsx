@@ -30,7 +30,6 @@ import ClassTeacherDashboard from "./ClassTeacherDashboard";
 import AccountantDashboard from "./AccountantDashboard";
 import SecretaryDashboard from "./SecretaryDashboard";
 import SocialWelfareDashboard from "./SocialWelfareDashboard";
-import TeacherOnDutyDashboard from "./TeacherOnDutyDashboard";
 
 
 // =====================================================
@@ -887,22 +886,6 @@ function DashboardController() {
 
         return (
             <SocialWelfareDashboard />
-        );
-
-    }
-
-
-    // =====================================================
-    // TEACHER ON DUTY
-    // =====================================================
-
-    if (
-        effectiveRoleId === 13 ||
-        effectiveRoleName === "teacher on duty"
-    ) {
-
-        return (
-            <TeacherOnDutyDashboard />
         );
 
     }
