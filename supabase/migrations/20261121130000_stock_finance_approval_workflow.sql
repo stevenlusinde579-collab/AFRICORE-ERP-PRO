@@ -62,7 +62,6 @@ using (
 grant select on public.stock_finance_approval_requests to authenticated;
 revoke insert, update, delete on public.stock_finance_approval_requests from anon, authenticated;
 grant usage, select on sequence public.stock_finance_approval_requests_id_seq to authenticated;
-revoke insert, update, delete on public.stock_finance_approval_requests from anon, authenticated;
 
 create or replace function public.submit_stock_finance_approval_request(
   p_request_type text,
