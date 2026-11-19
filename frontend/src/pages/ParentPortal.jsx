@@ -329,7 +329,7 @@ export default function ParentPortal() {
       </main>
     </div>
   );
-  const tabs = [["overview","Muhtasari"],["finance","Finance"],["results","Matokeo"],["communication","Mawasiliano"],["video","Video Conference"],["chat","Group Chat"],["attendance","Mahudhurio"],...(data.portal_type === "Sponsor" ? [] : [["suggestions","Maoni"]]),["reports","Reports"]];
+  const tabs = [["overview","Muhtasari"],["finance","Finance"],["results","Matokeo"],["communication","Mawasiliano"],["video","Video Conference"],["chat","Group Chat"],["attendance","Mahudhurio"],...(data.portal_type === "Sponsor" ? [] : [["suggestions","Maoni"]]),["reports","Reports"],...(data.portal_type === "Sponsor" ? [] : [["orders","Uniform & School Items"]])];
   const attendanceRows = Array.isArray(data.attendance) ? data.attendance : [];
   const attendanceStats = attendanceRows.reduce((stats, row) => { stats[attendanceBucket(row.status)] += 1; return stats; }, { present: 0, absent: 0, late: 0, other: 0 });
   const attendanceRate = attendanceRows.length ? Math.round(((attendanceStats.present + attendanceStats.late) / attendanceRows.length) * 100) : 0;
