@@ -72,7 +72,7 @@ begin
     v_total := v_total + (v_quantity * coalesce(v_item.selling_price, 0));
   end loop;
 
-  v_order_number := 'SO-' || to_char(clock_timestamp(), 'YYYYMMDD-HH24MISS-MS');
+  v_order_number := 'SO-' || to_char(clock_timestamp(), 'YYYYMMDD-HH24MISS-MS') || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
   insert into public.stock_student_orders (
     school_id, student_id, parent_account_id, order_number, status,
     payment_status, total_amount, notes
