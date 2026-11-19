@@ -60,6 +60,7 @@ using (
 );
 
 grant select on public.stock_finance_approval_requests to authenticated;
+revoke insert, update, delete on public.stock_finance_approval_requests from anon, authenticated;
 grant usage, select on sequence public.stock_finance_approval_requests_id_seq to authenticated;
 revoke insert, update, delete on public.stock_finance_approval_requests from anon, authenticated;
 
@@ -136,7 +137,13 @@ begin
       v_description, v_order.order_number, v_user
     )
     on conflict (school_id, source_movement_id) where source_movement_id is not null
-    do update set id = public.stock_finance_approval_requests.id
+    do update set
+      status = case when public.stock_finance_approval_requests.status = 'rejected' then 'pending' else public.stock_finance_approval_requests.status end,
+      submitted_by = case when public.stock_finance_approval_requests.status = 'rejected' then excluded.submitted_by else public.stock_finance_approval_requests.submitted_by end,
+      submitted_at = case when public.stock_finance_approval_requests.status = 'rejected' then now() else public.stock_finance_approval_requests.submitted_at end,
+      rejected_by = case when public.stock_finance_approval_requests.status = 'rejected' then null else public.stock_finance_approval_requests.rejected_by end,
+      rejected_at = case when public.stock_finance_approval_requests.status = 'rejected' then null else public.stock_finance_approval_requests.rejected_at end,
+      rejection_reason = case when public.stock_finance_approval_requests.status = 'rejected' then null else public.stock_finance_approval_requests.rejection_reason end
     returning id into v_request_id;
 
   elsif p_request_type = 'student_order_payment' then
