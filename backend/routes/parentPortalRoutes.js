@@ -952,6 +952,40 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
   }
 });
 
+
+router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAccess, async (req, res) => {
+  const schoolId = Number(req.profile?.school_id);
+  const ids = [...new Set((Array.isArray(req.body?.document_ids) ? req.body.document_ids : [])
+    .map(value => Number(value)).filter(value => Number.isSafeInteger(value) && value > 0))];
+  if (!Number.isInteger(schoolId) || !ids.length || ids.length > 500) {
+    return res.status(400).json({ success: false, message: "Chagua risiti halali za kuchapisha." });
+  }
+  try {
+    const query = supabase.from("parent_portal_documents")
+      .select("id,student_id,publication_status")
+      .eq("school_id", schoolId).eq("document_type", "receipt")
+      .eq("source_type", "fee_payment").in("id", ids);
+    const found = await query;
+    if (found.error) throw found.error;
+    if ((found.data || []).length !== ids.length) {
+      return res.status(404).json({ success: false, message: "Baadhi ya risiti hazipo au hazihusiani na shule yako." });
+    }
+    if (!req.parentPortalScope.fullAccess && found.data.some(row => !req.parentPortalScope.studentIds.includes(Number(row.student_id)))) {
+      return res.status(403).json({ success: false, message: "Huna ruhusa ya kuchapisha risiti za mwanafunzi mmoja au zaidi." });
+    }
+    const publishable = found.data.filter(row => row.publication_status !== "published").map(row => row.id);
+    if (!publishable.length) return res.json({ success: true, published_count: 0, message: "Risiti zote ulizochagua tayari zimechapishwa kwenye Parent Portal." });
+    const updated = await supabase.from("parent_portal_documents")
+      .update({ publication_status: "published", published_at: new Date().toISOString(), published_by: req.user.id })
+      .eq("school_id", schoolId).in("id", publishable).select("id");
+    if (updated.error) throw updated.error;
+    return res.json({ success: true, published_count: updated.data?.length || 0, message: "Risiti zimechapishwa kwenye Parent Portal kikamilifu." });
+  } catch (error) {
+    console.error("PARENT PORTAL DOCUMENT PUBLISH ERROR:", error);
+    return res.status(500).json({ success: false, message: "Imeshindikana kuchapisha risiti kwenye Parent Portal." });
+  }
+});
+
 router.use(parentAuth);
 /**
  * Parent/Sponsor stock ordering.
@@ -1164,7 +1198,7 @@ router.get("/dashboard", async (req, res) => {
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("parent_portal_published_letters").select("id,letter_type,title,payload,published_at").eq("school_id",school.id).eq("student_id",student.id).order("published_at",{ascending:false}).limit(100),
-      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload").eq("school_id",school.id).eq("student_id",student.id).eq("parent_account_id",req.parent.account.id).eq("status","issued").order("document_date",{ascending:false}).limit(200),
+      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload,publication_status,published_at").eq("school_id",school.id).eq("student_id",student.id).eq("parent_account_id",req.parent.account.id).eq("status","issued").eq("publication_status","published").order("document_date",{ascending:false}).limit(200),
     ]);
     for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions,publishedLetters,documents]) if (result.error) throw result.error;
     const parentExams = (publishedSnapshots.data || [])
