@@ -45,7 +45,8 @@ export default function StockManagement() {
   const isSuper = Boolean(isSuperAdmin) || Number(selectedRoleId) === 1;
   const role = String(selectedRoleName || "").trim().toLowerCase();
   const canManage = isSuper || role === "headmaster" || role === "accountant";
-  const canApprove = isSuper || role === "headmaster";\n  const canApproveFinance = role === "headmaster";
+  const canApprove = isSuper || role === "headmaster";
+  const canApproveFinance = role === "headmaster";
   const canReceive = isSuper || role === "accountant";
   const canIssue = isSuper || role === "accountant" || role === "headmaster";
 
