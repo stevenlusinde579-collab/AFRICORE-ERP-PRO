@@ -284,6 +284,139 @@ create trigger trg_validate_stock_student_order_tenant
 before insert or update on public.stock_student_orders
 for each row execute function public.validate_stock_student_order_tenant();
 
+
+-- Purchase-order approval is reserved for the Headmaster (or Super Admin).
+create or replace function public.enforce_stock_purchase_order_approval()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $
+begin
+  if old.status = 'submitted' and new.status = 'approved'
+     and not public.is_current_user_super_admin()
+     and not exists (
+       select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+       where pr.profile_id = auth.uid() and pr.school_id = new.school_id
+         and pr.is_active is true and lower(trim(r.role_name)) = 'headmaster'
+     ) then
+    raise exception 'Only the Headmaster may approve a stock purchase order.';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists trg_enforce_stock_purchase_order_approval on public.stock_purchase_orders;
+create trigger trg_enforce_stock_purchase_order_approval
+before update on public.stock_purchase_orders
+for each row execute function public.enforce_stock_purchase_order_approval();
+
+-- Atomic receipt: stock ledger, order-line quantity and order status commit together.
+create or replace function public.receive_stock_purchase_order_item(
+  p_order_item_id bigint,
+  p_quantity numeric,
+  p_location_id bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  v_line public.stock_purchase_order_items%rowtype;
+  v_order public.stock_purchase_orders%rowtype;
+  v_next numeric(14,3);
+  v_all_received boolean;
+begin
+  if auth.uid() is null then raise exception 'Authentication is required.'; end if;
+  select * into v_line from public.stock_purchase_order_items where id = p_order_item_id for update;
+  if not found then raise exception 'Purchase order line was not found.'; end if;
+  select * into v_order from public.stock_purchase_orders where id = v_line.purchase_order_id for update;
+  if not found or v_order.school_id <> v_line.school_id then raise exception 'Purchase order was not found.'; end if;
+  if not public.is_current_user_super_admin() and (
+    v_order.school_id <> public.get_current_user_school_id() or not exists (
+      select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+      where pr.profile_id = auth.uid() and pr.school_id = v_order.school_id
+        and pr.is_active is true and lower(trim(r.role_name)) = 'accountant'
+    )
+  ) then raise exception 'Only the school Accountant may receive stock.'; end if;
+  if v_order.status not in ('approved','partially_received') then raise exception 'Only approved orders can be received.'; end if;
+  if p_quantity is null or p_quantity <= 0 or p_quantity > (v_line.quantity_ordered - v_line.quantity_received) then
+    raise exception 'Received quantity must be positive and not exceed the outstanding quantity.';
+  end if;
+  if not exists (select 1 from public.stock_locations l where l.id = p_location_id and l.school_id = v_order.school_id) then
+    raise exception 'The selected store does not belong to this school.';
+  end if;
+  insert into public.stock_movements (
+    school_id,item_id,location_id,movement_type,quantity,unit_cost,reference_number,notes,created_by
+  ) values (
+    v_order.school_id,v_line.item_id,p_location_id,'receive',p_quantity,v_line.unit_cost,
+    v_order.order_number,'Goods received against purchase order ' || v_order.order_number,auth.uid()
+  );
+  v_next := v_line.quantity_received + p_quantity;
+  update public.stock_purchase_order_items set quantity_received = v_next where id = v_line.id;
+  select not exists (
+    select 1 from public.stock_purchase_order_items x
+    where x.purchase_order_id = v_order.id and x.quantity_received < x.quantity_ordered
+  ) into v_all_received;
+  update public.stock_purchase_orders set status = case when v_all_received then 'received' else 'partially_received' end
+  where id = v_order.id;
+  return jsonb_build_object('success',true,'quantity_received',v_next,'order_status',case when v_all_received then 'received' else 'partially_received' end);
+end;
+$;
+
+-- Atomic student uniform fulfilment: issuing stock and updating the order cannot diverge.
+create or replace function public.fulfil_stock_student_order_item(
+  p_order_item_id bigint,
+  p_location_id bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  v_line public.stock_student_order_items%rowtype;
+  v_order public.stock_student_orders%rowtype;
+  v_remaining numeric(14,3);
+  v_cost numeric(14,2);
+begin
+  if auth.uid() is null then raise exception 'Authentication is required.'; end if;
+  select * into v_line from public.stock_student_order_items where id = p_order_item_id for update;
+  if not found then raise exception 'Student order line was not found.'; end if;
+  select * into v_order from public.stock_student_orders where id = v_line.student_order_id for update;
+  if not found or v_order.school_id <> v_line.school_id then raise exception 'Student order was not found.'; end if;
+  if not public.is_current_user_super_admin() and (
+    v_order.school_id <> public.get_current_user_school_id() or not exists (
+      select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+      where pr.profile_id = auth.uid() and pr.school_id = v_order.school_id
+        and pr.is_active is true and lower(trim(r.role_name)) in ('headmaster','accountant')
+    )
+  ) then raise exception 'You are not authorised to issue student stock.'; end if;
+  if v_order.status = 'cancelled' then raise exception 'Cancelled student orders cannot be fulfilled.'; end if;
+  v_remaining := v_line.quantity_ordered - v_line.quantity_issued;
+  if v_remaining <= 0 then raise exception 'This order line has already been fulfilled.'; end if;
+  if not exists (select 1 from public.stock_locations l where l.id = p_location_id and l.school_id = v_order.school_id) then
+    raise exception 'The selected store does not belong to this school.';
+  end if;
+  select cost_price into v_cost from public.stock_items where id = v_line.item_id and school_id = v_order.school_id;
+  insert into public.stock_movements (
+    school_id,item_id,location_id,movement_type,quantity,unit_cost,reference_number,notes,created_by
+  ) values (
+    v_order.school_id,v_line.item_id,p_location_id,'sale',v_remaining,coalesce(v_cost,0),
+    v_order.order_number,'Uniform issued to student for order ' || v_order.order_number,auth.uid()
+  );
+  update public.stock_student_order_items set quantity_issued = quantity_ordered where id = v_line.id;
+  update public.stock_student_orders set status = 'fulfilled' where id = v_order.id;
+  return jsonb_build_object('success',true,'quantity_issued',v_remaining,'order_status','fulfilled');
+end;
+$;
+
+revoke all on function public.receive_stock_purchase_order_item(bigint,numeric,bigint) from public, anon;
+revoke all on function public.fulfil_stock_student_order_item(bigint,bigint) from public, anon;
+grant execute on function public.receive_stock_purchase_order_item(bigint,numeric,bigint) to authenticated;
+grant execute on function public.fulfil_stock_student_order_item(bigint,bigint) to authenticated;
+
 -- Tenant isolation: reads are limited to the active school. Mutations are restricted
 -- to Headmaster/Accountant (or Super Admin) and never trust a client-supplied school_id.
 do $$
