@@ -172,7 +172,13 @@ begin
       v_description, coalesce(v_payment.payment_reference, v_student_order.order_number), v_user
     )
     on conflict (school_id, source_payment_id) where source_payment_id is not null
-    do update set id = public.stock_finance_approval_requests.id
+    do update set
+      status = case when public.stock_finance_approval_requests.status = 'rejected' then 'pending' else public.stock_finance_approval_requests.status end,
+      submitted_by = case when public.stock_finance_approval_requests.status = 'rejected' then excluded.submitted_by else public.stock_finance_approval_requests.submitted_by end,
+      submitted_at = case when public.stock_finance_approval_requests.status = 'rejected' then now() else public.stock_finance_approval_requests.submitted_at end,
+      rejected_by = case when public.stock_finance_approval_requests.status = 'rejected' then null else public.stock_finance_approval_requests.rejected_by end,
+      rejected_at = case when public.stock_finance_approval_requests.status = 'rejected' then null else public.stock_finance_approval_requests.rejected_at end,
+      rejection_reason = case when public.stock_finance_approval_requests.status = 'rejected' then null else public.stock_finance_approval_requests.rejection_reason end
     returning id into v_request_id;
   else
     raise exception 'Invalid stock Finance request type.';
