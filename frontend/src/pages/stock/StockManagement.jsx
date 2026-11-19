@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../services/supabase";
 import { useRole } from "../../context/RoleContext";
+import { FaBoxes, FaCoins, FaTruck, FaWarehouse, FaExclamationTriangle, FaClipboardList, FaChartLine } from "react-icons/fa";
 
 const TABS = ["Overview", "Items", "Locations", "Movements", "Purchase Orders", "Student Uniform Orders", "Finance Approvals", "Recommendations"];
 const money = (n) => new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(n) || 0);
@@ -62,7 +63,7 @@ export default function StockManagement() {
       let orderQuery = supabase.from("stock_purchase_orders").select("*, stock_purchase_order_items(id,item_id,quantity_ordered,quantity_received,unit_cost,stock_items(item_name))").order("created_at", { ascending: false }).limit(100);
       let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");
       let studentQuery = supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").order("first_name");
-      let financeRequestQuery = supabase.from("stock_finance_approval_requests").select("*").order("created_at", { ascending: false }).limit(300);
+      let financeRequestQuery = supabase.from("stock_finance_approval_requests").select("*").order("created_at", { ascending: false }).limit(1000);
        let financeAccountQuery = supabase.schema("finance").from("chart_of_accounts").select("id,account_code,account_name,account_type").eq("is_active", true).order("account_code");
        let cashAccountQuery = supabase.schema("finance").from("cash_accounts").select("id,account_name,account_type").eq("is_active", true).order("account_name");
        let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,parent_name,guardian_name,admission_number,admission_no), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label)), stock_student_order_payments(id,amount,payment_method,payment_reference,payment_date,notes,created_at)").order("created_at", { ascending: false }).limit(1000);
@@ -113,6 +114,14 @@ export default function StockManagement() {
     return items.filter((item) => Number(item.reorder_level || 0) > 0 && (totals.get(item.id) || 0) < Number(item.reorder_level || 0));
   }, [items, balances]);
   const pendingOrders = purchaseOrders.filter((o) => ["submitted", "approved", "partially_received"].includes(o.status));
+  // Official sales income and received-goods costs include approved Finance postings only.
+  const approvedSalesIncome = useMemo(() => financeRequests
+    .filter((request) => request.request_type === "student_order_payment" && request.status === "approved")
+    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [financeRequests]);
+  const approvedReceivedGoodsCost = useMemo(() => financeRequests
+    .filter((request) => request.request_type === "purchase_receipt" && request.status === "approved")
+    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [financeRequests]);
+  const pendingFinanceCount = useMemo(() => financeRequests.filter((request) => request.status === "pending").length, [financeRequests]);
   const expiringSoon = movements.filter((m) => m.expiry_date && new Date(m.expiry_date + "T00:00:00") >= new Date(today() + "T00:00:00") && new Date(m.expiry_date + "T00:00:00") <= new Date(Date.now() + 30 * 86400000));
   const filteredItems = items.filter((i) => [i.item_name, i.sku, i.stock_categories?.name].some((v) => String(v || "").toLowerCase().includes(search.toLowerCase())));
   const studentOrderStockSummary = useMemo(() => {
@@ -378,18 +387,59 @@ export default function StockManagement() {
     </div>
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     {notice && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Stock Items</p><p className="mt-2 text-2xl font-bold text-slate-900">{items.length}</p></div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Units · Item Breakdown</p><p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits.toLocaleString()}</p><div className="mt-3 max-h-44 space-y-2 overflow-y-auto border-t pt-2">{itemUnitBreakdown.length ? itemUnitBreakdown.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 text-sm"><span className="min-w-0 break-words text-slate-700">{item.name}</span><span className="shrink-0 font-semibold text-slate-900">{item.quantity.toLocaleString()} {item.unit}</span></div>) : <p className="text-xs text-slate-500">No stock items registered.</p>}</div></div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Low / Reorder</p><p className="mt-2 text-2xl font-bold text-slate-900">{lowStock.length}</p></div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Parent Order Shortages</p><p className="mt-2 text-2xl font-bold text-rose-700">{studentOrderStockSummary.shortageRows.length}</p><p className="mt-1 text-xs text-slate-500">{studentOrderStockSummary.reservedUnits.toLocaleString()} units reserved on outstanding orders</p></div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Stock Value (at cost)</p><p className="mt-2 text-2xl font-bold text-slate-900">{money(stockValue)}</p><p className="mt-1 text-xs text-slate-500">Available quantity × item cost price</p><div className="mt-3 max-h-44 space-y-2 overflow-y-auto border-t pt-2">{itemStockValueBreakdown.length ? itemStockValueBreakdown.map((item) => <div key={item.id} className="text-xs"><div className="flex justify-between gap-2"><span className="min-w-0 break-words text-slate-700">{item.name}</span><span className="shrink-0 font-semibold text-slate-900">{money(item.value)}</span></div><p className="text-slate-500">{item.quantity.toLocaleString()} {item.unit} × {money(item.unitCost)}</p></div>) : <p className="text-xs text-slate-500">No stock items registered.</p>}</div></div>
-    </div>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Stock & Finance Summary</h2><p className="mt-1 text-xs text-slate-500">Takwimu za shule hii · Mapato na gharama ni miamala iliyoidhinishwa na Finance pekee</p></div>
+        <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{pendingFinanceCount} Finance request(s) pending</span>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="group relative overflow-hidden rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-emerald-500" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mapato ya mauzo</p><p className="mt-2 break-words text-xl font-extrabold tabular-nums text-slate-900 md:text-2xl">{money(approvedSalesIncome)}</p></div><span className="rounded-xl bg-emerald-50 p-3 text-xl text-emerald-700"><FaCoins /></span></div>
+          <p className="mt-3 text-xs text-slate-500">Malipo ya items yaliyopokelewa na kuidhinishwa Finance</p>
+        </article>
+        <article className="group relative overflow-hidden rounded-2xl border border-amber-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-amber-500" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Gharama za mizigo</p><p className="mt-2 break-words text-xl font-extrabold tabular-nums text-slate-900 md:text-2xl">{money(approvedReceivedGoodsCost)}</p></div><span className="rounded-xl bg-amber-50 p-3 text-xl text-amber-700"><FaTruck /></span></div>
+          <p className="mt-3 text-xs text-slate-500">Thamani ya mizigo iliyopokelewa na kuidhinishwa Finance</p>
+        </article>
+        <article className="group relative overflow-hidden rounded-2xl border border-blue-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-blue-600" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Thamani ya stock</p><p className="mt-2 break-words text-xl font-extrabold tabular-nums text-slate-900 md:text-2xl">{money(stockValue)}</p></div><span className="rounded-xl bg-blue-50 p-3 text-xl text-blue-700"><FaWarehouse /></span></div>
+          <p className="mt-3 text-xs text-slate-500">Stock iliyopo sasa × gharama ya item</p>
+        </article>
+        <article className="group relative overflow-hidden rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-indigo-500" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Bidhaa zilizosajiliwa</p><p className="mt-2 text-2xl font-extrabold tabular-nums text-slate-900">{items.length}</p></div><span className="rounded-xl bg-indigo-50 p-3 text-xl text-indigo-700"><FaBoxes /></span></div>
+          <p className="mt-3 text-xs text-slate-500">Aina za items zilizosajiliwa kwenye shule</p>
+        </article>
+        <article className="group relative overflow-hidden rounded-2xl border border-sky-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-sky-500" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Jumla ya units</p><p className="mt-2 text-2xl font-extrabold tabular-nums text-slate-900">{totalUnits.toLocaleString()}</p></div><span className="rounded-xl bg-sky-50 p-3 text-xl text-sky-700"><FaChartLine /></span></div>
+          <p className="mt-3 text-xs text-slate-500">Idadi ya units zilizopo kwenye store zote</p>
+        </article>
+        <article className="group relative overflow-hidden rounded-2xl border border-rose-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-rose-500" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Stock ndogo</p><p className="mt-2 text-2xl font-extrabold tabular-nums text-slate-900">{lowStock.length}</p></div><span className="rounded-xl bg-rose-50 p-3 text-xl text-rose-700"><FaExclamationTriangle /></span></div>
+          <p className="mt-3 text-xs text-slate-500">Items zilizo chini ya kiwango cha reorder</p>
+        </article>
+        <article className="group relative overflow-hidden rounded-2xl border border-orange-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="absolute inset-x-0 top-0 h-1 bg-orange-500" />
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-orange-700">Upungufu wa oda</p><p className="mt-2 text-2xl font-extrabold tabular-nums text-slate-900">{studentOrderStockSummary.shortageRows.length}</p></div><span className="rounded-xl bg-orange-50 p-3 text-xl text-orange-700"><FaClipboardList /></span></div>
+          <p className="mt-3 text-xs text-slate-500">{studentOrderStockSummary.reservedUnits.toLocaleString()} units zimehifadhiwa kwenye oda zinazoendelea</p>
+        </article>
+      </div>
+    </section>
     <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
       {TABS.map((name) => <button key={name} onClick={() => setTab(name)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold ${tab === name ? "border-blue-700 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900"}`}>{name}</button>)}
     </div>
 
-    {tab === "Overview" && <div className="grid gap-4 lg:grid-cols-2">
+    {tab === "Overview" && <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Units kwa kila item</h2><p className="text-xs text-slate-500">Mgawanyo wa stock iliyopo</p></div><span className="rounded-lg bg-sky-50 p-2 text-sky-700"><FaBoxes /></span></div><div className="max-h-56 space-y-2 overflow-y-auto divide-y divide-slate-100">{itemUnitBreakdown.length ? itemUnitBreakdown.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span className="min-w-0 break-words text-slate-700">{item.name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{item.quantity.toLocaleString()} {item.unit}</span></div>) : <p className="py-5 text-xs text-slate-500">Hakuna items zilizosajiliwa.</p>}</div></section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Thamani ya stock kwa item</h2><p className="text-xs text-slate-500">Kiasi kilichopo × cost price</p></div><span className="rounded-lg bg-blue-50 p-2 text-blue-700"><FaWarehouse /></span></div><div className="max-h-56 space-y-2 overflow-y-auto divide-y divide-slate-100">{itemStockValueBreakdown.length ? itemStockValueBreakdown.map((item) => <div key={item.id} className="py-2 text-xs"><div className="flex justify-between gap-2"><span className="min-w-0 break-words text-slate-700">{item.name}</span><span className="shrink-0 font-semibold tabular-nums text-slate-900">{money(item.value)}</span></div><p className="mt-1 text-slate-500">{item.quantity.toLocaleString()} {item.unit} × {money(item.unitCost)}</p></div>) : <p className="py-5 text-xs text-slate-500">Hakuna stock iliyosajiliwa.</p>}</div></section>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Stock Alerts</h2><p className="mt-1 text-sm text-slate-500">Items at or below their reorder level</p>{lowStock.length ? <div className="mt-4 divide-y">{lowStock.map((i) => <div key={i.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{i.item_name}</p><p className="text-xs text-slate-500">{i.stock_categories?.name || "Uncategorised"} · Reorder at {i.reorder_level} {i.unit_of_measure}</p></div><span className="h-fit rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Low stock</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No low-stock alerts.</p>}</section>
       <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Expiry Alerts (next 30 days)</h2><p className="mt-1 text-sm text-slate-500">Stock receipts with recorded expiry dates</p>{expiringSoon.length ? <div className="mt-4 divide-y">{expiringSoon.map((m) => <div key={m.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{m.stock_items?.item_name}</p><p className="text-xs text-slate-500">Batch {m.batch_number || "—"} · {m.quantity} units</p></div><span className="text-xs font-semibold text-amber-700">{m.expiry_date}</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No recorded expiry dates within 30 days.</p>}</section>
       <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Parent Order Stock Shortages</h2><p className="mt-1 text-sm text-slate-500">Outstanding parent orders compared with current physical stock</p>{studentOrderStockSummary.shortageRows.length ? <div className="mt-4 divide-y">{studentOrderStockSummary.shortageRows.map((row) => <div key={row.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{row.name}</p><p className="text-xs text-slate-500">On hand: {row.onHand} · Reserved: {row.reserved}</p></div><span className="h-fit rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-800">Short by {row.shortage} {row.unit}</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No shortages against outstanding parent orders.</p>}</section>
