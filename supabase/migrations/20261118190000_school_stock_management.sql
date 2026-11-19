@@ -338,7 +338,7 @@ $$;
 
 drop trigger if exists trg_enforce_stock_purchase_order_approval on public.stock_purchase_orders;
 create trigger trg_enforce_stock_purchase_order_approval
-before update on public.stock_purchase_orders
+before insert or update on public.stock_purchase_orders
 for each row execute function public.enforce_stock_purchase_order_approval();
 
 -- Atomic receipt: stock ledger, order-line quantity and order status commit together.
@@ -441,6 +441,12 @@ begin
   return jsonb_build_object('success',true,'quantity_issued',v_remaining,'order_status','fulfilled');
 end;
 $$;
+
+revoke all on function public.apply_stock_movement_to_balance() from public, anon, authenticated;
+revoke all on function public.validate_stock_purchase_order_tenant() from public, anon, authenticated;
+revoke all on function public.validate_stock_order_item_tenant() from public, anon, authenticated;
+revoke all on function public.validate_stock_student_order_tenant() from public, anon, authenticated;
+revoke all on function public.enforce_stock_purchase_order_approval() from public, anon, authenticated;
 
 revoke all on function public.receive_stock_purchase_order_item(bigint,numeric,bigint) from public, anon;
 revoke all on function public.fulfil_stock_student_order_item(bigint,bigint) from public, anon;
