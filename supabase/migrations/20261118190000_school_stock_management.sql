@@ -160,9 +160,15 @@ begin
        or not exists (
          select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
          where pr.profile_id = auth.uid() and pr.school_id = new.school_id and pr.is_active is true
-           and lower(trim(r.role_name)) in ('headmaster','accountant')
+           and (
+             (new.movement_type in ('opening','receive','return','adjustment_in','transfer_in')
+               and lower(trim(r.role_name)) = 'accountant')
+             or
+             (new.movement_type in ('issue','sale','damaged','expired','adjustment_out','transfer_out')
+               and lower(trim(r.role_name)) in ('headmaster','accountant'))
+           )
        ) then
-      raise exception 'You are not authorised to post stock movements for this school.';
+      raise exception 'You are not authorised to post this type of stock movement for this school.';
     end if;
   end if;
 
@@ -293,14 +299,38 @@ security invoker
 set search_path = public, pg_temp
 as $$
 begin
-  if old.status = 'submitted' and new.status = 'approved'
-     and not public.is_current_user_super_admin()
-     and not exists (
-       select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
-       where pr.profile_id = auth.uid() and pr.school_id = new.school_id
-         and pr.is_active is true and lower(trim(r.role_name)) = 'headmaster'
-     ) then
-    raise exception 'Only the Headmaster may approve a stock purchase order.';
+  if tg_op = 'INSERT' and new.status <> 'draft' and not public.is_current_user_super_admin() then
+    raise exception 'New stock purchase orders must start as draft.';
+  end if;
+  if tg_op = 'UPDATE' and old.status is distinct from new.status
+     and not public.is_current_user_super_admin() then
+    if old.status = 'draft' and new.status = 'submitted' then
+      if not exists (
+        select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+        where pr.profile_id = auth.uid() and pr.school_id = new.school_id and pr.is_active is true
+          and lower(trim(r.role_name)) in ('headmaster','accountant')
+      ) then raise exception 'Only the Headmaster or Accountant may submit a purchase order.'; end if;
+    elsif old.status = 'submitted' and new.status = 'approved' then
+      if not exists (
+        select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+        where pr.profile_id = auth.uid() and pr.school_id = new.school_id and pr.is_active is true
+          and lower(trim(r.role_name)) = 'headmaster'
+      ) then raise exception 'Only the Headmaster may approve a stock purchase order.'; end if;
+    elsif old.status in ('approved','partially_received') and new.status in ('partially_received','received') then
+      if not exists (
+        select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+        where pr.profile_id = auth.uid() and pr.school_id = new.school_id and pr.is_active is true
+          and lower(trim(r.role_name)) = 'accountant'
+      ) then raise exception 'Only the Accountant may record goods received.'; end if;
+    elsif new.status = 'cancelled' then
+      if not exists (
+        select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+        where pr.profile_id = auth.uid() and pr.school_id = new.school_id and pr.is_active is true
+          and lower(trim(r.role_name)) in ('headmaster','accountant')
+      ) then raise exception 'Only the Headmaster or Accountant may cancel a purchase order.'; end if;
+    else
+      raise exception 'Invalid purchase order status transition.';
+    end if;
   end if;
   return new;
 end;
@@ -431,8 +461,8 @@ begin
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists stock_tenant_select on public.%I', t);
     execute format(
-      'create policy stock_tenant_select on public.%I for select to authenticated using (is_current_user_super_admin() or school_id = get_current_user_school_id())',
-      t
+      'create policy stock_tenant_select on public.%I for select to authenticated using (is_current_user_super_admin() or (school_id = get_current_user_school_id() and exists (select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id where pr.profile_id = auth.uid() and pr.school_id = %I.school_id and pr.is_active is true and lower(trim(r.role_name)) in (''headmaster'',''accountant''))))',
+      t, t
     );
     execute format('drop policy if exists stock_tenant_manage on public.%I', t);
     execute format(
