@@ -213,19 +213,24 @@ export default function StockManagement() {
     if (!locationId) { setError("Create a stock location before receiving goods."); return; }
     setSaving(true); setError(""); setNotice("");
     try {
-      const { error: movementError } = await supabase.from("stock_movements").insert({
-        school_id: schoolId, item_id: line.item_id, location_id: locationId, movement_type: "receive",
-        quantity: qty, unit_cost: Number(line.unit_cost || 0), reference_number: order.order_number,
-        notes: `Receipt against purchase order ${order.order_number}`, created_by: (await supabase.auth.getUser()).data.user?.id
+      const { error: e } = await supabase.rpc("receive_stock_purchase_order_item", {
+        p_order_item_id: line.id, p_quantity: qty, p_location_id: locationId
       });
-      if (movementError) throw movementError;
-      const next = Number(line.quantity_received) + qty;
-      const { error: lineError } = await supabase.from("stock_purchase_order_items").update({ quantity_received: next }).eq("id", line.id).eq("school_id", schoolId);
-      if (lineError) throw lineError;
-      const allReceived = (order.stock_purchase_order_items || []).every((x) => x.id === line.id ? next >= Number(x.quantity_ordered) : Number(x.quantity_received) >= Number(x.quantity_ordered));
-      const { error: orderError } = await supabase.from("stock_purchase_orders").update({ status: allReceived ? "received" : "partially_received" }).eq("id", order.id).eq("school_id", schoolId);
-      if (orderError) throw orderError;
-      setNotice("Goods received and added to stock."); await loadData();
+      if (e) throw e;
+      setNotice("Goods received. Stock balance and purchase order were updated together."); await loadData();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  };
+
+  const fulfilStudentOrder = async (order, line) => {
+    const locationId = locations[0]?.id;
+    if (!locationId) { setError("Create a stock location before issuing uniform."); return; }
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const { error: e } = await supabase.rpc("fulfil_stock_student_order_item", {
+        p_order_item_id: line.id, p_location_id: locationId
+      });
+      if (e) throw e;
+      setNotice("Uniform issued and stock balance updated. Record/confirm payment through the school's approved Finance process."); await loadData();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
 
