@@ -71,7 +71,7 @@ export default function ParentStockOrders({ token, student }) {
   return <div className="space-y-5">
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Uniform & School Items</p><h2 className="mt-1 text-xl font-black text-slate-900">Order for {student?.name || "your child"}</h2><p className="mt-1 text-sm text-slate-500">Chagua sare na vifaa vinavyouzwa na shule. Stock hupungua baada ya shule kutoa bidhaa.</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Uniform & School Items</p><h2 className="mt-1 text-xl font-black text-slate-900">Order for {student?.name || "your child"}</h2><p className="mt-1 text-sm text-slate-500">Chagua sare na vifaa vinavyouzwa na shule. Bidhaa zilizo kwenye oda zinahesabiwa kama reserved; stock hupungua baada ya shule kutoa bidhaa.</p></div>
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{items.length} bidhaa zinapatikana</span>
       </div>
       {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -83,7 +83,7 @@ export default function ParentStockOrders({ token, student }) {
         <div className="grid gap-3 md:grid-cols-[1fr_130px_auto]">
           <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)} className="rounded-xl border border-slate-300 p-3 text-sm" required>
             <option value="">Chagua bidhaa / Select item</option>
-            {items.map(item => <option key={item.id} value={item.id}>{item.item_name}{item.variant_label ? " · " + item.variant_label : ""} — {money(item.selling_price)} · Stock: {item.quantity_on_hand}</option>)}
+            {items.map(item => <option key={item.id} value={item.id}>{item.item_name}{item.variant_label ? " · " + item.variant_label : ""} — {money(item.selling_price)} · In stock: {item.quantity_on_hand} · Available: {item.available_quantity}</option>)}
           </select>
           <input type="number" min="0.001" max="1000" step="0.001" value={quantity} onChange={e => setQuantity(e.target.value)} className="rounded-xl border border-slate-300 p-3 text-sm" aria-label="Quantity" required />
           <button type="button" onClick={addItem} className="rounded-xl border border-blue-200 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-50">Add item</button>
