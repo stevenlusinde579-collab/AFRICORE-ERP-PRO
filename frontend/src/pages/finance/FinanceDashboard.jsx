@@ -540,14 +540,17 @@ function FinanceDashboard() {
             if (!superAdmin && schoolId) receiptsQuery = receiptsQuery.eq("school_id", schoolId);
             const { data: receiptsData, error: receiptsError } = await receiptsQuery;
             if (receiptsError) throw receiptsError;
+            // Receipts are primary records. Load and display them even if optional
+            // student details or Parent Portal publication metadata cannot be read.
+            setReceipts((receiptsData || []).map(row => ({ ...row, student: null })));
             const receiptStudentIds = [...new Set((receiptsData || []).map(row => row.student_id).filter(Boolean))];
             let receiptStudents = [];
             if (receiptStudentIds.length) {
                 const { data: receiptStudentRows, error: receiptStudentsError } = await supabase.from("students")
                     .select("id,first_name,middle_name,last_name,admission_number,admission_no,parent_name,guardian_name")
                     .in("id", receiptStudentIds);
-                if (receiptStudentsError) throw receiptStudentsError;
-                receiptStudents = receiptStudentRows || [];
+                if (receiptStudentsError) console.warn("Receipt student details lookup failed:", receiptStudentsError);
+                else receiptStudents = receiptStudentRows || [];
             }
             const receiptStudentMap = new Map(receiptStudents.map(row => [String(row.id), row]));
             setReceipts((receiptsData || []).map(row => ({ ...row, student: receiptStudentMap.get(String(row.student_id)) || null })));
@@ -557,7 +560,7 @@ function FinanceDashboard() {
                 .eq("school_id", schoolId)
                 .eq("document_type", "receipt")
                 .eq("source_type", "fee_payment");
-            if (portalDocumentError) throw portalDocumentError;
+            if (portalDocumentError) console.warn("Receipt Parent Portal status lookup failed:", portalDocumentError);
             setPortalDocuments(portalDocumentRows || []);
 
             // =================================================

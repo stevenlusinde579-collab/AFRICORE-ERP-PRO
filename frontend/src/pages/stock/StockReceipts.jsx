@@ -18,15 +18,22 @@ export default function StockReceipts({ schoolId }) {
     if (!schoolId) return;
     setLoading(true); setError("");
     try {
-      const [receiptResult, documentResult, studentResult] = await Promise.all([
-        supabase.schema("finance").from("receipts").select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status").eq("school_id", schoolId).like("receipt_number", "STOCK-%").order("receipt_date", { ascending: false }).limit(1000),
-        supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id", schoolId).eq("document_type", "receipt").eq("source_type", "stock_payment"),
+      // Load official receipts first. Optional Parent Portal and student lookups must
+      // never prevent existing receipts from appearing or being printed.
+      const receiptResult = await supabase.schema("finance").from("receipts")
+        .select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status")
+        .eq("school_id", schoolId).like("receipt_number", "STOCK-%")
+        .order("receipt_date", { ascending: false }).limit(1000);
+      if (receiptResult.error) throw receiptResult.error;
+      setReceipts(receiptResult.data || []);
+
+      const [documentResult, studentResult] = await Promise.all([
+        supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at")
+          .eq("school_id", schoolId).eq("document_type", "receipt").eq("source_type", "stock_payment"),
         supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").eq("school_id", schoolId)
       ]);
-      if (receiptResult.error) throw receiptResult.error;
-      if (documentResult.error) throw documentResult.error;
-      if (studentResult.error) throw studentResult.error;
-      setReceipts(receiptResult.data || []);
+      if (documentResult.error) console.warn("Stock receipt Parent Portal status lookup failed:", documentResult.error);
+      if (studentResult.error) console.warn("Stock receipt student details lookup failed:", studentResult.error);
       setDocuments(documentResult.data || []);
       setStudents(studentResult.data || []);
     } catch (e) { setError(e.message || "Unable to load stock receipts."); }
