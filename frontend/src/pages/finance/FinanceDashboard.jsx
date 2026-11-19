@@ -96,6 +96,8 @@ function FinanceDashboard() {
     const [supplierBills, setSupplierBills] = useState([]);
 
     const [cashAccounts, setCashAccounts] = useState([]);
+    const [receipts, setReceipts] = useState([]);
+    const [selectedReceiptIds, setSelectedReceiptIds] = useState([]);
 
     const [students, setStudents] = useState([]);
 
@@ -528,6 +530,23 @@ function FinanceDashboard() {
                 safeCashAccounts
             );
 
+            let receiptsQuery = supabase.schema("finance").from("receipts")
+                .select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status")
+                .like("receipt_number", "FEE-%").order("receipt_date", { ascending: false }).limit(500);
+            if (!superAdmin && schoolId) receiptsQuery = receiptsQuery.eq("school_id", schoolId);
+            const { data: receiptsData, error: receiptsError } = await receiptsQuery;
+            if (receiptsError) throw receiptsError;
+            const receiptStudentIds = [...new Set((receiptsData || []).map(row => row.student_id).filter(Boolean))];
+            let receiptStudents = [];
+            if (receiptStudentIds.length) {
+                const { data: receiptStudentRows, error: receiptStudentsError } = await supabase.from("students")
+                    .select("id,first_name,middle_name,last_name,admission_number,admission_no,parent_name,guardian_name")
+                    .in("id", receiptStudentIds);
+                if (receiptStudentsError) throw receiptStudentsError;
+                receiptStudents = receiptStudentRows || [];
+            }
+            const receiptStudentMap = new Map(receiptStudents.map(row => [String(row.id), row]));
+            setReceipts((receiptsData || []).map(row => ({ ...row, student: receiptStudentMap.get(String(row.student_id)) || null })));
 
             // =================================================
             // STUDENTS
@@ -1163,6 +1182,19 @@ function FinanceDashboard() {
 
             <div className="max-w-7xl mx-auto px-6 py-6">
 
+
+                <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div><h2 className="text-lg font-extrabold text-slate-900">School Fees Receipts</h2><p className="text-sm text-slate-500">Risiti zinazotokana na malipo ya ada yaliyopostiwa kwenye Finance.</p></div>
+                        <button type="button" disabled={!receipts.some(r=>selectedReceiptIds.includes(String(r.id)))} onClick={()=>window.print()} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">Print selected ({receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).length})</button>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                        {receipts.map(receipt=><label key={receipt.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3 text-sm"><span className="flex items-center gap-3"><input type="checkbox" checked={selectedReceiptIds.includes(String(receipt.id))} onChange={e=>setSelectedReceiptIds(current=>e.target.checked?[...current,String(receipt.id)]:current.filter(id=>id!==String(receipt.id)))}/><span><b className="block">{receipt.receipt_number}</b><span className="text-xs text-slate-500">{receipt.payer_name||"Parent/Guardian"} · {formatDate(receipt.receipt_date)} · {receipt.payment_method}</span></span></span><b>{money(receipt.amount)} TZS</b></label>)}
+                        {!receipts.length&&<p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Hakuna risiti za ada zilizopostiwa bado.</p>}
+                    </div>
+                    <div className="finance-receipt-print hidden">{receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).map(r=><article key={r.id} className="mb-10 break-after-page border p-8 text-slate-900"><header className="border-b-2 pb-4 text-center"><h2 className="text-xl font-black">{school?.school_name||"School"}</h2><p className="font-bold">OFFICIAL SCHOOL FEES RECEIPT</p></header><div className="mt-5 grid grid-cols-2 gap-3 text-sm"><p><b>Receipt No:</b> {r.receipt_number}</p><p><b>Date:</b> {formatDate(r.receipt_date)}</p><p><b>Parent/Payer:</b> {r.payer_name||"—"}</p><p><b>Student ID:</b> {r.student ? [r.student.first_name,r.student.middle_name,r.student.last_name].filter(Boolean).join(" ") : "—"}</p><p><b>Admission:</b> {r.student?.admission_number||r.student?.admission_no||"—"}</p><p><b>Payment method:</b> {r.payment_method}</p><p><b>Reference:</b> {r.reference_number||"—"}</p></div><p className="mt-8 text-lg font-black">AMOUNT RECEIVED: {money(r.amount)} TZS</p><p className="mt-3">{r.description||"School fees payment"}</p><p className="mt-16 border-t pt-2 text-xs">Issued by AfriCore ERP PRO</p></article>)}</div>
+                </section>
+                <style>{'@media print { body * { visibility:hidden !important; } body .finance-receipt-print, body .finance-receipt-print * { visibility:visible !important; } body .finance-receipt-print { display:block !important; position:absolute; inset:0; padding:18mm; background:white; } }'}</style>
 
                 {/* =================================================
                     KPI CARDS
