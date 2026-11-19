@@ -55,7 +55,7 @@ export default function StockManagement() {
       let orderQuery = supabase.from("stock_purchase_orders").select("*, stock_purchase_order_items(id,item_id,quantity_ordered,quantity_received,unit_cost,stock_items(item_name))").order("created_at", { ascending: false }).limit(100);
       let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");
       let studentQuery = supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").order("first_name");
-      let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,parent_name,guardian_name,admission_number,admission_no), parent_portal_accounts(username), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label))").order("created_at", { ascending: false }).limit(100);
+      let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,parent_name,guardian_name,admission_number,admission_no), parent_portal_accounts(username), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label))").order("created_at", { ascending: false }).limit(1000);
       if (schoolId) {
         itemQuery = itemQuery.eq("school_id", schoolId);
         catQuery = catQuery.eq("school_id", schoolId);
