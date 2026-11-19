@@ -1002,7 +1002,7 @@ router.get("/stock/orders", async (req, res) => {
   try {
     const result = await supabase.from("stock_student_orders")
       .select("id,order_number,order_date,status,payment_status,total_amount,notes,created_at,parent_account_id,stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label,unit_of_measure))")
-      .eq("school_id", school.id).eq("student_id", student.id)
+      .eq("school_id", school.id).eq("student_id", student.id).eq("parent_account_id", account.id)
       .order("created_at", { ascending: false }).limit(50);
     if (result.error) throw result.error;
     return res.json({ success: true, orders: result.data || [] });
@@ -1041,7 +1041,7 @@ router.post("/stock/orders", async (req, res) => {
     });
   } catch (error) {
     console.error("PARENT STOCK ORDER SUBMISSION ERROR:", error);
-    return res.status(400).json({ success: false, message: error.message || "Unable to submit your order." });
+    return res.status(400).json({ success: false, message: error.code === "23505" ? "An order with these details already exists. Refresh your orders before trying again." : "Unable to submit your order. Please check the selected items and try again." });
   }
 });
 
