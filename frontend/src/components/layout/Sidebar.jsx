@@ -21,6 +21,7 @@ import {
   FaPrint,
   FaBed,
   FaBuilding,
+  FaBoxes,
 } from "react-icons/fa";
 
 import { useRole } from "../../context/RoleContext";
@@ -230,6 +231,13 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
         "academic master",
         "secretary"
       ]
+    },
+
+    {
+      name: "Stock Management",
+      path: "/stock",
+      icon: <FaBoxes />,
+      roles: ["super admin", "headmaster", "accountant"]
     },
 
     {
