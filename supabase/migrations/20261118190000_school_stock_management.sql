@@ -32,6 +32,7 @@ create table if not exists public.stock_items (
   sku text,
   item_name text not null,
   description text,
+  variant_label text,
   unit_of_measure text not null default 'pcs',
   reorder_level numeric(14,3) not null default 0 check (reorder_level >= 0),
   cost_price numeric(14,2) not null default 0 check (cost_price >= 0),
@@ -66,6 +67,8 @@ create table if not exists public.stock_movements (
   quantity numeric(14,3) not null check (quantity > 0),
   unit_cost numeric(14,2) not null default 0 check (unit_cost >= 0),
   reference_number text,
+  batch_number text,
+  expiry_date date,
   notes text,
   movement_date date not null default current_date,
   created_at timestamptz not null default now(),
@@ -135,6 +138,10 @@ create index if not exists idx_stock_balances_school_item on public.stock_balanc
 create index if not exists idx_stock_movements_school_date on public.stock_movements(school_id, movement_date desc);
 create index if not exists idx_stock_orders_school_status on public.stock_purchase_orders(school_id, status);
 create index if not exists idx_stock_student_orders_school_date on public.stock_student_orders(school_id, order_date desc);
+
+alter table public.stock_items add column if not exists variant_label text;
+alter table public.stock_movements add column if not exists batch_number text;
+alter table public.stock_movements add column if not exists expiry_date date;
 
 -- Every stock movement updates the running balance in the same database transaction.
 create or replace function public.apply_stock_movement_to_balance()
@@ -254,6 +261,28 @@ drop trigger if exists trg_validate_stock_student_item_tenant on public.stock_st
 create trigger trg_validate_stock_student_item_tenant
 before insert or update on public.stock_student_order_items
 for each row execute function public.validate_stock_order_item_tenant();
+
+create or replace function public.validate_stock_student_order_tenant()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $
+begin
+  if not exists (
+    select 1 from public.students s
+    where s.id = new.student_id and s.school_id = new.school_id
+  ) then
+    raise exception 'Student must belong to the same school as the stock order.';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists trg_validate_stock_student_order_tenant on public.stock_student_orders;
+create trigger trg_validate_stock_student_order_tenant
+before insert or update on public.stock_student_orders
+for each row execute function public.validate_stock_student_order_tenant();
 
 -- Tenant isolation: reads are limited to the active school. Mutations are restricted
 -- to Headmaster/Accountant (or Super Admin) and never trust a client-supplied school_id.
