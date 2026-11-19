@@ -179,28 +179,6 @@ export default function StockManagement() {
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
 
-  const fulfilStudentOrder = async (order, line) => {
-    const remaining = Number(line.quantity_ordered) - Number(line.quantity_issued);
-    const locationId = locations[0]?.id;
-    if (!locationId) { setError("Create a stock location before issuing uniform."); return; }
-    if (remaining <= 0) return;
-    setSaving(true); setError(""); setNotice("");
-    try {
-      const { error: movementError } = await supabase.from("stock_movements").insert({
-        school_id: schoolId, item_id: line.item_id, location_id: locationId, movement_type: "sale",
-        quantity: remaining, unit_cost: Number(items.find((i) => i.id === line.item_id)?.cost_price || 0),
-        reference_number: order.order_number, notes: `Uniform issued to student for order ${order.order_number}`,
-        created_by: (await supabase.auth.getUser()).data.user?.id
-      });
-      if (movementError) throw movementError;
-      const { error: lineError } = await supabase.from("stock_student_order_items").update({ quantity_issued: Number(line.quantity_issued) + remaining }).eq("id", line.id).eq("school_id", schoolId);
-      if (lineError) throw lineError;
-      const { error: orderError } = await supabase.from("stock_student_orders").update({ status: "fulfilled" }).eq("id", order.id).eq("school_id", schoolId);
-      if (orderError) throw orderError;
-      setNotice("Uniform issued and stock balance reduced. Record/confirm payment through the school's approved finance process."); await loadData();
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
-  };
-
   const updateOrderStatus = async (order, status) => {
     setSaving(true); setError(""); setNotice("");
     try {
