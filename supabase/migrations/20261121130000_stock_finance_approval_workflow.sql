@@ -86,6 +86,13 @@ declare
 begin
   if v_user is null then raise exception 'Authentication is required.'; end if;
   v_school_id := public.get_current_user_school_id();
+  if v_school_id is null and public.is_current_user_super_admin() then
+    if p_request_type = 'purchase_receipt' then
+      select school_id into v_school_id from public.stock_movements where id = p_source_id;
+    elsif p_request_type = 'student_order_payment' then
+      select school_id into v_school_id from public.stock_student_order_payments where id = p_source_id;
+    end if;
+  end if;
   if v_school_id is null then raise exception 'Active school is not configured.'; end if;
 
   if not public.is_current_user_super_admin() and not exists (
@@ -192,6 +199,10 @@ declare
 begin
   if v_user is null then raise exception 'Authentication is required.'; end if;
   v_school_id := public.get_current_user_school_id();
+  if v_school_id is null and public.is_current_user_super_admin() then
+    select school_id into v_school_id from public.stock_finance_approval_requests where id = p_request_id;
+  end if;
+  if v_school_id is null then raise exception 'Finance request school could not be resolved.'; end if;
   if not public.is_current_user_super_admin() and not exists (
     select 1 from public.profile_roles pr
     join public.roles r on r.id = pr.role_id
@@ -312,6 +323,10 @@ declare
 begin
   if v_user is null then raise exception 'Authentication is required.'; end if;
   v_school_id := public.get_current_user_school_id();
+  if v_school_id is null and public.is_current_user_super_admin() then
+    select school_id into v_school_id from public.stock_finance_approval_requests where id = p_request_id;
+  end if;
+  if v_school_id is null then raise exception 'Finance request school could not be resolved.'; end if;
   if not public.is_current_user_super_admin() and not exists (
     select 1 from public.profile_roles pr
     join public.roles r on r.id = pr.role_id
