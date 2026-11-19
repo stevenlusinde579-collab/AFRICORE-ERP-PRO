@@ -20,7 +20,7 @@ export default function StockReceipts({ schoolId }) {
     try {
       const [receiptResult, documentResult, studentResult] = await Promise.all([
         supabase.schema("finance").from("receipts").select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status").eq("school_id", schoolId).like("receipt_number", "STOCK-%").order("receipt_date", { ascending: false }).limit(1000),
-        supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id", schoolId).eq("document_type", "receipt").eq("source_type", "stock_student_order_payment"),
+        supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id", schoolId).eq("document_type", "receipt").eq("source_type", "stock_payment"),
         supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").eq("school_id", schoolId)
       ]);
       if (receiptResult.error) throw receiptResult.error;
