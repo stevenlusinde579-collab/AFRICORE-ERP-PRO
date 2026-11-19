@@ -1151,7 +1151,7 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
-    const [classResult, charges, payments, communications, announcements, meetings, publishedSnapshots, attendance, suggestions, publishedLetters] = await Promise.all([
+    const [classResult, charges, payments, communications, announcements, meetings, publishedSnapshots, attendance, suggestions, publishedLetters, documents] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
@@ -1164,8 +1164,9 @@ router.get("/dashboard", async (req, res) => {
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("parent_portal_published_letters").select("id,letter_type,title,payload,published_at").eq("school_id",school.id).eq("student_id",student.id).order("published_at",{ascending:false}).limit(100),
+      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload").eq("school_id",school.id).eq("student_id",student.id).eq("parent_account_id",req.parent.account.id).eq("status","issued").order("document_date",{ascending:false}).limit(200),
     ]);
-    for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions,publishedLetters]) if (result.error) throw result.error;
+    for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions,publishedLetters,documents]) if (result.error) throw result.error;
     const parentExams = (publishedSnapshots.data || [])
       .filter(snapshot => {
         const report = snapshot.result_snapshot?.report_form;
@@ -1187,7 +1188,7 @@ router.get("/dashboard", async (req, res) => {
       student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no, class_name: classResult.data?.class_name || student.class_name || "-", school_name: school.school_name, academic_year_id: student.academic_year_id, status: student.status || student.student_status },
       finance: { total_charged: totalCharged, total_paid: totalPaid, balance: totalBalance, charges: chargeRows, payments: payments.data || [] },
       communications: communications.data || [], announcements: announcements.data || [], meetings: meetings.data || [],
-      exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], published_letters: publishedLetters.data || [], chat: chat.data || [], group_members: groupMembers,
+      exams: parentExams, attendance: attendance.data || [], suggestions: suggestions.data || [], published_letters: publishedLetters.data || [], documents: documents.data || [], chat: chat.data || [], group_members: groupMembers,
       must_change_password: req.parent.account.must_change_password,
       portal_type: req.parent.account.is_sponsor ? "Sponsor" : "Parent",
       sponsor_center_name: req.parent.account.sponsor_center_name || null,
