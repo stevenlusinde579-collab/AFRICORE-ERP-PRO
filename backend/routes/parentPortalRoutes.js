@@ -1198,7 +1198,7 @@ router.get("/dashboard", async (req, res) => {
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("parent_portal_published_letters").select("id,letter_type,title,payload,published_at").eq("school_id",school.id).eq("student_id",student.id).order("published_at",{ascending:false}).limit(100),
-      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload").eq("school_id",school.id).eq("student_id",student.id).eq("parent_account_id",req.parent.account.id).eq("status","issued").order("document_date",{ascending:false}).limit(200),
+      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload,publication_status,published_at").eq("school_id",school.id).eq("student_id",student.id).eq("parent_account_id",req.parent.account.id).eq("status","issued").eq("publication_status","published").order("document_date",{ascending:false}).limit(200),
     ]);
     for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions,publishedLetters,documents]) if (result.error) throw result.error;
     const parentExams = (publishedSnapshots.data || [])
