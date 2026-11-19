@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../services/supabase";
 import { useRole } from "../../context/RoleContext";
 
-const TABS = ["Overview", "Items", "Movements", "Purchase Orders", "Recommendations"];
+const TABS = ["Overview", "Items", "Movements", "Purchase Orders", "Student Uniform Orders", "Recommendations"];
 const money = (n) => new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 0 }).format(Number(n) || 0);
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyItem = { item_name: "", sku: "", category_id: "", variant_label: "", unit_of_measure: "pcs", reorder_level: "0", cost_price: "0", selling_price: "0", is_for_sale: false, track_expiry: false };
@@ -21,13 +21,13 @@ export default function StockManagement() {
   const [balances, setBalances] = useState([]);
   const [movements, setMovements] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);\n  const [students, setStudents] = useState([]);\n  const [studentOrders, setStudentOrders] = useState([]);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
-  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [showOrderForm, setShowOrderForm] = useState(false);\n  const [showStudentOrderForm, setShowStudentOrderForm] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItem);
   const [movementForm, setMovementForm] = useState({ item_id: "", location_id: "", movement_type: "receive", quantity: "", unit_cost: "0", movement_date: today(), expiry_date: "", batch_number: "", notes: "" });
-  const [orderForm, setOrderForm] = useState({ supplier_id: "", expected_delivery_date: "", notes: "", item_id: "", quantity_ordered: "", unit_cost: "" });
+  const [orderForm, setOrderForm] = useState({ supplier_id: "", expected_delivery_date: "", notes: "", item_id: "", quantity_ordered: "", unit_cost: "" });\n  const [studentOrderForm, setStudentOrderForm] = useState({ student_id: "", item_id: "", quantity_ordered: "1", notes: "" });
   const [search, setSearch] = useState("");
 
   const isSuper = Boolean(isSuperAdmin) || Number(selectedRoleId) === 1;
@@ -47,7 +47,7 @@ export default function StockManagement() {
       let balanceQuery = supabase.from("stock_balances").select("*, stock_items(item_name,unit_of_measure,reorder_level,cost_price,is_for_sale), stock_locations(name)").order("updated_at", { ascending: false });
       let moveQuery = supabase.from("stock_movements").select("*, stock_items(item_name,unit_of_measure), stock_locations(name)").order("created_at", { ascending: false }).limit(100);
       let orderQuery = supabase.from("stock_purchase_orders").select("*, stock_purchase_order_items(id,item_id,quantity_ordered,quantity_received,unit_cost,stock_items(item_name))").order("created_at", { ascending: false }).limit(100);
-      let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");
+      let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");\n      let studentQuery = supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").order("first_name");\n      let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,admission_number,admission_no), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label))").order("created_at", { ascending: false }).limit(100);
       if (schoolId) {
         itemQuery = itemQuery.eq("school_id", schoolId);
         catQuery = catQuery.eq("school_id", schoolId);
@@ -55,13 +55,13 @@ export default function StockManagement() {
         balanceQuery = balanceQuery.eq("school_id", schoolId);
         moveQuery = moveQuery.eq("school_id", schoolId);
         orderQuery = orderQuery.eq("school_id", schoolId);
-        supplierQuery = supplierQuery.eq("school_id", schoolId);
+        supplierQuery = supplierQuery.eq("school_id", schoolId);\n        studentQuery = studentQuery.eq("school_id", schoolId).eq("student_status", "active");\n        studentOrderQuery = studentOrderQuery.eq("school_id", schoolId);
       }
-      const results = await Promise.all([itemQuery, catQuery, locQuery, balanceQuery, moveQuery, orderQuery, supplierQuery]);
+      const results = await Promise.all([itemQuery, catQuery, locQuery, balanceQuery, moveQuery, orderQuery, supplierQuery, studentQuery, studentOrderQuery]);
       for (const result of results) if (result.error) throw result.error;
       setItems(results[0].data || []); setCategories(results[1].data || []); setLocations(results[2].data || []);
       setBalances(results[3].data || []); setMovements(results[4].data || []); setPurchaseOrders(results[5].data || []);
-      setSuppliers(results[6].data || []);
+      setSuppliers(results[6].data || []); setStudents(results[7].data || []); setStudentOrders(results[8].data || []);
     } catch (e) { setError(e.message || "Failed to load stock data."); }
     finally { setLoading(false); }
   }, [schoolId, isSuper]);
@@ -144,6 +144,54 @@ export default function StockManagement() {
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
 
+  const createStudentOrder = async (event) => {
+    event.preventDefault(); setSaving(true); setError(""); setNotice("");
+    try {
+      if (!schoolId) throw new Error("No active school selected.");
+      const quantity = Number(studentOrderForm.quantity_ordered);
+      const item = items.find((i) => String(i.id) === String(studentOrderForm.item_id));
+      if (!studentOrderForm.student_id || !item || !(quantity > 0)) throw new Error("Choose a student, item and valid quantity.");
+      if (!item.is_for_sale) throw new Error("This item is not configured for sale to students.");
+      const user = (await supabase.auth.getUser()).data.user;
+      const orderNumber = `SO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      const { data: order, error: orderError } = await supabase.from("stock_student_orders").insert({
+        school_id: schoolId, student_id: Number(studentOrderForm.student_id), order_number: orderNumber,
+        status: "pending", payment_status: "unpaid", total_amount: quantity * Number(item.selling_price || 0),
+        notes: studentOrderForm.notes, created_by: user?.id
+      }).select("id").single();
+      if (orderError) throw orderError;
+      const { error: lineError } = await supabase.from("stock_student_order_items").insert({
+        school_id: schoolId, student_order_id: order.id, item_id: item.id,
+        quantity_ordered: quantity, unit_price: Number(item.selling_price || 0)
+      });
+      if (lineError) throw lineError;
+      setNotice(`Student order ${orderNumber} saved. It is pending fulfilment and payment recording.`);
+      setShowStudentOrderForm(false); setStudentOrderForm({ student_id: "", item_id: "", quantity_ordered: "1", notes: "" }); await loadData();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  };
+
+  const fulfilStudentOrder = async (order, line) => {
+    const remaining = Number(line.quantity_ordered) - Number(line.quantity_issued);
+    const locationId = locations[0]?.id;
+    if (!locationId) { setError("Create a stock location before issuing uniform."); return; }
+    if (remaining <= 0) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const { error: movementError } = await supabase.from("stock_movements").insert({
+        school_id: schoolId, item_id: line.item_id, location_id: locationId, movement_type: "sale",
+        quantity: remaining, unit_cost: Number(items.find((i) => i.id === line.item_id)?.cost_price || 0),
+        reference_number: order.order_number, notes: `Uniform issued to student for order ${order.order_number}`,
+        created_by: (await supabase.auth.getUser()).data.user?.id
+      });
+      if (movementError) throw movementError;
+      const { error: lineError } = await supabase.from("stock_student_order_items").update({ quantity_issued: Number(line.quantity_issued) + remaining }).eq("id", line.id).eq("school_id", schoolId);
+      if (lineError) throw lineError;
+      const { error: orderError } = await supabase.from("stock_student_orders").update({ status: "fulfilled" }).eq("id", order.id).eq("school_id", schoolId);
+      if (orderError) throw orderError;
+      setNotice("Uniform issued and stock balance reduced. Record/confirm payment through the school's approved finance process."); await loadData();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  };
+
   const updateOrderStatus = async (order, status) => {
     setSaving(true); setError(""); setNotice("");
     try {
@@ -214,11 +262,15 @@ export default function StockManagement() {
 
     {tab === "Purchase Orders" && <section className="space-y-3">{purchaseOrders.map((o) => <div key={o.id} className="rounded-xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold">{o.order_number}</p><p className="text-xs text-slate-500">{suppliers.find((s) => s.id === o.supplier_id)?.supplier_name || "No supplier"} · {o.order_date} · {money(o.total_amount)}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold capitalize">{o.status.replaceAll("_"," ")}</span></div><div className="mt-3 space-y-2">{(o.stock_purchase_order_items || []).map((line) => <div key={line.id} className="flex flex-wrap justify-between gap-2 border-t pt-2 text-sm"><span>{line.stock_items?.item_name}</span><span>{line.quantity_received} / {line.quantity_ordered} received</span>{canReceive && ["approved","partially_received"].includes(o.status) && Number(line.quantity_received) < Number(line.quantity_ordered) && <button onClick={() => receiveOrderLine(o,line)} className="font-semibold text-blue-700">Receive goods</button>}</div>)}</div><div className="mt-3 flex flex-wrap gap-2">{canManage && o.status === "draft" && <button disabled={saving} onClick={() => updateOrderStatus(o,"submitted")} className="rounded-lg border px-3 py-2 text-xs font-semibold">Submit for approval</button>}{canApprove && o.status === "submitted" && <button disabled={saving} onClick={() => updateOrderStatus(o,"approved")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Approve order</button>}{canApprove && ["draft","submitted"].includes(o.status) && <button disabled={saving} onClick={() => updateOrderStatus(o,"cancelled")} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700">Cancel</button>}</div></div>)}{!purchaseOrders.length && <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">No purchase orders yet.</div>}</section>}
 
+    {tab === "Student Uniform Orders" && <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Student Uniform Orders</h2><p className="text-sm text-slate-500">Track student requests, issued items and outstanding fulfilment.</p></div>{canManage && <button onClick={() => setShowStudentOrderForm(true)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">New Student Order</button>}</div>{studentOrders.map((o) => <div key={o.id} className="rounded-xl border bg-white p-4"><div className="flex flex-wrap justify-between gap-3"><div><p className="font-bold">{o.order_number} · {[o.students?.first_name,o.students?.middle_name,o.students?.last_name].filter(Boolean).join(" ")}</p><p className="text-xs text-slate-500">Admission: {o.students?.admission_number || o.students?.admission_no || "—"} · {o.order_date} · {money(o.total_amount)}</p></div><div className="flex gap-2"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs capitalize">{o.status.replaceAll("_"," ")}</span><span className="rounded-full bg-amber-50 px-3 py-1 text-xs capitalize">{o.payment_status}</span></div></div>{(o.stock_student_order_items || []).map((line) => <div key={line.id} className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm"><span>{line.stock_items?.item_name} {line.stock_items?.variant_label || ""}</span><span>{line.quantity_issued} / {line.quantity_ordered} issued</span>{canIssue && Number(line.quantity_issued) < Number(line.quantity_ordered) && o.status !== "cancelled" && <button disabled={saving} onClick={() => fulfilStudentOrder(o,line)} className="font-semibold text-blue-700">Issue uniform</button>}</div>)}</div>)}{!studentOrders.length && <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">No student uniform orders have been entered.</div>}<p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800">Issuing uniform updates stock. Payment status is not automatically marked as paid; use the existing Finance receipt workflow to record actual payments, avoiding duplicate receipts.</p></section>}
+
     {tab === "Recommendations" && <section className="rounded-xl border bg-white p-5"><h2 className="font-bold">Replenishment Recommendations</h2><p className="mt-1 text-sm text-slate-500">Based on recorded balances and configured reorder levels. Forecasting improves as the school records regular stock issues.</p><div className="mt-4 divide-y">{lowStock.map((i) => { const qty = balances.filter((b) => b.item_id === i.id).reduce((s,b) => s + Number(b.quantity_on_hand || 0),0); const target = Math.max(Number(i.reorder_level || 0) * 2, Number(i.reorder_level || 0) + 1); return <div key={i.id} className="py-3"><p className="font-semibold">{i.item_name}</p><p className="text-sm text-slate-600">Available: {qty} {i.unit_of_measure}. Reorder level: {i.reorder_level}. Suggested replenishment: {Math.max(0,target-qty)} {i.unit_of_measure}.</p></div>; })}{!lowStock.length && <p className="py-5 text-sm text-emerald-700">Current stock is above all configured reorder levels.</p>}</div><p className="mt-4 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">Recommendations are rule-based, not AI forecasts. The system does not invent daily consumption or supplier lead times when there is not enough recorded history.</p></section>}
 
     {showItemForm && <Modal title="Add Stock Item" onClose={() => setShowItemForm(false)}><form onSubmit={saveItem} className="grid gap-3 md:grid-cols-2"><Field label="Item name" required><input required value={itemForm.item_name} onChange={(e)=>setItemForm({...itemForm,item_name:e.target.value})} className="control"/></Field><Field label="SKU / Code"><input value={itemForm.sku} onChange={(e)=>setItemForm({...itemForm,sku:e.target.value})} className="control"/></Field><Field label="Category"><select value={itemForm.category_id} onChange={(e)=>setItemForm({...itemForm,category_id:e.target.value})} className="control"><option value="">Uncategorised</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><Field label="Variant (size / colour / type)"><input value={itemForm.variant_label} onChange={(e)=>setItemForm({...itemForm,variant_label:e.target.value})} className="control"/></Field><Field label="Unit of measure"><input value={itemForm.unit_of_measure} onChange={(e)=>setItemForm({...itemForm,unit_of_measure:e.target.value})} className="control"/></Field><Field label="Reorder level"><input type="number" min="0" step="0.001" value={itemForm.reorder_level} onChange={(e)=>setItemForm({...itemForm,reorder_level:e.target.value})} className="control"/></Field><Field label="Cost price (TZS)"><input type="number" min="0" step="0.01" value={itemForm.cost_price} onChange={(e)=>setItemForm({...itemForm,cost_price:e.target.value})} className="control"/></Field><Field label="Selling price (TZS)"><input type="number" min="0" step="0.01" value={itemForm.selling_price} onChange={(e)=>setItemForm({...itemForm,selling_price:e.target.value})} className="control"/></Field><div className="flex flex-wrap gap-4 text-sm"><label><input type="checkbox" checked={itemForm.is_for_sale} onChange={(e)=>setItemForm({...itemForm,is_for_sale:e.target.checked})}/> Sold to students</label><label><input type="checkbox" checked={itemForm.track_expiry} onChange={(e)=>setItemForm({...itemForm,track_expiry:e.target.checked})}/> Track expiry</label></div><div className="md:col-span-2 flex justify-end gap-2"><button type="button" onClick={()=>setShowItemForm(false)} className="rounded-lg border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white">{saving?"Saving…":"Save Item"}</button></div></form></Modal>}
 
     {showMovementForm && <Modal title="Record Stock Movement" onClose={()=>setShowMovementForm(false)}><form onSubmit={saveMovement} className="grid gap-3"><Field label="Item" required><select required value={movementForm.item_id} onChange={(e)=>setMovementForm({...movementForm,item_id:e.target.value})} className="control"><option value="">Select item</option>{items.map(i=><option key={i.id} value={i.id}>{i.item_name}</option>)}</select></Field><Field label="Store / Location" required><select required value={movementForm.location_id} onChange={(e)=>setMovementForm({...movementForm,location_id:e.target.value})} className="control"><option value="">Select store</option>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></Field><Field label="Movement type" required><select value={movementForm.movement_type} onChange={(e)=>setMovementForm({...movementForm,movement_type:e.target.value})} className="control">{["receive","opening","return","issue","sale","damaged","expired","adjustment_in","adjustment_out"].map(x=><option key={x} value={x}>{x.replaceAll("_"," ")}</option>)}</select></Field><Field label="Quantity" required><input type="number" min="0.001" step="0.001" required value={movementForm.quantity} onChange={(e)=>setMovementForm({...movementForm,quantity:e.target.value})} className="control"/></Field><Field label="Unit cost (TZS)"><input type="number" min="0" step="0.01" value={movementForm.unit_cost} onChange={(e)=>setMovementForm({...movementForm,unit_cost:e.target.value})} className="control"/></Field><Field label="Date"><input type="date" value={movementForm.movement_date} onChange={(e)=>setMovementForm({...movementForm,movement_date:e.target.value})} className="control"/></Field><Field label="Batch number"><input value={movementForm.batch_number} onChange={(e)=>setMovementForm({...movementForm,batch_number:e.target.value})} className="control"/></Field><Field label="Expiry date (if applicable)"><input type="date" value={movementForm.expiry_date} onChange={(e)=>setMovementForm({...movementForm,expiry_date:e.target.value})} className="control"/></Field><Field label="Notes / reference"><input value={movementForm.notes} onChange={(e)=>setMovementForm({...movementForm,notes:e.target.value})} className="control"/></Field><div className="flex justify-end gap-2"><button type="button" onClick={()=>setShowMovementForm(false)} className="rounded-lg border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white">{saving?"Saving…":"Record Movement"}</button></div></form></Modal>}
+
+    {showStudentOrderForm && <Modal title="Create Student Uniform Order" onClose={() => setShowStudentOrderForm(false)}><form onSubmit={createStudentOrder} className="grid gap-3"><Field label="Student" required><select required value={studentOrderForm.student_id} onChange={(e)=>setStudentOrderForm({...studentOrderForm,student_id:e.target.value})} className="control"><option value="">Select student</option>{students.map(s=><option key={s.id} value={s.id}>{[s.first_name,s.middle_name,s.last_name].filter(Boolean).join(" ")} · {s.admission_number || s.admission_no || s.id}</option>)}</select></Field><Field label="Uniform / item" required><select required value={studentOrderForm.item_id} onChange={(e)=>setStudentOrderForm({...studentOrderForm,item_id:e.target.value})} className="control"><option value="">Select sale item</option>{items.filter(i=>i.is_for_sale).map(i=><option key={i.id} value={i.id}>{i.item_name} {i.variant_label || ""} · {money(i.selling_price)}</option>)}</select></Field><Field label="Quantity" required><input type="number" min="1" step="1" required value={studentOrderForm.quantity_ordered} onChange={(e)=>setStudentOrderForm({...studentOrderForm,quantity_ordered:e.target.value})} className="control"/></Field><Field label="Notes"><textarea rows="2" value={studentOrderForm.notes} onChange={(e)=>setStudentOrderForm({...studentOrderForm,notes:e.target.value})} className="control"/></Field><p className="text-xs text-slate-500">The order will be saved as unpaid. Stock is deducted only when the item is issued. Record the actual payment separately through Finance.</p><div className="flex justify-end gap-2"><button type="button" onClick={()=>setShowStudentOrderForm(false)} className="rounded-lg border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white">{saving?"Saving…":"Save Student Order"}</button></div></form></Modal>}
 
     {showOrderForm && <Modal title="Create Purchase Order" onClose={()=>setShowOrderForm(false)}><form onSubmit={createPurchaseOrder} className="grid gap-3"><Field label="Supplier"><select value={orderForm.supplier_id} onChange={(e)=>setOrderForm({...orderForm,supplier_id:e.target.value})} className="control"><option value="">Choose supplier (optional)</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.supplier_name}</option>)}</select></Field><Field label="Item" required><select required value={orderForm.item_id} onChange={(e)=>setOrderForm({...orderForm,item_id:e.target.value})} className="control"><option value="">Select item</option>{items.map(i=><option key={i.id} value={i.id}>{i.item_name}</option>)}</select></Field><div className="grid grid-cols-2 gap-3"><Field label="Quantity" required><input required type="number" min="0.001" step="0.001" value={orderForm.quantity_ordered} onChange={(e)=>setOrderForm({...orderForm,quantity_ordered:e.target.value})} className="control"/></Field><Field label="Unit cost (TZS)"><input type="number" min="0" step="0.01" value={orderForm.unit_cost} onChange={(e)=>setOrderForm({...orderForm,unit_cost:e.target.value})} className="control"/></Field></div><Field label="Expected delivery"><input type="date" value={orderForm.expected_delivery_date} onChange={(e)=>setOrderForm({...orderForm,expected_delivery_date:e.target.value})} className="control"/></Field><Field label="Notes"><textarea rows="2" value={orderForm.notes} onChange={(e)=>setOrderForm({...orderForm,notes:e.target.value})} className="control"/></Field><p className="text-xs text-slate-500">The order is saved as a draft. Submitting it does not create an expense or reduce cash. Receive goods separately when delivered.</p><div className="flex justify-end gap-2"><button type="button" onClick={()=>setShowOrderForm(false)} className="rounded-lg border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white">{saving?"Saving…":"Save Draft"}</button></div></form></Modal>}
     <style>{`.control{width:100%;border:1px solid #cbd5e1;border-radius:.5rem;padding:.6rem .75rem;background:white;color:#0f172a}.control:focus{outline:2px solid #93c5fd;outline-offset:1px}`}</style>
