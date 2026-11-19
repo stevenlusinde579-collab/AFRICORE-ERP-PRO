@@ -953,6 +953,89 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
 });
 
 router.use(parentAuth);
+/**
+ * Parent/Sponsor stock ordering.
+ * The parent token is verified by parentAuth above; all school/student/account
+ * identifiers are taken from that verified session, never from request input.
+ */
+router.get("/stock/catalog", async (req, res) => {
+  const { student, school, account } = req.parent;
+  if (account.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor accounts cannot place student orders." });
+  try {
+    const [itemsResult, balancesResult] = await Promise.all([
+      supabase.from("stock_items")
+        .select("id,item_name,variant_label,sku,unit_of_measure,selling_price,default_location_id")
+        .eq("school_id", school.id).eq("is_active", true).eq("is_for_sale", true).order("item_name"),
+      supabase.from("stock_balances")
+        .select("item_id,quantity_on_hand,location_id")
+        .eq("school_id", school.id),
+    ]);
+    if (itemsResult.error || balancesResult.error) throw itemsResult.error || balancesResult.error;
+    const balances = new Map();
+    for (const row of balancesResult.data || []) balances.set(Number(row.item_id), (balances.get(Number(row.item_id)) || 0) + Number(row.quantity_on_hand || 0));
+    return res.json({
+      success: true,
+      student: { id: student.id, name: fullName(student), admission_number: student.admission_number || student.admission_no },
+      items: (itemsResult.data || []).map(item => ({
+        ...item, quantity_on_hand: balances.get(Number(item.id)) || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("PARENT STOCK CATALOG ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load school items." });
+  }
+});
+
+router.get("/stock/orders", async (req, res) => {
+  const { student, school, account } = req.parent;
+  if (account.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor accounts cannot view student orders." });
+  try {
+    const result = await supabase.from("stock_student_orders")
+      .select("id,order_number,order_date,status,payment_status,total_amount,notes,created_at,parent_account_id,stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label,unit_of_measure))")
+      .eq("school_id", school.id).eq("student_id", student.id)
+      .order("created_at", { ascending: false }).limit(50);
+    if (result.error) throw result.error;
+    return res.json({ success: true, orders: result.data || [] });
+  } catch (error) {
+    console.error("PARENT STOCK ORDERS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load your school-item orders." });
+  }
+});
+
+router.post("/stock/orders", async (req, res) => {
+  const { student, school, account } = req.parent;
+  if (account.is_sponsor) return res.status(403).json({ success: false, message: "Sponsor accounts cannot place student orders." });
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length || items.length > 20) return res.status(400).json({ success: false, message: "Choose between 1 and 20 items." });
+    const normalized = items.map(line => ({
+      item_id: Number(line.item_id),
+      quantity: Number(line.quantity),
+    }));
+    if (normalized.some(line => !Number.isSafeInteger(line.item_id) || line.item_id <= 0 || !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 1000)) {
+      return res.status(400).json({ success: false, message: "Each item must have a valid item and quantity." });
+    }
+    const result = await supabase.rpc("create_parent_stock_student_order", {
+      p_parent_account_id: account.id,
+      p_student_id: student.id,
+      p_school_id: school.id,
+      p_items: normalized,
+      p_notes: String(req.body?.notes || "").trim().slice(0, 1000) || null,
+    });
+    if (result.error) throw result.error;
+    return res.status(201).json({
+      success: true,
+      order: result.data,
+      message_en: "Your order has been received successfully by the school. You can track its progress through your Parent Portal.",
+      message_sw: "Oda yako imepokelewa kikamilifu na shule. Unaweza kufuatilia maendeleo ya oda yako kupitia Parent Portal.",
+    });
+  } catch (error) {
+    console.error("PARENT STOCK ORDER SUBMISSION ERROR:", error);
+    return res.status(400).json({ success: false, message: error.message || "Unable to submit your order." });
+  }
+});
+
+
 
 
 
