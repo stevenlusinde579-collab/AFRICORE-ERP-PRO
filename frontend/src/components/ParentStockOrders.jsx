@@ -40,8 +40,10 @@ export default function ParentStockOrders({ token, student }) {
     if (!item || !Number.isFinite(qty) || qty <= 0 || qty > 1000) { setError("Chagua bidhaa na kiasi sahihi."); return; }
     setCart(current => {
       const found = current.find(row => String(row.item_id) === String(item.id));
+      const nextQty = (found?.quantity || 0) + qty;
+      if (nextQty > 1000) { setError("Idadi ya bidhaa haiwezi kuzidi 1,000."); return current; }
       return found
-        ? current.map(row => row.item_id === item.id ? { ...row, quantity: row.quantity + qty } : row)
+        ? current.map(row => row.item_id === item.id ? { ...row, quantity: nextQty } : row)
         : [...current, { item_id: item.id, quantity: qty, item }];
     });
     setSelectedItem(""); setQuantity("1"); setError("");
