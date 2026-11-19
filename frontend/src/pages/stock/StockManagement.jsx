@@ -86,7 +86,14 @@ export default function StockManagement() {
       setItems(results[0].data || []); setCategories(results[1].data || []); setLocations(results[2].data || []);
       setBalances(results[3].data || []); setMovements(results[4].data || []); setPurchaseOrders(results[5].data || []);
       setSuppliers(results[6].data || []); setStudents(results[7].data || []); setStudentOrders(results[8].data || []);
-       setFinanceRequests(results[9].data || []); setFinanceAccounts(results[10].data || []); setCashAccounts(results[11].data || []);
+       let allFinanceRequests = results[9].data || [];
+       for (let offset = 1000; allFinanceRequests.length >= offset; offset += 1000) {
+         const { data: page, error: pageError } = await financeRequestQuery.range(offset, offset + 999);
+         if (pageError) throw pageError;
+         allFinanceRequests = allFinanceRequests.concat(page || []);
+         if (!page || page.length < 1000) break;
+       }
+       setFinanceRequests(allFinanceRequests); setFinanceAccounts(results[10].data || []); setCashAccounts(results[11].data || []);
     } catch (e) { setError(e.message || "Failed to load stock data."); }
     finally { setLoading(false); }
   }, [schoolId, isSuper]);
@@ -445,6 +452,7 @@ export default function StockManagement() {
       <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Parent Order Stock Shortages</h2><p className="mt-1 text-sm text-slate-500">Outstanding parent orders compared with current physical stock</p>{studentOrderStockSummary.shortageRows.length ? <div className="mt-4 divide-y">{studentOrderStockSummary.shortageRows.map((row) => <div key={row.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{row.name}</p><p className="text-xs text-slate-500">On hand: {row.onHand} · Reserved: {row.reserved}</p></div><span className="h-fit rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-800">Short by {row.shortage} {row.unit}</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No shortages against outstanding parent orders.</p>}</section>
       <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Purchase Orders Requiring Attention</h2><p className="mt-1 text-sm text-slate-500">{pendingOrders.length} open orders</p>{pendingOrders.length ? <div className="mt-4 divide-y">{pendingOrders.slice(0,8).map((o) => <div key={o.id} className="flex items-center justify-between gap-3 py-3"><div><p className="font-semibold">{o.order_number}</p><p className="text-xs text-slate-500">{o.status.replaceAll("_"," ")} · {money(o.total_amount)}</p></div><button className="text-sm font-semibold text-blue-700" onClick={() => setTab("Purchase Orders")}>View</button></div>)}</div> : <p className="py-6 text-sm text-slate-500">No outstanding purchase orders.</p>}</section>
       <section className="rounded-xl border bg-white p-5 lg:col-span-2"><h2 className="font-bold text-slate-900">Recent Stock Activity</h2>{movements.slice(0,8).map((m) => <div key={m.id} className="flex flex-wrap justify-between gap-2 border-b py-3 last:border-0"><div><p className="font-medium">{m.stock_items?.item_name}</p><p className="text-xs text-slate-500">{m.movement_type.replaceAll("_"," ")} · {m.stock_locations?.name} · {m.movement_date}</p></div><p className="font-semibold tabular-nums">{m.quantity} {m.stock_items?.unit_of_measure}</p></div>)}{!movements.length && <p className="py-5 text-sm text-slate-500">No stock activity recorded yet.</p>}</section>
+      </div>
     </div>}
 
     {tab === "Locations" && <section className="rounded-xl border bg-white p-4 md:p-5"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Stores & Locations</h2><p className="text-sm text-slate-500">Manage school stores, kitchens, uniform rooms and other stock locations.</p></div>{canManage && <button onClick={()=>setShowLocationForm(true)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Add Location</button>}</div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{locations.map(l=><div key={l.id} className="rounded-lg border p-4"><p className="font-semibold">{l.name}</p><p className="mt-1 text-sm text-slate-500">{l.description || "No description"}</p><p className="mt-2 text-xs text-slate-500">{items.filter(i=>String(i.default_location_id)===String(l.id)).length} assigned item(s)</p></div>)}</div>{!locations.length && <p className="py-8 text-center text-sm text-slate-500">No stores or locations have been added yet.</p>}</section>}
