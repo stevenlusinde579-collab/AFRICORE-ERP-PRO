@@ -21,13 +21,17 @@ export default function StockManagement() {
   const [balances, setBalances] = useState([]);
   const [movements, setMovements] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);\n  const [students, setStudents] = useState([]);\n  const [studentOrders, setStudentOrders] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [studentOrders, setStudentOrders] = useState([]);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
-  const [showOrderForm, setShowOrderForm] = useState(false);\n  const [showStudentOrderForm, setShowStudentOrderForm] = useState(false);
+  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [showStudentOrderForm, setShowStudentOrderForm] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItem);
   const [movementForm, setMovementForm] = useState({ item_id: "", location_id: "", movement_type: "receive", quantity: "", unit_cost: "0", movement_date: today(), expiry_date: "", batch_number: "", notes: "" });
-  const [orderForm, setOrderForm] = useState({ supplier_id: "", expected_delivery_date: "", notes: "", item_id: "", quantity_ordered: "", unit_cost: "" });\n  const [studentOrderForm, setStudentOrderForm] = useState({ student_id: "", item_id: "", quantity_ordered: "1", notes: "" });
+  const [orderForm, setOrderForm] = useState({ supplier_id: "", expected_delivery_date: "", notes: "", item_id: "", quantity_ordered: "", unit_cost: "" });
+  const [studentOrderForm, setStudentOrderForm] = useState({ student_id: "", item_id: "", quantity_ordered: "1", notes: "" });
   const [search, setSearch] = useState("");
 
   const isSuper = Boolean(isSuperAdmin) || Number(selectedRoleId) === 1;
@@ -47,7 +51,9 @@ export default function StockManagement() {
       let balanceQuery = supabase.from("stock_balances").select("*, stock_items(item_name,unit_of_measure,reorder_level,cost_price,is_for_sale), stock_locations(name)").order("updated_at", { ascending: false });
       let moveQuery = supabase.from("stock_movements").select("*, stock_items(item_name,unit_of_measure), stock_locations(name)").order("created_at", { ascending: false }).limit(100);
       let orderQuery = supabase.from("stock_purchase_orders").select("*, stock_purchase_order_items(id,item_id,quantity_ordered,quantity_received,unit_cost,stock_items(item_name))").order("created_at", { ascending: false }).limit(100);
-      let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");\n      let studentQuery = supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").order("first_name");\n      let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,admission_number,admission_no), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label))").order("created_at", { ascending: false }).limit(100);
+      let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");
+      let studentQuery = supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").order("first_name");
+      let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,admission_number,admission_no), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label))").order("created_at", { ascending: false }).limit(100);
       if (schoolId) {
         itemQuery = itemQuery.eq("school_id", schoolId);
         catQuery = catQuery.eq("school_id", schoolId);
@@ -55,7 +61,9 @@ export default function StockManagement() {
         balanceQuery = balanceQuery.eq("school_id", schoolId);
         moveQuery = moveQuery.eq("school_id", schoolId);
         orderQuery = orderQuery.eq("school_id", schoolId);
-        supplierQuery = supplierQuery.eq("school_id", schoolId);\n        studentQuery = studentQuery.eq("school_id", schoolId);\n        studentOrderQuery = studentOrderQuery.eq("school_id", schoolId);
+        supplierQuery = supplierQuery.eq("school_id", schoolId);
+        studentQuery = studentQuery.eq("school_id", schoolId);
+        studentOrderQuery = studentOrderQuery.eq("school_id", schoolId);
       }
       const results = await Promise.all([itemQuery, catQuery, locQuery, balanceQuery, moveQuery, orderQuery, supplierQuery, studentQuery, studentOrderQuery]);
       for (const result of results) if (result.error) throw result.error;
@@ -75,7 +83,8 @@ export default function StockManagement() {
     balances.forEach((b) => totals.set(b.item_id, (totals.get(b.item_id) || 0) + Number(b.quantity_on_hand || 0)));
     return items.filter((item) => (totals.get(item.id) || 0) <= Number(item.reorder_level || 0));
   }, [items, balances]);
-  const pendingOrders = purchaseOrders.filter((o) => ["submitted", "approved", "partially_received"].includes(o.status));\n  const expiringSoon = movements.filter((m) => m.expiry_date && new Date(m.expiry_date + "T00:00:00") >= new Date(today() + "T00:00:00") && new Date(m.expiry_date + "T00:00:00") <= new Date(Date.now() + 30 * 86400000));
+  const pendingOrders = purchaseOrders.filter((o) => ["submitted", "approved", "partially_received"].includes(o.status));
+  const expiringSoon = movements.filter((m) => m.expiry_date && new Date(m.expiry_date + "T00:00:00") >= new Date(today() + "T00:00:00") && new Date(m.expiry_date + "T00:00:00") <= new Date(Date.now() + 30 * 86400000));
   const filteredItems = items.filter((i) => [i.item_name, i.sku, i.stock_categories?.name].some((v) => String(v || "").toLowerCase().includes(search.toLowerCase())));
 
   const createStore = async () => {
@@ -257,7 +266,8 @@ export default function StockManagement() {
 
     {tab === "Overview" && <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Stock Alerts</h2><p className="mt-1 text-sm text-slate-500">Items at or below their reorder level</p>{lowStock.length ? <div className="mt-4 divide-y">{lowStock.map((i) => <div key={i.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{i.item_name}</p><p className="text-xs text-slate-500">{i.stock_categories?.name || "Uncategorised"} · Reorder at {i.reorder_level} {i.unit_of_measure}</p></div><span className="h-fit rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Low stock</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No low-stock alerts.</p>}</section>
-      <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Expiry Alerts (next 30 days)</h2><p className="mt-1 text-sm text-slate-500">Stock receipts with recorded expiry dates</p>{expiringSoon.length ? <div className="mt-4 divide-y">{expiringSoon.map((m) => <div key={m.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{m.stock_items?.item_name}</p><p className="text-xs text-slate-500">Batch {m.batch_number || "—"} · {m.quantity} units</p></div><span className="text-xs font-semibold text-amber-700">{m.expiry_date}</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No recorded expiry dates within 30 days.</p>}</section>\n      <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Purchase Orders Requiring Attention</h2><p className="mt-1 text-sm text-slate-500">{pendingOrders.length} open orders</p>{pendingOrders.length ? <div className="mt-4 divide-y">{pendingOrders.slice(0,8).map((o) => <div key={o.id} className="flex items-center justify-between gap-3 py-3"><div><p className="font-semibold">{o.order_number}</p><p className="text-xs text-slate-500">{o.status.replaceAll("_"," ")} · {money(o.total_amount)}</p></div><button className="text-sm font-semibold text-blue-700" onClick={() => setTab("Purchase Orders")}>View</button></div>)}</div> : <p className="py-6 text-sm text-slate-500">No outstanding purchase orders.</p>}</section>
+      <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Expiry Alerts (next 30 days)</h2><p className="mt-1 text-sm text-slate-500">Stock receipts with recorded expiry dates</p>{expiringSoon.length ? <div className="mt-4 divide-y">{expiringSoon.map((m) => <div key={m.id} className="flex justify-between gap-3 py-3"><div><p className="font-semibold">{m.stock_items?.item_name}</p><p className="text-xs text-slate-500">Batch {m.batch_number || "—"} · {m.quantity} units</p></div><span className="text-xs font-semibold text-amber-700">{m.expiry_date}</span></div>)}</div> : <p className="py-6 text-sm text-emerald-700">No recorded expiry dates within 30 days.</p>}</section>
+      <section className="rounded-xl border bg-white p-5"><h2 className="font-bold text-slate-900">Purchase Orders Requiring Attention</h2><p className="mt-1 text-sm text-slate-500">{pendingOrders.length} open orders</p>{pendingOrders.length ? <div className="mt-4 divide-y">{pendingOrders.slice(0,8).map((o) => <div key={o.id} className="flex items-center justify-between gap-3 py-3"><div><p className="font-semibold">{o.order_number}</p><p className="text-xs text-slate-500">{o.status.replaceAll("_"," ")} · {money(o.total_amount)}</p></div><button className="text-sm font-semibold text-blue-700" onClick={() => setTab("Purchase Orders")}>View</button></div>)}</div> : <p className="py-6 text-sm text-slate-500">No outstanding purchase orders.</p>}</section>
       <section className="rounded-xl border bg-white p-5 lg:col-span-2"><h2 className="font-bold text-slate-900">Recent Stock Activity</h2>{movements.slice(0,8).map((m) => <div key={m.id} className="flex flex-wrap justify-between gap-2 border-b py-3 last:border-0"><div><p className="font-medium">{m.stock_items?.item_name}</p><p className="text-xs text-slate-500">{m.movement_type.replaceAll("_"," ")} · {m.stock_locations?.name} · {m.movement_date}</p></div><p className="font-semibold tabular-nums">{m.quantity} {m.stock_items?.unit_of_measure}</p></div>)}{!movements.length && <p className="py-5 text-sm text-slate-500">No stock activity recorded yet.</p>}</section>
     </div>}
 
