@@ -267,7 +267,7 @@ returns trigger
 language plpgsql
 security invoker
 set search_path = public, pg_temp
-as $
+as $$
 begin
   if not exists (
     select 1 from public.students s
@@ -277,7 +277,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists trg_validate_stock_student_order_tenant on public.stock_student_orders;
 create trigger trg_validate_stock_student_order_tenant
@@ -291,7 +291,7 @@ returns trigger
 language plpgsql
 security invoker
 set search_path = public, pg_temp
-as $
+as $$
 begin
   if old.status = 'submitted' and new.status = 'approved'
      and not public.is_current_user_super_admin()
@@ -304,7 +304,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists trg_enforce_stock_purchase_order_approval on public.stock_purchase_orders;
 create trigger trg_enforce_stock_purchase_order_approval
@@ -321,7 +321,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   v_line public.stock_purchase_order_items%rowtype;
   v_order public.stock_purchase_orders%rowtype;
@@ -363,7 +363,7 @@ begin
   where id = v_order.id;
   return jsonb_build_object('success',true,'quantity_received',v_next,'order_status',case when v_all_received then 'received' else 'partially_received' end);
 end;
-$;
+$$;
 
 -- Atomic student uniform fulfilment: issuing stock and updating the order cannot diverge.
 create or replace function public.fulfil_stock_student_order_item(
@@ -374,7 +374,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   v_line public.stock_student_order_items%rowtype;
   v_order public.stock_student_orders%rowtype;
@@ -410,7 +410,7 @@ begin
   update public.stock_student_orders set status = 'fulfilled' where id = v_order.id;
   return jsonb_build_object('success',true,'quantity_issued',v_remaining,'order_status','fulfilled');
 end;
-$;
+$$;
 
 revoke all on function public.receive_stock_purchase_order_item(bigint,numeric,bigint) from public, anon;
 revoke all on function public.fulfil_stock_student_order_item(bigint,bigint) from public, anon;
