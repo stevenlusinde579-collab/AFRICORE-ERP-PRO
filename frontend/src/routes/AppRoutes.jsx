@@ -91,6 +91,7 @@ import SubjectTeacherExamUpload from "../pages/examination/SubjectTeacherExamUpl
 import ExamPrintingUnit from "../pages/examination/ExamPrintingUnit";
 
 import Finance from "../pages/finance/Finance";
+import StockManagement from "../pages/stock/StockManagement";
 import FinanceDashboard from "../pages/finance/FinanceDashboard";
 import ChartOfAccounts from "../pages/finance/ChartOfAccounts";
 import CashAccounts from "../pages/finance/CashAccounts";
@@ -827,6 +828,13 @@ export default function AppRoutes() {
                             element={<ExamPrintingUnit />}
                         />
                     </Route>
+                </Route>
+
+                {/* STOCK MANAGEMENT */}
+                <Route
+                    element={<SuperAdminOrPermissionRoute permission="view_stock" />}
+                >
+                    <Route path="stock" element={<StockManagement />} />
                 </Route>
 
                 {/* FINANCE VIEW */}
