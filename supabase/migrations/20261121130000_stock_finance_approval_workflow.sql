@@ -203,13 +203,13 @@ begin
     select school_id into v_school_id from public.stock_finance_approval_requests where id = p_request_id;
   end if;
   if v_school_id is null then raise exception 'Finance request school could not be resolved.'; end if;
-  if not public.is_current_user_super_admin() and not exists (
+  if not exists (
     select 1 from public.profile_roles pr
     join public.roles r on r.id = pr.role_id
     where pr.profile_id = v_user and pr.school_id = v_school_id
       and pr.is_active is true and lower(trim(r.role_name)) = 'headmaster'
   ) then
-    raise exception 'Only the school Headmaster or Super Admin may approve stock Finance requests.';
+    raise exception 'Only the school Headmaster may approve stock Finance requests.';
   end if;
 
   select * into v_request
@@ -327,12 +327,12 @@ begin
     select school_id into v_school_id from public.stock_finance_approval_requests where id = p_request_id;
   end if;
   if v_school_id is null then raise exception 'Finance request school could not be resolved.'; end if;
-  if not public.is_current_user_super_admin() and not exists (
+  if not exists (
     select 1 from public.profile_roles pr
     join public.roles r on r.id = pr.role_id
     where pr.profile_id = v_user and pr.school_id = v_school_id
       and pr.is_active is true and lower(trim(r.role_name)) = 'headmaster'
-  ) then raise exception 'Only the school Headmaster or Super Admin may reject stock Finance requests.'; end if;
+  ) then raise exception 'Only the school Headmaster may reject stock Finance requests.'; end if;
 
   update public.stock_finance_approval_requests
   set status = 'rejected', rejected_by = v_user, rejected_at = now(),
