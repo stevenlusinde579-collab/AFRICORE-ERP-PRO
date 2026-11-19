@@ -63,7 +63,7 @@ export default function StockManagement() {
       let orderQuery = supabase.from("stock_purchase_orders").select("*, stock_purchase_order_items(id,item_id,quantity_ordered,quantity_received,unit_cost,stock_items(item_name))").order("created_at", { ascending: false }).limit(100);
       let supplierQuery = supabase.schema("finance").from("suppliers").select("id,supplier_name").eq("is_active", true).order("supplier_name");
       let studentQuery = supabase.from("students").select("id,first_name,middle_name,last_name,admission_number,admission_no").order("first_name");
-      let financeRequestQuery = supabase.from("stock_finance_approval_requests").select("*").order("created_at", { ascending: false }).limit(1000);
+      let financeRequestQuery = supabase.from("stock_finance_approval_requests").select("*").order("created_at", { ascending: false });
        let financeAccountQuery = supabase.schema("finance").from("chart_of_accounts").select("id,account_code,account_name,account_type").eq("is_active", true).order("account_code");
        let cashAccountQuery = supabase.schema("finance").from("cash_accounts").select("id,account_name,account_type").eq("is_active", true).order("account_name");
        let studentOrderQuery = supabase.from("stock_student_orders").select("*, students(first_name,middle_name,last_name,parent_name,guardian_name,admission_number,admission_no), stock_student_order_items(id,item_id,quantity_ordered,quantity_issued,unit_price,stock_items(item_name,variant_label)), stock_student_order_payments(id,amount,payment_method,payment_reference,payment_date,notes,created_at)").order("created_at", { ascending: false }).limit(1000);
@@ -81,7 +81,7 @@ export default function StockManagement() {
          financeAccountQuery = financeAccountQuery.eq("school_id", schoolId);
          cashAccountQuery = cashAccountQuery.eq("school_id", schoolId);
       }
-      const results = await Promise.all([itemQuery, catQuery, locQuery, balanceQuery, moveQuery, orderQuery, supplierQuery, studentQuery, studentOrderQuery, financeRequestQuery, financeAccountQuery, cashAccountQuery]);
+      const results = await Promise.all([itemQuery, catQuery, locQuery, balanceQuery, moveQuery, orderQuery, supplierQuery, studentQuery, studentOrderQuery, financeRequestQuery.range(0, 999), financeAccountQuery, cashAccountQuery]);
       for (const result of results) if (result.error) throw result.error;
       setItems(results[0].data || []); setCategories(results[1].data || []); setLocations(results[2].data || []);
       setBalances(results[3].data || []); setMovements(results[4].data || []); setPurchaseOrders(results[5].data || []);
