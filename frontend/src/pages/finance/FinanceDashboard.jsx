@@ -532,7 +532,7 @@ function FinanceDashboard() {
 
             let receiptsQuery = supabase.schema("finance").from("receipts")
                 .select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status")
-                .order("receipt_date", { ascending: false }).limit(500);
+                .like("receipt_number", "FEE-%").order("receipt_date", { ascending: false }).limit(500);
             if (!superAdmin && schoolId) receiptsQuery = receiptsQuery.eq("school_id", schoolId);
             const { data: receiptsData, error: receiptsError } = await receiptsQuery;
             if (receiptsError) throw receiptsError;
