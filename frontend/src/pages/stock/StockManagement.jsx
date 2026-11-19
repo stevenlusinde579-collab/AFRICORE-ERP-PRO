@@ -55,7 +55,7 @@ export default function StockManagement() {
         balanceQuery = balanceQuery.eq("school_id", schoolId);
         moveQuery = moveQuery.eq("school_id", schoolId);
         orderQuery = orderQuery.eq("school_id", schoolId);
-        supplierQuery = supplierQuery.eq("school_id", schoolId);\n        studentQuery = studentQuery.eq("school_id", schoolId).eq("student_status", "active");\n        studentOrderQuery = studentOrderQuery.eq("school_id", schoolId);
+        supplierQuery = supplierQuery.eq("school_id", schoolId);\n        studentQuery = studentQuery.eq("school_id", schoolId);\n        studentOrderQuery = studentOrderQuery.eq("school_id", schoolId);
       }
       const results = await Promise.all([itemQuery, catQuery, locQuery, balanceQuery, moveQuery, orderQuery, supplierQuery, studentQuery, studentOrderQuery]);
       for (const result of results) if (result.error) throw result.error;
