@@ -121,13 +121,22 @@ export default function StockManagement() {
     return items.filter((item) => Number(item.reorder_level || 0) > 0 && (totals.get(item.id) || 0) < Number(item.reorder_level || 0));
   }, [items, balances]);
   const pendingOrders = purchaseOrders.filter((o) => ["submitted", "approved", "partially_received"].includes(o.status));
-  // Official sales income and received-goods costs include approved Finance postings only.
-  const approvedSalesIncome = useMemo(() => financeRequests
-    .filter((request) => request.request_type === "student_order_payment" && request.status === "approved")
-    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [financeRequests]);
-  const approvedReceivedGoodsCost = useMemo(() => financeRequests
-    .filter((request) => request.request_type === "purchase_receipt" && request.status === "approved")
-    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [financeRequests]);
+  // Show received/paid operational totals immediately, while keeping pending Finance
+  // approvals transparent and excluding rejected requests from the totals.
+  const salesFinanceRequests = useMemo(() => financeRequests
+    .filter((request) => request.request_type === "student_order_payment" && request.status !== "rejected"), [financeRequests]);
+  const goodsFinanceRequests = useMemo(() => financeRequests
+    .filter((request) => request.request_type === "purchase_receipt" && request.status !== "rejected"), [financeRequests]);
+  const approvedSalesIncome = useMemo(() => salesFinanceRequests
+    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [salesFinanceRequests]);
+  const approvedReceivedGoodsCost = useMemo(() => goodsFinanceRequests
+    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [goodsFinanceRequests]);
+  const pendingSalesIncome = useMemo(() => salesFinanceRequests
+    .filter((request) => request.status === "pending")
+    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [salesFinanceRequests]);
+  const pendingReceivedGoodsCost = useMemo(() => goodsFinanceRequests
+    .filter((request) => request.status === "pending")
+    .reduce((sum, request) => sum + Number(request.amount || 0), 0), [goodsFinanceRequests]);
   const pendingFinanceCount = useMemo(() => financeRequests.filter((request) => request.status === "pending").length, [financeRequests]);
   const expiringSoon = movements.filter((m) => m.expiry_date && new Date(m.expiry_date + "T00:00:00") >= new Date(today() + "T00:00:00") && new Date(m.expiry_date + "T00:00:00") <= new Date(Date.now() + 30 * 86400000));
   const filteredItems = items.filter((i) => [i.item_name, i.sku, i.stock_categories?.name].some((v) => String(v || "").toLowerCase().includes(search.toLowerCase())));
@@ -403,12 +412,14 @@ export default function StockManagement() {
         <article className="group relative overflow-hidden rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
           <div className="absolute inset-x-0 top-0 h-1 bg-emerald-500" />
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mapato ya mauzo</p><p className="mt-2 break-words text-xl font-extrabold tabular-nums text-slate-900 md:text-2xl">{money(approvedSalesIncome)}</p></div><span className="rounded-xl bg-emerald-50 p-3 text-xl text-emerald-700"><FaCoins /></span></div>
-          <p className="mt-3 text-xs text-slate-500">Malipo ya items yaliyopokelewa na kuidhinishwa Finance</p>
+          <p className="mt-3 text-xs text-slate-500">Malipo yote yaliyorekodiwa, bila maombi yaliyokataliwa</p>
+          {pendingSalesIncome > 0 && <p className="mt-1 text-xs font-semibold text-amber-700">{money(pendingSalesIncome)} yanasubiri idhini ya Finance</p>}
         </article>
         <article className="group relative overflow-hidden rounded-2xl border border-amber-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
           <div className="absolute inset-x-0 top-0 h-1 bg-amber-500" />
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Gharama za mizigo</p><p className="mt-2 break-words text-xl font-extrabold tabular-nums text-slate-900 md:text-2xl">{money(approvedReceivedGoodsCost)}</p></div><span className="rounded-xl bg-amber-50 p-3 text-xl text-amber-700"><FaTruck /></span></div>
-          <p className="mt-3 text-xs text-slate-500">Thamani ya mizigo iliyopokelewa na kuidhinishwa Finance</p>
+          <p className="mt-3 text-xs text-slate-500">Thamani ya mizigo iliyopokelewa, bila maombi yaliyokataliwa</p>
+          {pendingReceivedGoodsCost > 0 && <p className="mt-1 text-xs font-semibold text-amber-700">{money(pendingReceivedGoodsCost)} yanasubiri idhini ya Finance</p>}
         </article>
         <article className="group relative overflow-hidden rounded-2xl border border-blue-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
           <div className="absolute inset-x-0 top-0 h-1 bg-blue-600" />
