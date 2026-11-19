@@ -79,6 +79,13 @@ export default function StockManagement() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const totalUnits = useMemo(() => balances.reduce((s, b) => s + Number(b.quantity_on_hand || 0), 0), [balances]);
+  const itemUnitBreakdown = useMemo(() => items.map((item) => ({
+    id: item.id,
+    name: item.item_name,
+    quantity: balances.filter((balance) => String(balance.item_id) === String(item.id))
+      .reduce((sum, balance) => sum + Number(balance.quantity_on_hand || 0), 0),
+    unit: item.unit_of_measure || "units"
+  })), [items, balances]);
   const stockValue = useMemo(() => balances.reduce((s, b) => s + Number(b.quantity_on_hand || 0) * Number(b.stock_items?.cost_price || 0), 0), [balances]);
   const lowStock = useMemo(() => {
     const totals = new Map();
@@ -269,8 +276,11 @@ export default function StockManagement() {
     </div>
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     {notice && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
-    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-      {[["Stock Items", items.length],["Total Units", totalUnits.toLocaleString()],["Low / Reorder", lowStock.length],["Stock Value", money(stockValue)]].map(([label,value]) => <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold text-slate-900">{value}</p></div>)}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Stock Items</p><p className="mt-2 text-2xl font-bold text-slate-900">{items.length}</p></div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Units · Item Breakdown</p><p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits.toLocaleString()}</p><div className="mt-3 max-h-44 space-y-2 overflow-y-auto border-t pt-2">{itemUnitBreakdown.length ? itemUnitBreakdown.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 text-sm"><span className="min-w-0 break-words text-slate-700">{item.name}</span><span className="shrink-0 font-semibold text-slate-900">{item.quantity.toLocaleString()} {item.unit}</span></div>) : <p className="text-xs text-slate-500">No stock items registered.</p>}</div></div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Low / Reorder</p><p className="mt-2 text-2xl font-bold text-slate-900">{lowStock.length}</p></div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Stock Value</p><p className="mt-2 text-2xl font-bold text-slate-900">{money(stockValue)}</p></div>
     </div>
     <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
       {TABS.map((name) => <button key={name} onClick={() => setTab(name)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold ${tab === name ? "border-blue-700 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900"}`}>{name}</button>)}
