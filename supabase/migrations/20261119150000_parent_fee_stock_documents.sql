@@ -57,10 +57,16 @@ declare
   v_school_name text;
   v_lines jsonb;
   v_parent_name text;
+  v_order_id bigint;
 begin
+  if tg_table_name = 'stock_student_orders' then
+    v_order_id := new.id;
+  else
+    v_order_id := new.student_order_id;
+  end if;
   select * into v_order
   from public.stock_student_orders
-  where id = new.student_order_id and school_id = new.school_id;
+  where id = v_order_id and school_id = new.school_id;
   if not found then return new; end if;
 
   select * into v_student from public.students
@@ -122,6 +128,12 @@ revoke all on function public.sync_parent_stock_order_invoice() from public, ano
 drop trigger if exists trg_parent_stock_order_invoice on public.stock_student_order_items;
 create trigger trg_parent_stock_order_invoice
 after insert or update on public.stock_student_order_items
+for each row execute function public.sync_parent_stock_order_invoice();
+
+drop trigger if exists trg_parent_stock_order_invoice_header on public.stock_student_orders;
+create trigger trg_parent_stock_order_invoice_header
+after insert or update of parent_account_id, total_amount, order_date, status, payment_status
+on public.stock_student_orders
 for each row execute function public.sync_parent_stock_order_invoice();
 
 -- A posted school-fee payment already contains its journal entry. This trigger
