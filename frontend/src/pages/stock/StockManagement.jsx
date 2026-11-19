@@ -96,7 +96,7 @@ export default function StockManagement() {
   const lowStock = useMemo(() => {
     const totals = new Map();
     balances.forEach((b) => totals.set(b.item_id, (totals.get(b.item_id) || 0) + Number(b.quantity_on_hand || 0)));
-    return items.filter((item) => (totals.get(item.id) || 0) <= Number(item.reorder_level || 0));
+    return items.filter((item) => Number(item.reorder_level || 0) > 0 && (totals.get(item.id) || 0) < Number(item.reorder_level || 0));
   }, [items, balances]);
   const pendingOrders = purchaseOrders.filter((o) => ["submitted", "approved", "partially_received"].includes(o.status));
   const expiringSoon = movements.filter((m) => m.expiry_date && new Date(m.expiry_date + "T00:00:00") >= new Date(today() + "T00:00:00") && new Date(m.expiry_date + "T00:00:00") <= new Date(Date.now() + 30 * 86400000));
