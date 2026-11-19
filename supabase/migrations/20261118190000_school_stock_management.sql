@@ -140,7 +140,7 @@ create index if not exists idx_stock_student_orders_school_date on public.stock_
 create or replace function public.apply_stock_movement_to_balance()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
 declare
@@ -148,6 +148,17 @@ declare
   v_item_school bigint;
   v_location_school bigint;
 begin
+  if not public.is_current_user_super_admin() then
+    if auth.uid() is null or new.school_id is distinct from public.get_current_user_school_id()
+       or not exists (
+         select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id
+         where pr.profile_id = auth.uid() and pr.school_id = new.school_id and pr.is_active is true
+           and lower(trim(r.role_name)) in ('headmaster','accountant')
+       ) then
+      raise exception 'You are not authorised to post stock movements for this school.';
+    end if;
+  end if;
+
   select school_id into v_item_school from public.stock_items where id = new.item_id;
   select school_id into v_location_school from public.stock_locations where id = new.location_id;
 
@@ -263,8 +274,8 @@ begin
     );
     execute format('drop policy if exists stock_tenant_manage on public.%I', t);
     execute format(
-      'create policy stock_tenant_manage on public.%I for all to authenticated using ((is_current_user_super_admin() or (school_id = get_current_user_school_id() and exists (select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id where pr.profile_id = auth.uid() and pr.school_id = school_id and pr.is_active is true and lower(trim(r.role_name)) in (''headmaster'',''accountant'')))) with check ((is_current_user_super_admin() or (school_id = get_current_user_school_id() and exists (select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id where pr.profile_id = auth.uid() and pr.school_id = school_id and pr.is_active is true and lower(trim(r.role_name)) in (''headmaster'',''accountant''))))',
-      t
+      'create policy stock_tenant_manage on public.%I for all to authenticated using (is_current_user_super_admin() or (%I.school_id = get_current_user_school_id() and exists (select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id where pr.profile_id = auth.uid() and pr.school_id = %I.school_id and pr.is_active is true and lower(trim(r.role_name)) in (''headmaster'',''accountant'')))) with check (is_current_user_super_admin() or (%I.school_id = get_current_user_school_id() and exists (select 1 from public.profile_roles pr join public.roles r on r.id = pr.role_id where pr.profile_id = auth.uid() and pr.school_id = %I.school_id and pr.is_active is true and lower(trim(r.role_name)) in (''headmaster'',''accountant''))))',
+      t, t, t, t, t
     );
   end loop;
 end $$;
@@ -279,7 +290,7 @@ grant select, insert, update on public.stock_purchase_order_items to authenticat
 grant select, insert, update on public.stock_student_orders to authenticated;
 grant select, insert, update on public.stock_student_order_items to authenticated;
 
-grant usage, select on all sequences in schema public to authenticated;
+grant usage, select on sequence public.stock_categories_id_seq, public.stock_locations_id_seq, public.stock_items_id_seq, public.stock_balances_id_seq, public.stock_movements_id_seq, public.stock_purchase_orders_id_seq, public.stock_purchase_order_items_id_seq, public.stock_student_orders_id_seq, public.stock_student_order_items_id_seq to authenticated;
 
 -- App-level permissions are keyed by role name rather than hard-coded role IDs.
 insert into public.permissions (permission_name, module, description, is_active)
