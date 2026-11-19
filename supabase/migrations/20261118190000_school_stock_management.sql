@@ -242,17 +242,21 @@ begin
   ) then
     raise exception 'Stock item must belong to the same school.';
   end if;
-  if tg_table_name = 'stock_purchase_order_items' and not exists (
-    select 1 from public.stock_purchase_orders o
-    where o.id = new.purchase_order_id and o.school_id = new.school_id
-  ) then
-    raise exception 'Purchase order must belong to the same school.';
-  end if;
-  if tg_table_name = 'stock_student_order_items' and not exists (
-    select 1 from public.stock_student_orders o
-    where o.id = new.student_order_id and o.school_id = new.school_id
-  ) then
-    raise exception 'Student order must belong to the same school.';
+
+  if tg_table_name = 'stock_purchase_order_items' then
+    if not exists (
+      select 1 from public.stock_purchase_orders o
+      where o.id = new.purchase_order_id and o.school_id = new.school_id
+    ) then
+      raise exception 'Purchase order must belong to the same school.';
+    end if;
+  elsif tg_table_name = 'stock_student_order_items' then
+    if not exists (
+      select 1 from public.stock_student_orders o
+      where o.id = new.student_order_id and o.school_id = new.school_id
+    ) then
+      raise exception 'Student order must belong to the same school.';
+    end if;
   end if;
   return new;
 end;
