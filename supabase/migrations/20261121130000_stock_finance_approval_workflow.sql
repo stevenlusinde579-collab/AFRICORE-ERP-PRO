@@ -120,6 +120,9 @@ begin
     if v_order.status not in ('partially_received','received') then
       raise exception 'Only goods received against an approved purchase order can be sent to Finance.';
     end if;
+    if v_order.supplier_id is null then
+      raise exception 'Add a supplier to this purchase order before sending its received goods to Finance.';
+    end if;
     v_amount := round(v_movement.quantity * v_movement.unit_cost, 2);
     if v_amount <= 0 then raise exception 'This received movement has no recorded purchase cost.'; end if;
     select item_name into v_description from public.stock_items
