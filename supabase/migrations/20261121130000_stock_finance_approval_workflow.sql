@@ -86,7 +86,7 @@ declare
 begin
   if v_user is null then raise exception 'Authentication is required.'; end if;
   v_school_id := public.get_current_user_school_id();
-  if v_school_id is null and public.is_current_user_super_admin() then
+  if public.is_current_user_super_admin() then
     if p_request_type = 'purchase_receipt' then
       select school_id into v_school_id from public.stock_movements where id = p_source_id;
     elsif p_request_type = 'student_order_payment' then
