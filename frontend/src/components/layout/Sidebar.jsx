@@ -22,6 +22,7 @@ import {
   FaBed,
   FaBuilding,
   FaBoxes,
+  FaFingerprint,
 } from "react-icons/fa";
 
 import { useRole } from "../../context/RoleContext";
@@ -370,6 +371,44 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
     },
 
   ], [superAdmin]);
+
+
+  if (currentRole === "hr manager") {
+    const hrMenu = [
+      { name: "HR Management", path: "/hr-management", icon: <FaFingerprint /> },
+      { name: "Communication", path: "/communication", icon: <FaComments /> },
+      { name: "Personal Settings", path: "/settings", icon: <FaCog /> },
+    ];
+
+    return (
+      <aside className={sidebarClassName}>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">AfriCore ERP PRO</h1>
+          <p className="text-sm text-gray-400">Human Resources Workspace</p>
+        </div>
+        <div className="mb-6 flex min-w-0 items-center gap-3 rounded-xl bg-slate-800 p-3">
+          {profile?.avatarUrl ? (
+            <img src={profile.avatarUrl} alt={profile.fullName || "User profile"} className="h-11 w-11 shrink-0 rounded-full border-2 border-slate-600 object-cover" />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+              {(profile?.fullName || "HR").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("")}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Signed in as</p>
+            <p className="truncate text-sm font-semibold text-white">{profile?.fullName || "HR Manager"}</p>
+          </div>
+        </div>
+        <nav className="space-y-2">
+          {hrMenu.map((item) => (
+            <NavLink key={item.name} to={item.path} onClick={onClose} className={({ isActive }) => `flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 ${isActive ? "bg-blue-600 text-white shadow-lg" : "text-gray-300 hover:bg-slate-800 hover:text-white"}`}>
+              <span className="text-lg">{item.icon}</span><span>{item.name}</span>
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+    );
+  }
 
 
   /* =======================================================
