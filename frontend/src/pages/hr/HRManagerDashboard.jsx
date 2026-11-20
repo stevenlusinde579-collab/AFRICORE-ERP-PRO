@@ -75,7 +75,7 @@ function HRManagerDashboard() {
           .eq("school_id", schoolId)
           .eq("status", "pending"),
         supabase.from("hr_attendance_events")
-          .select("id,event_type,occurred_at")
+          .select("employee_id,event_type,occurred_at")
           .eq("school_id", schoolId)
           .gte("occurred_at", `${date}T00:00:00`)
           .lt("occurred_at", `${date}T23:59:59.999`),
@@ -105,7 +105,7 @@ function HRManagerDashboard() {
       setOffdayRows(offdayResult.data || []);
       setDevices(deviceResult.data || []);
       const events = attendanceResult.data || [];
-      const presentIds = new Set(events.filter((event) => event.event_type === "check_in").map((event) => event.id));
+      const presentIds = new Set(events.filter((event) => event.event_type === "check_in").map((event) => event.employee_id));
       setStats({
         staff: staffResult.data?.length || 0,
         offToday: (offdayResult.data || []).filter((row) => row.off_date === date && row.status !== "cancelled").length,
