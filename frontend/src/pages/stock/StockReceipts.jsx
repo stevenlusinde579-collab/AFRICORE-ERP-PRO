@@ -33,9 +33,9 @@ export default function StockReceipts({ schoolId }) {
   const publish=async()=>{
     setPublishing(true);setMessage("");setError("");
     try{
-      const ids=selectedReceipts.map(r=>documentFor(r)?.id).filter(Boolean);
-      if(!ids.length){setMessage("Hakuna risiti za stock zilizounganishwa na Parent Portal. Hakikisha mzazi ana akaunti hai.");return;}
-      const result=await api.post("/parent-portal/staff/documents/publish",{document_ids:ids,receipt_header_color:headerColor});
+      const receiptIds=selectedReceipts.map(r=>r.id);
+      if(!receiptIds.length){setMessage("Chagua angalau risiti moja ya stock.");return;}
+      const result=await api.post("/parent-portal/staff/documents/publish",{receipt_ids:receiptIds,receipt_header_color:headerColor});
       setMessage(result.data?.message||"Risiti zimechapishwa Parent Portal.");await load();
     }catch(e){setError(e?.response?.data?.message||e.message||"Imeshindikana kuchapisha risiti.");}finally{setPublishing(false);}
   };
@@ -72,13 +72,13 @@ export default function StockReceipts({ schoolId }) {
           <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">Rangi ya kivuli cha kichwa cha risiti <input aria-label="Receipt header shade" type="color" value={headerColor} onChange={e=>setHeaderColor(e.target.value)} className="h-10 w-14 cursor-pointer rounded border border-slate-300 bg-white p-1"/></label>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={!selectedReceipts.length} onClick={()=>window.print()} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">Print selected ({selectedReceipts.length})</button>
-            <button type="button" disabled={publishing||!selectedReceipts.some(r=>{const d=documentFor(r);return d&&d.publication_status!=="published";})} onClick={publish} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{publishing?"Publishing…":"Publish selected to Parent Portal"}</button>
+            <button type="button" disabled={publishing||selectedReceipts.length===0} onClick={publish} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{publishing?"Publishing…":"Publish selected to Parent Portal"}</button>
             <button type="button" onClick={load} className="rounded-xl border px-4 py-2 text-sm font-semibold">Refresh</button>
           </div>
         </div>
         {error&&<p className="mb-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}{message&&<p className="mb-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{message}</p>}
         <div className="space-y-2">{receipts.map(r=>{const d=documentFor(r),st=studentFor(r),status=d?.publication_status||"not_linked";return <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-sm">
-          <div className="flex min-w-0 flex-1 items-center gap-3"><input aria-label={`Select receipt ${r.receipt_number}`} type="checkbox" checked={selected.includes(String(r.id))} onChange={e=>setSelected(cur=>e.target.checked?[...cur,String(r.id)]:cur.filter(id=>id!==String(r.id)))}/><div className="min-w-0"><b className="block">{r.receipt_number}</b><span className="block text-xs text-slate-500">{r.payer_name||"Parent/Guardian"} · {fullName(st)} · {dateText(r.receipt_date)}</span><span className={`mt-1 block text-xs font-semibold ${status==="published"?"text-emerald-700":status==="pending"?"text-amber-700":"text-slate-500"}`}>{status==="published"?"Published to Parent Portal":status==="pending"?"Not published yet":"Parent Portal account/document unavailable"}</span></div></div>
+          <div className="flex min-w-0 flex-1 items-center gap-3"><input aria-label={`Select receipt ${r.receipt_number}`} type="checkbox" checked={selected.includes(String(r.id))} onChange={e=>setSelected(cur=>e.target.checked?[...cur,String(r.id)]:cur.filter(id=>id!==String(r.id)))}/><div className="min-w-0"><b className="block">{r.receipt_number}</b><span className="block text-xs text-slate-500">{r.payer_name||"Parent/Guardian"} · {fullName(st)} · {dateText(r.receipt_date)}</span><span className={`mt-1 block text-xs font-semibold ${status==="published"?"text-emerald-700":status==="pending"?"text-amber-700":"text-slate-500"}`}>{status==="published"?"Published to Parent Portal":status==="pending"?"Not published yet":status==="published"?"Published to Parent Portal":"Ready to publish to Parent Portal"}</span></div></div>
           <b className="whitespace-nowrap">{money(r.amount)} TZS</b><button type="button" onClick={()=>setViewing(r)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View</button>
         </div>;})}{!receipts.length&&<p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Hakuna risiti za mauzo ya stock zilizopostiwa bado. Risiti hutengenezwa baada ya Headmaster kuidhinisha malipo Finance.</p>}</div>
       </div>}
