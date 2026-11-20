@@ -397,7 +397,7 @@ function HRManagerDashboard() {
           <div className="flex items-center gap-3"><FaFingerprint className="text-2xl text-blue-700" /><div><h2 className="text-lg font-bold text-slate-900">Biometric Attendance</h2><p className="text-sm text-slate-500">USB fingerprint scanner integration</p></div></div>
           <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div><p className="font-semibold text-slate-900">Supported scanner: ZKTeco ZK9500</p><p className="mt-1 text-sm leading-6 text-slate-600">USB optical reader. Itahitaji Windows PC, ZKTeco ZKFinger SDK/driver na AfriCore local bridge. Kifaa hiki hakifanyi kazi kama attendance terminal ya kujitegemea.</p></div>
+              <div><p className="font-semibold text-slate-900">Supported scanner: ZKTeco ZK9500</p><p className="mt-1 text-sm leading-6 text-slate-600">USB optical reader. Itahitaji PC yenye Windows 8 au toleo jipya zaidi, ZKTeco ZKFinger SDK/driver na AfriCore local bridge. Windows 8/10 zitatumika kama matoleo ya kuanzia kwa majaribio; Windows 11 itathibitishwa kwa kifaa na SDK halisi. Kifaa hiki hakifanyi kazi kama attendance terminal ya kujitegemea.</p></div>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-800">USB • ZK9500</span>
             </div>
             {schemaReady ? (
