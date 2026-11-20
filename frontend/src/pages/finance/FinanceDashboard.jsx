@@ -71,7 +71,7 @@ function formatDate(value) {
 
 function FinanceDashboard() {
     const navigate = useNavigate();
-    const { selectedSchoolId, isSuperAdmin } = useRole();
+    const { selectedSchoolId, isSuperAdmin, loadingRoles } = useRole();
 
 
     // =================================================
@@ -805,8 +805,9 @@ function FinanceDashboard() {
     // =================================================
 
     useEffect(() => {
+        if (loadingRoles) return;
         loadDashboard(false);
-    }, []);
+    }, [selectedSchoolId, isSuperAdmin, loadingRoles]);
 
 
     // =================================================
