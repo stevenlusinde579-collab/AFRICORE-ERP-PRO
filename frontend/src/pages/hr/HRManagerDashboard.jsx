@@ -47,6 +47,10 @@ function HRManagerDashboard() {
   const [devices, setDevices] = useState([]);
   const [offdayRows, setOffdayRows] = useState([]);
   const [activeSection, setActiveSection] = useState("overview");
+  const [deviceName, setDeviceName] = useState("Main Office Fingerprint Scanner");
+  const [deviceSerial, setDeviceSerial] = useState("");
+  const [registeringDevice, setRegisteringDevice] = useState(false);
+  const [deviceMessage, setDeviceMessage] = useState("");
 
   const loadHRData = useCallback(async () => {
     if (!schoolId) {
@@ -120,6 +124,42 @@ function HRManagerDashboard() {
       setRefreshing(false);
     }
   }, [schoolId]);
+
+  const registerZK9500 = useCallback(async (event) => {
+    event.preventDefault();
+    if (!schoolId || !schemaReady || registeringDevice) return;
+
+    setRegisteringDevice(true);
+    setDeviceMessage("");
+    try {
+      const { error: insertError } = await supabase
+        .from("hr_biometric_devices")
+        .insert({
+          school_id: schoolId,
+          device_name: deviceName.trim() || "ZK9500 Fingerprint Scanner",
+          device_model: "ZK9500",
+          manufacturer: "ZKTeco",
+          connection_type: "USB",
+          bridge_status: "not_connected",
+          device_serial_number: deviceSerial.trim() || null,
+          settings: {
+            integration: "zkfinger_windows_sdk",
+            bridge_protocol: "africore-usb-bridge-v1",
+            biometric_templates_stored_in_cloud: false
+          }
+        });
+
+      if (insertError) throw insertError;
+      setDeviceMessage("ZKTeco ZK9500 imesajiliwa kwenye shule hii. Bado inahitaji Windows bridge na SDK ya kifaa kabla ya kusoma fingerprint.");
+      setDeviceSerial("");
+      await loadHRData();
+    } catch (registerError) {
+      console.error("ZK9500 registration error:", registerError);
+      setDeviceMessage(registerError.message || "Imeshindikana kusajili kifaa.");
+    } finally {
+      setRegisteringDevice(false);
+    }
+  }, [schoolId, schemaReady, registeringDevice, deviceName, deviceSerial, loadHRData]);
 
   useEffect(() => { loadHRData(); }, [loadHRData]);
 
@@ -215,8 +255,25 @@ function HRManagerDashboard() {
       {activeSection === "attendance" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex items-center gap-3"><FaFingerprint className="text-2xl text-blue-700" /><div><h2 className="text-lg font-bold text-slate-900">Biometric Attendance</h2><p className="text-sm text-slate-500">USB fingerprint scanner integration</p></div></div>
-          <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5"><p className="font-semibold text-slate-900">USB device bridge required</p><p className="mt-2 text-sm leading-6 text-slate-600">USB fingerprint scanners hutumia SDK/driver maalumu kulingana na model. AfriCore itaunganisha kupitia local Windows bridge yenye API salama. Kabla ya kuandika driver, tunahitaji model halisi ya scanner; kwa sasa dashboard imeandaliwa bila kudai kuwa kifaa kimeunganishwa.</p></div>
-          <p className="mt-4 text-xs leading-5 text-slate-500">Kila tukio litahifadhi employee ID, check-in/check-out, timestamp, device ID na chanzo. Hakuna fingerprint image/template itakayohifadhiwa kwenye Supabase.</p>
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><p className="font-semibold text-slate-900">Supported scanner: ZKTeco ZK9500</p><p className="mt-1 text-sm leading-6 text-slate-600">USB optical reader. Itahitaji Windows PC, ZKTeco ZKFinger SDK/driver na AfriCore local bridge. Kifaa hiki hakifanyi kazi kama attendance terminal ya kujitegemea.</p></div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-800">USB • ZK9500</span>
+            </div>
+            {schemaReady ? (
+              <form onSubmit={registerZK9500} className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-medium text-slate-700">Jina la kifaa
+                  <input value={deviceName} onChange={(event) => setDeviceName(event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Main Office Fingerprint Scanner" />
+                </label>
+                <label className="text-sm font-medium text-slate-700">Serial number (hiari)
+                  <input value={deviceSerial} onChange={(event) => setDeviceSerial(event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Serial number ya kifaa" />
+                </label>
+                <div className="sm:col-span-2"><button type="submit" disabled={registeringDevice || !deviceName.trim()} className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">{registeringDevice ? "Inasajili..." : "Register ZK9500 device"}</button></div>
+              </form>
+            ) : <p className="mt-3 text-sm text-amber-800">Sajili kifaa baada ya HR database migration kuwekwa na kuidhinishwa.</p>}
+            {deviceMessage && <p role="status" className="mt-3 rounded-lg bg-white p-3 text-sm text-slate-700">{deviceMessage}</p>}
+          </div>
+          <p className="mt-4 text-xs leading-5 text-slate-500">Kila tukio litahifadhi employee ID, check-in/check-out, timestamp, device ID na chanzo. Fingerprint images/templates hazitahifadhiwa Supabase. Matching ya fingerprint itafanyika kwenye PC ya shule.</p>
         </section>
       )}
 
