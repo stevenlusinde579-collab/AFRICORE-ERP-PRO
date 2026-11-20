@@ -77,8 +77,8 @@ function HRManagerDashboard() {
         supabase.from("hr_attendance_events")
           .select("employee_id,event_type,occurred_at")
           .eq("school_id", schoolId)
-          .gte("occurred_at", `${date}T00:00:00`)
-          .lt("occurred_at", `${date}T23:59:59.999`),
+          .gte("occurred_at", new Date(`${date}T00:00:00+03:00`).toISOString())
+          .lt("occurred_at", new Date(`${date}T23:59:59.999+03:00`).toISOString()),
         supabase.from("hr_biometric_devices")
           .select("id,device_name,device_model,connection_type,bridge_status,last_seen_at")
           .eq("school_id", schoolId),
