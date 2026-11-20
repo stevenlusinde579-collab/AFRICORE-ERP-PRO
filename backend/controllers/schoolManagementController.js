@@ -910,7 +910,7 @@ export const assignHeadmaster = async (req, res) => {
                 .eq("id", staffRecord.id);
             if (error) throw error;
         } else {
-            const nameParts = String(profile.full_name || "Headmaster Account").trim().split(/\\s+/).filter(Boolean);
+            const nameParts = String(profile.full_name || "Headmaster Account").trim().split(/\s+/).filter(Boolean);
             const { data, error } = await supabase
                 .from("teachers")
                 .insert([{
