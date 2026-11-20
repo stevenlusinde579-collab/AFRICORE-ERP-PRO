@@ -8,7 +8,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
 const formatNumber = (value) => Number(value || 0).toLocaleString("en-TZ");
 
