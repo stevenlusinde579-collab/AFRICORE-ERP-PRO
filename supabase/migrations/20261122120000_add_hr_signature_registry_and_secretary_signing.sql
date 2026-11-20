@@ -57,7 +57,7 @@ using (
   or exists (
     select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
     where pr.profile_id=auth.uid() and pr.school_id=hr_staff_signatures.school_id
-      and pr.is_active is true and lower(trim(r.role_name)) in ('hr manager','headmaster','super admin')
+      and pr.is_active is true and lower(trim(r.role_name)) in ('hr manager','headmaster','super admin','secretary')
   )
 );
 drop policy if exists hr_signatures_manage on public.hr_staff_signatures;
