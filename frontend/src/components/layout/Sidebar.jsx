@@ -23,6 +23,7 @@ import {
   FaBuilding,
   FaBoxes,
   FaFingerprint,
+  FaFileSignature,
 } from "react-icons/fa";
 
 import { useRole } from "../../context/RoleContext";
@@ -297,6 +298,18 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
         "academic master",
         "subject teacher",
         "class teacher"
+      ]
+    },
+
+    {
+      name: "Document Signing",
+      path: "/document-signing",
+      icon: <FaFileSignature />,
+      roles: [
+        "super admin", "headmaster", "deputy headmaster", "academic master",
+        "subject teacher", "accountant", "secretary", "hr manager",
+        "social welfare manager", "class teacher", "matron", "patron",
+        "security officer", "other employee"
       ]
     },
 

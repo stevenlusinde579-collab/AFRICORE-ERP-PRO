@@ -23,6 +23,7 @@ import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/dashboard/Dashboard";
 import HRManagerDashboard from "../pages/hr/HRManagerDashboard";
+import SecretaryDocumentSigning from "../pages/communication/SecretaryDocumentSigning";
 import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
 /* SCHOOL MANAGEMENT */
@@ -929,6 +930,26 @@ export default function AppRoutes() {
                     <Route
                         path="finance/record-payable"
                         element={<RecordPayable />}
+                    />
+                </Route>
+
+                {/* DOCUMENT SIGNING: Secretary coordinates; HR registers signatures */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1]}
+                            allowedRoleNames={[
+                                "Secretary", "HR Manager", "Headmaster", "Deputy Headmaster",
+                                "Academic Master", "Subject Teacher", "Accountant",
+                                "Class Teacher", "Social Welfare Manager", "Matron", "Patron",
+                                "Security Officer", "Other Employee"
+                            ]}
+                        />
+                    }
+                >
+                    <Route
+                        path="document-signing"
+                        element={<SecretaryDocumentSigning />}
                     />
                 </Route>
 

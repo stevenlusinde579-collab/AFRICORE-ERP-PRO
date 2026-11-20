@@ -441,6 +441,7 @@ export const createSchoolHeadmaster = async (req, res) => {
     let authUserId = null;
     let profileCreated = false;
     let profileRoleCreated = false;
+    let linkedTeacherId = null;
 
     try {
         const schoolId = Number(req.params.id);
@@ -539,6 +540,35 @@ export const createSchoolHeadmaster = async (req, res) => {
         if (profileRoleError) throw profileRoleError;
         profileRoleCreated = true;
 
+        // Create the Headmaster in the same Staff directory used by school HR.
+        // The Auth profile remains the login identity; teachers.user_id links both.
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const employeeNumber = `HM-${schoolId}-${randomInt(100000, 1000000)}`;
+        const { data: staffRecord, error: staffInsertError } = await supabase
+            .from("teachers")
+            .insert([{
+                school_id: schoolId,
+                employee_number: employeeNumber,
+                first_name: nameParts[0] || "Headmaster",
+                middle_name: nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : null,
+                last_name: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "Account",
+                phone: phone || null,
+                status: "Active",
+                staff_type: "Staff",
+                user_id: authUserId,
+                is_headmaster: true
+            }])
+            .select("id")
+            .single();
+        if (staffInsertError) throw staffInsertError;
+        linkedTeacherId = staffRecord.id;
+
+        const { error: profileLinkError } = await supabase
+            .from("profiles")
+            .update({ teacher_id: linkedTeacherId })
+            .eq("id", authUserId);
+        if (profileLinkError) throw profileLinkError;
+
         let credentialSms = { status: "skipped", reason: "Namba ya simu haijawekwa." };
         if (phone) {
             const loginUsername = email || phone;
@@ -566,6 +596,7 @@ export const createSchoolHeadmaster = async (req, res) => {
     } catch (error) {
         console.error("SCHOOL MANAGEMENT - CREATE HEADMASTER ERROR:", error);
         if (authUserId) {
+            if (linkedTeacherId) await supabase.from("teachers").delete().eq("id", linkedTeacherId);
             if (profileRoleCreated) await supabase.from("profile_roles").delete().eq("profile_id", authUserId);
             if (profileCreated) await supabase.from("profiles").delete().eq("id", authUserId);
             await supabase.auth.admin.deleteUser(authUserId);
@@ -824,6 +855,85 @@ export const assignHeadmaster = async (req, res) => {
                 message: assignmentError.message ||
                     "Unable to assign the Headmaster to this school."
             });
+        }
+
+        // Keep the Staff directory in sync with the transactional role reassignment.
+        const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("id,full_name,phone,school_id,teacher_id")
+            .eq("id", profileId)
+            .maybeSingle();
+        if (profileError) throw profileError;
+        if (!profile) throw new Error("Headmaster profile could not be loaded after reassignment.");
+
+        const { error: demotePreviousError } = await supabase
+            .from("teachers")
+            .update({ is_headmaster: false })
+            .eq("school_id", schoolId)
+            .eq("is_headmaster", true)
+            .neq("user_id", profileId);
+        if (demotePreviousError) throw demotePreviousError;
+
+        let staffRecord = null;
+        if (profile.teacher_id) {
+            const { data, error } = await supabase
+                .from("teachers")
+                .select("id")
+                .eq("id", profile.teacher_id)
+                .maybeSingle();
+            if (error) throw error;
+            staffRecord = data;
+        }
+        if (!staffRecord) {
+            const { data, error } = await supabase
+                .from("teachers")
+                .select("id")
+                .eq("user_id", profileId)
+                .maybeSingle();
+            if (error) throw error;
+            staffRecord = data;
+        }
+
+        if (staffRecord?.id) {
+            const { error } = await supabase
+                .from("teachers")
+                .update({
+                    school_id: schoolId,
+                    user_id: profileId,
+                    is_headmaster: true,
+                    status: "Active",
+                    phone: profile.phone || null
+                })
+                .eq("id", staffRecord.id);
+            if (error) throw error;
+        } else {
+            const nameParts = String(profile.full_name || "Headmaster Account").trim().split(/\s+/).filter(Boolean);
+            const { data, error } = await supabase
+                .from("teachers")
+                .insert([{
+                    school_id: schoolId,
+                    employee_number: `HM-${schoolId}-${randomInt(100000, 1000000)}`,
+                    first_name: nameParts[0] || "Headmaster",
+                    middle_name: nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : null,
+                    last_name: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "Account",
+                    phone: profile.phone || null,
+                    status: "Active",
+                    staff_type: "Staff",
+                    user_id: profileId,
+                    is_headmaster: true
+                }])
+                .select("id")
+                .single();
+            if (error) throw error;
+            staffRecord = data;
+        }
+
+        if (Number(profile.teacher_id) !== Number(staffRecord.id)) {
+            const { error } = await supabase
+                .from("profiles")
+                .update({ teacher_id: staffRecord.id })
+                .eq("id", profileId);
+            if (error) throw error;
         }
 
         const { data: school, error: schoolError } = await supabase

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   FaUsers, FaCalendarAlt, FaFingerprint, FaClipboardCheck,
   FaUmbrellaBeach, FaFileAlt, FaChartBar, FaSyncAlt,
-  FaComments, FaCog, FaExclamationTriangle
+  FaComments, FaCog, FaExclamationTriangle, FaPen
 } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
@@ -61,6 +61,10 @@ function HRManagerDashboard() {
   const [deviceSerial, setDeviceSerial] = useState("");
   const [registeringDevice, setRegisteringDevice] = useState(false);
   const [deviceMessage, setDeviceMessage] = useState("");
+  const [signatureStaff, setSignatureStaff] = useState([]);
+  const [signatureRows, setSignatureRows] = useState([]);
+  const [signatureBusyId, setSignatureBusyId] = useState(null);
+  const [signatureNotice, setSignatureNotice] = useState("");
 
   const loadHRData = useCallback(async () => {
     if (!schoolId) {
@@ -74,7 +78,7 @@ function HRManagerDashboard() {
     const date = today();
     const year = Number(date.slice(0, 4));
     try {
-      const [staffResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult] = await Promise.all([
+      const [staffResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
         supabase.from("employees")
           .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
           .eq("school_id", schoolId)
@@ -108,12 +112,21 @@ function HRManagerDashboard() {
           .eq("status", "taken")
           .gte("off_date", `${year}-01-01`)
           .lt("off_date", `${year + 1}-01-01`),
+        supabase.from("teachers")
+          .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,status")
+          .eq("school_id", schoolId)
+          .not("user_id", "is", null)
+          .order("first_name", { ascending: true }),
+        supabase.from("hr_staff_signatures")
+          .select("id,teacher_id,profile_id,storage_path,is_active,created_at")
+          .eq("school_id", schoolId),
       ]);
 
-      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
+      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureResult]
         .some((result) => result.error?.code === "42P01" || result.error?.code === "PGRST205");
 
       if (staffResult.error) throw staffResult.error;
+      if (signatureStaffResult.error) throw signatureStaffResult.error;
       if (missingHRSchema) {
         setSchemaReady(false);
         setStaff(staffResult.data || []);
@@ -133,6 +146,8 @@ function HRManagerDashboard() {
       setEntitlementRows(entitlementResult.data || []);
       setUsedOffdayRows(usedOffdayResult.data || []);
       setDevices(deviceResult.data || []);
+      setSignatureStaff(signatureStaffResult.data || []);
+      setSignatureRows(signatureResult.data || []);
       const events = attendanceResult.data || [];
       const presentIds = new Set(events.filter((event) => event.event_type === "check_in").map((event) => event.employee_id));
       setStats({
@@ -273,6 +288,45 @@ function HRManagerDashboard() {
     }
   }, [schoolId, leaveActionId, loadHRData]);
 
+  const registerStaffSignature = useCallback(async (teacher, file) => {
+    if (!schoolId || !teacher?.user_id || !file) return;
+    if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setSignatureNotice("Tumia picha ya PNG/JPG isiyozidi 2 MB.");
+      return;
+    }
+    setSignatureBusyId(teacher.id);
+    setSignatureNotice("");
+    try {
+      const previousSignature = signatureRows.find((row) => row.teacher_id === teacher.id);
+      const path = `${schoolId}/${teacher.id}/signature-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error: uploadError } = await supabase.storage.from("hr-staff-signatures").upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error: saveError } = await supabase.from("hr_staff_signatures").upsert({
+        school_id: schoolId,
+        teacher_id: teacher.id,
+        profile_id: teacher.user_id,
+        storage_path: path,
+        is_active: true,
+        registered_by: user?.id || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "school_id,teacher_id" });
+      if (saveError) {
+        await supabase.storage.from("hr-staff-signatures").remove([path]);
+        throw saveError;
+      }
+      if (previousSignature?.storage_path && previousSignature.storage_path !== path) {
+        await supabase.storage.from("hr-staff-signatures").remove([previousSignature.storage_path]);
+      }
+      setSignatureNotice("Saini limehifadhiwa kwa mafanikio.");
+      await loadHRData();
+    } catch (saveError) {
+      setSignatureNotice(saveError.message || "Imeshindikana kuhifadhi saini.");
+    } finally {
+      setSignatureBusyId(null);
+    }
+  }, [schoolId, signatureRows, loadHRData]);
+
   const activeStaff = useMemo(
     () => staff.filter((person) => !["inactive", "terminated", "left"].includes(String(person.status || "").toLowerCase())),
     [staff]
@@ -285,6 +339,7 @@ function HRManagerDashboard() {
     { id: "attendance", label: "Attendance & USB Fingerprint", icon: <FaFingerprint /> },
     { id: "leave", label: "Leave Management", icon: <FaUmbrellaBeach /> },
     { id: "reports", label: "HR Reports & Documents", icon: <FaFileAlt /> },
+    { id: "signatures", label: "Staff Signature Registry", icon: <FaPen /> },
   ];
 
   return (
@@ -318,6 +373,28 @@ function HRManagerDashboard() {
           </button>
         ))}
       </nav>
+
+      {activeSection === "signatures" && (
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <div><h2 className="text-xl font-bold text-slate-900">Staff Signature Registration</h2><p className="mt-1 text-sm text-slate-500">HR husajili picha ya saini ya kila mfanyakazi. Secretary atatumia saini hizi kwenye mchakato wa kusaini nyaraka.</p></div>
+          {signatureNotice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{signatureNotice}</p>}
+          <div className="divide-y divide-slate-100">
+            {signatureStaff.map((person) => {
+              const existing = signatureRows.find((row) => row.teacher_id === person.id && row.is_active);
+              const fullName = [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ");
+              return <div key={person.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div><p className="font-semibold text-slate-900">{fullName || person.employee_number}</p><p className="text-xs text-slate-500">{person.employee_number || "No employee number"} • {existing ? "Signature registered" : "No signature registered"}</p></div>
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  {signatureBusyId === person.id ? "Saving..." : existing ? "Replace signature" : "Upload signature"}
+                  <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={signatureBusyId === person.id} onChange={(event) => { const file = event.target.files?.[0]; if (file) registerStaffSignature(person, file); event.target.value = ""; }} />
+                </label>
+              </div>;
+            })}
+            {signatureStaff.length === 0 && <p className="py-5 text-sm text-slate-500">Hakuna Staff wenye akaunti za kuingia zilizounganishwa na shule hii.</p>}
+          </div>
+          <p className="text-xs text-slate-500">Picha zinakubaliwa PNG/JPG, hadi 2 MB. Hifadhi ni ya faragha na inapatikana kwa HR na watumiaji wenye ruhusa husika.</p>
+        </section>
+      )}
 
       {activeSection === "overview" && (
         <>

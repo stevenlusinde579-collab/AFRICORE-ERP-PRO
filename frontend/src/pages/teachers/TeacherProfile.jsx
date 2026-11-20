@@ -74,6 +74,7 @@ function TeacherProfile() {
                         <p>Employee Number: <strong>{teacher.employee_number || "-"}</strong></p>
                         <p>Status: <strong>{teacher.status || "-"}</strong></p>
                         <p>Staff Type: <strong>{teacher.staff_type || "-"}</strong></p>
+                        {teacher.is_headmaster === true && <p className="mt-2 inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-indigo-700">Headmaster</p>}
                     </div>
                 </div>
             </section>
