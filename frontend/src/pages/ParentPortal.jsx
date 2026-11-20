@@ -400,10 +400,12 @@ export default function ParentPortal() {
             <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
               <div className="sticky top-0 flex items-center justify-between border-b bg-white p-4"><h3 className="font-extrabold">{viewingParentDocument.document_type==="invoice"?"Invoice":"Receipt"} · {viewingParentDocument.document_number}</h3><button type="button" onClick={()=>setViewingParentDocument(null)} className="rounded-lg border px-3 py-1.5 text-sm font-bold">Close</button></div>
               <article className="m-5 border border-slate-300 p-6 text-sm text-slate-900">
-                <header className="mb-5 border-b-2 border-slate-800 pb-4 text-center" style={{ backgroundColor: viewingParentDocument.payload?.receipt_header_color || "#ffffff" }}><h2 className="text-xl font-black uppercase">{viewingParentDocument.payload?.school_name || student.school_name}</h2><p className="text-xs">{viewingParentDocument.payload?.school_address || viewingParentDocument.payload?.school?.address || ""}</p><p className="mt-2 font-bold">OFFICIAL {viewingParentDocument.document_type.toUpperCase()}</p></header>
-                <div className="grid grid-cols-2 gap-3"><p><b>Document No:</b> {viewingParentDocument.document_number}</p><p><b>Date:</b> {dateText(viewingParentDocument.document_date)}</p><p><b>Parent/Guardian:</b> {viewingParentDocument.payload?.parent_name || "Mzazi/Mlezi"}</p><p><b>Student:</b> {viewingParentDocument.payload?.student_name || student.name}</p><p><b>Admission:</b> {viewingParentDocument.payload?.admission_number || student.admission_number || "—"}</p><p><b>Payment method:</b> {viewingParentDocument.payload?.payment_method || "—"}</p><p><b>Reference:</b> {viewingParentDocument.payload?.reference_number || "—"}</p><p><b>Payment date:</b> {dateText(viewingParentDocument.payload?.payment_date || viewingParentDocument.document_date)}</p></div>
-                {viewingParentDocument.document_type==="invoice" && <table className="mt-5 w-full border-collapse"><thead><tr><th className="border p-2 text-left">Item</th><th className="border p-2 text-right">Qty</th><th className="border p-2 text-right">Unit price</th><th className="border p-2 text-right">Total</th></tr></thead><tbody>{(viewingParentDocument.payload?.items||[]).map((item,index)=><tr key={index}><td className="border p-2">{item.item_name} {item.variant_label||""}</td><td className="border p-2 text-right">{item.quantity}</td><td className="border p-2 text-right">{money(item.unit_price)}</td><td className="border p-2 text-right">{money(item.line_total)}</td></tr>)}</tbody></table>}
-                <p className="mt-6 border-t pt-4 text-right text-lg font-black">TOTAL: {money(viewingParentDocument.amount)} TZS</p><p className="mt-4 text-xs text-slate-500">Asante kwa kufanya malipo. Kwa ufafanuzi, wasiliana na ofisi ya shule.</p>
+                {viewingParentDocument.document_type==="receipt"
+                  ? <ParentPortalReceipt document={viewingParentDocument} student={student}/>
+                  : <><header className="mb-5 border-b-2 border-slate-800 pb-4 text-center"><h2 className="text-xl font-black uppercase">{viewingParentDocument.payload?.school_name || student.school_name}</h2><p className="text-xs">OFFICIAL INVOICE</p></header>
+                    <div className="grid grid-cols-2 gap-3"><p><b>Document No:</b> {viewingParentDocument.document_number}</p><p><b>Date:</b> {dateText(viewingParentDocument.document_date)}</p><p><b>Parent/Guardian:</b> {viewingParentDocument.payload?.parent_name || "Mzazi/Mlezi"}</p><p><b>Student:</b> {viewingParentDocument.payload?.student_name || student.name}</p><p><b>Admission:</b> {viewingParentDocument.payload?.admission_number || student.admission_number || "—"}</p></div>
+                    <table className="mt-5 w-full border-collapse"><thead><tr><th className="border p-2 text-left">Item</th><th className="border p-2 text-right">Qty</th><th className="border p-2 text-right">Unit price</th><th className="border p-2 text-right">Total</th></tr></thead><tbody>{(viewingParentDocument.payload?.items||[]).map((item,index)=><tr key={index}><td className="border p-2">{item.item_name} {item.variant_label||""}</td><td className="border p-2 text-right">{item.quantity}</td><td className="border p-2 text-right">{money(item.unit_price)}</td><td className="border p-2 text-right">{money(item.line_total)}</td></tr>)}</tbody></table>
+                    <p className="mt-6 border-t pt-4 text-right text-lg font-black">TOTAL: {money(viewingParentDocument.amount)} TZS</p></>}
               </article>
               <div className="flex justify-end gap-2 border-t p-4"><button type="button" onClick={()=>{setSelectedDocumentIds(current=>current.includes(String(viewingParentDocument.id))?current:[...current,String(viewingParentDocument.id)]);window.setTimeout(()=>window.print(),100);}} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Print this document</button><button type="button" onClick={()=>setViewingParentDocument(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">Done</button></div>
             </div>
@@ -469,12 +471,12 @@ export default function ParentPortal() {
           </div>
           <div className="parent-documents-print hidden">
             {selectedDocuments.map(document=><article key={document.id} className="parent-print-document">
-              <header className="mb-5 border-b-2 border-slate-800 pb-4 text-center"><h2 className="text-xl font-black uppercase">{document.payload?.school_name || student.school_name}</h2><p className="text-xs">OFFICIAL {document.document_type.toUpperCase()}</p></header>
-              <div className="grid grid-cols-2 gap-2 text-sm"><p><b>Document No:</b> {document.document_number}</p><p><b>Date:</b> {dateText(document.document_date)}</p><p><b>Parent/Guardian:</b> {document.payload?.parent_name || "Mzazi/Mlezi"}</p><p><b>Student:</b> {document.payload?.student_name || student.name}</p><p><b>Admission:</b> {document.payload?.admission_number || student.admission_number || "—"}</p></div>
-              {document.document_type==="invoice" && <table className="mt-5 w-full border-collapse text-sm"><thead><tr><th className="border p-2 text-left">Item</th><th className="border p-2 text-right">Qty</th><th className="border p-2 text-right">Unit price</th><th className="border p-2 text-right">Total</th></tr></thead><tbody>{(document.payload?.items||[]).map((item,index)=><tr key={index}><td className="border p-2">{item.item_name} {item.variant_label||""}</td><td className="border p-2 text-right">{item.quantity}</td><td className="border p-2 text-right">{money(item.unit_price)}</td><td className="border p-2 text-right">{money(item.line_total)}</td></tr>)}</tbody></table>}
-              <div className="mt-6 flex justify-end border-t pt-3 text-lg font-black">TOTAL: {money(document.amount)}</div>
-              {document.document_type==="receipt"&&<p className="mt-3 text-sm">Payment method: {document.payload?.payment_method||"—"} · Reference: {document.payload?.reference_number||"—"}</p>}
-              <p className="mt-12 text-center text-xs text-slate-500">Generated by AfriCore ERP PRO</p>
+              {document.document_type==="receipt"
+                ? <ParentPortalReceipt document={document} student={student}/>
+                : <><header className="mb-5 border-b-2 border-slate-800 pb-4 text-center"><h2 className="text-xl font-black uppercase">{document.payload?.school_name || student.school_name}</h2><p className="text-xs">OFFICIAL INVOICE</p></header>
+                  <div className="grid grid-cols-2 gap-2 text-sm"><p><b>Document No:</b> {document.document_number}</p><p><b>Date:</b> {dateText(document.document_date)}</p><p><b>Parent/Guardian:</b> {document.payload?.parent_name || "Mzazi/Mlezi"}</p><p><b>Student:</b> {document.payload?.student_name || student.name}</p><p><b>Admission:</b> {document.payload?.admission_number || student.admission_number || "—"}</p></div>
+                  <table className="mt-5 w-full border-collapse text-sm"><thead><tr><th className="border p-2 text-left">Item</th><th className="border p-2 text-right">Qty</th><th className="border p-2 text-right">Unit price</th><th className="border p-2 text-right">Total</th></tr></thead><tbody>{(document.payload?.items||[]).map((item,index)=><tr key={index}><td className="border p-2">{item.item_name} {item.variant_label||""}</td><td className="border p-2 text-right">{item.quantity}</td><td className="border p-2 text-right">{money(item.unit_price)}</td><td className="border p-2 text-right">{money(item.line_total)}</td></tr>)}</tbody></table>
+                  <div className="mt-6 flex justify-end border-t pt-3 text-lg font-black">TOTAL: {money(document.amount)}</div><p className="mt-12 text-center text-xs text-slate-500">Generated by AfriCore ERP PRO</p></>}
             </article>)}
           </div>
           <style>{'@media print { body * { visibility:hidden !important; } body:has(.parent-documents-print) .parent-documents-print, body:has(.parent-documents-print) .parent-documents-print * { visibility:visible !important; } body:has(.parent-documents-print) .parent-documents-print { display:block !important; position:absolute; inset:0; width:100%; padding:18mm; background:#fff; } .parent-print-document { break-after:page; page-break-after:always; } .parent-print-document:last-child { break-after:auto; page-break-after:auto; } }'}</style>
@@ -528,6 +530,37 @@ export default function ParentPortal() {
     </div>
   );
 }
+
+function ParentPortalReceipt({ document, student }) {
+  const payload = document.payload || {};
+  const schoolName = payload.school_name || payload.school?.name || student.school_name || "School";
+  const schoolAddress = payload.school_address || payload.school?.address || payload.address || "";
+  const studentName = payload.student_name || student.name || "Not linked";
+  const amount = Number(document.amount || 0);
+  return <div className="text-slate-900">
+    <header className="px-8 py-6 text-center" style={{ backgroundColor: payload.receipt_header_color || "#e0f2fe", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
+      <h2 className="text-2xl font-black uppercase">{schoolName}</h2>
+      <p className="mt-1 text-sm font-semibold">{schoolAddress}</p>
+      <p className="mt-3 text-lg font-extrabold tracking-widest">OFFICIAL SCHOOL FEES RECEIPT</p>
+      <p className="text-xs font-semibold">AFRICORE ERP PRO · ORIGINAL RECEIPT</p>
+    </header>
+    <div className="p-8">
+      <div className="mb-5 grid grid-cols-2 gap-x-8 gap-y-3 border-b pb-5 text-sm">
+        <p><b>Receipt Number:</b> {document.document_number}</p><p><b>Receipt Date:</b> {dateText(payload.receipt_date || document.document_date)}</p>
+        <p><b>Receipt Status:</b> {payload.status || "Posted"}</p><p><b>Payment Method:</b> {payload.payment_method || "Not specified"}</p>
+        <p><b>Parent / Payer:</b> {payload.payer_name || "Not recorded"}</p><p><b>Payment Reference:</b> {payload.reference_number || "Not provided"}</p>
+        <p><b>Student Name:</b> {studentName}</p><p><b>Admission Number:</b> {payload.admission_number || student.admission_number || "Not available"}</p>
+        <p><b>Parent / Guardian:</b> {payload.parent_name || "Not recorded"}</p><p><b>School:</b> {schoolName}</p>
+      </div>
+      <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide">Payment details</h3>
+      <table className="w-full border-collapse text-sm"><thead><tr className="bg-slate-100"><th className="border p-3 text-left">Description</th><th className="border p-3 text-right">Amount (TZS)</th></tr></thead><tbody><tr><td className="border p-3">{payload.description || "School fees payment"}</td><td className="border p-3 text-right font-bold">{money(amount)}</td></tr></tbody><tfoot><tr><td className="border p-3 text-right font-extrabold">TOTAL RECEIVED</td><td className="border p-3 text-right text-lg font-black">{money(amount)} TZS</td></tr></tfoot></table>
+      <div className="mt-6 rounded-lg border border-slate-300 p-4"><p className="text-xs font-bold uppercase text-slate-600">Amount received</p><p className="mt-1 text-2xl font-black">{money(amount)} TZS</p><p className="mt-2 text-xs text-slate-600">This receipt confirms that the amount stated above was recorded as received by the school, subject to the school's financial records.</p></div>
+      <div className="mt-14 grid grid-cols-2 gap-12 text-center text-xs"><p className="border-t border-slate-500 pt-2">Cashier / Accountant signature</p><p className="border-t border-slate-500 pt-2">Parent / Payer acknowledgement</p></div>
+      <div className="mt-8 border-t pt-3 text-center text-xs text-slate-500"><p>Asante kwa kufanya malipo. Kwa ufafanuzi, wasiliana na ofisi ya shule.</p></div>
+    </div>
+  </div>;
+}
+
 function NotificationBadge({count}) {
   const value = Math.max(0, Number(count || 0));
   if (!value) return null;
