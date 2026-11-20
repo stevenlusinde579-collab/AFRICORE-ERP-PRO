@@ -7,6 +7,10 @@ begin;
 alter table public.teachers
   add column if not exists is_headmaster boolean not null default false;
 
+-- One login account maps to one Staff row. Existing data was checked for duplicates.
+create unique index if not exists teachers_user_id_unique_idx
+  on public.teachers(user_id) where user_id is not null;
+
 -- Restore the Headmaster marker on staff records that are already linked.
 update public.teachers t
    set is_headmaster = true,
@@ -88,11 +92,7 @@ select
   true
 from missing m
 left join auth.users u on u.id = m.profile_id
-on conflict (user_id) do update
-  set is_headmaster = true,
-      school_id = excluded.school_id,
-      phone = coalesce(public.teachers.phone, excluded.phone),
-      email = coalesce(public.teachers.email, excluded.email);
+on conflict (user_id) where user_id is not null do nothing;
 
 -- Link each Headmaster profile to the matching Staff row.
 update public.profiles p
