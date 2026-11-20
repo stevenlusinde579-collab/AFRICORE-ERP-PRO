@@ -981,10 +981,10 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
       if (expectedDocuments.some(item => !item.receipt_number || !["fee_payment", "stock_payment"].includes(item.source_type))) {
         return res.status(400).json({ success: false, message: "Aina ya risiti uliyochagua haitumiki kwa Parent Portal." });
       }
-      const studentIds = [...new Set(receipts.map(row => Number(row.student_id)).filter(Number.isSafeInteger))];
-      if (studentIds.length !== receipts.length) {
+      if (receipts.some(row => !Number.isSafeInteger(Number(row.student_id)) || Number(row.student_id) <= 0)) {
         return res.status(400).json({ success: false, message: "Kila risiti lazima ihusishwe na mwanafunzi kabla ya kuchapishwa Parent Portal." });
       }
+      const studentIds = [...new Set(receipts.map(row => Number(row.student_id)))];
       if (!req.parentPortalScope.fullAccess && studentIds.some(id => !req.parentPortalScope.studentIds.includes(id))) {
         return res.status(403).json({ success: false, message: "Huna ruhusa ya kuchapisha risiti za mwanafunzi mmoja au zaidi." });
       }
