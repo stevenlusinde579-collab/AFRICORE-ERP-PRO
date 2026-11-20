@@ -32,6 +32,16 @@ with check (
     and (storage.foldername(name))[1] = (select auth.uid())::text
 );
 
+drop policy if exists "Users view their own profile photos" on storage.objects;
+create policy "Users view their own profile photos"
+on storage.objects
+for select
+to authenticated
+using (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
 drop policy if exists "Users update their own profile photos" on storage.objects;
 create policy "Users update their own profile photos"
 on storage.objects
