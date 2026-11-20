@@ -391,7 +391,7 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
             <img src={profile.avatarUrl} alt={profile.fullName || "User profile"} className="h-11 w-11 shrink-0 rounded-full border-2 border-slate-600 object-cover" />
           ) : (
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-              {(profile?.fullName || "HR").split(/\\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("")}
+              {(profile?.fullName || "HR").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("")}
             </div>
           )}
           <div className="min-w-0">
