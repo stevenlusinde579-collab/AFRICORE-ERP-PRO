@@ -11,8 +11,13 @@ alter table public.teachers
 update public.teachers t
    set is_headmaster = true,
        user_id = coalesce(t.user_id, p.id),
-       school_id = coalesce(t.school_id, p.school_id)
+       school_id = coalesce(t.school_id, p.school_id),
+       staff_type = 'Staff',
+       status = 'Active',
+       phone = coalesce(t.phone, p.phone),
+       email = coalesce(t.email, u.email)
   from public.profiles p
+  left join auth.users u on u.id = p.id
  where (p.teacher_id = t.id or t.user_id = p.id)
    and (
      p.role_id = (select r.id from public.roles r where lower(trim(r.role_name)) = 'headmaster' order by r.id limit 1)
