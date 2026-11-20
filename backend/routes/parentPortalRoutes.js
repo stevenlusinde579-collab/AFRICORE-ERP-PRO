@@ -964,7 +964,7 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
     const query = supabase.from("parent_portal_documents")
       .select("id,student_id,publication_status,payload")
       .eq("school_id", schoolId).eq("document_type", "receipt")
-      .eq("source_type", "fee_payment").in("id", ids);
+      .in("source_type", ["fee_payment", "stock_payment"]).in("id", ids);
     const requestedHeaderColor = String(req.body?.receipt_header_color || "").trim();
     const receiptHeaderColor = /^#[0-9a-fA-F]{6}$/.test(requestedHeaderColor) ? requestedHeaderColor : null;
     const found = await query;
