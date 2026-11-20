@@ -558,6 +558,30 @@ export const createTeacher = async (
                 role_id
             });
 
+        // A Super Admin-created Headmaster is also a Staff record.
+        // Never allow the normal staff editor to accidentally strip that role.
+        const { data: staffHeadmasterFlag, error: staffFlagError } = await supabase
+            .from("teachers")
+            .select("is_headmaster")
+            .eq("id", teacherId)
+            .maybeSingle();
+        if (staffFlagError) {
+            return res.status(500).json({
+                success: false,
+                message: `Unable to verify Headmaster staff status: ${staffFlagError.message}`
+            });
+        }
+        if (staffHeadmasterFlag?.is_headmaster === true) {
+            const { data: headmasterRole, error: headmasterRoleError } = await supabase
+                .from("roles")
+                .select("id")
+                .eq("role_name", "Headmaster")
+                .maybeSingle();
+            if (headmasterRoleError) throw headmasterRoleError;
+            if (headmasterRole?.id && !normalizedRoleIds.includes(Number(headmasterRole.id))) {
+                normalizedRoleIds.push(Number(headmasterRole.id));
+            }
+        }
 
         if (normalizedRoleIds.length === 0) {
 
