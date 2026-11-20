@@ -139,31 +139,25 @@ begin
     execute format(
       'create policy hr_school_scope on public.%I for all to authenticated using (
         public.is_current_user_super_admin()
-        or (
-          school_id = public.get_current_user_school_id()
-          and exists (
-            select 1
-            from public.profile_roles pr
-            join public.roles r on r.id = pr.role_id
-            where pr.profile_id = auth.uid()
-              and pr.school_id = school_id
-              and pr.is_active is true
-              and lower(trim(r.role_name)) in (''hr manager'', ''headmaster'')
-          )
+        or school_id in (
+          select pr.school_id
+          from public.profile_roles pr
+          join public.roles r on r.id = pr.role_id
+          where pr.profile_id = auth.uid()
+            and pr.is_active is true
+            and pr.school_id is not null
+            and lower(trim(r.role_name)) in (''hr manager'', ''headmaster'')
         )
       ) with check (
         public.is_current_user_super_admin()
-        or (
-          school_id = public.get_current_user_school_id()
-          and exists (
-            select 1
-            from public.profile_roles pr
-            join public.roles r on r.id = pr.role_id
-            where pr.profile_id = auth.uid()
-              and pr.school_id = school_id
-              and pr.is_active is true
-              and lower(trim(r.role_name)) in (''hr manager'', ''headmaster'')
-          )
+        or school_id in (
+          select pr.school_id
+          from public.profile_roles pr
+          join public.roles r on r.id = pr.role_id
+          where pr.profile_id = auth.uid()
+            and pr.is_active is true
+            and pr.school_id is not null
+            and lower(trim(r.role_name)) in (''hr manager'', ''headmaster'')
         )
       )',
       table_name
