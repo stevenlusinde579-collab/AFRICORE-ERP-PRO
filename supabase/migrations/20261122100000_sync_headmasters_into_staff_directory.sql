@@ -20,7 +20,6 @@ update public.teachers t
        status = 'Active',
        phone = coalesce(t.phone, p.phone)
   from public.profiles p
-  left join auth.users u on u.id = p.id
  where (p.teacher_id = t.id or t.user_id = p.id)
    and (
      p.role_id = (select r.id from public.roles r where lower(trim(r.role_name)) = 'headmaster' order by r.id limit 1)
