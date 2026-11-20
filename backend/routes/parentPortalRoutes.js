@@ -966,30 +966,113 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
     let ids = documentIds;
     if (receiptIds.length) {
       const selectedReceipts = await supabase.schema("finance").from("receipts")
-        .select("id,receipt_number,student_id")
+        .select("*")
         .eq("school_id", schoolId).in("id", receiptIds);
       if (selectedReceipts.error) throw selectedReceipts.error;
       if ((selectedReceipts.data || []).length !== receiptIds.length) {
         return res.status(404).json({ success: false, message: "Baadhi ya risiti hazipo au hazihusiani na shule yako." });
       }
-      const expectedDocuments = (selectedReceipts.data || []).map(receipt => ({
+      const receipts = selectedReceipts.data || [];
+      const expectedDocuments = receipts.map(receipt => ({
+        receipt,
         receipt_number: receipt.receipt_number,
         source_type: String(receipt.receipt_number || "").startsWith("STOCK-") ? "stock_payment" : "fee_payment",
       }));
       if (expectedDocuments.some(item => !item.receipt_number || !["fee_payment", "stock_payment"].includes(item.source_type))) {
         return res.status(400).json({ success: false, message: "Aina ya risiti uliyochagua haitumiki kwa Parent Portal." });
       }
-      const receiptNumbers = expectedDocuments.map(item => item.receipt_number);
+      const studentIds = [...new Set(receipts.map(row => Number(row.student_id)).filter(Number.isSafeInteger))];
+      if (studentIds.length !== receipts.length) {
+        return res.status(400).json({ success: false, message: "Kila risiti lazima ihusishwe na mwanafunzi kabla ya kuchapishwa Parent Portal." });
+      }
+      if (!req.parentPortalScope.fullAccess && studentIds.some(id => !req.parentPortalScope.studentIds.includes(id))) {
+        return res.status(403).json({ success: false, message: "Huna ruhusa ya kuchapisha risiti za mwanafunzi mmoja au zaidi." });
+      }
+
+      // A posted finance receipt is the source of truth. Create the missing
+      // Parent Portal document from that receipt instead of requiring a
+      // separate document to have been created by another workflow.
+      const [studentsResult, schoolResult, accountsResult] = await Promise.all([
+        supabase.from("students").select("*").eq("school_id", schoolId).in("id", studentIds),
+        supabase.from("schools").select("*").eq("id", schoolId).maybeSingle(),
+        supabase.from("parent_portal_accounts").select("id,student_id").eq("school_id", schoolId).in("student_id", studentIds),
+      ]);
+      if (studentsResult.error || schoolResult.error || accountsResult.error) {
+        throw studentsResult.error || schoolResult.error || accountsResult.error;
+      }
+      const studentMap = new Map((studentsResult.data || []).map(row => [Number(row.id), row]));
+      if (studentMap.size !== studentIds.length || !schoolResult.data) {
+        return res.status(404).json({ success: false, message: "Taarifa za mwanafunzi au shule hazijapatikana." });
+      }
+      const accountMap = new Map((accountsResult.data || []).map(row => [Number(row.student_id), row.id]));
+      const school = schoolResult.data;
+      const schoolAddress = school.address || school.school_address || school.postal_address || school.location || "";
+      const existingResult = await supabase.from("parent_portal_documents")
+        .select("id,student_id,publication_status,payload,document_number,source_type,source_id")
+        .eq("school_id", schoolId).eq("document_type", "receipt")
+        .in("source_type", ["fee_payment", "stock_payment"])
+        .in("document_number", expectedDocuments.map(item => item.receipt_number));
+      if (existingResult.error) throw existingResult.error;
+      const existingDocuments = existingResult.data || [];
+      const missingRows = expectedDocuments.filter(item => !existingDocuments.some(doc =>
+        doc.document_number === item.receipt_number && doc.source_type === item.source_type
+      )).map(({ receipt, receipt_number, source_type }) => {
+        const student = studentMap.get(Number(receipt.student_id));
+        const studentName = fullName(student);
+        const guardianName = student.parent_name || student.guardian_name || receipt.payer_name || "Mzazi/Mlezi";
+        return {
+          school_id: schoolId,
+          parent_account_id: accountMap.get(Number(student.id)) || null,
+          student_id: Number(student.id),
+          document_type: "receipt",
+          document_number: receipt_number,
+          source_type,
+          source_id: String(receipt.id),
+          amount: Number(receipt.amount || 0),
+          document_date: receipt.receipt_date || new Date().toISOString().slice(0, 10),
+          status: "issued",
+          publication_status: "pending",
+          payload: {
+            school_name: school.school_name || "School",
+            school_address: schoolAddress,
+            school: { name: school.school_name || "School", address: schoolAddress },
+            receipt_number,
+            receipt_date: receipt.receipt_date || null,
+            status: receipt.status || "Posted",
+            payment_method: receipt.payment_method || "",
+            payer_name: receipt.payer_name || "",
+            parent_name: guardianName,
+            student_name: studentName,
+            admission_number: student.admission_number || student.admission_no || "",
+            reference_number: receipt.reference_number || "",
+            description: receipt.description || "School fees payment",
+            receipt_header_color: "#e0f2fe",
+            original_receipt: true,
+          },
+        };
+      });
+      if (missingRows.length) {
+        const created = await supabase.from("parent_portal_documents")
+          .upsert(missingRows, { onConflict: "school_id,document_type,source_type,source_id", ignoreDuplicates: true });
+        if (created.error) throw created.error;
+      }
+
+      // Re-read by receipt number so both newly created documents and older
+      // documents linked to legacy payment IDs are supported.
       const receiptDocuments = await supabase.from("parent_portal_documents")
         .select("id,student_id,publication_status,payload,document_number,source_type")
         .eq("school_id", schoolId).eq("document_type", "receipt")
-        .in("source_type", ["fee_payment", "stock_payment"]).in("document_number", receiptNumbers);
+        .in("source_type", ["fee_payment", "stock_payment"])
+        .in("document_number", expectedDocuments.map(item => item.receipt_number));
       if (receiptDocuments.error) throw receiptDocuments.error;
       const matchedDocuments = expectedDocuments.map(expected => (receiptDocuments.data || []).find(doc =>
         doc.document_number === expected.receipt_number && doc.source_type === expected.source_type
       ));
       if (matchedDocuments.some(doc => !doc)) {
-        return res.status(404).json({ success: false, message: "Baadhi ya risiti hazina nyaraka zinazolingana kwenye Parent Portal." });
+        return res.status(500).json({ success: false, message: "Nyaraka za risiti hazikuweza kutengenezwa. Jaribu tena au wasiliana na msimamizi." });
+      }
+      if (matchedDocuments.some((doc, index) => Number(doc.student_id) !== Number(receipts[index].student_id))) {
+        return res.status(409).json({ success: false, message: "Namba ya risiti tayari imeunganishwa na mwanafunzi tofauti. Hakuna kilichochapishwa." });
       }
       ids = [...new Set([...documentIds, ...matchedDocuments.map(row => Number(row.id))])];
     }
