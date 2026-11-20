@@ -108,7 +108,7 @@ create or replace function public.guard_document_signing_recipient_update()
 returns trigger
 language plpgsql
 set search_path = public
-as $
+as $$
 declare
   manager_access boolean := false;
 begin
@@ -150,7 +150,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists trg_guard_document_signing_recipient_update on public.document_signing_recipients;
 create trigger trg_guard_document_signing_recipient_update
