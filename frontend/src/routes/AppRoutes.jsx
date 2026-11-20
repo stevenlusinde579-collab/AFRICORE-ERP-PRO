@@ -312,7 +312,7 @@ export default function AppRoutes() {
                     element={
                         <SuperAdminOrAllowedRoleRoute
                             allowedRoles={[1]}
-                            allowedRoleNames={["HR Manager", "Headmaster"]}
+                            allowedRoleNames={["HR Manager"]}
                         />
                     }
                 >
