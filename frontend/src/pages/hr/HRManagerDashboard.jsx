@@ -47,7 +47,12 @@ function HRManagerDashboard() {
   const [devices, setDevices] = useState([]);
   const [offdayRows, setOffdayRows] = useState([]);
   const [leaveRows, setLeaveRows] = useState([]);
+  const [entitlementRows, setEntitlementRows] = useState([]);
+  const [usedOffdayRows, setUsedOffdayRows] = useState([]);
   const [activeSection, setActiveSection] = useState("overview");
+  const [entitlementEmployeeId, setEntitlementEmployeeId] = useState("");
+  const [entitlementDays, setEntitlementDays] = useState("7");
+  const [savingEntitlement, setSavingEntitlement] = useState(false);
   const [offdayEmployeeId, setOffdayEmployeeId] = useState("");
   const [offdayDate, setOffdayDate] = useState("");
   const [savingOffday, setSavingOffday] = useState(false);
@@ -67,8 +72,9 @@ function HRManagerDashboard() {
     setRefreshing(true);
     setError("");
     const date = today();
+    const year = Number(date.slice(0, 4));
     try {
-      const [staffResult, offdayResult, leaveResult, attendanceResult, deviceResult] = await Promise.all([
+      const [staffResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult] = await Promise.all([
         supabase.from("employees")
           .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
           .eq("school_id", schoolId)
@@ -92,9 +98,19 @@ function HRManagerDashboard() {
         supabase.from("hr_biometric_devices")
           .select("id,device_name,device_model,connection_type,bridge_status,last_seen_at")
           .eq("school_id", schoolId),
+        supabase.from("hr_offday_entitlements")
+          .select("id,employee_id,entitlement_year,entitled_days")
+          .eq("school_id", schoolId)
+          .eq("entitlement_year", year),
+        supabase.from("hr_offday_rosters")
+          .select("employee_id")
+          .eq("school_id", schoolId)
+          .eq("status", "taken")
+          .gte("off_date", `${year}-01-01`)
+          .lt("off_date", `${year + 1}-01-01`),
       ]);
 
-      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult]
+      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
         .some((result) => result.error?.code === "42P01" || result.error?.code === "PGRST205");
 
       if (staffResult.error) throw staffResult.error;
@@ -106,7 +122,7 @@ function HRManagerDashboard() {
         return;
       }
 
-      const errors = [offdayResult, leaveResult, attendanceResult, deviceResult]
+      const errors = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
         .filter((result) => result.error);
       if (errors.length) throw errors[0].error;
 
@@ -114,6 +130,8 @@ function HRManagerDashboard() {
       setStaff(staffResult.data || []);
       setOffdayRows(offdayResult.data || []);
       setLeaveRows(leaveResult.data || []);
+      setEntitlementRows(entitlementResult.data || []);
+      setUsedOffdayRows(usedOffdayResult.data || []);
       setDevices(deviceResult.data || []);
       const events = attendanceResult.data || [];
       const presentIds = new Set(events.filter((event) => event.event_type === "check_in").map((event) => event.employee_id));
@@ -169,6 +187,33 @@ function HRManagerDashboard() {
   }, [schoolId, schemaReady, registeringDevice, deviceName, deviceSerial, loadHRData]);
 
   useEffect(() => { loadHRData(); }, [loadHRData]);
+
+  const saveEntitlement = useCallback(async (event) => {
+    event.preventDefault();
+    if (!schoolId || !entitlementEmployeeId || !entitlementDays || savingEntitlement) return;
+    const days = Number(entitlementDays);
+    if (!Number.isFinite(days) || days < 0 || days > 366) {
+      setError("Idadi ya off-days lazima iwe kati ya 0 na 366.");
+      return;
+    }
+    setSavingEntitlement(true);
+    setError("");
+    try {
+      const { error: upsertError } = await supabase.from("hr_offday_entitlements").upsert({
+        school_id: schoolId,
+        employee_id: Number(entitlementEmployeeId),
+        entitlement_year: Number(today().slice(0, 4)),
+        entitled_days: days
+      }, { onConflict: "school_id,employee_id,entitlement_year" });
+      if (upsertError) throw upsertError;
+      setEntitlementEmployeeId("");
+      await loadHRData();
+    } catch (saveError) {
+      setError(saveError.message || "Imeshindikana kuhifadhi haki ya off-days.");
+    } finally {
+      setSavingEntitlement(false);
+    }
+  }, [schoolId, entitlementEmployeeId, entitlementDays, savingEntitlement, loadHRData]);
 
   const saveOffday = useCallback(async (event) => {
     event.preventDefault();
@@ -312,6 +357,21 @@ function HRManagerDashboard() {
             </form>
           )}
           {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Ratiba zijazo</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">Hakuna ratiba iliyopo.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Mfanyakazi"}</span><span className="text-slate-500">{row.off_date}</span><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{row.status}</span></div>)}</div>}</div>}
+          {schemaReady && (
+            <form onSubmit={saveEntitlement} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+              <label className="text-sm font-medium text-slate-700">Mfanyakazi
+                <select required value={entitlementEmployeeId} onChange={(event) => setEntitlementEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                  <option value="">Chagua mfanyakazi</option>
+                  {activeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">Off-days kwa mwaka ({today().slice(0, 4)})
+                <input required type="number" min="0" max="366" step="0.5" value={entitlementDays} onChange={(event) => setEntitlementDays(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
+              </label>
+              <div className="flex items-end"><button disabled={savingEntitlement || !entitlementEmployeeId} className="w-full rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingEntitlement ? "Inahifadhi..." : "Weka entitlement"}</button></div>
+            </form>
+          )}
+          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Mfanyakazi</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Used</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const used = usedOffdayRows.filter((item) => item.employee_id === row.employee_id).length; const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{used}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - used)}</td></tr>; })}</tbody></table></div>}
           {!schemaReady && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Off-day records hazijawezeshwa kwenye database bado; migration iko kwenye tawi la majaribio.</p>}
         </section>
       )}
