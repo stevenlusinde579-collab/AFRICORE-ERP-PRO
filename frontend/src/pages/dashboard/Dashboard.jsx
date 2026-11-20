@@ -36,6 +36,7 @@ import { useSchool } from "../../context/SchoolContext";
 
 import StudentAnalytics from "./StudentAnalytics";
 import HeadmasterDashboardLive from "./HeadmasterDashboard";
+import HRManagerDashboard from "../hr/HRManagerDashboard";
 
 
 /* =========================================================
@@ -92,6 +93,9 @@ const getDashboardType = (roleName) => {
 
     case "headmaster":
       return "headmaster";
+
+    case "hr manager":
+      return "hr_manager";
 
     case "deputy headmaster":
       return "deputy_headmaster";
@@ -879,6 +883,15 @@ function Dashboard() {
 
     );
 
+  }
+
+
+  /* =======================================================
+     HR MANAGER
+  ======================================================= */
+
+  if (dashboardType === "hr_manager") {
+    return <HRManagerDashboard />;
   }
 
 
