@@ -12,7 +12,8 @@ values
   ('manage_hr', 'hr', 'Human Resources', 'manage', 'Manage HR settings and staff HR workflows.', true),
   ('manage_hr_offdays', 'hr', 'Off Day Management', 'manage', 'Set annual off-day entitlements and staggered staff rosters.', true),
   ('manage_hr_attendance', 'hr', 'Attendance', 'manage', 'Manage staff attendance and biometric device connections.', true),
-  ('manage_hr_leave', 'hr', 'Leave Management', 'manage', 'Review and manage staff leave requests.', true)
+  ('manage_hr_leave', 'hr', 'Leave Management', 'manage', 'Review and manage staff leave requests.', true),
+  ('send_messages', 'communication', 'Communication', 'send', 'Send school communication messages.', true)
 on conflict (permission_name) do update
 set module = excluded.module,
     module_name = excluded.module_name,
@@ -25,7 +26,7 @@ select r.id, p.id
 from public.roles r
 cross join public.permissions p
 where r.role_name in ('HR Manager', 'Headmaster')
-  and p.permission_name in ('view_hr', 'manage_hr', 'manage_hr_offdays', 'manage_hr_attendance', 'manage_hr_leave')
+  and p.permission_name in ('view_hr', 'manage_hr', 'manage_hr_offdays', 'manage_hr_attendance', 'manage_hr_leave', 'view_staff', 'create_staff', 'edit_staff', 'send_messages')
 on conflict do nothing;
 
 create table if not exists public.hr_offday_policies (
