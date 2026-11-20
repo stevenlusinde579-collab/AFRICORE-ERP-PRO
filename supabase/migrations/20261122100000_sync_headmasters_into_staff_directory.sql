@@ -11,7 +11,7 @@ alter table public.teachers
 update public.teachers t
    set is_headmaster = true,
        user_id = coalesce(t.user_id, p.id),
-       school_id = coalesce(t.school_id, p.school_id),
+       school_id = coalesce(p.school_id, t.school_id),
        staff_type = 'Staff',
        status = 'Active',
        phone = coalesce(t.phone, p.phone),
