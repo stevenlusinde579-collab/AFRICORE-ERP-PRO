@@ -165,3 +165,49 @@ begin
     );
   end loop;
 end $$;
+
+-- Enforce tenant consistency at the database level: an HR row cannot
+-- reference an employee or biometric device belonging to another school.
+create unique index if not exists employees_school_id_id_uidx
+  on public.employees (school_id, id);
+
+create unique index if not exists hr_biometric_devices_school_id_id_uidx
+  on public.hr_biometric_devices (school_id, id);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'hr_offday_entitlements_employee_school_fkey') then
+    alter table public.hr_offday_entitlements
+      add constraint hr_offday_entitlements_employee_school_fkey
+      foreign key (school_id, employee_id)
+      references public.employees (school_id, id) on delete cascade;
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'hr_offday_rosters_employee_school_fkey') then
+    alter table public.hr_offday_rosters
+      add constraint hr_offday_rosters_employee_school_fkey
+      foreign key (school_id, employee_id)
+      references public.employees (school_id, id) on delete cascade;
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'hr_leave_requests_employee_school_fkey') then
+    alter table public.hr_leave_requests
+      add constraint hr_leave_requests_employee_school_fkey
+      foreign key (school_id, employee_id)
+      references public.employees (school_id, id) on delete cascade;
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'hr_attendance_events_employee_school_fkey') then
+    alter table public.hr_attendance_events
+      add constraint hr_attendance_events_employee_school_fkey
+      foreign key (school_id, employee_id)
+      references public.employees (school_id, id) on delete cascade;
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'hr_attendance_events_device_school_fkey') then
+    alter table public.hr_attendance_events
+      add constraint hr_attendance_events_device_school_fkey
+      foreign key (school_id, device_id)
+      references public.hr_biometric_devices (school_id, id) on delete set null (device_id);
+  end if;
+end $$;
