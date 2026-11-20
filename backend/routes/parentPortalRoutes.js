@@ -955,12 +955,37 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
 
 router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAccess, async (req, res) => {
   const schoolId = Number(req.profile?.school_id);
-  const ids = [...new Set((Array.isArray(req.body?.document_ids) ? req.body.document_ids : [])
+  const documentIds = [...new Set((Array.isArray(req.body?.document_ids) ? req.body.document_ids : [])
     .map(value => Number(value)).filter(value => Number.isSafeInteger(value) && value > 0))];
-  if (!Number.isInteger(schoolId) || !ids.length || ids.length > 500) {
+  const receiptIds = [...new Set((Array.isArray(req.body?.receipt_ids) ? req.body.receipt_ids : [])
+    .map(value => String(value)).filter(value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)))];
+  if (!Number.isInteger(schoolId) || (!documentIds.length && !receiptIds.length) || documentIds.length > 500 || receiptIds.length > 500) {
     return res.status(400).json({ success: false, message: "Chagua risiti halali za kuchapisha." });
   }
   try {
+    let ids = documentIds;
+    if (receiptIds.length) {
+      const stockReceipts = await supabase.schema("finance").from("receipts")
+        .select("id,receipt_number,student_id")
+        .eq("school_id", schoolId).like("receipt_number", "STOCK-%").in("id", receiptIds);
+      if (stockReceipts.error) throw stockReceipts.error;
+      if ((stockReceipts.data || []).length !== receiptIds.length) {
+        return res.status(404).json({ success: false, message: "Baadhi ya risiti za stock hazipo au hazihusiani na shule yako." });
+      }
+      const stockNumbers = stockReceipts.data.map(row => row.receipt_number);
+      const stockDocuments = await supabase.from("parent_portal_documents")
+        .select("id,student_id,publication_status,payload,document_number")
+        .eq("school_id", schoolId).eq("document_type", "receipt")
+        .eq("source_type", "stock_payment").in("document_number", stockNumbers);
+      if (stockDocuments.error) throw stockDocuments.error;
+      if ((stockDocuments.data || []).length !== stockNumbers.length) {
+        return res.status(404).json({ success: false, message: "Baadhi ya risiti za stock hazina nyaraka zinazolingana kwenye Parent Portal." });
+      }
+      ids = [...new Set([...documentIds, ...(stockDocuments.data || []).map(row => Number(row.id))])];
+    }
+    if (!ids.length || ids.length > 500) {
+      return res.status(400).json({ success: false, message: "Chagua risiti halali za kuchapisha." });
+    }
     const query = supabase.from("parent_portal_documents")
       .select("id,student_id,publication_status,payload")
       .eq("school_id", schoolId).eq("document_type", "receipt")
