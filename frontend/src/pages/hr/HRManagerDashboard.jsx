@@ -238,6 +238,21 @@ function HRManagerDashboard() {
     }
   }, [schoolId, offdayEmployeeId, offdayDate, savingOffday, loadHRData]);
 
+  const updateOffdayStatus = useCallback(async (rosterId, status) => {
+    if (!schoolId || !rosterId) return;
+    setError("");
+    try {
+      const { error: updateError } = await supabase.from("hr_offday_rosters")
+        .update({ status })
+        .eq("id", rosterId)
+        .eq("school_id", schoolId);
+      if (updateError) throw updateError;
+      await loadHRData();
+    } catch (updateError) {
+      setError(updateError.message || "Imeshindikana kubadilisha hali ya off-day.");
+    }
+  }, [schoolId, loadHRData]);
+
   const reviewLeave = useCallback(async (requestId, status) => {
     if (!schoolId || leaveActionId) return;
     setLeaveActionId(requestId);
@@ -357,7 +372,7 @@ function HRManagerDashboard() {
               <div className="flex items-end"><button disabled={savingOffday || !offdayEmployeeId || !offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Inahifadhi..." : "Panga off-day"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Ratiba zijazo</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">Hakuna ratiba iliyopo.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Mfanyakazi"}</span><span className="text-slate-500">{row.off_date}</span><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{row.status}</span></div>)}</div>}</div>}
+          {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Ratiba zijazo</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">Hakuna ratiba iliyopo.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Mfanyakazi"}</span><span className="text-slate-500">{row.off_date}</span><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{row.status}</span>{row.status === "planned" && <div className="flex gap-2"><button type="button" onClick={() => updateOffdayStatus(row.id, "taken")} className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-bold text-white">Mark taken</button><button type="button" onClick={() => updateOffdayStatus(row.id, "cancelled")} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600">Cancel</button></div>}</div>)}</div>}</div>}
           {schemaReady && (
             <form onSubmit={saveEntitlement} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
               <label className="text-sm font-medium text-slate-700">Mfanyakazi
