@@ -441,6 +441,7 @@ export const createSchoolHeadmaster = async (req, res) => {
     let authUserId = null;
     let profileCreated = false;
     let profileRoleCreated = false;
+    let linkedTeacherId = null;
 
     try {
         const schoolId = Number(req.params.id);
@@ -539,6 +540,36 @@ export const createSchoolHeadmaster = async (req, res) => {
         if (profileRoleError) throw profileRoleError;
         profileRoleCreated = true;
 
+        // Create the Headmaster in the same Staff directory used by school HR.
+        // The Auth profile remains the login identity; teachers.user_id links both.
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const employeeNumber = `HM-${schoolId}-${randomInt(100000, 1000000)}`;
+        const { data: staffRecord, error: staffInsertError } = await supabase
+            .from("teachers")
+            .insert([{
+                school_id: schoolId,
+                employee_number: employeeNumber,
+                first_name: nameParts[0] || "Headmaster",
+                middle_name: nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : null,
+                last_name: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "Account",
+                phone: phone || null,
+                email: email || null,
+                status: "Active",
+                staff_type: "Staff",
+                user_id: authUserId,
+                is_headmaster: true
+            }])
+            .select("id")
+            .single();
+        if (staffInsertError) throw staffInsertError;
+        linkedTeacherId = staffRecord.id;
+
+        const { error: profileLinkError } = await supabase
+            .from("profiles")
+            .update({ teacher_id: linkedTeacherId })
+            .eq("id", authUserId);
+        if (profileLinkError) throw profileLinkError;
+
         let credentialSms = { status: "skipped", reason: "Namba ya simu haijawekwa." };
         if (phone) {
             const loginUsername = email || phone;
@@ -566,6 +597,7 @@ export const createSchoolHeadmaster = async (req, res) => {
     } catch (error) {
         console.error("SCHOOL MANAGEMENT - CREATE HEADMASTER ERROR:", error);
         if (authUserId) {
+            if (linkedTeacherId) await supabase.from("teachers").delete().eq("id", linkedTeacherId);
             if (profileRoleCreated) await supabase.from("profile_roles").delete().eq("profile_id", authUserId);
             if (profileCreated) await supabase.from("profiles").delete().eq("id", authUserId);
             await supabase.auth.admin.deleteUser(authUserId);
