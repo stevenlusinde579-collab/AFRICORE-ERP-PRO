@@ -22,7 +22,8 @@ import {
   FaBed,
   FaBuilding,
   FaBoxes,
-  FaFingerprint,\n  FaFileSignature,
+  FaFingerprint,
+  FaFileSignature,
 } from "react-icons/fa";
 
 import { useRole } from "../../context/RoleContext";
