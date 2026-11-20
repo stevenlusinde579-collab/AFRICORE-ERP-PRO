@@ -266,7 +266,7 @@ function HRManagerDashboard() {
     } catch (updateError) {
       setError(updateError.message || "Imeshindikana kubadilisha hali ya off-day.");
     }
-  }, [schoolId, signatureRows, loadHRData]);
+  }, [schoolId, loadHRData]);
 
   const reviewLeave = useCallback(async (requestId, status) => {
     if (!schoolId || leaveActionId) return;
@@ -325,7 +325,7 @@ function HRManagerDashboard() {
     } finally {
       setSignatureBusyId(null);
     }
-  }, [schoolId, loadHRData]);
+  }, [schoolId, signatureRows, loadHRData]);
 
   const activeStaff = useMemo(
     () => staff.filter((person) => !["inactive", "terminated", "left"].includes(String(person.status || "").toLowerCase())),
