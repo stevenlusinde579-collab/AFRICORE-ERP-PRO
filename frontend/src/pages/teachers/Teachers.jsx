@@ -31,15 +31,22 @@ function Teachers() {
     setLoading(true);
 
     try {
-      const {
-        data,
-        error
-      } = await supabase
+      let { data, error } = await supabase
         .from("teachers")
         .select("*")
-        .order("created_at", {
-          ascending: false
-        });
+        .order("is_headmaster", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      // Gracefully support a deployment where the database migration is
+      // still pending; the sorted Headmaster flag becomes active after migration.
+      if (error && /is_headmaster|column/i.test(error.message || "")) {
+        const fallback = await supabase
+          .from("teachers")
+          .select("*")
+          .order("created_at", { ascending: false });
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) {
         console.error(
@@ -280,7 +287,10 @@ function Teachers() {
           </h1>
 
           <p className="text-gray-600 mt-1">
-            Manage all staff and non-staff members
+            Manage all staff and non-staff members, including the Headmaster
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-700">
+            Total staff records: {teachers.length} • Headmasters: {teachers.filter((item) => item.is_headmaster === true).length}
           </p>
         </div>
 
@@ -387,12 +397,10 @@ function Teachers() {
 
                       {/* NAME */}
                       <td className="p-4 font-semibold">
-                        {teacher.first_name ||
-                          ""}{" "}
-                        {teacher.middle_name ||
-                          ""}{" "}
-                        {teacher.last_name ||
-                          ""}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{teacher.first_name || ""}{" "}{teacher.middle_name || ""}{" "}{teacher.last_name || ""}</span>
+                          {teacher.is_headmaster === true && <span className="rounded-full bg-indigo-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Headmaster</span>}
+                        </div>
                       </td>
 
                       {/* EMPLOYEE NUMBER */}
