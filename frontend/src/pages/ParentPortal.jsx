@@ -426,6 +426,8 @@ export default function ParentPortal() {
               </div>
             </div>
           </div>;})()}
+            </div>
+          </section>
         </div>}
         {activeTab==="suggestions" && <div className="space-y-5">
           <section className="relative isolate overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-slate-950 via-indigo-950 to-blue-900 p-6 text-white shadow-xl md:p-8"><div className="pointer-events-none absolute -right-16 -top-16 -z-10 h-64 w-64 rounded-full bg-fuchsia-400/15 blur-3xl"/><p className="text-xs font-bold uppercase tracking-[.2em] text-cyan-300">Parent feedback centre</p><div className="mt-2 flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-2xl font-black md:text-3xl">Maoni na mrejesho</h2><p className="mt-2 max-w-2xl text-sm text-blue-100">Wasilisha ushauri, swali au changamoto kwa uongozi wa shule na fuatilia majibu hapa.</p></div><div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3"><p className="text-xs text-blue-100">Maoni uliyowasilisha</p><p className="mt-1 text-3xl font-black">{suggestions.length}</p></div></div></section>
