@@ -88,19 +88,19 @@ create policy signing_requests_insert on public.document_signing_requests for in
 with check (created_by=auth.uid() and exists (
   select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
   where pr.profile_id=auth.uid() and pr.school_id=document_signing_requests.school_id
-    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin')
 ));
 drop policy if exists signing_requests_update on public.document_signing_requests;
 create policy signing_requests_update on public.document_signing_requests for update to authenticated
 using (exists (
   select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
   where pr.profile_id=auth.uid() and pr.school_id=document_signing_requests.school_id
-    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin')
 ))
 with check (exists (
   select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
   where pr.profile_id=auth.uid() and pr.school_id=document_signing_requests.school_id
-    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin')
 ));
 
 -- Prevent recipients from changing assignment identity or attaching another person's signature.
@@ -171,7 +171,7 @@ create policy signing_recipients_insert on public.document_signing_recipients fo
 with check (exists (
   select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
   where pr.profile_id=auth.uid() and pr.school_id=document_signing_recipients.school_id
-    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin')
 ));
 drop policy if exists signing_recipients_update on public.document_signing_recipients;
 create policy signing_recipients_update on public.document_signing_recipients for update to authenticated
@@ -179,13 +179,13 @@ using (
   profile_id=auth.uid()
   or exists (select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
     where pr.profile_id=auth.uid() and pr.school_id=document_signing_recipients.school_id
-      and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin'))
+      and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin'))
 )
 with check (
   (profile_id=auth.uid() and status in ('signed','declined'))
   or exists (select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
     where pr.profile_id=auth.uid() and pr.school_id=document_signing_recipients.school_id
-      and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin'))
+      and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin'))
 );
 
 -- Private document bucket. Paths are school-id/request-id/filename.
@@ -219,7 +219,7 @@ create policy signing_docs_insert on storage.objects for insert to authenticated
 with check (bucket_id='school-signing-documents' and exists (
   select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
   where pr.profile_id=auth.uid() and pr.school_id=(storage.foldername(name))[1]::bigint
-    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','super admin')
 ));
 
 drop policy if exists hr_signature_files_read on storage.objects;
