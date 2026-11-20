@@ -243,8 +243,9 @@ function HRManagerDashboard() {
     setLeaveActionId(requestId);
     setError("");
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       const { error: updateError } = await supabase.from("hr_leave_requests")
-        .update({ status, reviewed_at: new Date().toISOString() })
+        .update({ status, reviewed_by: user?.id || null, reviewed_at: new Date().toISOString() })
         .eq("id", requestId)
         .eq("school_id", schoolId)
         .eq("status", "pending");
