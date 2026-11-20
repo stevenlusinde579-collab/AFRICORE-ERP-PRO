@@ -1134,7 +1134,7 @@ router.get("/meetings/active", async (req, res) => {
     const result = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status,class_id,meeting_url,meeting_provider")
       .eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null)
-      .lte("starts_at", new Date().toISOString()).eq("class_id", classId)
+      .lte("starts_at", new Date().toISOString()).or(`class_id.is.null,class_id.eq.${classId}`)
       .order("starts_at", { ascending: false }).limit(1).maybeSingle();
     if (result.error) throw result.error;
     const meeting = result.data;
@@ -1158,7 +1158,7 @@ router.post("/meetings/:id/token", async (req, res) => {
     const found = await supabase.from("parent_portal_meetings")
       .select("id,title,description,starts_at,status,class_id,meeting_url")
       .eq("id", req.params.id).eq("school_id", school.id).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null)
-      .lte("starts_at", new Date().toISOString()).eq("class_id", classId).maybeSingle();
+      .lte("starts_at", new Date().toISOString()).or(`class_id.is.null,class_id.eq.${classId}`).maybeSingle();
     if (found.error) throw found.error;
     const roomId = parentMeetingRoomId(found.data);
     if (!found.data || !roomId) return res.status(404).json({ success: false, message: "Mkutano haupo LIVE. Tafadhali refresh Parent Portal." });
@@ -1228,20 +1228,22 @@ router.get("/dashboard", async (req, res) => {
   const { student, school } = req.parent;
   const classId = student.current_class_id;
   try {
+    const meetingScope = Number(classId) > 0 ? `class_id.is.null,class_id.eq.${Number(classId)}` : "class_id.is.null";
     const [classResult, charges, payments, communications, announcements, meetings, publishedSnapshots, attendance, suggestions, publishedLetters, documents] = await Promise.all([
       classId ? supabase.from("classes").select("id,class_name,short_name").eq("id", classId).eq("school_id", school.id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.schema("finance").from("student_charges").select("id,description,amount,paid_amount,balance,due_date,status,term_number,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.schema("finance").from("student_payments").select("id,payment_number,payment_date,amount,payment_method,reference_number,description,status").eq("school_id", school.id).eq("student_id", student.id).order("payment_date", { ascending: false }).limit(100),
       supabase.from("parent_result_communications").select("id,channel,subject,message,status,sent_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(100),
       supabase.from("announcements").select("id,title,content,created_at").eq("school_id", school.id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status").eq("school_id", school.id).is("class_id", null).eq("status", "scheduled").eq("meeting_provider", PARENT_MEETING_PROVIDER).is("ends_at", null).lte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(1),
+      // Include school-wide and class-specific meetings, both upcoming and past, for the Parent Portal schedule.
+      supabase.from("parent_portal_meetings").select("id,title,description,starts_at,ends_at,meeting_url,meeting_provider,status,class_id").eq("school_id", school.id).or(meetingScope).in("status", ["scheduled", "completed"]).order("starts_at", { ascending: false }).limit(50),
       // Only this authenticated student's published snapshots are eligible for the report dropdown.
       // Do not expose the school's general exam catalogue to parent accounts.
       supabase.from("parent_portal_result_snapshots").select("exam_id,exam_snapshot,result_snapshot,published_at").eq("school_id", school.id).eq("student_id", student.id).order("published_at", { ascending: false }).limit(100),
       supabase.from("class_attendance").select("id,attendance_date,status,remarks").eq("school_id", school.id).eq("student_id", student.id).order("attendance_date", { ascending: false }).limit(60),
       supabase.from("parent_portal_suggestions").select("id,category,message,status,staff_reply,replied_at,created_at").eq("school_id", school.id).eq("student_id", student.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("parent_portal_published_letters").select("id,letter_type,title,payload,published_at").eq("school_id",school.id).eq("student_id",student.id).order("published_at",{ascending:false}).limit(100),
-      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload,publication_status,published_at").eq("school_id",school.id).eq("student_id",student.id).eq("parent_account_id",req.parent.account.id).eq("status","issued").eq("publication_status","published").order("document_date",{ascending:false}).limit(200),
+      supabase.from("parent_portal_documents").select("id,document_type,document_number,source_type,source_id,amount,document_date,status,payload,publication_status,published_at").eq("school_id",school.id).eq("student_id",student.id).eq("status","issued").eq("publication_status","published").order("document_date",{ascending:false}).limit(200),
     ]);
     for (const result of [charges,payments,communications,announcements,meetings,publishedSnapshots,attendance,suggestions,publishedLetters,documents]) if (result.error) throw result.error;
     const parentExams = (publishedSnapshots.data || [])
