@@ -103,6 +103,60 @@ with check (exists (
     and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
 ));
 
+-- Prevent recipients from changing assignment identity or attaching another person's signature.
+create or replace function public.guard_document_signing_recipient_update()
+returns trigger
+language plpgsql
+set search_path = public
+as $
+declare
+  manager_access boolean := false;
+begin
+  select exists (
+    select 1 from public.profile_roles pr
+    join public.roles r on r.id=pr.role_id
+    where pr.profile_id=auth.uid()
+      and pr.school_id=old.school_id
+      and pr.is_active is true
+      and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+  ) into manager_access;
+
+  if auth.uid() = old.profile_id and not manager_access then
+    if new.id is distinct from old.id
+      or new.request_id is distinct from old.request_id
+      or new.school_id is distinct from old.school_id
+      or new.teacher_id is distinct from old.teacher_id
+      or new.profile_id is distinct from old.profile_id
+      or new.created_at is distinct from old.created_at
+      or old.status <> 'pending'
+      or new.status not in ('signed','declined') then
+      raise exception 'Only your pending signing response can be changed';
+    end if;
+
+    if new.status = 'signed' then
+      if new.signed_at is null or not exists (
+        select 1 from public.hr_staff_signatures sig
+        where sig.id=new.signature_id
+          and sig.school_id=old.school_id
+          and sig.teacher_id=old.teacher_id
+          and sig.profile_id=old.profile_id
+          and sig.is_active is true
+      ) then
+        raise exception 'An active HR-registered signature is required';
+      end if;
+    elsif new.signature_id is not null then
+      raise exception 'A declined document cannot carry a signature';
+    end if;
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists trg_guard_document_signing_recipient_update on public.document_signing_recipients;
+create trigger trg_guard_document_signing_recipient_update
+before update on public.document_signing_recipients
+for each row execute function public.guard_document_signing_recipient_update();
+
 -- Request managers can add recipients; a recipient can only update their own response.
 drop policy if exists signing_recipients_select on public.document_signing_recipients;
 create policy signing_recipients_select on public.document_signing_recipients for select to authenticated
@@ -145,11 +199,21 @@ on conflict (id) do update set public=false,file_size_limit=2097152,allowed_mime
 
 drop policy if exists signing_docs_read on storage.objects;
 create policy signing_docs_read on storage.objects for select to authenticated
-using (bucket_id='school-signing-documents' and exists (
-  select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
-  where pr.profile_id=auth.uid() and pr.school_id=(storage.foldername(name))[1]::bigint
-    and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
-));
+using (
+  bucket_id='school-signing-documents'
+  and (
+    exists (
+      select 1 from public.profile_roles pr join public.roles r on r.id=pr.role_id
+      where pr.profile_id=auth.uid() and pr.school_id=(storage.foldername(name))[1]::bigint
+        and pr.is_active is true and lower(trim(r.role_name)) in ('secretary','hr manager','headmaster','super admin')
+    )
+    or exists (
+      select 1 from public.document_signing_requests req
+      join public.document_signing_recipients rec on rec.request_id=req.id
+      where req.document_path=name and rec.profile_id=auth.uid()
+    )
+  )
+);
 drop policy if exists signing_docs_insert on storage.objects;
 create policy signing_docs_insert on storage.objects for insert to authenticated
 with check (bucket_id='school-signing-documents' and exists (
