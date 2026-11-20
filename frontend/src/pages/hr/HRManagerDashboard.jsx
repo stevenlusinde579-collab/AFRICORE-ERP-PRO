@@ -266,7 +266,7 @@ function HRManagerDashboard() {
     } catch (updateError) {
       setError(updateError.message || "Imeshindikana kubadilisha hali ya off-day.");
     }
-  }, [schoolId, loadHRData]);
+  }, [schoolId, signatureRows, loadHRData]);
 
   const reviewLeave = useCallback(async (requestId, status) => {
     if (!schoolId || leaveActionId) return;
@@ -297,6 +297,7 @@ function HRManagerDashboard() {
     setSignatureBusyId(teacher.id);
     setSignatureNotice("");
     try {
+      const previousSignature = signatureRows.find((row) => row.teacher_id === teacher.id);
       const path = `${schoolId}/${teacher.id}/signature-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: uploadError } = await supabase.storage.from("hr-staff-signatures").upload(path, file, { contentType: file.type, upsert: false });
       if (uploadError) throw uploadError;
@@ -313,6 +314,9 @@ function HRManagerDashboard() {
       if (saveError) {
         await supabase.storage.from("hr-staff-signatures").remove([path]);
         throw saveError;
+      }
+      if (previousSignature?.storage_path && previousSignature.storage_path !== path) {
+        await supabase.storage.from("hr-staff-signatures").remove([previousSignature.storage_path]);
       }
       setSignatureNotice("Saini limehifadhiwa kwa mafanikio.");
       await loadHRData();
