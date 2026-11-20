@@ -22,6 +22,7 @@ import ParentPortalManagement from "../pages/ParentPortalManagement";
 import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/dashboard/Dashboard";
+import HRManagerDashboard from "../pages/hr/HRManagerDashboard";
 import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
 /* SCHOOL MANAGEMENT */
@@ -305,6 +306,21 @@ export default function AppRoutes() {
                     path="dashboard"
                     element={<Dashboard />}
                 />
+
+                {/* HR MANAGER WORKSPACE */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1]}
+                            allowedRoleNames={["HR Manager", "Headmaster"]}
+                        />
+                    }
+                >
+                    <Route
+                        path="hr-management"
+                        element={<HRManagerDashboard />}
+                    />
+                </Route>
 
                 {/* GLOBAL PAYMENT PROVIDERS — SUPER ADMIN ONLY */}
                 <Route
