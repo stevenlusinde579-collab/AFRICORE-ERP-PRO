@@ -15,7 +15,12 @@ export default function StockReceipts({ schoolId }) {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    if (!schoolId) return;
+    if (!schoolId) {
+      setReceipts([]); setDocuments([]); setStudents([]);
+      setError("Chagua shule yenye ruhusa ya kuona risiti za stock.");
+      setLoading(false);
+      return;
+    }
     setLoading(true); setError("");
     try {
       // Load official receipts first. Optional Parent Portal and student lookups must
