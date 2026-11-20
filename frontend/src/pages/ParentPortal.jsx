@@ -426,7 +426,6 @@ export default function ParentPortal() {
               </div>
             </div>
           </div>;})()}
-            </div>
           </section>
         </div>}
         {activeTab==="suggestions" && <div className="space-y-5">
