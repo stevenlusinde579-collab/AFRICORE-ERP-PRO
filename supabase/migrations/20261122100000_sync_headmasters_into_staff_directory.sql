@@ -88,7 +88,6 @@ select
   m.profile_id,
   true
 from missing m
-left join auth.users u on u.id = m.profile_id
 on conflict (user_id) where user_id is not null do nothing;
 
 -- Link each Headmaster profile to the matching Staff row.
