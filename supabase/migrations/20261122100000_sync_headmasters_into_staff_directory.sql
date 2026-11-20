@@ -18,8 +18,7 @@ update public.teachers t
        school_id = coalesce(p.school_id, t.school_id),
        staff_type = 'Staff',
        status = 'Active',
-       phone = coalesce(t.phone, p.phone),
-       email = coalesce(t.email, u.email)
+       phone = coalesce(t.phone, p.phone)
   from public.profiles p
   left join auth.users u on u.id = p.id
  where (p.teacher_id = t.id or t.user_id = p.id)
@@ -72,7 +71,7 @@ missing as (
 )
 insert into public.teachers (
   school_id, employee_number, first_name, middle_name, last_name,
-  phone, email, status, staff_type, user_id, is_headmaster
+  phone, status, staff_type, user_id, is_headmaster
 )
 select
   m.school_id,
@@ -85,7 +84,6 @@ select
        then m.name_parts[cardinality(m.name_parts)]
        else 'Account' end,
   m.phone,
-  u.email,
   'Active',
   'Staff',
   m.profile_id,
