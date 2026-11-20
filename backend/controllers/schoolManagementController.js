@@ -858,6 +858,88 @@ export const assignHeadmaster = async (req, res) => {
             });
         }
 
+        // Keep the Staff directory in sync with the transactional role reassignment.
+        const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("id,full_name,phone,school_id,teacher_id")
+            .eq("id", profileId)
+            .maybeSingle();
+        if (profileError) throw profileError;
+        if (!profile) throw new Error("Headmaster profile could not be loaded after reassignment.");
+
+        const { data: authData } = await supabase.auth.admin.getUserById(profileId);
+        const { error: demotePreviousError } = await supabase
+            .from("teachers")
+            .update({ is_headmaster: false })
+            .eq("school_id", schoolId)
+            .eq("is_headmaster", true)
+            .neq("user_id", profileId);
+        if (demotePreviousError) throw demotePreviousError;
+
+        let staffRecord = null;
+        if (profile.teacher_id) {
+            const { data, error } = await supabase
+                .from("teachers")
+                .select("id")
+                .eq("id", profile.teacher_id)
+                .maybeSingle();
+            if (error) throw error;
+            staffRecord = data;
+        }
+        if (!staffRecord) {
+            const { data, error } = await supabase
+                .from("teachers")
+                .select("id")
+                .eq("user_id", profileId)
+                .maybeSingle();
+            if (error) throw error;
+            staffRecord = data;
+        }
+
+        if (staffRecord?.id) {
+            const { error } = await supabase
+                .from("teachers")
+                .update({
+                    school_id: schoolId,
+                    user_id: profileId,
+                    is_headmaster: true,
+                    status: "Active",
+                    phone: profile.phone || null,
+                    email: authData?.user?.email || null
+                })
+                .eq("id", staffRecord.id);
+            if (error) throw error;
+        } else {
+            const nameParts = String(profile.full_name || "Headmaster Account").trim().split(/\\s+/).filter(Boolean);
+            const { data, error } = await supabase
+                .from("teachers")
+                .insert([{
+                    school_id: schoolId,
+                    employee_number: `HM-${schoolId}-${randomInt(100000, 1000000)}`,
+                    first_name: nameParts[0] || "Headmaster",
+                    middle_name: nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : null,
+                    last_name: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "Account",
+                    phone: profile.phone || null,
+                    email: authData?.user?.email || null,
+                    status: "Active",
+                    staff_type: "Staff",
+                    user_id: profileId,
+                    is_headmaster: true
+                }])
+                .select("id")
+                .single();
+            if (error) throw error;
+            staffRecord = data;
+        }
+
+        if (Number(profile.teacher_id) !== Number(staffRecord.id)) {
+            const { error } = await supabase
+                .from("profiles")
+                .update({ teacher_id: staffRecord.id })
+                .eq("id", profileId);
+            if (error) throw error;
+        }
+
         const { data: school, error: schoolError } = await supabase
             .from("schools")
             .select("id,school_name")
