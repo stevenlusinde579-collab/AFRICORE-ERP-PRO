@@ -565,13 +565,13 @@ export const createTeacher = async (
             .select("is_headmaster")
             .eq("id", teacherId)
             .maybeSingle();
-        if (staffFlagError) {
+        if (staffFlagError && !/is_headmaster|column/i.test(staffFlagError.message || "")) {
             return res.status(500).json({
                 success: false,
                 message: `Unable to verify Headmaster staff status: ${staffFlagError.message}`
             });
         }
-        if (staffHeadmasterFlag?.is_headmaster === true) {
+        if (!staffFlagError && staffHeadmasterFlag?.is_headmaster === true) {
             const { data: headmasterRole, error: headmasterRoleError } = await supabase
                 .from("roles")
                 .select("id")
