@@ -553,7 +553,6 @@ export const createSchoolHeadmaster = async (req, res) => {
                 middle_name: nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : null,
                 last_name: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "Account",
                 phone: phone || null,
-                email: email || null,
                 status: "Active",
                 staff_type: "Staff",
                 user_id: authUserId,
@@ -904,8 +903,7 @@ export const assignHeadmaster = async (req, res) => {
                     user_id: profileId,
                     is_headmaster: true,
                     status: "Active",
-                    phone: profile.phone || null,
-                    email: authData?.user?.email || null
+                    phone: profile.phone || null
                 })
                 .eq("id", staffRecord.id);
             if (error) throw error;
