@@ -28,6 +28,7 @@ import {
 } from "react-router-dom";
 
 import { supabase } from "../../services/supabase";
+import { useRole } from "../../context/RoleContext";
 import api from "../../services/api";
 
 
@@ -70,6 +71,7 @@ function formatDate(value) {
 
 function FinanceDashboard() {
     const navigate = useNavigate();
+    const { selectedSchoolId, isSuperAdmin } = useRole();
 
 
     // =================================================
@@ -191,13 +193,15 @@ function FinanceDashboard() {
 
 
             const superAdmin =
-                Number(profileData?.role_id) === 1;
+                Boolean(isSuperAdmin) || Number(profileData?.role_id) === 1;
 
 
             const schoolId =
-                profileData?.school_id
-                    ? Number(profileData.school_id)
-                    : null;
+                selectedSchoolId != null
+                    ? Number(selectedSchoolId)
+                    : profileData?.school_id
+                        ? Number(profileData.school_id)
+                        : null;
 
 
             // -----------------------------------------
@@ -1203,12 +1207,12 @@ function FinanceDashboard() {
                         <div><h2 className="text-lg font-extrabold text-slate-900">School Fees Receipts</h2><p className="text-sm text-slate-500">Risiti za ada zilizopostiwa. Chagua risiti kisha ichapishe au ichapishe kwa Parent Portal.</p></div>
                         <div className="flex flex-wrap gap-2">
                             <button type="button" disabled={!receipts.some(r=>selectedReceiptIds.includes(String(r.id)))} onClick={()=>window.print()} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-40">Print selected ({receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).length})</button>
-                            <button type="button" disabled={publishingReceipts || !receipts.some(r=>selectedReceiptIds.includes(String(r.id)) && portalDocuments.some(d=>String(d.source_id)===String(r.id) && d.publication_status!=="published"))} onClick={async()=>{setPublishingReceipts(true);setPublishMessage("");try{const ids=receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).map(r=>portalDocuments.find(d=>String(d.source_id)===String(r.id) && d.publication_status!=="published")?.id).filter(Boolean);if(!ids.length){setPublishMessage("Hakuna risiti zilizopo tayari kuchapishwa. Hakikisha mzazi ana akaunti ya Parent Portal.");return;}const result=await api.post("/parent-portal/staff/documents/publish",{document_ids:ids});setPublishMessage(result.data?.message||"Risiti zimechapishwa.");const refreshed=await supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id",school?.id).eq("document_type","receipt").eq("source_type","fee_payment");if(refreshed.error)throw refreshed.error;setPortalDocuments(refreshed.data||[]);}catch(e){setPublishMessage(e?.response?.data?.message||e.message||"Imeshindikana kuchapisha risiti.");}finally{setPublishingReceipts(false);}}} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{publishingReceipts?"Publishing…":"Publish selected to Parent Portal"}</button>
+                            <button type="button" disabled={publishingReceipts || !receipts.some(r=>selectedReceiptIds.includes(String(r.id)) && portalDocuments.some(d=>d.document_number===r.receipt_number && d.publication_status!=="published"))} onClick={async()=>{setPublishingReceipts(true);setPublishMessage("");try{const ids=receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).map(r=>portalDocuments.find(d=>d.document_number===r.receipt_number && d.publication_status!=="published")?.id).filter(Boolean);if(!ids.length){setPublishMessage("Hakuna risiti zilizopo tayari kuchapishwa. Hakikisha mzazi ana akaunti ya Parent Portal.");return;}const result=await api.post("/parent-portal/staff/documents/publish",{document_ids:ids});setPublishMessage(result.data?.message||"Risiti zimechapishwa.");const refreshed=await supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id",school?.id).eq("document_type","receipt").eq("source_type","fee_payment");if(refreshed.error)throw refreshed.error;setPortalDocuments(refreshed.data||[]);}catch(e){setPublishMessage(e?.response?.data?.message||e.message||"Imeshindikana kuchapisha risiti.");}finally{setPublishingReceipts(false);}}} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{publishingReceipts?"Publishing…":"Publish selected to Parent Portal"}</button>
                         </div>
                     </div>
                     {publishMessage&&<p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{publishMessage}</p>}
                     <div className="mt-4 space-y-2">
-                        {receipts.map(receipt=>{const doc=portalDocuments.find(d=>String(d.source_id)===String(receipt.id));const status=doc?.publication_status||"not_linked";return <label key={receipt.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3 text-sm"><span className="flex items-center gap-3"><input type="checkbox" checked={selectedReceiptIds.includes(String(receipt.id))} onChange={e=>setSelectedReceiptIds(current=>e.target.checked?[...current,String(receipt.id)]:current.filter(id=>id!==String(receipt.id)))}/><span><b className="block">{receipt.receipt_number}</b><span className="text-xs text-slate-500">{receipt.payer_name||"Parent/Guardian"} · {formatDate(receipt.receipt_date)} · {receipt.payment_method}</span><span className={`mt-1 block text-xs font-semibold ${status==="published"?"text-emerald-700":status==="pending"?"text-amber-700":"text-slate-500"}`}>{status==="published"?"Published to Parent Portal":status==="pending"?"Not published yet":"Parent Portal account/document unavailable"}</span></span></span><b>{money(receipt.amount)} TZS</b></label>})}
+                        {receipts.map(receipt=>{const doc=portalDocuments.find(d=>d.document_number===receipt.receipt_number);const status=doc?.publication_status||"not_linked";return <label key={receipt.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3 text-sm"><span className="flex items-center gap-3"><input type="checkbox" checked={selectedReceiptIds.includes(String(receipt.id))} onChange={e=>setSelectedReceiptIds(current=>e.target.checked?[...current,String(receipt.id)]:current.filter(id=>id!==String(receipt.id)))}/><span><b className="block">{receipt.receipt_number}</b><span className="text-xs text-slate-500">{receipt.payer_name||"Parent/Guardian"} · {formatDate(receipt.receipt_date)} · {receipt.payment_method}</span><span className={`mt-1 block text-xs font-semibold ${status==="published"?"text-emerald-700":status==="pending"?"text-amber-700":"text-slate-500"}`}>{status==="published"?"Published to Parent Portal":status==="pending"?"Not published yet":"Parent Portal account/document unavailable"}</span></span></span><b>{money(receipt.amount)} TZS</b></label>})}
                         {!receipts.length&&<p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Hakuna risiti za ada zilizopostiwa bado.</p>}
                     </div>
                     <div className="finance-receipt-print hidden">{receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).map(r=><article key={r.id} className="mb-10 break-after-page border p-8 text-slate-900"><header className="border-b-2 pb-4 text-center"><h2 className="text-xl font-black">{school?.school_name||"School"}</h2><p className="font-bold">OFFICIAL SCHOOL FEES RECEIPT</p></header><div className="mt-5 grid grid-cols-2 gap-3 text-sm"><p><b>Receipt No:</b> {r.receipt_number}</p><p><b>Date:</b> {formatDate(r.receipt_date)}</p><p><b>Parent/Payer:</b> {r.payer_name||"—"}</p><p><b>Student:</b> {r.student ? [r.student.first_name,r.student.middle_name,r.student.last_name].filter(Boolean).join(" ") : "—"}</p><p><b>Admission:</b> {r.student?.admission_number||r.student?.admission_no||"—"}</p><p><b>Payment method:</b> {r.payment_method}</p><p><b>Reference:</b> {r.reference_number||"—"}</p></div><p className="mt-8 text-lg font-black">AMOUNT RECEIVED: {money(r.amount)} TZS</p><p className="mt-3">{r.description||"School fees payment"}</p><p className="mt-16 border-t pt-2 text-xs">Issued by AfriCore ERP PRO</p></article>)}</div>
