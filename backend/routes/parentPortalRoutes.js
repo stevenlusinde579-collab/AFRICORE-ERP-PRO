@@ -995,7 +995,7 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
       const [studentsResult, schoolResult, accountsResult] = await Promise.all([
         supabase.from("students").select("*").eq("school_id", schoolId).in("id", studentIds),
         supabase.from("schools").select("*").eq("id", schoolId).maybeSingle(),
-        supabase.from("parent_portal_accounts").select("id,student_id").eq("school_id", schoolId).in("student_id", studentIds),
+        supabase.from("parent_portal_accounts").select("id,student_id,is_active").eq("school_id", schoolId).in("student_id", studentIds),
       ]);
       if (studentsResult.error || schoolResult.error || accountsResult.error) {
         throw studentsResult.error || schoolResult.error || accountsResult.error;
@@ -1004,7 +1004,52 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
       if (studentMap.size !== studentIds.length || !schoolResult.data) {
         return res.status(404).json({ success: false, message: "Taarifa za mwanafunzi au shule hazijapatikana." });
       }
-      const accountMap = new Map((accountsResult.data || []).map(row => [Number(row.student_id), row.id]));
+
+      // Every portal document must belong to a real parent portal account.
+      // If the student has never been provisioned, create the same initial
+      // account used by the normal staff provisioning workflow. Do not send
+      // SMS from this publishing action; staff can use the existing resend
+      // credentials action to deliver access details through the configured provider.
+      const accountMap = new Map((accountsResult.data || []).map(row => [Number(row.student_id), row]));
+      let accountsCreated = 0;
+      for (const studentId of studentIds) {
+        const existingAccount = accountMap.get(studentId);
+        if (existingAccount) {
+          if (existingAccount.is_active !== true) {
+            return res.status(409).json({ success: false, message: "Akaunti ya Parent Portal ya mwanafunzi imezimwa. Iwashe kwanza kisha ujaribu tena." });
+          }
+          continue;
+        }
+        const student = studentMap.get(studentId);
+        const username = fullName(student);
+        const admission = String(student.admission_number || student.admission_no || "").trim();
+        if (!username || !admission) {
+          return res.status(409).json({ success: false, message: "Mwanafunzi hana jina kamili au namba ya usajili inayohitajika kuanzisha akaunti ya Parent Portal." });
+        }
+        const initialPassword = await hashPassword(admission);
+        const createdAccount = await supabase.from("parent_portal_accounts").insert({
+          student_id: studentId,
+          school_id: schoolId,
+          username,
+          password_hash: initialPassword.hash,
+          password_salt: initialPassword.salt,
+          must_change_password: true,
+        }).select("id,student_id,is_active").single();
+        if (createdAccount.error) {
+          // Handle a concurrent account-creation request without creating a duplicate.
+          if (createdAccount.error.code !== "23505") throw createdAccount.error;
+          const reread = await supabase.from("parent_portal_accounts").select("id,student_id,is_active")
+            .eq("school_id", schoolId).eq("student_id", studentId).maybeSingle();
+          if (reread.error) throw reread.error;
+          if (!reread.data || reread.data.is_active !== true) {
+            return res.status(409).json({ success: false, message: "Akaunti ya Parent Portal haikuweza kuthibitishwa. Jaribu tena." });
+          }
+          accountMap.set(studentId, reread.data);
+        } else {
+          accountMap.set(studentId, createdAccount.data);
+          accountsCreated += 1;
+        }
+      }
       const school = schoolResult.data;
       const schoolAddress = school.address || school.school_address || school.postal_address || school.location || "";
       const existingResult = await supabase.from("parent_portal_documents")
@@ -1022,7 +1067,7 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
         const guardianName = student.parent_name || student.guardian_name || receipt.payer_name || "Mzazi/Mlezi";
         return {
           school_id: schoolId,
-          parent_account_id: accountMap.get(Number(student.id)) || null,
+          parent_account_id: accountMap.get(Number(student.id))?.id,
           student_id: Number(student.id),
           document_type: "receipt",
           document_number: receipt_number,
@@ -1105,7 +1150,12 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
     }));
     const updateError = updates.find(result => result.error)?.error;
     if (updateError) throw updateError;
-    return res.json({ success: true, published_count: updates.filter(result => result.data?.id).length, message: "Risiti zimechapishwa kwenye Parent Portal kikamilifu." });
+    return res.json({
+      success: true,
+      published_count: updates.filter(result => result.data?.id).length,
+      accounts_created: typeof accountsCreated === "number" ? accountsCreated : 0,
+      message: "Risiti zimechapishwa kwenye Parent Portal kikamilifu.",
+    });
   } catch (error) {
     console.error("PARENT PORTAL DOCUMENT PUBLISH ERROR:", error);
     return res.status(500).json({ success: false, message: "Imeshindikana kuchapisha risiti kwenye Parent Portal." });
