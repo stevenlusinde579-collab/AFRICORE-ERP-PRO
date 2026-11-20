@@ -962,9 +962,11 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
   }
   try {
     const query = supabase.from("parent_portal_documents")
-      .select("id,student_id,publication_status")
+      .select("id,student_id,publication_status,payload")
       .eq("school_id", schoolId).eq("document_type", "receipt")
       .eq("source_type", "fee_payment").in("id", ids);
+    const requestedHeaderColor = String(req.body?.receipt_header_color || "").trim();
+    const receiptHeaderColor = /^#[0-9a-fA-F]{6}$/.test(requestedHeaderColor) ? requestedHeaderColor : null;
     const found = await query;
     if (found.error) throw found.error;
     if ((found.data || []).length !== ids.length) {
@@ -975,11 +977,17 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
     }
     const publishable = found.data.filter(row => row.publication_status !== "published").map(row => row.id);
     if (!publishable.length) return res.json({ success: true, published_count: 0, message: "Risiti zote ulizochagua tayari zimechapishwa kwenye Parent Portal." });
-    const updated = await supabase.from("parent_portal_documents")
-      .update({ publication_status: "published", published_at: new Date().toISOString(), published_by: req.user.id })
-      .eq("school_id", schoolId).in("id", publishable).select("id");
-    if (updated.error) throw updated.error;
-    return res.json({ success: true, published_count: updated.data?.length || 0, message: "Risiti zimechapishwa kwenye Parent Portal kikamilifu." });
+    const publishTimestamp = new Date().toISOString();
+    const updates = await Promise.all(found.data.filter(row => publishable.includes(row.id)).map(async row => {
+      const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload) ? row.payload : {};
+      const nextPayload = receiptHeaderColor ? { ...payload, receipt_header_color: receiptHeaderColor } : payload;
+      return supabase.from("parent_portal_documents")
+        .update({ publication_status: "published", published_at: publishTimestamp, published_by: req.user.id, payload: nextPayload })
+        .eq("school_id", schoolId).eq("id", row.id).select("id").single();
+    }));
+    const updateError = updates.find(result => result.error)?.error;
+    if (updateError) throw updateError;
+    return res.json({ success: true, published_count: updates.filter(result => result.data?.id).length, message: "Risiti zimechapishwa kwenye Parent Portal kikamilifu." });
   } catch (error) {
     console.error("PARENT PORTAL DOCUMENT PUBLISH ERROR:", error);
     return res.status(500).json({ success: false, message: "Imeshindikana kuchapisha risiti kwenye Parent Portal." });

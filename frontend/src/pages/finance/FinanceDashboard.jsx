@@ -104,6 +104,9 @@ function FinanceDashboard() {
     const [portalDocuments, setPortalDocuments] = useState([]);
     const [publishingReceipts, setPublishingReceipts] = useState(false);
     const [publishMessage, setPublishMessage] = useState("");
+    const [receiptsExpanded, setReceiptsExpanded] = useState(false);
+    const [receiptHeaderColor, setReceiptHeaderColor] = useState("#e0f2fe");
+    const [viewingReceipt, setViewingReceipt] = useState(null);
 
     const [students, setStudents] = useState([]);
 
@@ -214,9 +217,7 @@ function FinanceDashboard() {
                     error: schoolError
                 } = await supabase
                     .from("schools")
-                    .select(
-                        "id, school_name, logo"
-                    )
+                    .select("*")
                     .eq(
                         "id",
                         schoolId
@@ -1205,20 +1206,76 @@ function FinanceDashboard() {
 
                 <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div><h2 className="text-lg font-extrabold text-slate-900">School Fees Receipts</h2><p className="text-sm text-slate-500">Risiti za ada zilizopostiwa. Chagua risiti kisha ichapishe au ichapishe kwa Parent Portal.</p></div>
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" disabled={!receipts.some(r=>selectedReceiptIds.includes(String(r.id)))} onClick={()=>window.print()} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-40">Print selected ({receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).length})</button>
-                            <button type="button" disabled={publishingReceipts || !receipts.some(r=>selectedReceiptIds.includes(String(r.id)) && portalDocuments.some(d=>d.document_number===r.receipt_number && d.publication_status!=="published"))} onClick={async()=>{setPublishingReceipts(true);setPublishMessage("");try{const ids=receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).map(r=>portalDocuments.find(d=>d.document_number===r.receipt_number && d.publication_status!=="published")?.id).filter(Boolean);if(!ids.length){setPublishMessage("Hakuna risiti zilizopo tayari kuchapishwa. Hakikisha mzazi ana akaunti ya Parent Portal.");return;}const result=await api.post("/parent-portal/staff/documents/publish",{document_ids:ids});setPublishMessage(result.data?.message||"Risiti zimechapishwa.");const refreshed=await supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id",school?.id).eq("document_type","receipt").eq("source_type","fee_payment");if(refreshed.error)throw refreshed.error;setPortalDocuments(refreshed.data||[]);}catch(e){setPublishMessage(e?.response?.data?.message||e.message||"Imeshindikana kuchapisha risiti.");}finally{setPublishingReceipts(false);}}} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{publishingReceipts?"Publishing…":"Publish selected to Parent Portal"}</button>
+                        <button type="button" aria-expanded={receiptsExpanded} aria-controls="school-fees-receipts-panel" onClick={() => setReceiptsExpanded(value => !value)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700"><FaReceipt /></span>
+                            <span><span className="block text-lg font-extrabold text-slate-900">School Fees Receipts <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold">{receipts.length}</span></span><span className="block text-sm text-slate-500">Risiti za ada zilizopostiwa. Fungua kuona, kuchagua, kuangalia au kuchapisha risiti.</span></span>
+                            <span className="ml-auto text-xl font-bold text-slate-500">{receiptsExpanded ? "−" : "+"}</span>
+                        </button>
+                    </div>
+                    {receiptsExpanded && <div id="school-fees-receipts-panel" className="mt-5">
+                        <div className="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">Rangi ya kivuli cha kichwa cha risiti
+                                <input aria-label="Receipt header shade" type="color" value={receiptHeaderColor} onChange={event => setReceiptHeaderColor(event.target.value)} className="h-10 w-14 cursor-pointer rounded border border-slate-300 bg-white p-1" />
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" disabled={!receipts.some(r => selectedReceiptIds.includes(String(r.id)))} onClick={() => window.print()} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-40">Print selected ({receipts.filter(r => selectedReceiptIds.includes(String(r.id))).length})</button>
+                                <button type="button" disabled={publishingReceipts || !receipts.some(r => selectedReceiptIds.includes(String(r.id)) && portalDocuments.some(d => d.document_number === r.receipt_number && d.publication_status !== "published"))} onClick={async () => { setPublishingReceipts(true); setPublishMessage(""); try { const ids = receipts.filter(r => selectedReceiptIds.includes(String(r.id))).map(r => portalDocuments.find(d => d.document_number === r.receipt_number && d.publication_status !== "published")?.id).filter(Boolean); if (!ids.length) { setPublishMessage("Hakuna risiti zilizopo tayari kuchapishwa. Hakikisha mzazi ana akaunti ya Parent Portal."); return; } const result = await api.post("/parent-portal/staff/documents/publish", { document_ids: ids, receipt_header_color: receiptHeaderColor }); setPublishMessage(result.data?.message || "Risiti zimechapishwa."); const refreshed = await supabase.from("parent_portal_documents").select("id,document_number,source_id,publication_status,published_at").eq("school_id", school?.id).eq("document_type", "receipt").eq("source_type", "fee_payment"); if (refreshed.error) throw refreshed.error; setPortalDocuments(refreshed.data || []); } catch (e) { setPublishMessage(e?.response?.data?.message || e.message || "Imeshindikana kuchapisha risiti."); } finally { setPublishingReceipts(false); } }} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{publishingReceipts ? "Publishing…" : "Publish selected to Parent Portal"}</button>
+                            </div>
                         </div>
-                    </div>
-                    {publishMessage&&<p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{publishMessage}</p>}
-                    <div className="mt-4 space-y-2">
-                        {receipts.map(receipt=>{const doc=portalDocuments.find(d=>d.document_number===receipt.receipt_number);const status=doc?.publication_status||"not_linked";return <label key={receipt.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3 text-sm"><span className="flex items-center gap-3"><input type="checkbox" checked={selectedReceiptIds.includes(String(receipt.id))} onChange={e=>setSelectedReceiptIds(current=>e.target.checked?[...current,String(receipt.id)]:current.filter(id=>id!==String(receipt.id)))}/><span><b className="block">{receipt.receipt_number}</b><span className="text-xs text-slate-500">{receipt.payer_name||"Parent/Guardian"} · {formatDate(receipt.receipt_date)} · {receipt.payment_method}</span><span className={`mt-1 block text-xs font-semibold ${status==="published"?"text-emerald-700":status==="pending"?"text-amber-700":"text-slate-500"}`}>{status==="published"?"Published to Parent Portal":status==="pending"?"Not published yet":"Parent Portal account/document unavailable"}</span></span></span><b>{money(receipt.amount)} TZS</b></label>})}
-                        {!receipts.length&&<p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Hakuna risiti za ada zilizopostiwa bado.</p>}
-                    </div>
-                    <div className="finance-receipt-print hidden">{receipts.filter(r=>selectedReceiptIds.includes(String(r.id))).map(r=><article key={r.id} className="mb-10 break-after-page border p-8 text-slate-900"><header className="border-b-2 pb-4 text-center"><h2 className="text-xl font-black">{school?.school_name||"School"}</h2><p className="font-bold">OFFICIAL SCHOOL FEES RECEIPT</p></header><div className="mt-5 grid grid-cols-2 gap-3 text-sm"><p><b>Receipt No:</b> {r.receipt_number}</p><p><b>Date:</b> {formatDate(r.receipt_date)}</p><p><b>Parent/Payer:</b> {r.payer_name||"—"}</p><p><b>Student:</b> {r.student ? [r.student.first_name,r.student.middle_name,r.student.last_name].filter(Boolean).join(" ") : "—"}</p><p><b>Admission:</b> {r.student?.admission_number||r.student?.admission_no||"—"}</p><p><b>Payment method:</b> {r.payment_method}</p><p><b>Reference:</b> {r.reference_number||"—"}</p></div><p className="mt-8 text-lg font-black">AMOUNT RECEIVED: {money(r.amount)} TZS</p><p className="mt-3">{r.description||"School fees payment"}</p><p className="mt-16 border-t pt-2 text-xs">Issued by AfriCore ERP PRO</p></article>)}</div>
+                        {publishMessage && <p className="mb-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{publishMessage}</p>}
+                        <div className="space-y-2">
+                            {receipts.map(receipt => {
+                                const doc = portalDocuments.find(d => d.document_number === receipt.receipt_number);
+                                const status = doc?.publication_status || "not_linked";
+                                const studentName = receipt.student ? [receipt.student.first_name, receipt.student.middle_name, receipt.student.last_name].filter(Boolean).join(" ") : "Student details unavailable";
+                                return <div key={receipt.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-sm">
+                                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                                        <input aria-label={`Select receipt ${receipt.receipt_number}`} type="checkbox" checked={selectedReceiptIds.includes(String(receipt.id))} onChange={event => setSelectedReceiptIds(current => event.target.checked ? [...current, String(receipt.id)] : current.filter(id => id !== String(receipt.id)))} />
+                                        <div className="min-w-0"><b className="block">{receipt.receipt_number}</b><span className="block text-xs text-slate-500">{receipt.payer_name || "Parent/Guardian"} · {studentName} · {formatDate(receipt.receipt_date)}</span><span className={`mt-1 block text-xs font-semibold ${status === "published" ? "text-emerald-700" : status === "pending" ? "text-amber-700" : "text-slate-500"}`}>{status === "published" ? "Published to Parent Portal" : status === "pending" ? "Not published yet" : "Parent Portal account/document unavailable"}</span></div>
+                                    </div>
+                                    <b className="whitespace-nowrap">{money(receipt.amount)} TZS</b>
+                                    <button type="button" onClick={() => setViewingReceipt(receipt)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View</button>
+                                </div>;
+                            })}
+                            {!receipts.length && <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Hakuna risiti za ada zilizopostiwa bado.</p>}
+                        </div>
+                    </div>}
+                    <div className="finance-receipt-print hidden">{receipts.filter(r => selectedReceiptIds.includes(String(r.id))).map(r => <article key={r.id} className="mb-8 break-after-page border border-slate-300 text-slate-900">
+                        <header className="px-8 py-6 text-center" style={{ backgroundColor: receiptHeaderColor, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
+                            <h2 className="text-2xl font-black uppercase">{school?.school_name || "School"}</h2>
+                            <p className="mt-1 text-sm font-semibold">{school?.address || school?.school_address || school?.postal_address || school?.location || ""}</p>
+                            <p className="mt-3 text-lg font-extrabold tracking-widest">OFFICIAL SCHOOL FEES RECEIPT</p>
+                            <p className="text-xs font-semibold">AFRICORE ERP PRO · ORIGINAL RECEIPT</p>
+                        </header>
+                        <div className="p-8">
+                            <div className="mb-5 grid grid-cols-2 gap-x-8 gap-y-3 border-b pb-5 text-sm">
+                                <p><b>Receipt Number:</b> {r.receipt_number}</p><p><b>Receipt Date:</b> {formatDate(r.receipt_date)}</p>
+                                <p><b>Receipt Status:</b> {r.status || "Posted"}</p><p><b>Payment Method:</b> {r.payment_method || "Not specified"}</p>
+                                <p><b>Parent / Payer:</b> {r.payer_name || "Not recorded"}</p><p><b>Payment Reference:</b> {r.reference_number || "Not provided"}</p>
+                                <p><b>Student Name:</b> {r.student ? [r.student.first_name, r.student.middle_name, r.student.last_name].filter(Boolean).join(" ") : "Not linked"}</p>
+                                <p><b>Admission Number:</b> {r.student?.admission_number || r.student?.admission_no || "Not available"}</p>
+                                <p><b>Parent / Guardian:</b> {r.student?.parent_name || r.student?.guardian_name || r.payer_name || "Not recorded"}</p>
+                                <p><b>School:</b> {school?.school_name || "School"}</p>
+                            </div>
+                            <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide">Payment details</h3>
+                            <table className="w-full border-collapse text-sm"><thead><tr className="bg-slate-100"><th className="border p-3 text-left">Description</th><th className="border p-3 text-right">Amount (TZS)</th></tr></thead><tbody><tr><td className="border p-3">{r.description || "School fees payment"}</td><td className="border p-3 text-right font-bold">{money(r.amount)}</td></tr></tbody><tfoot><tr><td className="border p-3 text-right font-extrabold">TOTAL RECEIVED</td><td className="border p-3 text-right text-lg font-black">{money(r.amount)} TZS</td></tr></tfoot></table>
+                            <div className="mt-6 rounded-lg border border-slate-300 p-4"><p className="text-xs font-bold uppercase text-slate-600">Amount received</p><p className="mt-1 text-2xl font-black">{money(r.amount)} TZS</p><p className="mt-2 text-xs text-slate-600">This receipt confirms that the amount stated above was recorded as received by the school, subject to the school's financial records.</p></div>
+                            <div className="mt-14 grid grid-cols-2 gap-12 text-center text-xs"><p className="border-t border-slate-500 pt-2">Cashier / Accountant signature</p><p className="border-t border-slate-500 pt-2">Parent / Payer acknowledgement</p></div>
+                            <div className="mt-8 border-t pt-3 text-center text-xs text-slate-500"><p>Generated by AfriCore ERP PRO</p><p>Keep this receipt for your records. Contact the school office for any clarification.</p></div>
+                        </div>
+                    </article>)}</div>
                 </section>
-                <style>{'@media print { body * { visibility:hidden !important; } body .finance-receipt-print, body .finance-receipt-print * { visibility:visible !important; } body .finance-receipt-print { display:block !important; position:absolute; inset:0; padding:18mm; background:white; } }'}</style>
+                {viewingReceipt && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="Receipt preview">
+                    <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+                        <div className="sticky top-0 flex items-center justify-between border-b bg-white p-4"><h2 className="font-extrabold">Receipt preview · {viewingReceipt.receipt_number}</h2><button type="button" onClick={() => setViewingReceipt(null)} className="rounded-lg border px-3 py-1.5 text-sm font-bold">Close</button></div>
+                        <article className="m-5 border border-slate-300 text-slate-900">
+                            <header className="px-6 py-6 text-center" style={{ backgroundColor: receiptHeaderColor, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}><h2 className="text-2xl font-black uppercase">{school?.school_name || "School"}</h2><p className="mt-1 text-sm font-semibold">{school?.address || school?.school_address || school?.postal_address || school?.location || ""}</p><p className="mt-3 text-lg font-extrabold tracking-widest">OFFICIAL SCHOOL FEES RECEIPT</p><p className="text-xs font-semibold">AFRICORE ERP PRO · ORIGINAL RECEIPT</p></header>
+                            <div className="p-6 text-sm"><div className="grid grid-cols-2 gap-3 border-b pb-5"><p><b>Receipt Number:</b> {viewingReceipt.receipt_number}</p><p><b>Date:</b> {formatDate(viewingReceipt.receipt_date)}</p><p><b>Parent / Payer:</b> {viewingReceipt.payer_name || "Not recorded"}</p><p><b>Student:</b> {viewingReceipt.student ? [viewingReceipt.student.first_name, viewingReceipt.student.middle_name, viewingReceipt.student.last_name].filter(Boolean).join(" ") : "Not linked"}</p><p><b>Admission Number:</b> {viewingReceipt.student?.admission_number || viewingReceipt.student?.admission_no || "Not available"}</p><p><b>Guardian:</b> {viewingReceipt.student?.parent_name || viewingReceipt.student?.guardian_name || "Not recorded"}</p><p><b>Payment Method:</b> {viewingReceipt.payment_method || "Not specified"}</p><p><b>Reference:</b> {viewingReceipt.reference_number || "Not provided"}</p><p><b>Status:</b> {viewingReceipt.status || "Posted"}</p><p><b>Amount:</b> <strong>{money(viewingReceipt.amount)} TZS</strong></p></div><h3 className="mt-5 font-extrabold">Payment description</h3><p className="mt-2 min-h-16 rounded-lg bg-slate-50 p-3">{viewingReceipt.description || "School fees payment"}</p><p className="mt-8 text-xs text-slate-500">Issued by AfriCore ERP PRO. Keep this receipt for your records.</p></div>
+                        </article>
+                        <div className="flex justify-end gap-2 border-t p-4"><button type="button" onClick={() => { setSelectedReceiptIds(current => current.includes(String(viewingReceipt.id)) ? current : [...current, String(viewingReceipt.id)]); setTimeout(() => window.print(), 0); }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Print this receipt</button><button type="button" onClick={() => setViewingReceipt(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">Done</button></div>
+                    </div>
+                </div>}
+                <style>{'@media print { @page { size: A4; margin: 12mm; } body * { visibility:hidden !important; } body .finance-receipt-print, body .finance-receipt-print * { visibility:visible !important; } body .finance-receipt-print { display:block !important; position:absolute; left:0; top:0; width:100%; padding:0; background:white; } .finance-receipt-print article { page-break-after:always; } }'}</style>
 
                 {/* =================================================
                     KPI CARDS
