@@ -866,7 +866,6 @@ export const assignHeadmaster = async (req, res) => {
         if (profileError) throw profileError;
         if (!profile) throw new Error("Headmaster profile could not be loaded after reassignment.");
 
-        const { data: authData } = await supabase.auth.admin.getUserById(profileId);
         const { error: demotePreviousError } = await supabase
             .from("teachers")
             .update({ is_headmaster: false })
