@@ -6,4 +6,5 @@ builder.Services.AddSingleton<LocalStore>();
 builder.Services.AddSingleton<AgentApiClient>();
 builder.Services.AddSingleton<IZkFingerSdkAdapter, ZkFingerSdkAdapter>();
 builder.Services.AddHostedService<AgentWorker>();
+builder.Services.AddHostedService<UsbDeviceMonitor>();
 await builder.Build().RunAsync();
