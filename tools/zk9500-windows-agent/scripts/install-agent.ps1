@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$AgentToken,
+    [Security.SecureString]$AgentToken,
     [string]$ApiBaseUrl = "https://africore-erp-pro.onrender.com",
     [string]$InstallDirectory = "$env:ProgramFiles\AfriCore\ZK9500",
     [string]$DataDirectory = "$env:ProgramData\AfriCore\ZK9500"
@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Run this script from PowerShell as Administrator."
 }
-if ([string]::IsNullOrWhiteSpace($AgentToken) -or $AgentToken.Length -lt 32) {
+if ($null -eq $AgentToken -or $AgentToken.Length -lt 32) {
     throw "The one-time AfriCore pairing token is missing or invalid."
 }
 $serviceName = "AfriCore ZK9500 Agent"
@@ -26,10 +26,18 @@ $acl.SetAccessRule($systemRule)
 $acl.SetAccessRule($adminRule)
 Set-Acl -Path $DataDirectory -AclObject $acl
 Add-Type -AssemblyName System.Security.Cryptography.ProtectedData
-$tokenBytes = [Text.Encoding]::UTF8.GetBytes($AgentToken)
-$protectedBytes = [Security.Cryptography.ProtectedData]::Protect($tokenBytes, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
-$protectedToken = [Convert]::ToBase64String($protectedBytes)
-[Array]::Clear($tokenBytes, 0, $tokenBytes.Length)
+$tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($AgentToken)
+try {
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
+    $tokenBytes = [Text.Encoding]::UTF8.GetBytes($plainToken)
+    $protectedBytes = [Security.Cryptography.ProtectedData]::Protect($tokenBytes, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
+    $protectedToken = [Convert]::ToBase64String($protectedBytes)
+    [Array]::Clear($tokenBytes, 0, $tokenBytes.Length)
+    $plainToken = $null
+}
+finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer)
+}
 [Environment]::SetEnvironmentVariable("AfriCoreAgent__ProtectedToken", $protectedToken, "Machine")
 [Environment]::SetEnvironmentVariable("AfriCoreAgent__ApiBaseUrl", $ApiBaseUrl.TrimEnd("/"), "Machine")
 [Environment]::SetEnvironmentVariable("AfriCoreAgent__DataDirectory", $DataDirectory, "Machine")
