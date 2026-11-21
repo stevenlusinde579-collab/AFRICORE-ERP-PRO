@@ -66,7 +66,6 @@ function HRManagerDashboard() {
   const [signatureBusyId, setSignatureBusyId] = useState(null);
   const [signatureNotice, setSignatureNotice] = useState("");
   const [attendanceEvents, setAttendanceEvents] = useState([]);
-  const [attendanceEmployeeId, setAttendanceEmployeeId] = useState("");
   const [attendanceActionId, setAttendanceActionId] = useState(null);
   const [attendanceNotice, setAttendanceNotice] = useState("");
 
