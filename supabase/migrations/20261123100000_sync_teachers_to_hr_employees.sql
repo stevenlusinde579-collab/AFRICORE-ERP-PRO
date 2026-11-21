@@ -56,7 +56,13 @@ select
   t.gender,
   t.phone,
   t.email,
-  case lower(trim(coalesce(t.staff_type, '')))\n    when 'teaching' then 'teaching'\n    when 'non_teaching' then 'non_teaching'\n    when 'management' then 'management'\n    when 'support' then 'support'\n    else 'other'\n  end,
+  case lower(trim(coalesce(t.staff_type, '')))
+    when 'teaching' then 'teaching'
+    when 'non_teaching' then 'non_teaching'
+    when 'management' then 'management'
+    when 'support' then 'support'
+    else 'other'
+  end,
   t.staff_type,
   t.specialization,
   t.employment_date,
@@ -99,7 +105,13 @@ begin
       gender = new.gender,
       phone = new.phone,
       email = new.email,
-      employee_type = case lower(trim(coalesce(new.staff_type, '')))\n        when 'teaching' then 'teaching'\n        when 'non_teaching' then 'non_teaching'\n        when 'management' then 'management'\n        when 'support' then 'support'\n        else 'other'\n      end,
+      employee_type = case lower(trim(coalesce(new.staff_type, '')))
+        when 'teaching' then 'teaching'
+        when 'non_teaching' then 'non_teaching'
+        when 'management' then 'management'
+        when 'support' then 'support'
+        else 'other'
+      end,
       department = new.staff_type,
       position = new.specialization,
       employment_date = new.employment_date,
@@ -119,7 +131,14 @@ begin
       employment_date, status, source_teacher_id
     ) values (
       new.school_id, new.employee_number, new.first_name, new.middle_name, new.last_name,
-      new.gender, new.phone, new.email, coalesce(nullif(new.staff_type, ''), 'staff'),
+      new.gender, new.phone, new.email,
+      case lower(trim(coalesce(new.staff_type, '')))
+        when 'teaching' then 'teaching'
+        when 'non_teaching' then 'non_teaching'
+        when 'management' then 'management'
+        when 'support' then 'support'
+        else 'other'
+      end,
       new.staff_type, new.specialization, new.employment_date,
       case
         when lower(trim(coalesce(new.status, ''))) in ('active','enabled','working') then 'active'
