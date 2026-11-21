@@ -422,12 +422,19 @@ function HRManagerDashboard() {
     }
   }, [schoolId, signatureSchemaReady, signatureRows, loadHRData]);
 
+  const normalizedStaffStatus = (status) => {
+    const value = String(status || "").trim().toLowerCase();
+    if (["active", "enabled", "working"].includes(value)) return "Active";
+    if (["inactive", "disabled", "terminated", "left", "resigned", "retired"].includes(value)) return "Inactive";
+    return "Not set";
+  };
+  const allStaff = staff;
   const activeStaff = useMemo(
-    () => staff.filter((person) => !["inactive", "terminated", "left"].includes(String(person.status || "").toLowerCase())),
+    () => staff.filter((person) => normalizedStaffStatus(person.status) === "Active"),
     [staff]
   );
-  // HR transactions use employees.id as their foreign key. Teacher-only rows are
-  // shown in the register but must not be submitted to attendance/off-day workflows.
+  // HR transactions reference employees.id. The HR sync migration mirrors each
+  // teacher into employees, preserving one canonical ID for all HR workflows.
   const activeEmployeeStaff = useMemo(
     () => activeStaff.filter((person) => person.record_source === "employees"),
     [activeStaff]
@@ -530,9 +537,9 @@ function HRManagerDashboard() {
 
       {activeSection === "staff" && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 p-5"><h2 className="text-lg font-bold text-slate-900">Staff Records</h2><p className="text-sm text-slate-500">{activeStaff.length} active staff records</p></div>
-          {loading ? <p className="p-5 text-sm text-slate-500">Loading staff...</p> : activeStaff.length === 0 ? <p className="p-5 text-sm text-slate-500">Hakuna wafanyakazi waliopatikana.</p> :
-            <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Employee No.</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{activeStaff.map((person) => <tr key={`${person.record_source}-${person.id}`}><td className="px-4 py-3 font-semibold">{person.employee_number || "—"}</td><td className="px-4 py-3">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</td><td className="px-4 py-3">{person.department || "—"}</td><td className="px-4 py-3">{person.position || "—"}</td><td className="px-4 py-3">{person.status || "Active"}{person.record_source === "teachers" ? <span className="ml-2 text-xs text-slate-500">(Teacher record)</span> : null}</td></tr>)}</tbody></table></div>}
+          <div className="border-b border-slate-100 p-5"><h2 className="text-lg font-bold text-slate-900">Staff Records</h2><p className="text-sm text-slate-500">{allStaff.length} total staff records • {activeStaff.length} active</p></div>
+          {loading ? <p className="p-5 text-sm text-slate-500">Loading staff...</p> : allStaff.length === 0 ? <p className="p-5 text-sm text-slate-500">Hakuna wafanyakazi waliopatikana.</p> :
+            <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Employee No.</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{allStaff.map((person) => { const status = normalizedStaffStatus(person.status); return <tr key={`${person.record_source}-${person.id}`}><td className="px-4 py-3 font-semibold">{person.employee_number || "—"}</td><td className="px-4 py-3">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</td><td className="px-4 py-3">{person.department || "—"}</td><td className="px-4 py-3">{person.position || "—"}</td><td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status === "Active" ? "bg-emerald-50 text-emerald-700" : status === "Inactive" ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"}`}>{status}</span>{person.record_source === "teachers" ? <span className="ml-2 text-xs text-slate-500">(Teacher record)</span> : null}</td></tr>; })}</tbody></table></div>}
         </section>
       )}
 
