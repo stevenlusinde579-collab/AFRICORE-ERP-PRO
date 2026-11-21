@@ -82,9 +82,13 @@ function HRManagerDashboard() {
     const date = today();
     const year = Number(date.slice(0, 4));
     try {
-      const [staffResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
+      const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
         supabase.from("employees")
           .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
+          .eq("school_id", schoolId)
+          .order("first_name", { ascending: true }),
+        supabase.from("teachers")
+          .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,department,position,specialization,staff_type,status")
           .eq("school_id", schoolId)
           .order("first_name", { ascending: true }),
         supabase.from("hr_offday_rosters")
@@ -137,11 +141,16 @@ function HRManagerDashboard() {
       }
 
       if (staffResult.error) throw staffResult.error;
+      if (teacherRecordsResult.error) throw teacherRecordsResult.error;
       if (signatureStaffResult.error) throw signatureStaffResult.error;
       if (missingHRSchema) {
         setSchemaReady(false);
-        setStaff(staffResult.data || []);
-        setStats((current) => ({ ...current, staff: staffResult.data?.length || 0 }));
+        const combinedStaff = [
+          ...(staffResult.data || []).map((person) => ({ ...person, record_source: "employees" })),
+          ...(teacherRecordsResult.data || []).map((person) => ({ ...person, department: person.department || person.staff_type || "Teaching", position: person.position || person.specialization || "—", record_source: "teachers" })),
+        ];
+        setStaff(combinedStaff);
+        setStats((current) => ({ ...current, staff: combinedStaff.length }));
         setError("HR database migration bado haijawekwa. Taarifa za wafanyakazi zinaonekana, lakini Off Days, Leave na Attendance zitaanza baada ya migration kuidhinishwa na kuwekwa.");
         return;
       }
@@ -151,7 +160,11 @@ function HRManagerDashboard() {
       if (errors.length) throw errors[0].error;
 
       setSchemaReady(true);
-      setStaff(staffResult.data || []);
+      const combinedStaff = [
+        ...(staffResult.data || []).map((person) => ({ ...person, record_source: "employees" })),
+        ...(teacherRecordsResult.data || []).map((person) => ({ ...person, department: person.department || person.staff_type || "Teaching", position: person.position || person.specialization || "—", record_source: "teachers" })),
+      ];
+      setStaff(combinedStaff);
       setOffdayRows(offdayResult.data || []);
       setLeaveRows(leaveResult.data || []);
       setEntitlementRows(entitlementResult.data || []);
@@ -167,7 +180,7 @@ function HRManagerDashboard() {
       }
       const presentIds = new Set([...latestByEmployee.entries()].filter(([, event]) => event.event_type === "check_in").map(([employeeId]) => employeeId));
       setStats({
-        staff: staffResult.data?.length || 0,
+        staff: combinedStaff.length,
         offToday: (offdayResult.data || []).filter((row) => row.off_date === date && row.status !== "cancelled").length,
         pendingLeave: (leaveResult.data || []).filter((row) => row.status === "pending").length,
         attendanceToday: presentIds.size,
@@ -413,6 +426,12 @@ function HRManagerDashboard() {
     () => staff.filter((person) => !["inactive", "terminated", "left"].includes(String(person.status || "").toLowerCase())),
     [staff]
   );
+  // HR transactions use employees.id as their foreign key. Teacher-only rows are
+  // shown in the register but must not be submitted to attendance/off-day workflows.
+  const activeEmployeeStaff = useMemo(
+    () => activeStaff.filter((person) => person.record_source === "employees"),
+    [activeStaff]
+  );
 
   const sections = [
     { id: "overview", label: "Overview", icon: <FaChartBar /> },
@@ -513,7 +532,7 @@ function HRManagerDashboard() {
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-100 p-5"><h2 className="text-lg font-bold text-slate-900">Staff Records</h2><p className="text-sm text-slate-500">{activeStaff.length} active staff records</p></div>
           {loading ? <p className="p-5 text-sm text-slate-500">Loading staff...</p> : activeStaff.length === 0 ? <p className="p-5 text-sm text-slate-500">Hakuna wafanyakazi waliopatikana.</p> :
-            <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Employee No.</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{activeStaff.map((person) => <tr key={person.id}><td className="px-4 py-3 font-semibold">{person.employee_number || "—"}</td><td className="px-4 py-3">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</td><td className="px-4 py-3">{person.department || "—"}</td><td className="px-4 py-3">{person.position || "—"}</td><td className="px-4 py-3">{person.status || "Active"}</td></tr>)}</tbody></table></div>}
+            <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Employee No.</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{activeStaff.map((person) => <tr key={`${person.record_source}-${person.id}`}><td className="px-4 py-3 font-semibold">{person.employee_number || "—"}</td><td className="px-4 py-3">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</td><td className="px-4 py-3">{person.department || "—"}</td><td className="px-4 py-3">{person.position || "—"}</td><td className="px-4 py-3">{person.status || "Active"}{person.record_source === "teachers" ? <span className="ml-2 text-xs text-slate-500">(Teacher record)</span> : null}</td></tr>)}</tbody></table></div>}
         </section>
       )}
 
@@ -527,7 +546,7 @@ function HRManagerDashboard() {
               <label className="text-sm font-medium text-slate-700 sm:col-span-1">Mfanyakazi
                 <select required value={offdayEmployeeId} onChange={(event) => setOffdayEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
                   <option value="">Chagua mfanyakazi</option>
-                  {activeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")} ({person.employee_number || person.id})</option>)}
+                  {activeEmployeeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")} ({person.employee_number || person.id})</option>)}
                 </select>
               </label>
               <label className="text-sm font-medium text-slate-700">Tarehe ya off-day
@@ -581,7 +600,7 @@ function HRManagerDashboard() {
             <div className="mt-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">Staff Sign In / Sign Out</h3><p className="text-sm text-slate-500">Rekodi muda wa kuingia na kutoka kwa mfanyakazi. Hii ni njia ya manual ya muda wakati USB bridge inakamilishwa.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Manual attendance</span></div>
               {attendanceNotice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{attendanceNotice}</p>}
-              <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Employee</th><th className="px-3 py-3">Today status</th><th className="px-3 py-3">Last event</th><th className="px-3 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{activeStaff.map((person) => { const personEvents = attendanceEvents.filter((event) => event.employee_id === person.id).sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)); const latest = personEvents[personEvents.length - 1]; const isIn = latest?.event_type === "check_in"; const lastTime = latest ? new Date(latest.occurred_at).toLocaleTimeString("en-GB", { timeZone: "Africa/Dar_es_Salaam", hour: "2-digit", minute: "2-digit" }) : "—"; return <tr key={person.id}><td className="px-3 py-3"><p className="font-semibold text-slate-900">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</p><p className="text-xs text-slate-500">{person.employee_number || "—"}</p></td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${isIn ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{isIn ? "Signed In" : latest?.event_type === "check_out" ? "Signed Out" : "Not Signed In"}</span></td><td className="px-3 py-3 text-slate-600">{latest ? `${latest.event_type === "check_in" ? "Sign In" : "Sign Out"} • ${lastTime}` : "No attendance yet"}</td><td className="px-3 py-3"><button type="button" disabled={attendanceActionId === person.id || (isIn && !latest)} onClick={() => recordAttendance(person, isIn ? "check_out" : "check_in")} className={`rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50 ${isIn ? "bg-rose-700 hover:bg-rose-800" : "bg-emerald-700 hover:bg-emerald-800"}`}>{attendanceActionId === person.id ? "Saving..." : isIn ? "Sign Out" : "Sign In"}</button></td></tr>; })}{activeStaff.length === 0 && <tr><td colSpan="4" className="px-3 py-6 text-center text-slate-500">Hakuna wafanyakazi hai waliopatikana.</td></tr>}</tbody></table></div>
+              <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Employee</th><th className="px-3 py-3">Today status</th><th className="px-3 py-3">Last event</th><th className="px-3 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{activeEmployeeStaff.map((person) => { const personEvents = attendanceEvents.filter((event) => event.employee_id === person.id).sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)); const latest = personEvents[personEvents.length - 1]; const isIn = latest?.event_type === "check_in"; const lastTime = latest ? new Date(latest.occurred_at).toLocaleTimeString("en-GB", { timeZone: "Africa/Dar_es_Salaam", hour: "2-digit", minute: "2-digit" }) : "—"; return <tr key={person.id}><td className="px-3 py-3"><p className="font-semibold text-slate-900">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</p><p className="text-xs text-slate-500">{person.employee_number || "—"}</p></td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${isIn ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{isIn ? "Signed In" : latest?.event_type === "check_out" ? "Signed Out" : "Not Signed In"}</span></td><td className="px-3 py-3 text-slate-600">{latest ? `${latest.event_type === "check_in" ? "Sign In" : "Sign Out"} • ${lastTime}` : "No attendance yet"}</td><td className="px-3 py-3"><button type="button" disabled={attendanceActionId === person.id || (isIn && !latest)} onClick={() => recordAttendance(person, isIn ? "check_out" : "check_in")} className={`rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50 ${isIn ? "bg-rose-700 hover:bg-rose-800" : "bg-emerald-700 hover:bg-emerald-800"}`}>{attendanceActionId === person.id ? "Saving..." : isIn ? "Sign Out" : "Sign In"}</button></td></tr>; })}{activeEmployeeStaff.length === 0 && <tr><td colSpan="4" className="px-3 py-6 text-center text-slate-500">Hakuna wafanyakazi hai waliopatikana.</td></tr>}</tbody></table></div>
               <p className="text-xs text-slate-500">Matukio yanahifadhiwa kwa shule hii pekee. Mfumo hurekodi muda wa server na chanzo cha tukio; alama za vidole hazihifadhiwi kwenye cloud.</p>
             </div>
           )}
