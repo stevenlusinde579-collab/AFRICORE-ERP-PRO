@@ -58,7 +58,7 @@ select
   case
     when lower(trim(coalesce(t.status, ''))) in ('inactive','disabled','terminated','left','resigned','retired') then 'inactive'
     when lower(trim(coalesce(t.status, ''))) in ('active','enabled','working') then 'active'
-    else 'inactive'
+    else 'not_set'
   end,
   t.id
 from public.teachers t
@@ -100,7 +100,8 @@ begin
       employment_date = new.employment_date,
       status = case
         when lower(trim(coalesce(new.status, ''))) in ('active','enabled','working') then 'active'
-        else 'inactive'
+        when lower(trim(coalesce(new.status, ''))) in ('inactive','disabled','terminated','left','resigned','retired') then 'inactive'
+        else 'not_set'
       end,
       source_teacher_id = new.id
   where e.school_id = new.school_id
@@ -117,7 +118,8 @@ begin
       new.staff_type, new.specialization, new.employment_date,
       case
         when lower(trim(coalesce(new.status, ''))) in ('active','enabled','working') then 'active'
-        else 'inactive'
+        when lower(trim(coalesce(new.status, ''))) in ('inactive','disabled','terminated','left','resigned','retired') then 'inactive'
+        else 'not_set'
       end,
       new.id
     )
