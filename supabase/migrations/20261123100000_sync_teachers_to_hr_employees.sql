@@ -40,7 +40,7 @@ where t.school_id = e.school_id
 insert into public.employees (
   school_id, employee_number, first_name, middle_name, last_name,
   gender, phone, email, employee_type, department, position,
-  employment_date, status, user_id, source_teacher_id
+  employment_date, status, source_teacher_id
 )
 select
   t.school_id,
@@ -60,7 +60,6 @@ select
     when lower(trim(coalesce(t.status, ''))) in ('active','enabled','working') then 'active'
     else 'inactive'
   end,
-  t.user_id,
   t.id
 from public.teachers t
 where t.school_id is not null
@@ -103,7 +102,6 @@ begin
         when lower(trim(coalesce(new.status, ''))) in ('active','enabled','working') then 'active'
         else 'inactive'
       end,
-      user_id = coalesce(e.user_id, new.user_id),
       source_teacher_id = new.id
   where e.school_id = new.school_id
     and (e.source_teacher_id = new.id or e.employee_number = new.employee_number);
@@ -112,7 +110,7 @@ begin
     insert into public.employees (
       school_id, employee_number, first_name, middle_name, last_name,
       gender, phone, email, employee_type, department, position,
-      employment_date, status, user_id, source_teacher_id
+      employment_date, status, source_teacher_id
     ) values (
       new.school_id, new.employee_number, new.first_name, new.middle_name, new.last_name,
       new.gender, new.phone, new.email, coalesce(nullif(new.staff_type, ''), 'staff'),
@@ -121,7 +119,7 @@ begin
         when lower(trim(coalesce(new.status, ''))) in ('active','enabled','working') then 'active'
         else 'inactive'
       end,
-      new.user_id, new.id
+      new.id
     )
     on conflict (school_id, employee_number) do update
       set source_teacher_id = coalesce(public.employees.source_teacher_id, excluded.source_teacher_id),
