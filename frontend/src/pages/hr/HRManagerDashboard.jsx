@@ -88,7 +88,7 @@ function HRManagerDashboard() {
           .eq("school_id", schoolId)
           .order("first_name", { ascending: true }),
         supabase.from("teachers")
-          .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,department,position,specialization,staff_type,status")
+          .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,specialization,staff_type,status")
           .eq("school_id", schoolId)
           .order("first_name", { ascending: true }),
         supabase.from("hr_offday_rosters")
