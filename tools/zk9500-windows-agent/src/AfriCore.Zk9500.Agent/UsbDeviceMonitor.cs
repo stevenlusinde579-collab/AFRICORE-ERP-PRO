@@ -6,18 +6,20 @@ public sealed class UsbDeviceMonitor : BackgroundService
 {
  private readonly ILogger<UsbDeviceMonitor> _logger;
  public UsbDeviceMonitor(ILogger<UsbDeviceMonitor> logger)=>_logger=logger;
- protected override Task ExecuteAsync(CancellationToken stoppingToken)
+ protected override async Task ExecuteAsync(CancellationToken stoppingToken)
  {
+  ManagementEventWatcher? arrival=null;ManagementEventWatcher? removal=null;
   try
   {
-   var arrival=new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2"));
-   var removal=new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 3"));
-   arrival.EventArrived+=(s,e)=>_logger.LogInformation("Windows reported a device arrival. ZK9500 SDK adapter will determine supported scanner state.");
-   removal.EventArrived+=(s,e)=>_logger.LogWarning("Windows reported a device removal.");
+   arrival=new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2"));
+   removal=new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 3"));
+   arrival.EventArrived+=(s,e)=>_logger.LogInformation("Windows reported a USB device arrival. SDK adapter must identify the supported scanner.");
+   removal.EventArrived+=(s,e)=>_logger.LogWarning("Windows reported a USB device removal.");
    arrival.Start();removal.Start();
-   stoppingToken.Register(()=>{arrival.Stop();removal.Stop();arrival.Dispose();removal.Dispose();});
-   return Task.CompletedTask;
+   await Task.Delay(Timeout.Infinite,stoppingToken);
   }
-  catch(Exception ex){_logger.LogError(ex,"USB device notifications could not be initialized.");return Task.CompletedTask;}
+  catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested){}
+  catch(Exception ex){_logger.LogError(ex,"USB device notifications could not be initialized.");}
+  finally{arrival?.Stop();removal?.Stop();arrival?.Dispose();removal?.Dispose();}
  }
 }
