@@ -157,7 +157,7 @@ function HRManagerDashboard() {
       if (sessionError) throw sessionError;
       const accessToken = sessionData?.session?.access_token;
       if (!accessToken) throw new Error("Tafadhali ingia tena kwenye mfumo.");
-      const apiBase = (import.meta.env.VITE_API_URL || "https://africore-erp-pro.onrender.com").replace(/\\/+$/, "");
+      const apiBase = new URL(import.meta.env.VITE_API_URL || "https://africore-erp-pro.onrender.com").origin;
       const response = await fetch(`${apiBase}/api/hr/biometric/devices/${deviceId}/pair`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }
