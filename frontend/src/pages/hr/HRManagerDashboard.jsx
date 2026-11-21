@@ -477,7 +477,6 @@ function HRManagerDashboard() {
               </div>;
             })}
             {signatureStaff.length === 0 && <p className="py-5 text-sm text-slate-500">Hakuna Staff wenye akaunti za kuingia zilizounganishwa na shule hii.</p>}
-          </div>
           </div>}
           <p className="text-xs text-slate-500">Picha zinakubaliwa PNG/JPG, hadi 2 MB. Hifadhi ni ya faragha na inapatikana kwa HR na watumiaji wenye ruhusa husika.</p>
         </section>
