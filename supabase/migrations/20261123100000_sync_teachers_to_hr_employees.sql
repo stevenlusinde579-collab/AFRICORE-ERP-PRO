@@ -4,6 +4,11 @@
 alter table public.employees
   add column if not exists source_teacher_id bigint;
 
+alter table public.employees drop constraint if exists employees_status_check;
+alter table public.employees
+  add constraint employees_status_check
+  check (status = any (array['active','inactive','terminated','not_set']));
+
 do $$
 begin
   if not exists (
@@ -51,7 +56,7 @@ select
   t.gender,
   t.phone,
   t.email,
-  coalesce(nullif(t.staff_type, ''), 'staff'),
+  case lower(trim(coalesce(t.staff_type, '')))\n    when 'teaching' then 'teaching'\n    when 'non_teaching' then 'non_teaching'\n    when 'management' then 'management'\n    when 'support' then 'support'\n    else 'other'\n  end,
   t.staff_type,
   t.specialization,
   t.employment_date,
@@ -94,7 +99,7 @@ begin
       gender = new.gender,
       phone = new.phone,
       email = new.email,
-      employee_type = coalesce(nullif(new.staff_type, ''), 'staff'),
+      employee_type = case lower(trim(coalesce(new.staff_type, '')))\n        when 'teaching' then 'teaching'\n        when 'non_teaching' then 'non_teaching'\n        when 'management' then 'management'\n        when 'support' then 'support'\n        else 'other'\n      end,
       department = new.staff_type,
       position = new.specialization,
       employment_date = new.employment_date,
