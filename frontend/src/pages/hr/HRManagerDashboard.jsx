@@ -65,6 +65,9 @@ function HRManagerDashboard() {
   const [signatureRows, setSignatureRows] = useState([]);
   const [signatureBusyId, setSignatureBusyId] = useState(null);
   const [signatureNotice, setSignatureNotice] = useState("");
+  const [attendanceEvents, setAttendanceEvents] = useState([]);
+  const [attendanceActionId, setAttendanceActionId] = useState(null);
+  const [attendanceNotice, setAttendanceNotice] = useState("");
 
   const loadHRData = useCallback(async () => {
     if (!schoolId) {
@@ -95,7 +98,7 @@ function HRManagerDashboard() {
           .order("created_at", { ascending: false })
           .limit(100),
         supabase.from("hr_attendance_events")
-          .select("employee_id,event_type,occurred_at")
+          .select("id,employee_id,event_type,event_source,occurred_at,device_id")
           .eq("school_id", schoolId)
           .gte("occurred_at", new Date(`${date}T00:00:00+03:00`).toISOString())
           .lt("occurred_at", new Date(`${date}T23:59:59.999+03:00`).toISOString()),
@@ -149,7 +152,12 @@ function HRManagerDashboard() {
       setSignatureStaff(signatureStaffResult.data || []);
       setSignatureRows(signatureResult.data || []);
       const events = attendanceResult.data || [];
-      const presentIds = new Set(events.filter((event) => event.event_type === "check_in").map((event) => event.employee_id));
+      setAttendanceEvents(events);
+      const latestByEmployee = new Map();
+      for (const event of [...events].sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at))) {
+        latestByEmployee.set(event.employee_id, event);
+      }
+      const presentIds = new Set([...latestByEmployee.entries()].filter(([, event]) => event.event_type === "check_in").map(([employeeId]) => employeeId));
       setStats({
         staff: staffResult.data?.length || 0,
         offToday: (offdayResult.data || []).filter((row) => row.off_date === date && row.status !== "cancelled").length,
@@ -287,6 +295,42 @@ function HRManagerDashboard() {
       setLeaveActionId(null);
     }
   }, [schoolId, leaveActionId, loadHRData]);
+
+  const recordAttendance = useCallback(async (employee, eventType) => {
+    if (!schoolId || !schemaReady || !employee?.id || attendanceActionId) return;
+    setAttendanceActionId(employee.id);
+    setAttendanceNotice("");
+    setError("");
+    try {
+      const todayEvents = attendanceEvents
+        .filter((event) => event.employee_id === employee.id)
+        .sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at));
+      const latest = todayEvents[todayEvents.length - 1];
+      if (eventType === "check_out" && latest?.event_type !== "check_in") {
+        throw new Error("Mfanyakazi huyu hajaingia kazini leo; haiwezekani kurekodi Sign Out.");
+      }
+      if (eventType === "check_in" && latest?.event_type === "check_in") {
+        throw new Error("Mfanyakazi huyu tayari ameingia kazini leo.");
+      }
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user?.id) throw new Error("Session ya mtumiaji haijathibitishwa. Ingia tena.");
+      const { error: insertError } = await supabase.from("hr_attendance_events").insert({
+        school_id: schoolId,
+        employee_id: employee.id,
+        event_type: eventType,
+        event_source: "manual",
+        created_by: authData.user.id,
+        occurred_at: new Date().toISOString(),
+      });
+      if (insertError) throw insertError;
+      setAttendanceNotice(`${eventType === "check_in" ? "Sign In" : "Sign Out"} imerekodiwa kwa ${[employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(" ")}.`);
+      await loadHRData();
+    } catch (attendanceError) {
+      setAttendanceNotice(attendanceError.message || "Imeshindikana kurekodi mahudhurio.");
+    } finally {
+      setAttendanceActionId(null);
+    }
+  }, [schoolId, schemaReady, attendanceActionId, attendanceEvents, loadHRData]);
 
   const registerStaffSignature = useCallback(async (teacher, file) => {
     if (!schoolId || !teacher?.user_id || !file) return;
@@ -490,6 +534,14 @@ function HRManagerDashboard() {
             ) : <p className="mt-3 text-sm text-amber-800">Sajili kifaa baada ya HR database migration kuwekwa na kuidhinishwa.</p>}
             {deviceMessage && <p role="status" className="mt-3 rounded-lg bg-white p-3 text-sm text-slate-700">{deviceMessage}</p>}
           </div>
+          {schemaReady && (
+            <div className="mt-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">Staff Sign In / Sign Out</h3><p className="text-sm text-slate-500">Rekodi muda wa kuingia na kutoka kwa mfanyakazi. Hii ni njia ya manual ya muda wakati USB bridge inakamilishwa.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Manual attendance</span></div>
+              {attendanceNotice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{attendanceNotice}</p>}
+              <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Employee</th><th className="px-3 py-3">Today status</th><th className="px-3 py-3">Last event</th><th className="px-3 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{activeStaff.map((person) => { const personEvents = attendanceEvents.filter((event) => event.employee_id === person.id).sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)); const latest = personEvents[personEvents.length - 1]; const isIn = latest?.event_type === "check_in"; const lastTime = latest ? new Date(latest.occurred_at).toLocaleTimeString("en-GB", { timeZone: "Africa/Dar_es_Salaam", hour: "2-digit", minute: "2-digit" }) : "—"; return <tr key={person.id}><td className="px-3 py-3"><p className="font-semibold text-slate-900">{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</p><p className="text-xs text-slate-500">{person.employee_number || "—"}</p></td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${isIn ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{isIn ? "Signed In" : latest?.event_type === "check_out" ? "Signed Out" : "Not Signed In"}</span></td><td className="px-3 py-3 text-slate-600">{latest ? `${latest.event_type === "check_in" ? "Sign In" : "Sign Out"} • ${lastTime}` : "No attendance yet"}</td><td className="px-3 py-3"><button type="button" disabled={attendanceActionId === person.id || (isIn && !latest)} onClick={() => recordAttendance(person, isIn ? "check_out" : "check_in")} className={`rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50 ${isIn ? "bg-rose-700 hover:bg-rose-800" : "bg-emerald-700 hover:bg-emerald-800"}`}>{attendanceActionId === person.id ? "Saving..." : isIn ? "Sign Out" : "Sign In"}</button></td></tr>; })}{activeStaff.length === 0 && <tr><td colSpan="4" className="px-3 py-6 text-center text-slate-500">Hakuna wafanyakazi hai waliopatikana.</td></tr>}</tbody></table></div>
+              <p className="text-xs text-slate-500">Matukio yanahifadhiwa kwa shule hii pekee. Mfumo hurekodi muda wa server na chanzo cha tukio; alama za vidole hazihifadhiwi kwenye cloud.</p>
+            </div>
+          )}
           <p className="mt-4 text-xs leading-5 text-slate-500">Kila tukio litahifadhi employee ID, check-in/check-out, timestamp, device ID na chanzo. Fingerprint images/templates hazitahifadhiwa Supabase. Matching ya fingerprint itafanyika kwenye PC ya shule.</p>
         </section>
       )}

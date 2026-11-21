@@ -147,7 +147,31 @@ const Login = () => {
             */
 
             try {
-                const accessResponse = await api.get("/auth/profile");
+                // Render Free may need time to wake after inactivity. Allow a
+                // longer first verification window and retry transient failures.
+                let accessResponse = null;
+                let accessError = null;
+
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    try {
+                        accessResponse = await api.get("/auth/profile", {
+                            timeout: 90000,
+                        });
+                        accessError = null;
+                        break;
+                    } catch (requestError) {
+                        accessError = requestError;
+                        const transient =
+                            !requestError?.response ||
+                            [502, 503, 504].includes(requestError.response.status) ||
+                            ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(requestError.code);
+
+                        if (!transient || attempt === 1) break;
+                        await new Promise((resolve) => setTimeout(resolve, 2500));
+                    }
+                }
+
+                if (accessError) throw accessError;
 
                 if (
                     accessResponse?.data?.success !== true ||
@@ -158,7 +182,7 @@ const Login = () => {
                     );
                 }
             } catch (accessError) {
-                // Do not leave an authenticated session for a blocked user.
+                // Keep the authenticated session only after school access is verified.
                 await supabase.auth.signOut();
 
                 const status = accessError?.response?.status;
@@ -184,8 +208,15 @@ const Login = () => {
                     );
                 }
 
+                if (!accessError?.response || [502, 504].includes(status) ||
+                    ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(accessError?.code)) {
+                    throw new Error(
+                        "AfriCore is taking longer than usual to start. Please wait a moment and try signing in again."
+                    );
+                }
+
                 throw new Error(
-                    "Unable to verify your school access. Please try again."
+                    serverMessage || "Unable to verify your school access. Please try again."
                 );
             }
 

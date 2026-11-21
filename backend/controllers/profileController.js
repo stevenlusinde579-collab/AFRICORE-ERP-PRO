@@ -1,8 +1,3 @@
-import {
-    getUserAccess
-} from "../services/permissionService.js";
-
-
 /**
  * ============================================================
  * GET CURRENT AFRICORE PROFILE
@@ -42,10 +37,17 @@ export const getCurrentProfile = async (
         // RESOLVE PROFILE + ROLES + PERMISSIONS + SCOPES
         // ----------------------------------------------------
 
-        const access =
-            await getUserAccess(
-                req.user.id
-            );
+        // authenticateUser already resolved this user's effective access
+        // and stored it on the request. Reuse it to avoid repeating several
+        // sequential Supabase queries during the first login.
+        const access = req.access;
+
+        if (!access) {
+            return res.status(503).json({
+                success: false,
+                message: "User access could not be verified. Please try again."
+            });
+        }
 
 
         // ----------------------------------------------------
