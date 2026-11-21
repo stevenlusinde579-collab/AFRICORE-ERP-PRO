@@ -6,11 +6,6 @@ const DEBOUNCE_SECONDS = 90;
 const TZ = "Africa/Dar_es_Salaam";
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
-const safeEqual = (a, b) => {
-  const left = Buffer.from(String(a || ""), "hex");
-  const right = Buffer.from(String(b || ""), "hex");
-  return left.length === right.length && left.length > 0 && crypto.timingSafeEqual(left, right);
-};
 const localDate = (value) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(value));
 const validId = (value) => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 
@@ -74,7 +69,7 @@ export async function authenticateBiometricAgent(req, res, next) {
     const hash = sha256(token);
     const { data: devices, error } = await supabase.from("hr_biometric_devices")
       .select("id,school_id,device_model,bridge_status")
-      .eq("agent_token_hash", hash).limit(2);
+      .eq("agent_token_hash", hash).eq("device_model", "ZK9500").neq("bridge_status", "disabled").limit(2);
     if (error) throw error;
     if (!devices || devices.length !== 1) return res.status(401).json({ success: false, message: "Agent is not paired or pairing is revoked." });
     req.biometricDevice = devices[0];
@@ -164,6 +159,9 @@ export async function syncEnrollmentMetadata(req, res) {
 
 export async function syncBiometricAttendance(req, res) {
   try {
+    if (process.env.HR_BIOMETRIC_ATTENDANCE_ENABLED !== "true") {
+      return res.status(503).json({ success: false, code: "BIOMETRIC_ATTENDANCE_NOT_ENABLED", message: "Biometric attendance sync is disabled until the official SDK, attendance direction policy, and physical validation are complete." });
+    }
     const device = req.biometricDevice;
     const events = Array.isArray(req.body?.events) ? req.body.events : [];
     if (!events.length) return res.json({ success: true, accepted: 0, duplicates: 0, rejected: [] });
