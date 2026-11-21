@@ -84,7 +84,7 @@ function HRManagerDashboard() {
     try {
       const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
         supabase.from("employees")
-          .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
+          .select("id,employee_number,first_name,middle_name,last_name,department,position,status,source_teacher_id")
           .eq("school_id", schoolId)
           .order("first_name", { ascending: true }),
         supabase.from("teachers")
@@ -160,9 +160,13 @@ function HRManagerDashboard() {
       if (errors.length) throw errors[0].error;
 
       setSchemaReady(true);
+      const employeeRows = staffResult.data || [];
+      const linkedTeacherIds = new Set(employeeRows.map((person) => person.source_teacher_id).filter(Boolean).map(String));
+      const employeeNumbers = new Set(employeeRows.map((person) => String(person.employee_number || "").trim()).filter(Boolean));
+      const unlinkedTeacherRows = (teacherRecordsResult.data || []).filter((teacher) => !linkedTeacherIds.has(String(teacher.id)) && !employeeNumbers.has(String(teacher.employee_number || "").trim()));
       const combinedStaff = [
-        ...(staffResult.data || []).map((person) => ({ ...person, record_source: "employees" })),
-        ...(teacherRecordsResult.data || []).map((person) => ({ ...person, department: person.department || person.staff_type || "Teaching", position: person.position || person.specialization || "—", record_source: "teachers" })),
+        ...employeeRows.map((person) => ({ ...person, record_source: "employees" })),
+        ...unlinkedTeacherRows.map((person) => ({ ...person, department: person.staff_type || "Teaching", position: person.specialization || "—", record_source: "teachers" })),
       ];
       setStaff(combinedStaff);
       setOffdayRows(offdayResult.data || []);
@@ -568,7 +572,7 @@ function HRManagerDashboard() {
               <label className="text-sm font-medium text-slate-700">Mfanyakazi
                 <select required value={entitlementEmployeeId} onChange={(event) => setEntitlementEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
                   <option value="">Chagua mfanyakazi</option>
-                  {activeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</option>)}
+                  {activeEmployeeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</option>)}
                 </select>
               </label>
               <label className="text-sm font-medium text-slate-700">Off-days kwa mwaka ({today().slice(0, 4)})
