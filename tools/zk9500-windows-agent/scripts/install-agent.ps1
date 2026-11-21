@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [Security.SecureString]$AgentToken,
+    [System.Security.SecureString]$AgentToken,
     [string]$ApiBaseUrl = "https://africore-erp-pro.onrender.com",
     [string]$InstallDirectory = "$env:ProgramFiles\AfriCore\ZK9500",
     [string]$DataDirectory = "$env:ProgramData\AfriCore\ZK9500"
