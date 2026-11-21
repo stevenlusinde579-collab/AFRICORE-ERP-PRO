@@ -12,6 +12,15 @@ public sealed class LocalStore
   cmd.ExecuteNonQuery();
  }
  private SqliteConnection Open(){var c=new SqliteConnection(_connectionString);c.Open();return c;}
+ public void Enqueue(long employeeId,DateTimeOffset occurredAt)
+ {
+  using var c=Open();using var cmd=c.CreateCommand();
+  cmd.CommandText="INSERT OR IGNORE INTO attendance_queue(event_id,employee_id,occurred_at) VALUES($id,$employee,$at)";
+  cmd.Parameters.AddWithValue("$id","local_"+Guid.NewGuid().ToString("N"));
+  cmd.Parameters.AddWithValue("$employee",employeeId);
+  cmd.Parameters.AddWithValue("$at",occurredAt.ToUniversalTime().ToString("O"));
+  cmd.ExecuteNonQuery();
+ }
  public IReadOnlyList<AttendanceQueueItem> ReadBatch(int limit=100)
  {
   using var c=Open();using var cmd=c.CreateCommand();
