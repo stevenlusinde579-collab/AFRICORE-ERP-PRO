@@ -40,6 +40,7 @@ function HRManagerDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [schemaReady, setSchemaReady] = useState(false);
+  const [signatureSchemaReady, setSignatureSchemaReady] = useState(false);
   const [stats, setStats] = useState({
     staff: 0, offToday: 0, pendingLeave: 0, attendanceToday: 0,
   });
@@ -125,8 +126,15 @@ function HRManagerDashboard() {
           .eq("school_id", schoolId),
       ]);
 
-      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureResult]
+      // Staff signatures are an optional, separately migrated workflow. Their absence
+      // must never disable the core HR off-day, leave, or attendance modules.
+      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
         .some((result) => result.error?.code === "42P01" || result.error?.code === "PGRST205");
+      const signatureSchemaMissing = signatureResult.error?.code === "42P01" || signatureResult.error?.code === "PGRST205";
+      setSignatureSchemaReady(!signatureResult.error && !signatureSchemaMissing);
+      if (signatureResult.error && !signatureSchemaMissing) {
+        console.warn("Optional HR signature registry is unavailable:", signatureResult.error);
+      }
 
       if (staffResult.error) throw staffResult.error;
       if (signatureStaffResult.error) throw signatureStaffResult.error;
@@ -150,7 +158,7 @@ function HRManagerDashboard() {
       setUsedOffdayRows(usedOffdayResult.data || []);
       setDevices(deviceResult.data || []);
       setSignatureStaff(signatureStaffResult.data || []);
-      setSignatureRows(signatureResult.data || []);
+      setSignatureRows(signatureResult.error ? [] : (signatureResult.data || []));
       const events = attendanceResult.data || [];
       setAttendanceEvents(events);
       const latestByEmployee = new Map();
@@ -363,7 +371,7 @@ function HRManagerDashboard() {
   }, [schoolId, schemaReady, attendanceActionId, attendanceEvents, loadHRData]);
 
   const registerStaffSignature = useCallback(async (teacher, file) => {
-    if (!schoolId || !teacher?.user_id || !file) return;
+    if (!schoolId || !signatureSchemaReady || !teacher?.user_id || !file) return;
     if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 2 * 1024 * 1024) {
       setSignatureNotice("Tumia picha ya PNG/JPG isiyozidi 2 MB.");
       return;
@@ -399,7 +407,7 @@ function HRManagerDashboard() {
     } finally {
       setSignatureBusyId(null);
     }
-  }, [schoolId, signatureRows, loadHRData]);
+  }, [schoolId, signatureSchemaReady, signatureRows, loadHRData]);
 
   const activeStaff = useMemo(
     () => staff.filter((person) => !["inactive", "terminated", "left"].includes(String(person.status || "").toLowerCase())),
@@ -452,7 +460,11 @@ function HRManagerDashboard() {
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
           <div><h2 className="text-xl font-bold text-slate-900">Staff Signature Registration</h2><p className="mt-1 text-sm text-slate-500">HR husajili picha ya saini ya kila mfanyakazi. Secretary atatumia saini hizi kwenye mchakato wa kusaini nyaraka.</p></div>
           {signatureNotice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{signatureNotice}</p>}
-          <div className="divide-y divide-slate-100">
+          {!signatureSchemaReady ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Usajili wa saini unasubiri migration yake tofauti. Hii haiathiri Staff Records, Off Days, Leave au Attendance.
+            </p>
+          ) : <div className="divide-y divide-slate-100">
             {signatureStaff.map((person) => {
               const existing = signatureRows.find((row) => row.teacher_id === person.id && row.is_active);
               const fullName = [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ");
@@ -466,6 +478,7 @@ function HRManagerDashboard() {
             })}
             {signatureStaff.length === 0 && <p className="py-5 text-sm text-slate-500">Hakuna Staff wenye akaunti za kuingia zilizounganishwa na shule hii.</p>}
           </div>
+          </div>}
           <p className="text-xs text-slate-500">Picha zinakubaliwa PNG/JPG, hadi 2 MB. Hifadhi ni ya faragha na inapatikana kwa HR na watumiaji wenye ruhusa husika.</p>
         </section>
       )}
