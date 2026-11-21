@@ -84,7 +84,7 @@ function HRManagerDashboard() {
     try {
       const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
         supabase.from("employees")
-          .select("id,employee_number,first_name,middle_name,last_name,department,position,status,source_teacher_id")
+          .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
           .eq("school_id", schoolId)
           .order("first_name", { ascending: true }),
         supabase.from("teachers")
@@ -161,9 +161,8 @@ function HRManagerDashboard() {
 
       setSchemaReady(true);
       const employeeRows = staffResult.data || [];
-      const linkedTeacherIds = new Set(employeeRows.map((person) => person.source_teacher_id).filter(Boolean).map(String));
       const employeeNumbers = new Set(employeeRows.map((person) => String(person.employee_number || "").trim()).filter(Boolean));
-      const unlinkedTeacherRows = (teacherRecordsResult.data || []).filter((teacher) => !linkedTeacherIds.has(String(teacher.id)) && !employeeNumbers.has(String(teacher.employee_number || "").trim()));
+      const unlinkedTeacherRows = (teacherRecordsResult.data || []).filter((teacher) => !employeeNumbers.has(String(teacher.employee_number || "").trim()));
       const combinedStaff = [
         ...employeeRows.map((person) => ({ ...person, record_source: "employees" })),
         ...unlinkedTeacherRows.map((person) => ({ ...person, department: person.staff_type || "Teaching", position: person.specialization || "—", record_source: "teachers" })),
