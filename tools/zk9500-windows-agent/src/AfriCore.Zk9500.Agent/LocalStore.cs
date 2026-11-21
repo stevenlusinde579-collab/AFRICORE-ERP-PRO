@@ -67,7 +67,7 @@ public sealed class LocalStore
         command.CommandText = """
             SELECT event_id, employee_id, occurred_at
             FROM attendance_queue
-            WHERE next_attempt_at <= $now
+            WHERE julianday(next_attempt_at) <= julianday($now)
             ORDER BY occurred_at
             LIMIT $limit
             """;
