@@ -16,7 +16,12 @@ public sealed class AgentApiClient
     {
         _options = options.Value;
         _logger = logger;
-        _http.BaseAddress = new Uri(_options.ApiBaseUrl.TrimEnd('/') + "/");
+        var baseUri = new Uri(_options.ApiBaseUrl.TrimEnd('/') + "/");
+        if (baseUri.Scheme != Uri.UriSchemeHttps)
+            throw new InvalidOperationException("The AfriCore Agent API must use HTTPS.");
+        if (string.IsNullOrWhiteSpace(_options.ProtectedToken))
+            throw new InvalidOperationException("The Agent has not been paired with an AfriCore device.");
+        _http.BaseAddress = baseUri;
         _http.Timeout = TimeSpan.FromSeconds(20);
 
         if (!string.IsNullOrWhiteSpace(_options.ProtectedToken))
