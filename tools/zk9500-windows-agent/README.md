@@ -2,30 +2,33 @@
 
 This is the Windows-side component for the ZKTeco ZK9500 USB optical fingerprint reader.
 
-## Implemented foundation
-- Windows Service host configured to run under Windows Service Control Manager.
-- Windows USB device arrival/removal event monitor.
-- Local SQLite queue schema, idempotent event IDs, and retry scheduling.
-- HTTPS agent heartbeat and batch attendance sync client.
-- Machine-scoped Windows DPAPI decryption for the one-time paired agent token.
-- Explicit SDK adapter boundary which fails closed and never fabricates fingerprint matches.
+## Foundation included
+- Windows Service host with automatic start and service recovery configuration.
+- Windows USB arrival/removal notifications.
+- Local SQLite attendance queue with exponential retry/backoff and a dead-letter table for permanent server rejections.
+- HTTPS agent heartbeat and batch synchronization.
+- Machine-scoped Windows DPAPI token decryption.
+- SDK adapter boundary that fails closed until the official SDK is inspected.
 
 ## Build
 Requires Windows x64 and .NET 8 SDK. From the project folder run:
 - dotnet restore
 - dotnet publish -c Release -r win-x64 --self-contained false
 
-## Install service (elevated PowerShell)
-After publishing to C:\Program Files\AfriCore\ZK9500:
-- sc.exe create "AfriCore ZK9500 Agent" binPath= "C:\Program Files\AfriCore\ZK9500\AfriCore.Zk9500.Agent.exe" start= auto
-- sc.exe failure "AfriCore ZK9500 Agent" reset= 86400 actions= restart/5000/restart/15000/restart/60000
-- sc.exe start "AfriCore ZK9500 Agent"
+A GitHub Actions workflow also builds the Windows x64 service on a Windows runner and uploads the artifact. The CI build does not require the physical scanner; the build log must still be reviewed before release.
 
-## Pairing
-HR Manager registers the ZK9500 in AfriCore and uses Pair Windows Agent. The API generates a one-time high-entropy token and stores only its SHA-256 hash in Supabase. The plaintext token must be provisioned to the Windows service and protected using Windows DPAPI LocalMachine. Never commit plaintext tokens or school service keys.
+## Install and pair
+1. Publish/copy the Windows Agent to C:\Program Files\AfriCore\ZK9500.
+2. In AfriCore, register the ZK9500 and use the Pair Windows Agent action.
+3. Copy the one-time token securely. Never commit it to Git or store it in a plaintext configuration file.
+4. Open PowerShell as Administrator and run the installer script with a SecureString token:
 
-## Hardware SDK gate
-Native ZK9500 capture, local fingerprint enrollment/matching, and event production remain disabled until the official ZKFinger SDK package, exact API documentation, and sample code are available and validated. USB attach/detach notifications are detected, but they do not mean a fingerprint was read. No raw fingerprint image or template is uploaded to Supabase.
+   $secureToken = Read-Host "One-time AfriCore pairing token" -AsSecureString
+   .\scripts\install-agent.ps1 -AgentToken $secureToken
 
-## Important
-The Windows Agent currently provides the service/monitoring/sync foundation only. Do not mark a device operational until the real SDK adapter, local template store, enrollment/matching flow, and physical ZK9500 tests pass. The backend currently alternates check-in/check-out events per employee per local day; this is a basic fallback policy and must be aligned with the school's attendance shift rules before production attendance is enabled.
+5. The script protects the token using Windows DPAPI LocalMachine, stores only the protected value as a machine environment variable, applies restrictive ACLs to the data directory, installs the Windows service as LocalSystem, and configures automatic restart after service failure.
+
+## SDK and hardware gate
+The official ZKFinger SDK native adapter, USB vendor/product identification, fingerprint capture, local enrollment/matching, local template protection, and real scan-to-event producer are not implemented yet. USB attach/detach notifications do not mean a fingerprint was read. No raw fingerprint image or template is uploaded to Supabase.
+
+The backend attendance sync endpoint is intentionally disabled by default until the official SDK, a school-approved check-in/check-out direction policy, and physical validation are complete. Do not mark a device operational until the SDK adapter, local template store, enrollment/matching flow, Windows build, and physical ZK9500 tests pass.
