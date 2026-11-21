@@ -173,6 +173,36 @@ function HRManagerDashboard() {
     }
   }, [schoolId]);
 
+  const pairZK9500 = useCallback(async (deviceId) => {
+    setDeviceMessage("");
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) throw new Error("Tafadhali ingia tena kwenye mfumo.");
+
+      const apiBase = new URL(
+        import.meta.env.VITE_API_URL || "https://africore-erp-pro.onrender.com"
+      ).origin;
+      const response = await fetch(`${apiBase}/api/hr/biometric/devices/${deviceId}/pair`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || "Imeshindikana kuunganisha kifaa.");
+      }
+      setDeviceMessage(
+        `Pairing token imetengenezwa kwa kifaa #${deviceId}. Ihifadhi kwa usalama na itumike mara moja kwenye Windows Agent: ${payload.agent_token}`
+      );
+    } catch (pairError) {
+      setDeviceMessage(pairError.message || "Imeshindikana kuunganisha kifaa.");
+    }
+  }, []);
+
   const registerZK9500 = useCallback(async (event) => {
     event.preventDefault();
     if (!schoolId || !schemaReady || registeringDevice) return;
@@ -459,7 +489,8 @@ function HRManagerDashboard() {
             <article className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">USB Fingerprint Scanner</h2><p className="mt-1 text-sm text-slate-500">Muunganisho wa kifaa cha fingerprint kupitia kompyuta.</p></div><FaFingerprint className="text-3xl text-blue-700" /></div>
               {devices.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"><p className="font-semibold text-slate-800">No USB bridge connected</p><p className="mt-1 text-sm text-slate-500">Mfumo utaonyesha hali ya kifaa baada ya kusakinisha bridge inayolingana na model ya scanner.</p></div> :
-                <div className="mt-4 space-y-3">{devices.map((device) => <div key={device.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><div><p className="font-semibold text-slate-800">{device.device_name}</p><p className="text-xs text-slate-500">{device.device_model || "Model not set"} • {device.connection_type}</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{device.bridge_status || "Not connected"}</span></div>)}</div>}
+                <div className="mt-4 space-y-3">{devices.map((device) => <div key={device.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div><p className="font-semibold text-slate-800">{device.device_name}</p><p className="text-xs text-slate-500">{device.device_model || "Model not set"} • {device.connection_type} • ID #{device.id}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{device.bridge_status || "Not connected"}</span><button type="button" onClick={() => pairZK9500(device.id)} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800">Pair Windows Agent</button></div></div>)}</div>}
+              {deviceMessage && <p role="status" className="mt-3 break-words rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{deviceMessage}</p>}
               <p className="mt-4 text-xs leading-5 text-slate-500">Usalama: AfriCore haitahifadhi picha au template ghafi za alama za vidole. Itapokea tu matokeo ya uthibitisho na muda wa check-in/check-out.</p>
             </article>
           </section>

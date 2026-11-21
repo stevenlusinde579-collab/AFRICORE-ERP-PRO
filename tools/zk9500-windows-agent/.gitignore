@@ -1,0 +1,8 @@
+bin/
+obj/
+vendor/
+data/
+*.db
+*.db-shm
+*.db-wal
+*.log

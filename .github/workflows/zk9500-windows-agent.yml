@@ -1,0 +1,41 @@
+name: Build AfriCore ZK9500 Windows Agent
+
+on:
+  pull_request:
+    paths:
+      - "tools/zk9500-windows-agent/**"
+      - ".github/workflows/zk9500-windows-agent.yml"
+  push:
+    branches:
+      - "feat/zk9500-windows-agent"
+    paths:
+      - "tools/zk9500-windows-agent/**"
+      - ".github/workflows/zk9500-windows-agent.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test biometric API contract
+        run: node --test backend/tests/hr-biometric-contract.test.js
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore
+        run: dotnet restore tools/zk9500-windows-agent/src/AfriCore.Zk9500.Agent/AfriCore.Zk9500.Agent.csproj
+      - name: Publish Windows x64 service
+        run: dotnet publish tools/zk9500-windows-agent/src/AfriCore.Zk9500.Agent/AfriCore.Zk9500.Agent.csproj -c Release -r win-x64 --self-contained false -o artifacts/zk9500-win-x64
+      - name: Upload Windows agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: africore-zk9500-windows-agent-win-x64
+          path: artifacts/zk9500-win-x64/**
+          if-no-files-found: error
