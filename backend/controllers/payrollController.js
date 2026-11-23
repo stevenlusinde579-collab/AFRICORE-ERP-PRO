@@ -72,11 +72,21 @@ export const getPayrollWorkspace = async (req, res) => {
         if (!hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId) && !hasRoleForSchool(req, ROLE_HR_MANAGER, schoolId)) {
             return res.status(403).json({ success: false, message: "Accountant or HR Manager access for this school is required." });
         }
-        const [employeesResult, payrollsResult, settingsResult, accountsResult, cashResult] = await Promise.all([
+        const payrollMonth = /^\d{4}-\d{2}$/.test(String(req.query.payroll_month || ""))
+            ? String(req.query.payroll_month) : new Date().toISOString().slice(0, 7);
+        const monthStart = `${payrollMonth}-01`;
+        const monthEnd = new Date(Number(payrollMonth.slice(0, 4)), Number(payrollMonth.slice(5, 7)), 0)
+            .toISOString().slice(0, 10);
+        const [employeesResult, contractsResult, payrollsResult, settingsResult, accountsResult, cashResult] = await Promise.all([
             supabase.from("employees")
                 .select("id,employee_number,first_name,middle_name,last_name,department,position,employee_type,basic_salary,status")
-                .eq("school_id", schoolId).in("status", ["active", "Active", "enabled", "working"])
+                .eq("school_id", schoolId).in("status", ["active", "Active", "ACTIVE", "enabled", "Enabled", "working", "Working"])
                 .order("first_name", { ascending: true }),
+            supabase.from("hr_employment_contracts")
+                .select("employee_id,basic_salary,start_date,end_date,status")
+                .eq("school_id", schoolId).eq("status", "active")
+                .not("basic_salary", "is", null)
+                .order("start_date", { ascending: false }),
             supabase.from("payrolls")
                 .select("id,school_id,payroll_number,payroll_month,status,total_basic_salary,total_allowances,total_deductions,total_net_salary,created_by,created_at,submitted_at,reviewed_at,approved_at,posted_at,review_notes,snapshot_locked_at")
                 .eq("school_id", schoolId).order("payroll_month", { ascending: false }).limit(36),
@@ -88,13 +98,26 @@ export const getPayrollWorkspace = async (req, res) => {
                 .select("id,account_name,account_type,is_active")
                 .eq("school_id", schoolId).eq("is_active", true).order("account_name"),
         ]);
-        for (const result of [employeesResult, payrollsResult, settingsResult, accountsResult, cashResult]) {
+        for (const result of [employeesResult, contractsResult, payrollsResult, settingsResult, accountsResult, cashResult]) {
             if (result.error) throw result.error;
         }
+        const contracts = contractsResult.data || [];
+        const employeesWithContractSalary = (employeesResult.data || []).map((employee) => {
+            const contract = contracts.find((row) =>
+                Number(row.employee_id) === Number(employee.id) &&
+                row.start_date <= monthEnd &&
+                (!row.end_date || row.end_date >= monthStart)
+            );
+            return {
+                ...employee,
+                basic_salary: contract?.basic_salary ?? employee.basic_salary ?? 0,
+                salary_source: contract ? "active_contract" : "employee_record",
+            };
+        });
         return res.json({
             success: true,
             data: {
-                employees: hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId) ? (employeesResult.data || []) : [],
+                employees: hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId) ? employeesWithContractSalary : [],
                 payrolls: payrollsResult.data || [],
                 settings: settingsResult.data || null,
                 accounts: accountsResult.data || [],
