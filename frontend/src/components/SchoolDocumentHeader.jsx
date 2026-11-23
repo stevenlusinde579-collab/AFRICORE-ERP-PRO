@@ -1,5 +1,5 @@
 import React from "react";
-import { useSchool } from "../../context/SchoolContext";
+import { useSchool } from "../context/SchoolContext";
 import SchoolOfficialSeal from "./SchoolOfficialSeal";
 
 /**
