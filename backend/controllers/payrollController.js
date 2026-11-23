@@ -50,7 +50,9 @@ const loadPayroll = async (schoolId, payrollId) => {
 };
 
 export const getPayrollWorkspace = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT) && !requireRole(req, res, ROLE_HR_MANAGER)) return;
+    if (!hasRole(req, ROLE_ACCOUNTANT) && !hasRole(req, ROLE_HR_MANAGER)) {
+        return res.status(403).json({ success: false, message: "Accountant or HR Manager access is required." });
+    }
     try {
         const schoolId = getSchoolId(req);
         const [employeesResult, payrollsResult, settingsResult, accountsResult, cashResult] = await Promise.all([
