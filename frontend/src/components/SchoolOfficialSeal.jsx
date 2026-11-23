@@ -6,7 +6,7 @@ import { useSchool } from "../context/SchoolContext";
  * This is a visual school stamp, not a cryptographic signature.
  */
 export default function SchoolOfficialSeal({ className = "" }) {
-    const { school, showOfficialSeal } = useSchool();
+    const { school, showOfficialSeal, headmasterName } = useSchool();
 
     if (!showOfficialSeal || !school) return null;
 
@@ -31,6 +31,11 @@ export default function SchoolOfficialSeal({ className = "" }) {
                 <span className="relative text-[9px] font-black uppercase tracking-[0.12em]">
                     Headmaster
                 </span>
+                {headmasterName ? (
+                    <span className="relative mt-0.5 max-w-full text-[7px] font-bold leading-tight">
+                        {headmasterName}
+                    </span>
+                ) : null}
             </div>
         </div>
     );
