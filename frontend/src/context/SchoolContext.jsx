@@ -74,6 +74,7 @@ export const SchoolProvider = ({ children }) => {
     // =================================================
 
     const [school, setSchool] = useState(null);
+    const [showOfficialSeal, setShowOfficialSeal] = useState(false);
 
     const [schoolId, setSchoolId] = useState(null);
 
@@ -793,6 +794,7 @@ export const SchoolProvider = ({ children }) => {
                 if (!user) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
 
                     setSchoolId(null);
 
@@ -836,6 +838,7 @@ export const SchoolProvider = ({ children }) => {
                 if (!profile) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
 
                     setSchoolId(null);
 
@@ -862,6 +865,7 @@ export const SchoolProvider = ({ children }) => {
                 if (!resolvedSchoolId) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
 
                     setSchoolId(null);
 
@@ -928,6 +932,7 @@ export const SchoolProvider = ({ children }) => {
                 if (!schoolData) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
 
                     setSchoolId(null);
 
@@ -941,6 +946,14 @@ export const SchoolProvider = ({ children }) => {
 
                     return null;
                 }
+
+                const { data: sealSettings, error: sealSettingsError } = await supabase
+                    .from("school_document_settings")
+                    .select("show_official_seal")
+                    .eq("school_id", resolvedSchoolId)
+                    .maybeSingle();
+                if (sealSettingsError) throw sealSettingsError;
+                setShowOfficialSeal(sealSettings?.show_official_seal === true);
 
                 // =========================================
                 // SAVE SCHOOL
@@ -980,6 +993,7 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 setSchool(null);
+                    setShowOfficialSeal(false);
 
                 setSchoolId(null);
 
@@ -1325,6 +1339,7 @@ export const SchoolProvider = ({ children }) => {
             showPhone,
 
             showEmail,
+            showOfficialSeal,
         }),
         [
             schoolId,
@@ -1340,6 +1355,7 @@ export const SchoolProvider = ({ children }) => {
             showAddress,
             showPhone,
             showEmail,
+            showOfficialSeal,
         ]
     );
 
@@ -1385,6 +1401,7 @@ export const SchoolProvider = ({ children }) => {
             showPhone,
 
             showEmail,
+            showOfficialSeal,
 
             // =========================================
             // DOCUMENT BRANDING
@@ -1443,6 +1460,7 @@ export const SchoolProvider = ({ children }) => {
             showAddress,
             showPhone,
             showEmail,
+            showOfficialSeal,
 
             documentBranding,
 
