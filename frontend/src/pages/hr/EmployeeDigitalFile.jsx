@@ -52,6 +52,12 @@ function EmployeeDigitalFile() {
   const [profile, setProfile] = useState(emptyProfile);
   const [contacts, setContacts] = useState([]);
   const [history, setHistory] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [contracts, setContracts] = useState([]);
+  const [documentFile, setDocumentFile] = useState(null);
+  const [contractFile, setContractFile] = useState(null);
+  const [documentForm, setDocumentForm] = useState({ document_type: "other", document_title: "", document_number: "", issue_date: "", expiry_date: "", notes: "" });
+  const [contractForm, setContractForm] = useState({ contract_number: "", contract_type: "fixed_term", start_date: "", end_date: "", job_title: "", department: "", basic_salary: "", probation_end_date: "", notice_period_days: "30", status: "draft", notes: "" });
   const [contact, setContact] = useState(emptyContact);
   const [event, setEvent] = useState({
     event_type: "appointment",
@@ -80,7 +86,7 @@ function EmployeeDigitalFile() {
       return;
     }
 
-    const [employeeResult, profileResult, contactsResult, historyResult] = await Promise.all([
+    const [employeeResult, profileResult, contactsResult, historyResult, documentsResult, contractsResult] = await Promise.all([
       supabase.from("employees")
         .select("id,school_id,employee_number,first_name,middle_name,last_name,gender,phone,email,address,employee_type,department,position,employment_date,status")
         .eq("id", id)
@@ -89,6 +95,8 @@ function EmployeeDigitalFile() {
       supabase.from("hr_employee_profiles").select("*").eq("employee_id", id).eq("school_id", schoolId).maybeSingle(),
       supabase.from("hr_employee_contacts").select("*").eq("employee_id", id).eq("school_id", schoolId).order("is_primary", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("hr_employment_history").select("*").eq("employee_id", id).eq("school_id", schoolId).order("event_date", { ascending: false }),
+      supabase.from("hr_employee_documents").select("*").eq("employee_id", id).eq("school_id", schoolId).order("created_at", { ascending: false }),
+      supabase.from("hr_employment_contracts").select("*").eq("employee_id", id).eq("school_id", schoolId).order("start_date", { ascending: false }),
     ]);
 
     if (employeeResult.error || !employeeResult.data) {
@@ -112,6 +120,10 @@ function EmployeeDigitalFile() {
     } else {
       setHistory(historyResult.data || []);
     }
+    if (documentsResult.error && documentsResult.error.code !== "42P01") setError((current) => current || documentsResult.error.message);
+    else setDocuments(documentsResult.data || []);
+    if (contractsResult.error && contractsResult.error.code !== "42P01") setError((current) => current || contractsResult.error.message);
+    else setContracts(contractsResult.data || []);
     setLoading(false);
   }, [schoolId, employeeId]);
 
@@ -197,11 +209,82 @@ function EmployeeDigitalFile() {
     setSaving(false);
   };
 
+  const uploadEmployeeDocument = async (formEvent) => {
+    formEvent.preventDefault();
+    if (!employee || !documentFile || !canManage || saving) return;
+    if (documentFile.size > 20 * 1024 * 1024) { setError("File exceeds the 20 MB limit."); return; }
+    const allowed = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/jpeg", "image/png"];
+    if (!allowed.includes(documentFile.type)) { setError("Allowed formats: PDF, DOC, DOCX, JPG and PNG."); return; }
+    setSaving(true); setError(""); setNotice("");
+    const safeName = documentFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `${employee.school_id}/${employee.id}/documents/${crypto.randomUUID()}-${safeName}`;
+    const upload = await supabase.storage.from("hr-employee-files").upload(storagePath, documentFile, { contentType: documentFile.type, upsert: false });
+    if (upload.error) { setError(upload.error.message); setSaving(false); return; }
+    const { data: authData } = await supabase.auth.getUser();
+    const saved = await supabase.from("hr_employee_documents").insert({
+      ...documentForm,
+      employee_id: employee.id, school_id: employee.school_id,
+      issue_date: documentForm.issue_date || null, expiry_date: documentForm.expiry_date || null,
+      storage_path: storagePath, original_file_name: documentFile.name,
+      mime_type: documentFile.type, file_size_bytes: documentFile.size,
+      created_by: authData.user?.id || null,
+    });
+    if (saved.error) {
+      await supabase.storage.from("hr-employee-files").remove([storagePath]);
+      setError(saved.error.message);
+    } else {
+      setDocumentForm({ document_type: "other", document_title: "", document_number: "", issue_date: "", expiry_date: "", notes: "" });
+      setDocumentFile(null); setNotice("Employee document uploaded successfully."); await loadFile();
+    }
+    setSaving(false);
+  };
+
+  const createEmploymentContract = async (formEventEvent) => {
+    formEventEvent.preventDefault();
+    if (!employee || !canManage || saving) return;
+    if (contractFile && (contractFile.size > 20 * 1024 * 1024 || contractFile.type !== "application/pdf")) {
+      setError("Contract attachment must be a PDF of 20 MB or less."); return;
+    }
+    setSaving(true); setError(""); setNotice("");
+    let storagePath = null;
+    if (contractFile) {
+      const safeName = contractFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      storagePath = `${employee.school_id}/${employee.id}/contracts/${crypto.randomUUID()}-${safeName}`;
+      const upload = await supabase.storage.from("hr-employee-files").upload(storagePath, contractFile, { contentType: "application/pdf", upsert: false });
+      if (upload.error) { setError(upload.error.message); setSaving(false); return; }
+    }
+    const { data: authData } = await supabase.auth.getUser();
+    const payload = {
+      ...contractForm, employee_id: employee.id, school_id: employee.school_id,
+      end_date: contractForm.end_date || null, probation_end_date: contractForm.probation_end_date || null,
+      basic_salary: contractForm.basic_salary === "" ? null : Number(contractForm.basic_salary),
+      notice_period_days: contractForm.notice_period_days === "" ? null : Number(contractForm.notice_period_days),
+      storage_path: storagePath, created_by: authData.user?.id || null,
+    };
+    const saved = await supabase.from("hr_employment_contracts").insert(payload);
+    if (saved.error) {
+      if (storagePath) await supabase.storage.from("hr-employee-files").remove([storagePath]);
+      setError(saved.error.message);
+    } else {
+      setContractForm({ contract_number: "", contract_type: "fixed_term", start_date: "", end_date: "", job_title: employee.position || "", department: employee.department || "", basic_salary: "", probation_end_date: "", notice_period_days: "30", status: "draft", notes: "" });
+      setContractFile(null); setNotice("Employment contract saved."); await loadFile();
+    }
+    setSaving(false);
+  };
+
+  const openPrivateFile = async (path) => {
+    const { data, error: linkError } = await supabase.storage.from("hr-employee-files").createSignedUrl(path, 60);
+    if (linkError) { setError(linkError.message); return; }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
   const tabs = [
     ["overview", "Overview"],
     ["personal", "Personal Details"],
     ["contacts", "Emergency Contacts"],
     ["history", "Employment History"],
+    ["documents", "Documents"],
+    ["contracts", "Contracts"],
   ];
 
   if (loading) return <div className="rounded-2xl border bg-white p-8 text-sm text-slate-600">Loading employee file...</div>;
@@ -276,6 +359,42 @@ function EmployeeDigitalFile() {
             <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"><FaPlus /> Add Contact</button>
           </form> : null}
           <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Registered Contacts</h2><div className="mt-3 divide-y divide-slate-100">{contacts.map((row) => <article key={row.id} className="py-3"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-slate-900">{row.contact_name}</p>{row.is_primary && <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">Primary</span>}</div><p className="mt-1 text-sm text-slate-600">{row.relationship || "Contact"} · {row.phone}</p><p className="text-xs text-slate-500">{row.email || ""} {row.address ? `· ${row.address}` : ""}</p></article>)}{contacts.length === 0 && <p className="py-5 text-sm text-slate-500">No emergency contacts recorded.</p>}</div></section>
+        </div>
+      )}
+
+      {activeTab === "documents" && (
+        <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          {canManage ? <form onSubmit={uploadEmployeeDocument} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+            <h2 className="text-lg font-bold text-slate-900">Upload Employee Document</h2>
+            <label className="block text-sm font-medium">Document Type<select required value={documentForm.document_type} onChange={(e) => setDocumentForm((p) => ({ ...p, document_type: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2">{[["national_id","National ID"],["passport","Passport"],["academic_certificate","Academic Certificate"],["professional_certificate","Professional Certificate"],["birth_certificate","Birth Certificate"],["medical_certificate","Medical Certificate"],["appointment_letter","Appointment Letter"],["confirmation_letter","Confirmation Letter"],["promotion_letter","Promotion Letter"],["disciplinary_letter","Disciplinary Letter"],["termination_letter","Termination Letter"],["cv","CV"],["other","Other"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <label className="block text-sm font-medium">Document Title<input required value={documentForm.document_title} onChange={(e) => setDocumentForm((p) => ({ ...p, document_title: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+            <label className="block text-sm font-medium">Document Number<input value={documentForm.document_number} onChange={(e) => setDocumentForm((p) => ({ ...p, document_number: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+            <div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium">Issue Date<input type="date" value={documentForm.issue_date} onChange={(e) => setDocumentForm((p) => ({ ...p, issue_date: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label><label className="text-sm font-medium">Expiry Date<input type="date" value={documentForm.expiry_date} onChange={(e) => setDocumentForm((p) => ({ ...p, expiry_date: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label></div>
+            <label className="block text-sm font-medium">Choose File<input required type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => setDocumentFile(e.target.files?.[0] || null)} className="mt-1 block w-full text-sm" /></label>
+            <p className="text-xs text-slate-500">PDF, DOC, DOCX, JPG or PNG. Maximum 20 MB. Stored privately.</p>
+            <label className="block text-sm font-medium">Notes<textarea rows="2" value={documentForm.notes} onChange={(e) => setDocumentForm((p) => ({ ...p, notes: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+            <button disabled={saving || !documentFile} className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "Uploading..." : "Upload Document"}</button>
+          </form> : null}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold">Employee Documents ({documents.length})</h2><div className="mt-3 divide-y">{documents.map((doc) => <article key={doc.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-semibold">{doc.document_title}</p><p className="text-xs text-slate-500">{doc.document_type.replaceAll("_"," ")} · {doc.original_file_name} · {Math.ceil(doc.file_size_bytes / 1024)} KB</p><p className="text-xs text-slate-500">Expiry: {doc.expiry_date || "Not specified"}</p></div><button type="button" onClick={() => openPrivateFile(doc.storage_path)} className="rounded-lg border px-3 py-2 text-xs font-bold">Open Securely</button></article>)}{documents.length === 0 && <p className="py-5 text-sm text-slate-500">No employee documents have been uploaded.</p>}</div></section>
+        </div>
+      )}
+
+      {activeTab === "contracts" && (
+        <div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]">
+          {canManage ? <form onSubmit={createEmploymentContract} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+            <h2 className="text-lg font-bold">Create Employment Contract</h2>
+            <label className="block text-sm font-medium">Contract Number<input required value={contractForm.contract_number} onChange={(e) => setContractForm((p) => ({ ...p, contract_number: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+            <label className="block text-sm font-medium">Contract Type<select value={contractForm.contract_type} onChange={(e) => setContractForm((p) => ({ ...p, contract_type: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2">{[["permanent","Permanent"],["fixed_term","Fixed Term"],["probation","Probation"],["part_time","Part Time"],["temporary","Temporary"],["consultancy","Consultancy"],["internship","Internship"],["other","Other"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium">Start Date<input required type="date" value={contractForm.start_date} onChange={(e) => setContractForm((p) => ({ ...p, start_date: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label><label className="text-sm font-medium">End Date<input type="date" value={contractForm.end_date} onChange={(e) => setContractForm((p) => ({ ...p, end_date: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label></div>
+            <div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium">Job Title<input value={contractForm.job_title} onChange={(e) => setContractForm((p) => ({ ...p, job_title: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label><label className="text-sm font-medium">Department<input value={contractForm.department} onChange={(e) => setContractForm((p) => ({ ...p, department: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label></div>
+            <div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium">Basic Salary (TZS)<input type="number" min="0" step="0.01" value={contractForm.basic_salary} onChange={(e) => setContractForm((p) => ({ ...p, basic_salary: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label><label className="text-sm font-medium">Notice Period (days)<input type="number" min="0" value={contractForm.notice_period_days} onChange={(e) => setContractForm((p) => ({ ...p, notice_period_days: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label></div>
+            <label className="block text-sm font-medium">Probation End Date<input type="date" value={contractForm.probation_end_date} onChange={(e) => setContractForm((p) => ({ ...p, probation_end_date: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+            <label className="block text-sm font-medium">Status<select value={contractForm.status} onChange={(e) => setContractForm((p) => ({ ...p, status: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2"><option value="draft">Draft</option><option value="pending_signature">Pending Signature</option><option value="active">Active</option></select></label>
+            <label className="block text-sm font-medium">Signed Contract PDF (optional)<input type="file" accept="application/pdf,.pdf" onChange={(e) => setContractFile(e.target.files?.[0] || null)} className="mt-1 block w-full text-sm" /></label>
+            <label className="block text-sm font-medium">Notes<textarea rows="2" value={contractForm.notes} onChange={(e) => setContractForm((p) => ({ ...p, notes: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+            <button disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? "Saving..." : "Save Contract"}</button>
+          </form> : null}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold">Employment Contracts ({contracts.length})</h2><div className="mt-3 space-y-3">{contracts.map((contract) => <article key={contract.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{contract.contract_number}</p><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize">{contract.status.replaceAll("_"," ")}</span></div><p className="mt-1 text-sm">{contract.contract_type.replaceAll("_"," ")} · {contract.job_title || "Position not set"}</p><p className="text-xs text-slate-500">{contract.start_date} – {contract.end_date || "Open-ended"} · {contract.basic_salary == null ? "Salary not recorded" : `TZS ${Number(contract.basic_salary).toLocaleString()}`}</p>{contract.storage_path && <button type="button" onClick={() => openPrivateFile(contract.storage_path)} className="mt-3 rounded-lg border px-3 py-2 text-xs font-bold">Open Contract PDF</button>}</article>)}{contracts.length === 0 && <p className="py-5 text-sm text-slate-500">No employment contracts recorded.</p>}</div></section>
         </div>
       )}
 
