@@ -113,62 +113,6 @@ begin
                 coalesce(trim(component->>'name'), '') = ''
                 or jsonb_typeof(component->'amount') <> 'number'
                 or (component->>'amount')::numeric < 0
-            raise exception 'Salary values cannot be negative or exceed gross earnings';
-        end if;
-        if jsonb_typeof(v_components) <> 'array' then
-            raise exception 'Salary components must be an array';
-        end if;
-
-        insert into public.payroll_items (
-            payroll_id, employee_id, basic_salary, allowances, deductions,
-            net_salary, payment_status, workflow_managed, employee_snapshot, components_snapshot
-        ) values (
-            v_payroll_id, v_employee.id, v_basic, v_allowances, v_deductions,
-            v_net, 'unpaid', true,
-            jsonb_build_object(
-                'employee_id', v_employee.id,
-                'employee_number', v_employee.employee_number,
-                'first_name', v_employee.first_name,
-                'middle_name', v_employee.middle_name,
-                'last_name', v_employee.last_name,
-                'department', v_employee.department,
-                'position', v_employee.position,
-                'employee_type', v_employee.employee_type,
-                'phone', v_employee.phone,
-                'email', v_employee.email,
-                'bank_name', coalesce(v_profile.bank_name, v_employee.bank_name),
-                'bank_account_number', coalesce(v_profile.bank_account_number, v_employee.bank_account_number),
-                'mobile_money_provider', v_profile.mobile_money_provider,
-                'mobile_money_number', coalesce(v_profile.mobile_money_number, v_employee.mobile_money_number),
-                'tax_number', v_profile.tax_number,
-                'social_security_number', v_profile.social_security_number,
-                'pension_number', v_profile.pension_number,
-                'salary_type', coalesce(v_profile.salary_type, 'monthly')
-            ),
-            v_components
-        );
-
-        v_total_basic := v_total_basic + v_basic;
-        v_total_allowances := v_total_allowances + v_allowances;
-        v_total_deductions := v_total_deductions + v_deductions;
-        v_total_net := v_total_net + v_net;
-    end loop;
-
-    update public.payrolls
-    set payroll_number = 'PAY-' || to_char(p_payroll_month, 'YYYYMM') || '-' || lpad(v_payroll_id::text, 6, '0'),
-        total_basic_salary = v_total_basic,
-        total_allowances = v_total_allowances,
-        total_deductions = v_total_deductions,
-        total_net_salary = v_total_net
-    where id = v_payroll_id;
-
-    perform public.hr_payroll_audit(
-        p_school_id, v_payroll_id, p_created_by, 'draft_created',
-        'Payroll draft created', jsonb_build_object('employee_count', jsonb_array_length(p_items))
-    );
-    return v_payroll_id;
-end;
-$$;
               )
         ) then
             raise exception 'Each named deduction requires a description and a valid non-negative amount';
@@ -276,8 +220,23 @@ begin
         where component->>'type' = 'deduction'
           and (
             coalesce(trim(component->>'name'), '') = ''
-                or jsonb_typeof(component->'amount') <> 'number'
-                or (component->>'amount')::numeric < 0
+            or jsonb_typeof(component->'amount') <> 'number'
+            or (component->>'amount')::numeric < 0
+          )
+    ) then
+        raise exception 'Each named deduction requires a description and a valid non-negative amount';
+    end if;
+    if exists (select 1 from jsonb_array_elements(coalesce(p_components, '[]'::jsonb)) component where component->>'type' = 'deduction') then
+        select round(coalesce(sum((component->>'amount')::numeric), 0), 2)
+        into p_deductions
+        from jsonb_array_elements(coalesce(p_components, '[]'::jsonb)) component
+        where component->>'type' = 'deduction';
+    end if;
+    v_net := round(coalesce(p_basic_salary, 0) + coalesce(p_allowances, 0) - coalesce(p_deductions, 0), 2);
+    if coalesce(p_basic_salary, 0) < 0 or coalesce(p_allowances, 0) < 0
+       or coalesce(p_deductions, 0) < 0 or v_net <= 0 then
+        raise exception 'Invalid salary amounts';
+    end if;
 
     update public.payroll_items
     set basic_salary = round(p_basic_salary, 2),
