@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../services/supabase";
 import api from "../../services/api";
+import SchoolOfficialSeal from "../../components/SchoolOfficialSeal";
 const money = (n) => new Intl.NumberFormat("en-TZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(n) || 0);
 const dateText = (v) => { if (!v) return "—"; const d=new Date(v); return Number.isNaN(d.getTime())?"—":d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}); };
 const fullName = (s) => [s?.first_name,s?.middle_name,s?.last_name].filter(Boolean).join(" ") || "—";
@@ -57,6 +58,7 @@ export default function StockReceipts({ schoolId }) {
         {items.length?<table className="w-full border-collapse text-sm"><thead><tr className="bg-slate-100"><th className="border p-3 text-left">Description</th><th className="border p-3 text-right">Quantity</th><th className="border p-3 text-right">Unit price (TZS)</th><th className="border p-3 text-right">Amount (TZS)</th></tr></thead><tbody>{items.map((it,i)=><tr key={i}><td className="border p-3">{it.item_name||it.name||it.description||"Stock item"} {it.variant_label||""}</td><td className="border p-3 text-right">{it.quantity??"—"}</td><td className="border p-3 text-right">{money(it.unit_price)}</td><td className="border p-3 text-right">{money(it.line_total??it.total??Number(it.quantity||0)*Number(it.unit_price||0))}</td></tr>)}</tbody></table>:<table className="w-full border-collapse text-sm"><thead><tr className="bg-slate-100"><th className="border p-3 text-left">Description</th><th className="border p-3 text-right">Amount (TZS)</th></tr></thead><tbody><tr><td className="border p-3">{r.description||p.description||"Uniform / school stock payment"}</td><td className="border p-3 text-right font-bold">{money(r.amount)}</td></tr></tbody></table>}
         <div className="mt-6 rounded-lg border border-slate-300 p-4"><p className="text-xs font-bold uppercase text-slate-600">Total amount received</p><p className="mt-1 text-2xl font-black">{money(r.amount)} TZS</p><p className="mt-2 text-xs text-slate-600">Malipo haya yamerekodiwa kwenye kumbukumbu za fedha za shule.</p></div>
         <div className="mt-14 grid grid-cols-2 gap-12 text-center text-xs"><p className="border-t border-slate-500 pt-2">Sahihi ya Mhasibu / Mpokeaji</p><p className="border-t border-slate-500 pt-2">Sahihi ya Mzazi / Mlipaji</p></div>
+        <SchoolOfficialSeal className="mt-5" seal={p.seal} />
         <p className="mt-8 border-t pt-3 text-center text-xs text-slate-500">Asante kwa kufanya malipo. Kwa ufafanuzi, wasiliana na ofisi ya shule.</p>
       </div>
     </article>;
