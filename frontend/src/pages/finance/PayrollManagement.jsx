@@ -31,6 +31,7 @@ function OfficialSeal({ seal }) {
                 {seal.registration_number && <span className="relative mt-1 text-[7px]">{seal.registration_number}</span>}
                 <span className="relative my-1 border-y border-blue-900 px-1 py-0.5 text-[10px] font-black tracking-widest">OFFICIAL SEAL</span>
                 <span className="relative text-[9px] font-black tracking-wider">HEADMASTER</span>
+                {seal.headmaster_name && <span className="relative mt-0.5 max-w-full text-[7px] font-bold leading-tight">{seal.headmaster_name}</span>}
             </div>
         </div>
     );
