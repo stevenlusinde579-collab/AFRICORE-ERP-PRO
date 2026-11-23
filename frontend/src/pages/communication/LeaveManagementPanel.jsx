@@ -36,7 +36,7 @@ export default function LeaveManagementPanel({ profile }) {
       }
       setEmployee(employeeRow || null);
       let query = supabase.from("hr_leave_requests")
-        .select("id,school_id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,reviewed_by,reviewed_at,created_at,employees(first_name,middle_name,last_name,employee_number)")
+        .select("id,school_id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,reviewed_by,reviewed_at,created_at,employees(first_name,middle_name,last_name,employee_number,user_id)")
         .eq("school_id", profile.school_id).order("created_at", { ascending: false }).limit(200);
       if (!isHR && employeeRow?.id) query = query.eq("employee_id", employeeRow.id);
       const result = await query;
@@ -78,14 +78,15 @@ export default function LeaveManagementPanel({ profile }) {
         .update({ status, reviewed_by: authData.user?.id || null, reviewed_at: new Date().toISOString() })
         .eq("id", request.id).eq("school_id", profile.school_id).eq("status", "pending");
       if (error) throw error;
-      const { error: notificationError } = await supabase.from("notifications").insert({
-        school_id: profile.school_id, user_id: null,
-        title: status === "approved" ? "Leave request approved" : "Leave request rejected",
-        message: "Your leave request from " + request.start_date + " to " + request.end_date + " was " + status + ".",
-        notification_type: "leave_request", is_read: false,
-      });
-      // Notification delivery is optional here; the leave decision remains authoritative.
-      if (notificationError) console.warn("Leave notification could not be created:", notificationError.message);
+      if (request.employees?.user_id) {
+        const { error: notificationError } = await supabase.from("notifications").insert({
+          school_id: profile.school_id, user_id: request.employees.user_id,
+          title: status === "approved" ? "Leave request approved" : "Leave request rejected",
+          message: "Your leave request from " + request.start_date + " to " + request.end_date + " was " + status + ".",
+          notification_type: "leave_request", is_read: false,
+        });
+        if (notificationError) console.warn("Leave notification could not be created:", notificationError.message);
+      }
       setNotice(status === "approved" ? "Leave request approved." : "Leave request rejected.");
       await load();
     } catch (error) { setNotice(error?.message || "Unable to process this leave request."); }
