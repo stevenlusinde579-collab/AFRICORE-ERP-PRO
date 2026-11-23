@@ -1149,6 +1149,14 @@ function FinanceDashboard() {
                         </div>
 
 
+                        <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => navigate("/payroll-management")}
+                            className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 transition"
+                        >
+                            <FaMoneyBillWave /> Payroll
+                        </button>
                         <button
                             type="button"
                             onClick={() =>
@@ -1169,6 +1177,7 @@ function FinanceDashboard() {
                                 ? "Refreshing..."
                                 : "Refresh"}
                         </button>
+                        </div>
 
                     </div>
 
