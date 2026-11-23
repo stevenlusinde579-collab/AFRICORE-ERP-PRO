@@ -128,9 +128,9 @@ export const getPayrollDetails = async (req, res) => {
 };
 
 export const savePayrollSettings = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
         const expenseId = req.body?.salary_expense_account_id;
         const payableId = req.body?.salary_payable_account_id;
         const deductionId = req.body?.deductions_payable_account_id || null;
@@ -165,9 +165,9 @@ export const savePayrollSettings = async (req, res) => {
 };
 
 export const createPayrollDraft = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
         const month = String(req.body?.payroll_month || "");
         if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Select a valid payroll month.");
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -186,9 +186,9 @@ export const createPayrollDraft = async (req, res) => {
 };
 
 export const updatePayrollItem = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
         const payrollId = Number(req.params.payrollId);
         const itemId = Number(req.params.itemId);
         const { data, error } = await supabase.rpc("hr_payroll_update_item", {
@@ -209,9 +209,9 @@ export const updatePayrollItem = async (req, res) => {
 };
 
 export const submitPayrollForReview = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
         const { error } = await supabase.rpc("hr_payroll_submit", {
             p_school_id: schoolId, p_payroll_id: Number(req.params.payrollId), p_actor_id: req.user.id,
         });
@@ -223,9 +223,9 @@ export const submitPayrollForReview = async (req, res) => {
 };
 
 export const reviewPayroll = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_HR_MANAGER, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_HR_MANAGER, schoolId)) return;
         const decision = String(req.body?.decision || "");
         const note = String(req.body?.note || "").trim();
         const { error } = await supabase.rpc("hr_payroll_review", {
@@ -243,9 +243,9 @@ export const reviewPayroll = async (req, res) => {
 };
 
 export const postPayrollToFinance = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
         const { data, error } = await supabase.rpc("hr_payroll_post", {
             p_school_id: schoolId, p_payroll_id: Number(req.params.payrollId), p_actor_id: req.user.id,
         });
@@ -257,9 +257,9 @@ export const postPayrollToFinance = async (req, res) => {
 };
 
 export const payPayrollItem = async (req, res) => {
-    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
+        if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
         const cashAccountId = Number(req.body?.cash_account_id);
         const paymentDate = String(req.body?.payment_date || "");
         const method = String(req.body?.payment_method || "").trim();
