@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { FaFileSignature, FaFilePdf, FaSyncAlt, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
@@ -31,7 +32,7 @@ function SecretaryDocumentSigning() {
       setUserId(auth.user?.id || null);
       const [staffResult, signatureResult, requestResult, primaryResult] = await Promise.all([
         supabase.from("teachers").select("id,user_id,employee_number,first_name,middle_name,last_name").eq("school_id", schoolId).not("user_id", "is", null).order("first_name"),
-        supabase.from("hr_staff_signatures").select("id,teacher_id,profile_id,is_active").eq("school_id", schoolId).eq("is_active", true),
+        supabase.from("hr_staff_signatures").select("id,teacher_id,profile_id,is_active").eq("school_id", schoolId),
         supabase.from("document_signing_requests").select("id,title,description,document_path,status,created_at,created_by,document_signing_recipients(id,teacher_id,profile_id,status,signed_at,teachers(first_name,middle_name,last_name,employee_number))").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(100),
         supabase.from("hr_primary_signatories").select("id,role_id,profile_id,teacher_id,roles(role_name)").eq("school_id", schoolId),
       ]);
@@ -113,6 +114,59 @@ function SecretaryDocumentSigning() {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
+  const downloadSignedPdf = async (request) => {
+    setActionId(`pdf-${request.id}`); setError(""); setNotice("");
+    try {
+      const recipients = request.document_signing_recipients || [];
+      if (!recipients.length || recipients.some((row) => row.status !== "signed" || !row.signature_id)) {
+        throw new Error("PDF ya mwisho itapatikana baada ya kila msaini kukamilisha saini yake.");
+      }
+      const { data: sourceFile, error: sourceError } = await supabase.storage.from("school-signing-documents").download(request.document_path);
+      if (sourceError) throw sourceError;
+      const pdf = await PDFDocument.load(await sourceFile.arrayBuffer());
+      const page = pdf.addPage([595.28, 841.89]);
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+      page.drawText("AFRICORE — SIGNATURE RECORD", { x: 42, y: 790, size: 15, font: bold, color: rgb(0.08, 0.16, 0.3) });
+      page.drawText(request.title || "Signed document", { x: 42, y: 766, size: 11, font: bold });
+      page.drawText(`School document reference: ${request.id}`, { x: 42, y: 748, size: 8, font, color: rgb(0.35, 0.35, 0.35) });
+      let y = 700;
+      for (const recipient of recipients) {
+        const signature = signatures.find((row) => row.id === recipient.signature_id && row.teacher_id === recipient.teacher_id && row.profile_id === recipient.profile_id);
+        if (!signature) throw new Error("Picha ya saini ya mmoja wa wasaini haipatikani. Wasiliana na HR.");
+        const { data: imageFile, error: imageError } = await supabase.storage.from("hr-staff-signatures").download(signature.storage_path);
+        if (imageError) throw imageError;
+        const bytes = await imageFile.arrayBuffer();
+        const image = imageFile.type === "image/png" ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+        const scale = Math.min(150 / image.width, 48 / image.height);
+        const person = recipient.teachers || {};
+        const name = [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ") || person.employee_number || "Staff";
+        page.drawText(name, { x: 42, y, size: 10, font: bold });
+        page.drawImage(image, { x: 330, y: y - 8, width: image.width * scale, height: image.height * scale });
+        page.drawText(`Signed electronically: ${new Date(recipient.signed_at).toLocaleString("en-GB")}`, { x: 42, y: y - 16, size: 8, font, color: rgb(0.25, 0.25, 0.25) });
+        page.drawLine({ start: { x: 42, y: y - 24 }, end: { x: 550, y: y - 24 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+        y -= 95;
+        if (y < 85 && recipient !== recipients[recipients.length - 1]) {
+          const nextPage = pdf.addPage([595.28, 841.89]);
+          page.drawText("Additional signatories continued on next page.", { x: 42, y: 40, size: 8, font });
+          y = 790;
+          // Continue drawing on a fresh page for long signer lists.
+          Object.defineProperty(page, "_unused", { value: nextPage, configurable: true });
+        }
+      }
+      const bytes = await pdf.save();
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(request.title || "signed-document").replace(/[^a-z0-9_-]+/gi, "-")}-signed.pdf`;
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      setNotice("PDF yenye ukurasa wa kumbukumbu ya saini imepakuliwa.");
+    } catch (pdfError) {
+      setError(pdfError.message || "Imeshindikana kutengeneza PDF iliyosainiwa.");
+    } finally { setActionId(null); }
+  };
+
   const staffName = (person) => [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ") || person.employee_number || "Staff";
   const statusLabel = (status) => ({ pending: "Inasubiri", in_progress: "Inaendelea", completed: "Imekamilika", cancelled: "Imefutwa", signed: "Imesaini", declined: "Amekataa" }[status] || status);
   const requestStatus = (request) => {
@@ -152,7 +206,7 @@ function SecretaryDocumentSigning() {
       {canManageRequests && (
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold text-slate-900">Nyaraka nilizotuma</h2><button onClick={load} className="rounded-lg border border-slate-300 p-2 text-slate-600" aria-label="Refresh"><FaSyncAlt /></button></div>
-        {loading ? <p className="py-6 text-sm text-slate-500">Inapakia...</p> : requests.length === 0 ? <p className="py-6 text-sm text-slate-500">Bado hakuna ombi la kusaini.</p> : <div className="mt-3 divide-y divide-slate-100">{requests.map((request) => <article key={request.id} className="py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{request.title}</h3><p className="text-xs text-slate-500">{new Date(request.created_at).toLocaleString("en-GB")} • {statusLabel(requestStatus(request))}</p>{request.description && <p className="mt-1 text-sm text-slate-600">{request.description}</p>}</div><button onClick={() => openDocument(request.document_path)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"><FaFilePdf /> Fungua PDF</button></div><div className="mt-3 flex flex-wrap gap-2">{(request.document_signing_recipients || []).map((recipient) => <span key={recipient.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{staffName(recipient.teachers || {})}: {statusLabel(recipient.status)}</span>)}</div></article>)}</div>}
+        {loading ? <p className="py-6 text-sm text-slate-500">Inapakia...</p> : requests.length === 0 ? <p className="py-6 text-sm text-slate-500">Bado hakuna ombi la kusaini.</p> : <div className="mt-3 divide-y divide-slate-100">{requests.map((request) => <article key={request.id} className="py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{request.title}</h3><p className="text-xs text-slate-500">{new Date(request.created_at).toLocaleString("en-GB")} • {statusLabel(requestStatus(request))}</p>{request.description && <p className="mt-1 text-sm text-slate-600">{request.description}</p>}</div><button onClick={() => openDocument(request.document_path)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"><FaFilePdf /> Fungua PDF</button>{requestStatus(request) === "completed" && <button onClick={() => downloadSignedPdf(request)} disabled={actionId === `pdf-${request.id}`} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><FaFilePdf /> {actionId === `pdf-${request.id}` ? "Inatengeneza..." : "Pakua PDF yenye saini"}</button>}</div><div className="mt-3 flex flex-wrap gap-2">{(request.document_signing_recipients || []).map((recipient) => <span key={recipient.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{staffName(recipient.teachers || {})}: {statusLabel(recipient.status)}</span>)}</div></article>)}</div>}
       </section>
       )}
 
@@ -160,7 +214,7 @@ function SecretaryDocumentSigning() {
         <h2 className="text-xl font-bold text-slate-900">Nyaraka ninazotakiwa kusaini</h2>
         {myTasks.length === 0 ? <p className="py-5 text-sm text-slate-500">Huna nyaraka zinazosubiri saini kwa sasa.</p> : <div className="divide-y divide-slate-100">{myTasks.map((task) => <article key={task.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-slate-900">{task.request.title}</h3><p className="text-xs text-slate-500">{statusLabel(task.status)} • {task.request.description || "Hakuna maelezo"}</p><button onClick={() => openDocument(task.request.document_path)} className="mt-2 text-sm font-semibold text-blue-700 underline">Soma PDF</button></div>{task.status === "pending" && <div className="flex gap-2"><button disabled={actionId === task.id} onClick={() => respondToTask(task, "signed")} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"><FaCheckCircle className="mr-1 inline" /> Nimesaini</button><button disabled={actionId === task.id} onClick={() => respondToTask(task, "declined")} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-50"><FaTimesCircle className="mr-1 inline" /> Kataa</button></div>}</article>)}</div>}
       </section>
-      <p className="text-xs text-slate-500">Kumbuka: hatua ya “Nimesaini” inarekodi uthibitisho na muda wa msaini pamoja na saini aliyosajiliwa na HR. PDF ya asili haibadilishwi moja kwa moja; kwa saini yenye muhuri ndani ya PDF na uthibitishaji wa kisheria, itahitajika hatua ya ziada ya PDF signing.</p>
+      <p className="text-xs text-slate-500">Kumbuka: PDF ya asili huhifadhiwa bila kubadilishwa. Baada ya wasaini wote kukamilisha, unaweza kupakua nakala yenye ukurasa wa kumbukumbu ya saini, picha za saini, majina na muda wa kusaini.</p>
     </main>
   );
 }
