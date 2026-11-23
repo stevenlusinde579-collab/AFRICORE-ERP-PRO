@@ -415,6 +415,7 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
 
   if (currentRole === "hr manager") {
     const hrMenu = [
+      { name: "Dashboard", path: "/hr-dashboard", icon: <FaTachometerAlt /> },
       { name: "HR Management", path: "/hr-management", icon: <FaFingerprint /> },
       { name: "Communication", path: "/communication", icon: <FaComments /> },
       { name: "Personal Settings", path: "/settings", icon: <FaCog /> },

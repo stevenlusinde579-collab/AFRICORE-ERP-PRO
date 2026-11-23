@@ -23,6 +23,7 @@ import Layout from "../components/layout/Layout";
 
 import Dashboard from "../pages/dashboard/Dashboard";
 import HRManagerDashboard from "../pages/hr/HRManagerDashboard";
+import HRDashboard from "../pages/hr/HRDashboard";
 import EmployeeDigitalFile from "../pages/hr/EmployeeDigitalFile";
 import PayrollManagement from "../pages/finance/PayrollManagement";
 import SecretaryDocumentSigning from "../pages/communication/SecretaryDocumentSigning";
@@ -319,6 +320,10 @@ export default function AppRoutes() {
                         />
                     }
                 >
+                    <Route
+                        path="hr-dashboard"
+                        element={<HRDashboard />}
+                    />
                     <Route
                         path="hr-management"
                         element={<HRManagerDashboard />}
