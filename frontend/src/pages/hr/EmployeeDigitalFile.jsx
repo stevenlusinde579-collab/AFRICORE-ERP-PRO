@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { FaArrowLeft, FaSave, FaPlus, FaUserTie, FaHistory, FaAddressBook } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import { useRole } from "../../context/RoleContext";
 
 const emptyProfile = {
   date_of_birth: "",
@@ -44,6 +45,8 @@ const fullName = (employee) =>
 function EmployeeDigitalFile() {
   const { employeeId } = useParams();
   const { schoolId } = useSchool();
+  const { selectedRoleId, selectedRoleName } = useRole();
+  const canManage = Number(selectedRoleId) === 1 || String(selectedRoleName || "").trim().toLowerCase() === "hr manager";
   const navigate = useNavigate();
   const [employee, setEmployee] = useState(null);
   const [profile, setProfile] = useState(emptyProfile);
@@ -245,7 +248,7 @@ function EmployeeDigitalFile() {
       )}
 
       {activeTab === "personal" && (
-        <form onSubmit={saveProfile} className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:grid-cols-2">
+        {canManage ? <form onSubmit={saveProfile} className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:grid-cols-2">
           <div className="md:col-span-2"><h2 className="text-lg font-bold text-slate-900">Additional Personal Details</h2><p className="text-sm text-slate-500">Core identity, contact and employment fields remain sourced from the existing Employees / Teachers records.</p></div>
           <label className="text-sm font-medium text-slate-700">Date of Birth<input type="date" value={profile.date_of_birth || ""} onChange={(e) => setProfile((p) => ({ ...p, date_of_birth: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm font-medium text-slate-700">Nationality<input value={profile.nationality || ""} onChange={(e) => setProfile((p) => ({ ...p, nationality: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
@@ -257,12 +260,12 @@ function EmployeeDigitalFile() {
           <label className="text-sm font-medium text-slate-700">Postal Address<input value={profile.postal_address || ""} onChange={(e) => setProfile((p) => ({ ...p, postal_address: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm font-medium text-slate-700 md:col-span-2">HR Notes<textarea rows="3" value={profile.notes || ""} onChange={(e) => setProfile((p) => ({ ...p, notes: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <div className="md:col-span-2 flex justify-end"><button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"><FaSave /> {saving ? "Saving..." : "Save Personal Details"}</button></div>
-        </form>
+        </form> : <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Personal details are read-only for this role.</section>}
       )}
 
       {activeTab === "contacts" && (
         <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
-          <form onSubmit={addContact} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+          {canManage ? <form onSubmit={addContact} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
             <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><FaAddressBook /> Add Emergency Contact</h2>
             <label className="block text-sm font-medium text-slate-700">Full Name<input required value={contact.contact_name} onChange={(e) => setContact((p) => ({ ...p, contact_name: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <label className="block text-sm font-medium text-slate-700">Relationship<input value={contact.relationship} onChange={(e) => setContact((p) => ({ ...p, relationship: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
@@ -271,14 +274,14 @@ function EmployeeDigitalFile() {
             <label className="block text-sm font-medium text-slate-700">Address<input value={contact.address} onChange={(e) => setContact((p) => ({ ...p, address: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={contact.is_primary} onChange={(e) => setContact((p) => ({ ...p, is_primary: e.target.checked }))} /> Primary emergency contact</label>
             <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"><FaPlus /> Add Contact</button>
-          </form>
+          </form> : null}
           <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Registered Contacts</h2><div className="mt-3 divide-y divide-slate-100">{contacts.map((row) => <article key={row.id} className="py-3"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-slate-900">{row.contact_name}</p>{row.is_primary && <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">Primary</span>}</div><p className="mt-1 text-sm text-slate-600">{row.relationship || "Contact"} · {row.phone}</p><p className="text-xs text-slate-500">{row.email || ""} {row.address ? `· ${row.address}` : ""}</p></article>)}{contacts.length === 0 && <p className="py-5 text-sm text-slate-500">No emergency contacts recorded.</p>}</div></section>
         </div>
       )}
 
       {activeTab === "history" && (
         <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
-          <form onSubmit={addHistory} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+          {canManage ? <form onSubmit={addHistory} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
             <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><FaHistory /> Record Employment Event</h2>
             <label className="block text-sm font-medium text-slate-700">Event Type<select value={event.event_type} onChange={(e) => setEvent((p) => ({ ...p, event_type: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">{eventTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="block text-sm font-medium text-slate-700">Effective Date<input required type="date" value={event.event_date} onChange={(e) => setEvent((p) => ({ ...p, event_date: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
@@ -289,7 +292,7 @@ function EmployeeDigitalFile() {
             <label className="block text-sm font-medium text-slate-700">Reference Number<input value={event.reference_number} onChange={(e) => setEvent((p) => ({ ...p, reference_number: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <label className="block text-sm font-medium text-slate-700">Description<textarea required rows="3" value={event.description} onChange={(e) => setEvent((p) => ({ ...p, description: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"><FaPlus /> Save History Entry</button>
-          </form>
+          </form> : null}
           <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Employment Timeline</h2><div className="mt-3 space-y-3">{history.map((row) => <article key={row.id} className="rounded-xl border border-slate-100 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold capitalize text-slate-900">{row.event_type.replaceAll("_", " ")}</span><time className="text-xs text-slate-500">{row.event_date}</time></div><p className="mt-2 text-sm text-slate-700">{row.description}</p><p className="mt-1 text-xs text-slate-500">{row.previous_position || "—"} → {row.new_position || "—"} · {row.reference_number || "No reference"}</p></article>)}{history.length === 0 && <p className="py-5 text-sm text-slate-500">No employment history recorded.</p>}</div></section>
         </div>
       )}
