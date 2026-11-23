@@ -1,5 +1,6 @@
 import React from "react";
 import { useSchool } from "../../context/SchoolContext";
+import SchoolOfficialSeal from "./SchoolOfficialSeal";
 
 /**
  * Global school branding header for printed documents and reports.
@@ -75,6 +76,8 @@ function SchoolDocumentHeader({
                     {subtitle}
                 </p>
             ) : null}
+
+            <SchoolOfficialSeal className="mt-6" />
         </div>
     );
 }
