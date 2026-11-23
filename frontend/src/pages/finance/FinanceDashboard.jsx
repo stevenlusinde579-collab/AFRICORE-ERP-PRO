@@ -9,6 +9,7 @@ import {
     FaBalanceScale,
     FaBuilding,
     FaChartLine,
+    FaChartPie,
     FaClipboardList,
     FaCoins,
     FaExchangeAlt,
@@ -1489,6 +1490,27 @@ function FinanceDashboard() {
 
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+
+
+                        {/* INCOME AND EXPENSES SUMMARY */}
+                        <button
+                            type="button"
+                            onClick={() => navigate("/finance/income-expenses-summary")}
+                            className="group bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-emerald-300 hover:shadow-md transition"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                                    <FaChartPie />
+                                </div>
+                                <FaArrowRight className="text-slate-300 group-hover:text-emerald-600 transition" />
+                            </div>
+                            <h3 className="font-bold text-slate-900 mt-4">
+                                Income and Expenses Summary
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Analyse actual income sources and expense categories.
+                            </p>
+                        </button>
 
 
                         {/* CHART OF ACCOUNTS */}
