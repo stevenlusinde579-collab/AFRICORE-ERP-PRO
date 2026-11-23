@@ -15,6 +15,10 @@ const money = (value) => new Intl.NumberFormat("en-TZ", {
 }).format(Number(value || 0));
 const fullName = (person = {}) =>
     [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ") || "Employee";
+const deductionLines = (components = []) => (Array.isArray(components) ? components : [])
+    .filter((line) => line?.type === "deduction" && String(line.name || "").trim() && Number(line.amount) > 0);
+const deductionTotal = (components = []) => deductionLines(components)
+    .reduce((sum, line) => sum + Number(line.amount || 0), 0);
 const statusLabel = (status) => ({
     draft: "Draft", submitted_for_review: "Awaiting HR review", returned: "Returned to Accountant",
     approved: "HR approved", posted: "Posted to Finance", partially_paid: "Partially paid",
@@ -45,6 +49,7 @@ function PayrollManagement() {
     const [payrollMonth, setPayrollMonth] = useState(currentMonth());
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
     const [employeeValues, setEmployeeValues] = useState({});
+    const [itemDeductionForms, setItemDeductionForms] = useState({});
     const [settingsForm, setSettingsForm] = useState({
         salary_expense_account_id: "", salary_payable_account_id: "", deductions_payable_account_id: "",
     });
@@ -78,6 +83,7 @@ function PayrollManagement() {
             });
             setEmployeeValues(Object.fromEntries((next.employees || []).map((person) => [person.id, {
                 basic_salary: Number(person.basic_salary || 0), allowances: 0, deductions: 0,
+                deductionLines: [],
             }])));
         } catch (err) {
             setError(err.response?.data?.message || err.message || "Unable to load payroll.");
@@ -92,6 +98,9 @@ function PayrollManagement() {
         try {
             const { data } = await api.get(`/payroll/${payrollId}`, requestConfig);
             setSelectedPayroll(data.data);
+            setItemDeductionForms(Object.fromEntries((data.data.payroll_items || []).map((item) => [
+                item.id, deductionLines(item.components_snapshot || []).map((line) => ({ name: line.name, amount: String(line.amount) }))
+            ])));
             setReviewNote(data.data.review_notes || "");
             setPaymentForms(Object.fromEntries((data.data.payroll_items || []).map((item) => [item.id, {
                 cash_account_id: workspace.cashAccounts?.[0]?.id || "",
@@ -111,7 +120,8 @@ function PayrollManagement() {
 
     const selectedTotal = useMemo(() => selectedEmployees.reduce((sum, person) => {
         const values = employeeValues[person.id] || {};
-        return sum + Number(values.basic_salary || 0) + Number(values.allowances || 0) - Number(values.deductions || 0);
+        const deductions = (values.deductionLines || []).reduce((total, line) => total + Number(line.amount || 0), 0);
+        return sum + Number(values.basic_salary || 0) + Number(values.allowances || 0) - (deductions || Number(values.deductions || 0));
     }, 0), [selectedEmployees, employeeValues]);
 
     const createDraft = async (event) => {
@@ -122,7 +132,10 @@ function PayrollManagement() {
             const items = selectedEmployees.map((person) => ({
                 employee_id: person.id,
                 ...employeeValues[person.id],
-                components: [],
+                components: (employeeValues[person.id]?.deductionLines || [])
+                    .filter((line) => String(line.name || "").trim() && Number(line.amount) > 0)
+                    .map((line) => ({ type: "deduction", name: String(line.name).trim(), amount: Number(line.amount) })),
+                deductions: (employeeValues[person.id]?.deductionLines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0) || Number(employeeValues[person.id]?.deductions || 0),
             }));
             const { data } = await api.post("/payroll", { school_id: schoolId, payroll_month: payrollMonth, items }, requestConfig);
             setNotice(data.message);
@@ -146,11 +159,14 @@ function PayrollManagement() {
 
     const saveItem = async (item) => {
         const form = document.getElementById(`payroll-item-${item.id}`);
+        const lines = itemDeductionForms[item.id] || [];
+        const components = lines.filter((line) => String(line.name || "").trim() && Number(line.amount) > 0)
+            .map((line) => ({ type: "deduction", name: String(line.name).trim(), amount: Number(line.amount) }));
         const values = {
             basic_salary: Number(form.elements.basic_salary.value),
             allowances: Number(form.elements.allowances.value),
-            deductions: Number(form.elements.deductions.value),
-            components: item.components_snapshot || [],
+            deductions: components.reduce((sum, line) => sum + Number(line.amount || 0), 0),
+            components,
         };
         await runAction(
             () => api.patch(`/payroll/${selectedPayroll.id}/items/${item.id}`, values, requestConfig),
@@ -262,11 +278,24 @@ function PayrollManagement() {
                                     <tbody className="divide-y divide-slate-100">
                                         {workspace.employees.map((person) => {
                                             const values = employeeValues[person.id] || { basic_salary: 0, allowances: 0, deductions: 0 };
-                                            const net = Number(values.basic_salary || 0) + Number(values.allowances || 0) - Number(values.deductions || 0);
+                                            const lineTotal = (values.deductionLines || []).reduce((total, line) => total + Number(line.amount || 0), 0);
+                                            const deductionAmount = lineTotal || Number(values.deductions || 0);
+                                            const net = Number(values.basic_salary || 0) + Number(values.allowances || 0) - deductionAmount;
                                             return <tr key={person.id}>
                                                 <td className="px-3 py-3"><input type="checkbox" checked={selectedEmployeeIds.includes(person.id)} onChange={(event) => setSelectedEmployeeIds((old) => event.target.checked ? [...old, person.id] : old.filter((id) => id !== person.id))} /></td>
                                                 <td className="px-3 py-3"><p className="font-semibold text-slate-900">{fullName(person)}</p><p className="text-xs text-slate-500">{person.employee_number || "No employee number"} • {person.position || person.department || "Staff"}</p><p className="text-[10px] text-slate-400">{person.salary_source === "active_contract" ? "Salary from active contract" : "Salary from employee record"}</p></td>
-                                                {["basic_salary", "allowances", "deductions"].map((key) => <td key={key} className="px-3 py-3"><input type="number" min="0" step="0.01" value={values[key]} onChange={(event) => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, [key]: event.target.value } }))} className="w-32 rounded-lg border border-slate-300 px-2 py-1.5" /></td>)}
+                                                {["basic_salary", "allowances"].map((key) => <td key={key} className="px-3 py-3"><input type="number" min="0" step="0.01" value={values[key]} onChange={(event) => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, [key]: event.target.value } }))} className="w-32 rounded-lg border border-slate-300 px-2 py-1.5" /></td>)}
+                                                <td className="px-3 py-3">
+                                                    <p className="font-bold">{money(deductionAmount)}</p>
+                                                    <div className="mt-2 min-w-52 space-y-1">
+                                                        {(values.deductionLines || []).map((line, lineIndex) => <div key={lineIndex} className="flex gap-1">
+                                                            <input aria-label="Deduction name" value={line.name} onChange={(event) => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, deductionLines: values.deductionLines.map((entry, index) => index === lineIndex ? { ...entry, name: event.target.value } : entry) } }))} placeholder="e.g. PAYE / NSSF" className="w-28 rounded border px-1 py-1 text-xs" />
+                                                            <input aria-label="Deduction amount" type="number" min="0" step="0.01" value={line.amount} onChange={(event) => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, deductionLines: values.deductionLines.map((entry, index) => index === lineIndex ? { ...entry, amount: event.target.value } : entry) } }))} placeholder="Amount" className="w-24 rounded border px-1 py-1 text-xs" />
+                                                            <button type="button" onClick={() => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, deductionLines: values.deductionLines.filter((_, index) => index !== lineIndex) } }))} className="text-rose-600" aria-label="Remove deduction">×</button>
+                                                        </div>)}
+                                                        <button type="button" onClick={() => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, deductionLines: [...(values.deductionLines || []), { name: "", amount: "" }] } }))} className="text-xs font-semibold text-blue-700">+ Add deduction</button>
+                                                    </div>
+                                                </td>
                                                 <td className="px-3 py-3 font-bold text-slate-900">{money(net)}</td>
                                             </tr>;
                                         })}
@@ -339,7 +368,15 @@ function PayrollManagement() {
                                                     {snapshot && <button type="button" onClick={() => setPrintItemId(item.id)} className="rounded-md border px-2 py-1 text-xs font-semibold"><FaPrint className="mr-1 inline" />Payslip</button>}
                                                 </div>
                                                 {canPrepare && ["draft", "returned"].includes(selectedPayroll.status) && <form id={`payroll-item-${item.id}`} className="mt-2 grid grid-cols-3 gap-1">
-                                                    {["basic_salary", "allowances", "deductions"].map((key) => <input key={key} name={key} aria-label={key} type="number" min="0" step="0.01" defaultValue={item[key]} className="w-24 rounded border px-1 py-1 text-xs" />)}
+                                                    {["basic_salary", "allowances"].map((key) => <input key={key} name={key} aria-label={key} type="number" min="0" step="0.01" defaultValue={item[key]} className="w-24 rounded border px-1 py-1 text-xs" />)}
+                                                    <div className="col-span-3 space-y-1">
+                                                        {(itemDeductionForms[item.id] || []).map((line, lineIndex) => <div key={lineIndex} className="flex gap-1">
+                                                            <input aria-label="Deduction name" value={line.name} onChange={(event) => setItemDeductionForms((old) => ({ ...old, [item.id]: old[item.id].map((entry, index) => index === lineIndex ? { ...entry, name: event.target.value } : entry) }))} placeholder="Deduction name" className="w-28 rounded border px-1 py-1 text-xs" />
+                                                            <input aria-label="Deduction amount" type="number" min="0" step="0.01" value={line.amount} onChange={(event) => setItemDeductionForms((old) => ({ ...old, [item.id]: old[item.id].map((entry, index) => index === lineIndex ? { ...entry, amount: event.target.value } : entry) }))} className="w-24 rounded border px-1 py-1 text-xs" />
+                                                            <button type="button" onClick={() => setItemDeductionForms((old) => ({ ...old, [item.id]: old[item.id].filter((_, index) => index !== lineIndex) }))} className="text-rose-600">×</button>
+                                                        </div>)}
+                                                        <button type="button" onClick={() => setItemDeductionForms((old) => ({ ...old, [item.id]: [...(old[item.id] || []), { name: "", amount: "" }] }))} className="text-xs font-semibold text-blue-700">+ Add named deduction</button>
+                                                    </div>
                                                 </form>}
                                                 {canPay && ["posted", "partially_paid"].includes(selectedPayroll.status) && item.payment_status !== "paid" && <div className="mt-2 grid gap-1">
                                                     <select value={paymentForms[item.id]?.cash_account_id || ""} onChange={(event) => setPaymentForms((old) => ({ ...old, [item.id]: { ...old[item.id], cash_account_id: event.target.value } }))} className="rounded border px-2 py-1 text-xs"><option value="">Cash/bank account</option>{workspace.cashAccounts.map((account) => <option key={account.id} value={account.id}>{account.account_name}</option>)}</select>
@@ -387,6 +424,7 @@ function PayrollManagement() {
                                     <h1 className="text-xl font-black uppercase">{schoolSnapshot.school_name || school?.school_name}</h1>
                                     {schoolSnapshot.registration_number && <p className="text-xs">Registration No: {schoolSnapshot.registration_number}</p>}
                                     {schoolSnapshot.address && <p className="text-xs">{schoolSnapshot.address}</p>}
+                                    {(schoolSnapshot.phone || schoolSnapshot.email || schoolSnapshot.website) && <p className="text-xs">{[schoolSnapshot.phone, schoolSnapshot.email, schoolSnapshot.website].filter(Boolean).join(" • ")}</p>}
                                     <h2 className="mt-4 text-lg font-bold">{isPayslip ? "EMPLOYEE PAYSLIP" : "MONTHLY PAYROLL REGISTER"}</h2>
                                     <p className="text-sm">Payroll No: {payroll.payroll_number} • Period: {String(payroll.payroll_month || "").slice(0, 7)}</p>
                                 </header>
@@ -399,7 +437,8 @@ function PayrollManagement() {
                                             <tr><td className="border p-2">Basic salary</td><td className="border p-2 text-right">{money(item.basic_salary)}</td></tr>
                                             <tr><td className="border p-2">Allowances</td><td className="border p-2 text-right">{money(item.allowances)}</td></tr>
                                             <tr><td className="border p-2">Gross earnings</td><td className="border p-2 text-right">{money(item.gross_salary)}</td></tr>
-                                            <tr><td className="border p-2">Deductions</td><td className="border p-2 text-right">{money(item.deductions)}</td></tr>
+                                            {deductionLines(item.components).length ? deductionLines(item.components).map((line, lineIndex) => <tr key={lineIndex}><td className="border p-2">{line.name}</td><td className="border p-2 text-right">{money(line.amount)}</td></tr>) : <tr><td className="border p-2">Deductions</td><td className="border p-2 text-right">{money(item.deductions)}</td></tr>}
+                                            <tr><td className="border p-2 font-semibold">Total deductions</td><td className="border p-2 text-right font-semibold">{money(item.deductions)}</td></tr>
                                             <tr><td className="border p-2 font-bold">Net pay</td><td className="border p-2 text-right font-bold">{money(item.net_salary)}</td></tr>
                                         </tbody></table>
                                         <div className="mt-4 rounded border p-3 text-xs">
@@ -414,7 +453,7 @@ function PayrollManagement() {
                                         <table className="w-full border-collapse text-xs"><thead><tr>{["No.","Employee","Employee No","Basic","Allowances","Deductions","Net Pay","Payment"].map((label) => <th key={label} className="border p-2 text-left">{label}</th>)}</tr></thead><tbody>
                                             {snapshot.items.map((row, i) => {
                                                 const paidItem = (selectedPayroll?.payroll_items || []).find((current) => String(current.id) === String(row.payroll_item_id)) || {};
-                                                return <tr key={row.payroll_item_id}><td className="border p-2">{i + 1}</td><td className="border p-2">{fullName(row.employee)}</td><td className="border p-2">{row.employee?.employee_number || "—"}</td><td className="border p-2 text-right">{money(row.basic_salary)}</td><td className="border p-2 text-right">{money(row.allowances)}</td><td className="border p-2 text-right">{money(row.deductions)}</td><td className="border p-2 text-right">{money(row.net_salary)}</td><td className="border p-2">{paidItem.payment_status || "unpaid"}</td></tr>;
+                                                return <tr key={row.payroll_item_id}><td className="border p-2">{i + 1}</td><td className="border p-2">{fullName(row.employee)}</td><td className="border p-2">{row.employee?.employee_number || "—"}</td><td className="border p-2 text-right">{money(row.basic_salary)}</td><td className="border p-2 text-right">{money(row.allowances)}</td><td className="border p-2 text-right">{money(row.deductions)}{deductionLines(row.components).length > 0 && <div className="mt-1 text-left text-[9px]">{deductionLines(row.components).map((line, lineIndex) => <div key={lineIndex}>{line.name}: {money(line.amount)}</div>)}</div>}</td><td className="border p-2 text-right">{money(row.net_salary)}</td><td className="border p-2">{paidItem.payment_status || "unpaid"}</td></tr>;
                                             })}
                                         </tbody></table>
                                         <div className="mt-4 ml-auto max-w-xs space-y-1 text-sm"><p>Gross: <strong>{money(payroll.total_gross_salary)}</strong></p><p>Deductions: <strong>{money(payroll.total_deductions)}</strong></p><p>Net payroll: <strong>{money(payroll.total_net_salary)}</strong></p></div>
@@ -425,7 +464,7 @@ function PayrollManagement() {
                                     <div><p>Reviewed / approved by: {payroll.reviewed_by_name || "—"}</p><p className="mt-8 border-t border-slate-500 pt-1">HR Manager</p></div>
                                 </div>
                                 <OfficialSeal seal={snapshot.seal} />
-                                <p className="mt-2 text-center text-[10px] text-slate-500">Printed from AfriCore ERP • Approved snapshot • {payroll.approved_at ? new Date(payroll.approved_at).toLocaleDateString("en-GB") : ""}</p>
+                                <p className="mt-2 text-center text-[10px] text-slate-500">Approved on {payroll.approved_at ? new Date(payroll.approved_at).toLocaleDateString("en-GB") : "—"}</p>
                             </article>;
                         })}
                     </div>
