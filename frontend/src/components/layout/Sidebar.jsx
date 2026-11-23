@@ -386,6 +386,33 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
   ], [superAdmin]);
 
 
+  /* =======================================================
+     VISIBLE MENU
+  ======================================================= */
+
+  const visibleMenu = useMemo(() => {
+    if (superAdmin) {
+      return allMenu;
+    }
+
+    if (!currentRole) {
+      return [];
+    }
+
+    return allMenu.filter((item) => {
+      if (item.superAdminOnly) {
+        return false;
+      }
+
+      return item.roles.includes(currentRole);
+    });
+  }, [
+    allMenu,
+    currentRole,
+    superAdmin,
+  ]);
+
+
   if (currentRole === "hr manager") {
     const hrMenu = [
       { name: "HR Management", path: "/hr-management", icon: <FaFingerprint /> },
@@ -422,33 +449,6 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
       </aside>
     );
   }
-
-
-  /* =======================================================
-     VISIBLE MENU
-  ======================================================= */
-
-  const visibleMenu = useMemo(() => {
-    if (superAdmin) {
-      return allMenu;
-    }
-
-    if (!currentRole) {
-      return [];
-    }
-
-    return allMenu.filter((item) => {
-      if (item.superAdminOnly) {
-        return false;
-      }
-
-      return item.roles.includes(currentRole);
-    });
-  }, [
-    allMenu,
-    currentRole,
-    superAdmin,
-  ]);
 
 
   /* =======================================================
