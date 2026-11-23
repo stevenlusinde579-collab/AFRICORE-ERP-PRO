@@ -51,6 +51,7 @@ function HRManagerDashboard() {
   const [leaveRows, setLeaveRows] = useState([]);
   const [entitlementRows, setEntitlementRows] = useState([]);
   const [usedOffdayRows, setUsedOffdayRows] = useState([]);
+  void usedOffdayRows;
   const [activeSection, setActiveSection] = useState("overview");
   const [entitlementEmployeeId, setEntitlementEmployeeId] = useState("");
   const [offdayYear, setOffdayYear] = useState(Number(today().slice(0, 4)));
