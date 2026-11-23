@@ -473,6 +473,9 @@ function HRManagerDashboard() {
       await loadHRData();
     } catch (saveError) {
       if (insertedSignatureId) {
+        if (previousSignature?.id) {
+          await supabase.from("hr_staff_signatures").update({ is_active: true, updated_at: new Date().toISOString() }).eq("id", previousSignature.id).eq("school_id", schoolId);
+        }
         await supabase.from("hr_staff_signatures").delete().eq("id", insertedSignatureId).eq("school_id", schoolId);
       }
       if (uploadedPath) await supabase.storage.from("hr-staff-signatures").remove([uploadedPath]);
