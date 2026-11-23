@@ -8,15 +8,11 @@ begin;
 create unique index if not exists employees_id_school_id_uidx
   on public.employees(id, school_id);
 
--- These permissive base policies used USING (true). PostgreSQL combines
--- permissive policies with OR, so they bypassed the school tenant guards.
--- Remove only the broad policies; preserve each table's existing tenant guard.
-drop policy if exists af_score_authenticated_base on public.employees;
-drop policy if exists af_score_authenticated_base on public.employee_financial_profiles;
-drop policy if exists af_score_authenticated_base on public.payrolls;
-drop policy if exists af_score_authenticated_base on public.payroll_items;
-drop policy if exists af_score_authenticated_base on public.staff_payroll;
-drop policy if exists af_score_authenticated_base on public.salary_components;
+-- Existing tenant_guard policies on these legacy tables are RESTRICTIVE.
+-- PostgreSQL combines permissive policies with OR, then restrictive policies
+-- with AND. The existing authenticated_base policies provide the permissive
+-- grant while the restrictive tenant guards enforce school isolation.
+-- Preserve both: dropping the permissive policy would deny legitimate access.
 
 create table if not exists public.hr_employee_profiles (
   employee_id bigint primary key,
