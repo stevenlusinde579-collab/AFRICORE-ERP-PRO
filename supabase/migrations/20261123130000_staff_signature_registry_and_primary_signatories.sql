@@ -12,9 +12,12 @@ create table if not exists public.hr_staff_signatures (
   is_active boolean not null default true,
   registered_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint hr_staff_signatures_school_teacher_uidx unique (school_id, teacher_id)
+  updated_at timestamptz not null default now()
 );
+
+-- Keep previous signature versions so already signed documents retain their exact asset.
+create unique index if not exists hr_staff_signatures_one_active_per_teacher_uidx
+  on public.hr_staff_signatures(school_id, teacher_id) where is_active is true;
 
 create index if not exists hr_staff_signatures_school_profile_idx
   on public.hr_staff_signatures(school_id, profile_id);
