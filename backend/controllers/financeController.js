@@ -2722,6 +2722,102 @@ export const getTrialBalance = async (
 
 
 // ============================================================
+// INCOME & EXPENSES SUMMARY
+// Posted general-ledger entries are the single source of truth.
+// Receipts and expense records are classification metadata only.
+// ============================================================
+
+export const getIncomeExpensesSummary = async (req, res) => {
+    try {
+        const schoolId = getSchoolId(req);
+        const todayDate = today();
+        const fromDate = String(req.query.from || (todayDate.slice(0, 4) + "-01-01"));
+        const toDate = String(req.query.to || todayDate);
+        const validDate = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z"));
+        if (!validDate(fromDate) || !validDate(toDate) || fromDate > toDate) {
+            return res.status(400).json({ success: false, message: "Choose a valid reporting date range." });
+        }
+        const fetchAll = async buildQuery => {
+            const rows = [];
+            for (let offset = 0; ; offset += 1000) {
+                const result = await buildQuery().range(offset, offset + 999);
+                if (result.error) throw result.error;
+                rows.push(...(result.data || []));
+                if (!result.data || result.data.length < 1000) break;
+            }
+            return rows;
+        };
+        const entries = await fetchAll(() => supabase.schema("finance").from("journal_entries")
+            .select("id,source_type,transaction_date,reference_number,description")
+            .eq("school_id", schoolId).eq("status", "posted").is("reversed_at", null)
+            .gte("transaction_date", fromDate).lte("transaction_date", toDate)
+            .order("transaction_date", { ascending: true }));
+        if (!entries.length) return res.json({ success: true, data: { school_id: schoolId, period: { from: fromDate, to: toDate }, totalIncome: 0, totalExpenses: 0, netResult: 0, incomeSources: [], expenseSources: [], transactionCount: 0, basis: "posted_general_ledger" } });
+        const chunks = (items, size = 100) => { const result = []; for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size)); return result; };
+        const entryIds = entries.map(row => row.id);
+        const journalLines = [];
+        for (const ids of chunks(entryIds)) journalLines.push(...await fetchAll(() => supabase.schema("finance").from("journal_lines").select("journal_entry_id,account_id,debit,credit").in("journal_entry_id", ids)));
+        const accountIds = [...new Set(journalLines.map(row => row.account_id).filter(Boolean))];
+        const accounts = [];
+        for (const ids of chunks(accountIds)) {
+            const result = await supabase.schema("finance").from("chart_of_accounts").select("id,account_name,account_type,account_category").eq("school_id", schoolId).in("id", ids);
+            if (result.error) throw result.error;
+            accounts.push(...(result.data || []));
+        }
+        const expenseRows = []; const receiptRows = [];
+        for (const ids of chunks(entryIds)) {
+            const results = await Promise.all([
+                supabase.schema("finance").from("expenses").select("journal_entry_id,expense_category,description").eq("school_id", schoolId).in("journal_entry_id", ids),
+                supabase.schema("finance").from("receipts").select("journal_entry_id,receipt_number,description").eq("school_id", schoolId).in("journal_entry_id", ids)
+            ]);
+            if (results[0].error) throw results[0].error; if (results[1].error) throw results[1].error;
+            expenseRows.push(...(results[0].data || [])); receiptRows.push(...(results[1].data || []));
+        }
+        const entryMap = new Map(entries.map(row => [String(row.id), row]));
+        const accountMap = new Map(accounts.map(row => [String(row.id), row]));
+        const expenseMap = new Map(expenseRows.map(row => [String(row.journal_entry_id), row]));
+        const receiptMap = new Map(receiptRows.map(row => [String(row.journal_entry_id), row]));
+        const incomeBuckets = new Map(); const expenseBuckets = new Map();
+        const addAmount = (buckets, label, accountName, amount, entryId) => {
+            if (!buckets.has(label)) buckets.set(label, { source: label, amount: 0, entries: new Set(), accounts: new Map() });
+            const bucket = buckets.get(label); bucket.amount += amount; bucket.entries.add(String(entryId));
+            bucket.accounts.set(accountName, (bucket.accounts.get(accountName) || 0) + amount);
+        };
+        for (const line of journalLines) {
+            const entry = entryMap.get(String(line.journal_entry_id)); const account = accountMap.get(String(line.account_id));
+            if (!entry || !account) continue;
+            const type = String(account.account_type || "").toLowerCase();
+            if (type === "revenue") {
+                const amount = numberValue(line.credit) - numberValue(line.debit); if (!amount) continue;
+                const sourceType = String(entry.source_type || "").toLowerCase(); const receipt = receiptMap.get(String(entry.id));
+                const reference = String(receipt?.receipt_number || entry.reference_number || "").toUpperCase();
+                const description = String(receipt?.description || entry.description || "").toLowerCase();
+                let label = "Other Income";
+                if (sourceType.includes("transport")) label = "Transport";
+                else if (["student_charge", "student_charge_adjustment", "fee_correction"].includes(sourceType)) label = "Student Fees";
+                else if (reference.startsWith("STOCK-") || description.includes("stock order")) label = "Stock Sales";
+                addAmount(incomeBuckets, label, account.account_name || label, amount, entry.id);
+            } else if (type === "expense") {
+                const amount = numberValue(line.debit) - numberValue(line.credit); if (!amount) continue;
+                const expense = expenseMap.get(String(entry.id)); const sourceType = String(entry.source_type || "").toLowerCase();
+                const rawCategory = String(expense?.expense_category || account.account_category || account.account_name || "Other Expenses");
+                const label = sourceType.includes("transport") ? "Transport" : sourceType.includes("payroll") ? "Staff Payroll" : rawCategory.replace(/[_-]+/g, " ").replace(/\\b\\w/g, c => c.toUpperCase());
+                addAmount(expenseBuckets, label, account.account_name || label, amount, entry.id);
+            }
+        }
+        const serialize = buckets => [...buckets.values()].map(bucket => ({ source: bucket.source, amount: Number(bucket.amount.toFixed(2)), transactionCount: bucket.entries.size, accounts: [...bucket.accounts.entries()].map(([account, amount]) => ({ account, amount: Number(amount.toFixed(2)) })).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)) })).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+        const incomeSources = serialize(incomeBuckets); const expenseSources = serialize(expenseBuckets);
+        const totalIncome = Number(incomeSources.reduce((sum, row) => sum + row.amount, 0).toFixed(2));
+        const totalExpenses = Number(expenseSources.reduce((sum, row) => sum + row.amount, 0).toFixed(2));
+        const allEntryIds = new Set();
+        for (const bucket of [...incomeBuckets.values(), ...expenseBuckets.values()]) for (const id of bucket.entries) allEntryIds.add(id);
+        return res.json({ success: true, data: { school_id: schoolId, period: { from: fromDate, to: toDate }, totalIncome, totalExpenses, netResult: Number((totalIncome - totalExpenses).toFixed(2)), incomeSources, expenseSources, transactionCount: allEntryIds.size, basis: "posted_general_ledger" } });
+    } catch (error) {
+        return sendError(res, error, "Unable to generate income and expenses summary.");
+    }
+};
+
+// ============================================================
 // INCOME STATEMENT
 // ============================================================
 
