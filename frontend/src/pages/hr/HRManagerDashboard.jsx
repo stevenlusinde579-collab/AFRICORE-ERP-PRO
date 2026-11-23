@@ -119,6 +119,7 @@ function HRManagerDashboard() {
         supabase.from("hr_offday_rosters")
           .select("employee_id")
           .eq("school_id", schoolId)
+          .eq("status", "taken")
           .gte("off_date", `${year}-01-01`)
           .lt("off_date", `${year + 1}-01-01`),
         supabase.from("teachers")
