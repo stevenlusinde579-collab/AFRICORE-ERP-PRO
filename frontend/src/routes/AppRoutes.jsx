@@ -98,6 +98,7 @@ import ExamPrintingUnit from "../pages/examination/ExamPrintingUnit";
 import Finance from "../pages/finance/Finance";
 import StockManagement from "../pages/stock/StockManagement";
 import FinanceDashboard from "../pages/finance/FinanceDashboard";
+import IncomeExpensesSummary from "../pages/finance/IncomeExpensesSummary";
 import ChartOfAccounts from "../pages/finance/ChartOfAccounts";
 import CashAccounts from "../pages/finance/CashAccounts";
 import PaymentProviderSetup from "../pages/finance/PaymentProviderSetup";
@@ -900,6 +901,11 @@ export default function AppRoutes() {
                     <Route
                         path="finance/dashboard"
                         element={<FinanceDashboard />}
+                    />
+
+                    <Route
+                        path="finance/income-expenses-summary"
+                        element={<IncomeExpensesSummary />}
                     />
 
                     <Route
