@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { FaFileInvoiceDollar, FaPrint, FaSpinner } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import api from "../../services/api";
+import SchoolOfficialSeal from "../../components/SchoolOfficialSeal";
 
 function money(value) {
     return new Intl.NumberFormat("en-TZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -565,6 +566,7 @@ function FeeReminderLetters({ school }) {
                             {accountantPhone.trim() ? <p className="mt-1 text-[10px]"><strong>Simu:</strong> {accountantPhone.trim()}</p> : null}
                             <p className="mt-5 text-[10px]">Saini: __________________________</p>
                         </div>
+                        <SchoolOfficialSeal className="mt-4" />
                         <p className="mt-8 text-center text-[9px]">Barua hii imetengenezwa na mfumo wa AfriCore ERP PRO · {index + 1} / {letters.length}</p>
                         </div>
                     </article>
