@@ -355,6 +355,18 @@ function PayrollManagement() {
                             </div>
                             {selectedPayroll.review_notes && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">HR note: {selectedPayroll.review_notes}</p>}
                             {selectedPayroll.snapshot_locked_at && <p className="text-xs text-slate-500">Historical snapshot locked: {new Date(selectedPayroll.snapshot_locked_at).toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam" })}. Later changes to staff profiles do not alter this payroll or its payslips.</p>}
+                            {selectedPayroll.audit?.length > 0 && <section className="rounded-xl border border-slate-200 p-4">
+                                <h3 className="font-bold text-slate-900">Payroll Activity History</h3>
+                                <ol className="mt-3 space-y-3">
+                                    {selectedPayroll.audit.map((event) => <li key={event.id} className="flex gap-3 text-xs">
+                                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
+                                        <div><p className="font-semibold text-slate-800">{String(event.event_type || "").replaceAll("_", " ")}</p>
+                                            <p className="text-slate-600">{event.event_note || "Payroll workflow action"} · {event.actor_name}</p>
+                                            <p className="mt-0.5 text-slate-400">{new Date(event.created_at).toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam" })}</p>
+                                        </div>
+                                    </li>)}
+                                </ol>
+                            </section>}
                         </div>
                     )}
                 </div>
