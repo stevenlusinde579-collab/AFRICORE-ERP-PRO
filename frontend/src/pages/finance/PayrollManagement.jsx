@@ -99,7 +99,9 @@ function PayrollManagement() {
             const { data } = await api.get(`/payroll/${payrollId}`, requestConfig);
             setSelectedPayroll(data.data);
             setItemDeductionForms(Object.fromEntries((data.data.payroll_items || []).map((item) => [
-                item.id, deductionLines(item.components_snapshot || []).map((line) => ({ name: line.name, amount: String(line.amount) }))
+                item.id, deductionLines(item.components_snapshot || []).length
+                    ? deductionLines(item.components_snapshot || []).map((line) => ({ name: line.name, amount: String(line.amount) }))
+                    : (Number(item.deductions || 0) > 0 ? [{ name: "Other deductions (legacy)", amount: String(item.deductions) }] : [])
             ])));
             setReviewNote(data.data.review_notes || "");
             setPaymentForms(Object.fromEntries((data.data.payroll_items || []).map((item) => [item.id, {
