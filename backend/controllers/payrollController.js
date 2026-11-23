@@ -12,33 +12,50 @@ const responseError = (res, error, fallback = "Payroll request failed.") => {
     return res.status(status).json({ success: false, message });
 };
 
-const hasRole = (req, roleName) =>
-    req.access?.isSuperAdmin === true ||
-    (req.access?.roles || []).some((role) => role.role_name === roleName);
+const getSchoolId = (req) => {
+    const requestedSchoolId = req.body?.school_id || req.query?.school_id || req.params?.schoolId;
+    const schoolId = Number(requestedSchoolId || req.profile?.school_id);
+    if (!Number.isInteger(schoolId) || schoolId <= 0) {
+        throw new Error("A valid school context is required.");
+    }
+    if (req.access?.isSuperAdmin === true) return schoolId;
 
-const requireRole = (req, res, roleName) => {
+    const assignments = req.access?.profile_roles || [];
+    if (assignments.length) {
+        if (!assignments.some((assignment) => Number(assignment.school_id) === schoolId)) {
+            throw new Error("You do not have an active role assignment for this school.");
+        }
+    } else if (schoolId !== Number(req.profile?.school_id)) {
+        throw new Error("You cannot access payroll records for another school.");
+    }
+    return schoolId;
+};
+
+const hasRoleForSchool = (req, roleName, schoolId) => {
+    if (req.access?.isSuperAdmin === true) return true;
+    const role = (req.access?.roles || []).find((item) => item.role_name === roleName);
+    if (!role) return false;
+    const assignments = req.access?.profile_roles || [];
+    if (assignments.length) {
+        return assignments.some((assignment) =>
+            Number(assignment.school_id) === Number(schoolId) &&
+            Number(assignment.role_id) === Number(role.id)
+        );
+    }
+    return Number(req.profile?.school_id) === Number(schoolId) &&
+        Number(req.profile?.role_id) === Number(role.id);
+};
+
+const requireRoleForSchool = (req, res, roleName, schoolId) => {
     if (!req.user?.id) {
         res.status(401).json({ success: false, message: "Authentication required." });
         return false;
     }
-    if (!hasRole(req, roleName)) {
-        res.status(403).json({ success: false, message: `${roleName} access is required.` });
+    if (!hasRoleForSchool(req, roleName, schoolId)) {
+        res.status(403).json({ success: false, message: `${roleName} access for this school is required.` });
         return false;
     }
     return true;
-};
-
-const getSchoolId = (req) => {
-    const schoolId = req.access?.isSuperAdmin === true
-        ? Number(req.body?.school_id || req.query?.school_id || req.params?.schoolId)
-        : Number(req.profile?.school_id);
-    if (!Number.isInteger(schoolId) || schoolId <= 0) {
-        throw new Error("A valid school context is required.");
-    }
-    if (req.access?.isSuperAdmin !== true && schoolId !== Number(req.profile?.school_id)) {
-        throw new Error("You cannot access payroll records for another school.");
-    }
-    return schoolId;
 };
 
 const loadPayroll = async (schoolId, payrollId) => {
@@ -50,11 +67,11 @@ const loadPayroll = async (schoolId, payrollId) => {
 };
 
 export const getPayrollWorkspace = async (req, res) => {
-    if (!hasRole(req, ROLE_ACCOUNTANT) && !hasRole(req, ROLE_HR_MANAGER)) {
-        return res.status(403).json({ success: false, message: "Accountant or HR Manager access is required." });
-    }
     try {
         const schoolId = getSchoolId(req);
+        if (!hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId) && !hasRoleForSchool(req, ROLE_HR_MANAGER, schoolId)) {
+            return res.status(403).json({ success: false, message: "Accountant or HR Manager access for this school is required." });
+        }
         const [employeesResult, payrollsResult, settingsResult, accountsResult, cashResult] = await Promise.all([
             supabase.from("employees")
                 .select("id,employee_number,first_name,middle_name,last_name,department,position,employee_type,basic_salary,status")
@@ -77,14 +94,14 @@ export const getPayrollWorkspace = async (req, res) => {
         return res.json({
             success: true,
             data: {
-                employees: hasRole(req, ROLE_ACCOUNTANT) ? (employeesResult.data || []) : [],
+                employees: hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId) ? (employeesResult.data || []) : [],
                 payrolls: payrollsResult.data || [],
                 settings: settingsResult.data || null,
                 accounts: accountsResult.data || [],
                 cashAccounts: cashResult.data || [],
-                canPrepare: hasRole(req, ROLE_ACCOUNTANT),
-                canReview: hasRole(req, ROLE_HR_MANAGER),
-                canPostAndPay: hasRole(req, ROLE_ACCOUNTANT),
+                canPrepare: hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId),
+                canReview: hasRoleForSchool(req, ROLE_HR_MANAGER, schoolId),
+                canPostAndPay: hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId),
             },
         });
     } catch (error) {
@@ -93,11 +110,12 @@ export const getPayrollWorkspace = async (req, res) => {
 };
 
 export const getPayrollDetails = async (req, res) => {
-    if (!hasRole(req, ROLE_ACCOUNTANT) && !hasRole(req, ROLE_HR_MANAGER)) {
-        return res.status(403).json({ success: false, message: "Payroll access is required." });
-    }
     try {
-        const payroll = await loadPayroll(getSchoolId(req), Number(req.params.payrollId));
+        const schoolId = getSchoolId(req);
+        if (!hasRoleForSchool(req, ROLE_ACCOUNTANT, schoolId) && !hasRoleForSchool(req, ROLE_HR_MANAGER, schoolId)) {
+            return res.status(403).json({ success: false, message: "Payroll access for this school is required." });
+        }
+        const payroll = await loadPayroll(schoolId, Number(req.params.payrollId));
         const { data: audit, error } = await supabase.from("hr_payroll_audit_events")
             .select("id,event_type,event_note,event_data,actor_id,created_at")
             .eq("school_id", payroll.school_id).eq("payroll_id", payroll.id)
@@ -110,7 +128,7 @@ export const getPayrollDetails = async (req, res) => {
 };
 
 export const savePayrollSettings = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT)) return;
+    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const expenseId = req.body?.salary_expense_account_id;
@@ -147,7 +165,7 @@ export const savePayrollSettings = async (req, res) => {
 };
 
 export const createPayrollDraft = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT)) return;
+    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const month = String(req.body?.payroll_month || "");
@@ -168,7 +186,7 @@ export const createPayrollDraft = async (req, res) => {
 };
 
 export const updatePayrollItem = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT)) return;
+    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const payrollId = Number(req.params.payrollId);
@@ -191,7 +209,7 @@ export const updatePayrollItem = async (req, res) => {
 };
 
 export const submitPayrollForReview = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT)) return;
+    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const { error } = await supabase.rpc("hr_payroll_submit", {
@@ -205,7 +223,7 @@ export const submitPayrollForReview = async (req, res) => {
 };
 
 export const reviewPayroll = async (req, res) => {
-    if (!requireRole(req, res, ROLE_HR_MANAGER)) return;
+    if (!requireRoleForSchool(req, res, ROLE_HR_MANAGER, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const decision = String(req.body?.decision || "");
@@ -225,7 +243,7 @@ export const reviewPayroll = async (req, res) => {
 };
 
 export const postPayrollToFinance = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT)) return;
+    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const { data, error } = await supabase.rpc("hr_payroll_post", {
@@ -239,7 +257,7 @@ export const postPayrollToFinance = async (req, res) => {
 };
 
 export const payPayrollItem = async (req, res) => {
-    if (!requireRole(req, res, ROLE_ACCOUNTANT)) return;
+    if (!requireRoleForSchool(req, res, ROLE_ACCOUNTANT, schoolId)) return;
     try {
         const schoolId = getSchoolId(req);
         const cashAccountId = Number(req.body?.cash_account_id);
