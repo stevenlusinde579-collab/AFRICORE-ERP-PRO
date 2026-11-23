@@ -297,7 +297,7 @@ function HRManagerDashboard() {
     event.preventDefault();
     if (!schoolId || !offdayEmployeeId || !offdayDate || !offdayEndDate || savingOffday) return;
     if (offdayEndDate < offdayDate) {
-      setError("Tarehe ya kumaliza Off Day haiwezi kuwa kabla ya tarehe ya kuanza.");
+      setError("The end date cannot be earlier than the start date.");
       return;
     }
     setSavingOffday(true);
@@ -314,14 +314,14 @@ function HRManagerDashboard() {
           status: "planned"
         });
       }
-      const { error: insertError } = await supabase.from("hr_offday_rosters").insert(dayRows);
+      const { error: insertError } = await supabase.from("hr_offday_rosters").upsert(dayRows, { onConflict: "employee_id,off_date", ignoreDuplicates: true });
       if (insertError) throw insertError;
       setOffdayEmployeeId("");
       setOffdayDate("");
       setOffdayEndDate("");
       await loadHRData();
     } catch (saveError) {
-      setError(saveError.message || "Imeshindikana kuhifadhi ratiba ya off-day.");
+      setError(saveError.message || "Unable to save the off-day schedule.");
     } finally {
       setSavingOffday(false);
     }
@@ -338,7 +338,7 @@ function HRManagerDashboard() {
       if (updateError) throw updateError;
       await loadHRData();
     } catch (updateError) {
-      setError(updateError.message || "Imeshindikana kubadilisha hali ya off-day.");
+      setError(updateError.message || "Unable to update the off-day status.");
     }
   }, [schoolId, loadHRData]);
 
@@ -373,10 +373,10 @@ function HRManagerDashboard() {
         .sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at));
       const latest = todayEvents[todayEvents.length - 1];
       if (eventType === "check_out" && latest?.event_type !== "check_in") {
-        throw new Error("Mfanyakazi huyu hajaingia kazini leo; haiwezekani kurekodi Sign Out.");
+        throw new Error("Employee huyu hajaingia kazini leo; haiwezekani kurekodi Sign Out.");
       }
       if (eventType === "check_in" && latest?.event_type === "check_in") {
-        throw new Error("Mfanyakazi huyu tayari ameingia kazini leo.");
+        throw new Error("Employee huyu tayari ameingia kazini leo.");
       }
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData?.user?.id) throw new Error("Session ya mtumiaji haijathibitishwa. Ingia tena.");
@@ -534,7 +534,7 @@ function HRManagerDashboard() {
           <section className="grid gap-4 lg:grid-cols-2">
             <article className="rounded-2xl border border-slate-200 bg-white p-5">
               <h2 className="text-lg font-bold text-slate-900">Off-Day Coverage</h2>
-              <p className="mt-1 text-sm text-slate-500">Ratiba zijazo za mapumziko ya wafanyakazi.</p>
+              <p className="mt-1 text-sm text-slate-500">Scheduled Off Days za mapumziko ya wafanyakazi.</p>
               {!schemaReady ? <p className="mt-5 text-sm text-slate-500">Ratiba zitaonekana baada ya HR database migration.</p> :
                 offdayRows.length === 0 ? <p className="mt-5 text-sm text-slate-500">Hakuna off-day iliyopangwa kwa sasa.</p> :
                 <div className="mt-4 divide-y divide-slate-100">{offdayRows.slice(0, 6).map((row) => <div key={row.id} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="font-medium text-slate-800">{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Staff"}</span><span className="rounded-lg bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">{row.off_date}</span></div>)}</div>}
@@ -561,39 +561,39 @@ function HRManagerDashboard() {
       {activeSection === "offdays" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="text-lg font-bold text-slate-900">Off Day Management</h2>
-          <p className="mt-1 text-sm text-slate-500">Weka haki ya off-days kwa mwaka, panga siku za kila mfanyakazi kwa zamu, na fuatilia zilizotumika dhidi ya zilizobaki.</p>
+          <p className="mt-1 text-sm text-slate-500">Set annual off-day entitlements, schedule staff days off, and track used and remaining days.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Annual entitlement</p><p className="mt-1 font-bold text-slate-800">Per staff member</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Rotation planning</p><p className="mt-1 font-bold text-slate-800">Staggered schedules</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Coverage control</p><p className="mt-1 font-bold text-slate-800">Avoid understaffing</p></div></div>
           {schemaReady && (
             <form onSubmit={saveOffday} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-4">
-              <label className="text-sm font-medium text-slate-700 sm:col-span-1">Mfanyakazi
+              <label className="text-sm font-medium text-slate-700 sm:col-span-1">Employee
                 <select required value={offdayEmployeeId} onChange={(event) => setOffdayEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-                  <option value="">Chagua mfanyakazi</option>
+                  <option value="">Select employee</option>
                   {activeEmployeeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")} ({person.employee_number || person.id})</option>)}
                 </select>
               </label>
-              <label className="text-sm font-medium text-slate-700">Tarehe ya off-day
+              <label className="text-sm font-medium text-slate-700">Start date
                 <input required type="date" min={today()} value={offdayDate} onChange={(event) => setOffdayDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
               </label>
-              <label className="text-sm font-medium text-slate-700">Tarehe ya kumaliza off-day\n                <input required type="date" min={offdayDate || today()} value={offdayEndDate} onChange={(event) => setOffdayEndDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />\n              </label>\n              <div className="flex flex-col justify-end gap-1"><p className="text-xs text-slate-500">{offdayDate && offdayEndDate && offdayEndDate >= offdayDate ? `Jumla: ${Math.round((Date.parse(`${offdayEndDate}T00:00:00Z`) - Date.parse(`${offdayDate}T00:00:00Z`)) / 86400000) + 1} siku` : "Chagua tarehe ya kuanza na kumaliza."}</p><button disabled={savingOffday || !offdayEmployeeId || !offdayDate || !offdayEndDate || offdayEndDate < offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Inahifadhi..." : "Panga off-day"}</button></div>
+              <label className="text-sm font-medium text-slate-700">End date\n                <input required type="date" min={offdayDate || today()} value={offdayEndDate} onChange={(event) => setOffdayEndDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />\n              </label>\n              <div className="flex flex-col justify-end gap-1"><p className="text-xs text-slate-500">{offdayDate && offdayEndDate && offdayEndDate >= offdayDate ? `Total: ${Math.round((Date.parse(`${offdayEndDate}T00:00:00Z`) - Date.parse(`${offdayDate}T00:00:00Z`)) / 86400000) + 1} day(s)` : "Select a start and end date."}</p><button disabled={savingOffday || !offdayEmployeeId || !offdayDate || !offdayEndDate || offdayEndDate < offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Saving..." : "Schedule Off Days"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Ratiba zijazo</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">Hakuna ratiba iliyopo.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Mfanyakazi"}</span><span className="text-slate-500">{row.off_date}</span><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{row.status}</span>{row.status === "planned" && <div className="flex gap-2"><button type="button" onClick={() => updateOffdayStatus(row.id, "taken")} className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-bold text-white">Mark taken</button><button type="button" onClick={() => updateOffdayStatus(row.id, "cancelled")} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600">Cancel</button></div>}</div>)}</div>}</div>}
+          {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Scheduled Off Days</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">No off days scheduled.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Employee"}</span><span className="text-slate-500">{row.off_date}</span><span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.status === "taken" ? "bg-rose-100 text-rose-800" : row.status === "cancelled" ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-800"}`}>{row.status === "taken" ? "Closed" : row.status === "cancelled" ? "Cancelled" : "Open"}</span>{row.status !== "cancelled" && <button type="button" onClick={() => updateOffdayStatus(row.id, row.status === "taken" ? "planned" : "taken")} className={`rounded-md px-2.5 py-1.5 text-xs font-bold text-white ${row.status === "taken" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-rose-700 hover:bg-rose-800"}`}>{row.status === "taken" ? "Reopen" : "Close"}</button>}</div>)}</div>}</div>}
           {schemaReady && (
             <form onSubmit={saveEntitlement} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
-              <label className="text-sm font-medium text-slate-700">Mfanyakazi
+              <label className="text-sm font-medium text-slate-700">Employee
                 <select required value={entitlementEmployeeId} onChange={(event) => setEntitlementEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-                  <option value="">Chagua mfanyakazi</option>
+                  <option value="">Select employee</option>
                   {activeEmployeeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</option>)}
                 </select>
               </label>
-              <label className="text-sm font-medium text-slate-700">Off-days kwa mwaka ({today().slice(0, 4)})
+              <label className="text-sm font-medium text-slate-700">Annual off-day entitlement ({today().slice(0, 4)})
                 <input required type="number" min="0" max="366" step="0.5" value={entitlementDays} onChange={(event) => setEntitlementDays(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
               </label>
-              <div className="flex items-end"><button disabled={savingEntitlement || !entitlementEmployeeId} className="w-full rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingEntitlement ? "Inahifadhi..." : "Weka entitlement"}</button></div>
+              <div className="flex items-end"><button disabled={savingEntitlement || !entitlementEmployeeId} className="w-full rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingEntitlement ? "Saving..." : "Save entitlement"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Mfanyakazi</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Used</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const used = usedOffdayRows.filter((item) => item.employee_id === row.employee_id).length; const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{used}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - used)}</td></tr>; })}</tbody></table></div>}
-          {!schemaReady && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Off-day records hazijawezeshwa kwenye database bado; migration iko kwenye tawi la majaribio.</p>}
+          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Closed</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const used = usedOffdayRows.filter((item) => item.employee_id === row.employee_id).length; const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{used}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - used)}</td></tr>; })}</tbody></table></div>}
+          {!schemaReady && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Off-day records are not enabled in the database yet. Apply the required HR migration first.</p>}
         </section>
       )}
 
@@ -633,7 +633,7 @@ function HRManagerDashboard() {
       {activeSection === "leave" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Leave Management</h2><p className="mt-1 text-sm text-slate-500">Kagua na amua maombi ya likizo ya wafanyakazi.</p>
           {!schemaReady ? <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Leave workflow itawashwa baada ya database migration.</p> : leaveRows.length === 0 ? <p className="mt-4 text-sm text-slate-500">Hakuna maombi ya likizo yaliyorekodiwa.</p> :
-            <div className="mt-4 divide-y divide-slate-100">{leaveRows.map((request) => <article key={request.id} className="py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{[request.employees?.first_name, request.employees?.middle_name, request.employees?.last_name].filter(Boolean).join(" ") || request.employees?.employee_number || "Mfanyakazi"}</p><p className="mt-1 text-sm text-slate-600">{request.leave_type} • {request.days_requested} day(s)</p><p className="text-xs text-slate-500">{request.start_date} hadi {request.end_date}</p>{request.reason && <p className="mt-2 text-sm text-slate-600">{request.reason}</p>}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-700">{request.status}</span></div>
+            <div className="mt-4 divide-y divide-slate-100">{leaveRows.map((request) => <article key={request.id} className="py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{[request.employees?.first_name, request.employees?.middle_name, request.employees?.last_name].filter(Boolean).join(" ") || request.employees?.employee_number || "Employee"}</p><p className="mt-1 text-sm text-slate-600">{request.leave_type} • {request.days_requested} day(s)</p><p className="text-xs text-slate-500">{request.start_date} hadi {request.end_date}</p>{request.reason && <p className="mt-2 text-sm text-slate-600">{request.reason}</p>}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-700">{request.status}</span></div>
               {request.status === "pending" && <div className="mt-3 flex gap-2"><button type="button" disabled={leaveActionId === request.id} onClick={() => reviewLeave(request.id, "approved")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Approve</button><button type="button" disabled={leaveActionId === request.id} onClick={() => reviewLeave(request.id, "rejected")} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Reject</button></div>}</article>)}</div>}
         </section>
       )}
