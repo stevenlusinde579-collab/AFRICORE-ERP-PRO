@@ -51,8 +51,6 @@ function HRManagerDashboard() {
   const [offdayRows, setOffdayRows] = useState([]);
   const [leaveRows, setLeaveRows] = useState([]);
   const [entitlementRows, setEntitlementRows] = useState([]);
-  const [usedOffdayRows, setUsedOffdayRows] = useState([]);
-  void usedOffdayRows;
   const [activeSection, setActiveSection] = useState("overview");
   const [entitlementEmployeeId, setEntitlementEmployeeId] = useState("");
   const [offdayYear, setOffdayYear] = useState(Number(today().slice(0, 4)));
@@ -87,7 +85,7 @@ function HRManagerDashboard() {
     const date = today();
     const year = Number(date.slice(0, 4));
     try {
-      const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
+      const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, signatureStaffResult, signatureResult] = await Promise.all([
         supabase.from("employees")
           .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
           .eq("school_id", schoolId)
@@ -103,7 +101,7 @@ function HRManagerDashboard() {
           .lt("off_date", `${year + 2}-01-01`)
           .order("off_date", { ascending: true }),
         supabase.from("hr_leave_requests")
-          .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,created_at,reviewed_at,employees(first_name,middle_name,last_name,employee_number)")
+          .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,created_at,reviewed_at,employees(first_name,middle_name,last_name,employee_number,user_id)")
           .eq("school_id", schoolId)
           .order("created_at", { ascending: false })
           .limit(100),
@@ -119,12 +117,6 @@ function HRManagerDashboard() {
           .select("id,employee_id,entitlement_year,entitled_days")
           .eq("school_id", schoolId)
           .in("entitlement_year", [year, year + 1]),
-        supabase.from("hr_offday_rosters")
-          .select("employee_id")
-          .eq("school_id", schoolId)
-          .eq("status", "taken")
-          .gte("off_date", `${year}-01-01`)
-          .lt("off_date", `${year + 2}-01-01`),
         supabase.from("teachers")
           .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,status")
           .eq("school_id", schoolId)
@@ -137,7 +129,7 @@ function HRManagerDashboard() {
 
       // Staff signatures are an optional, separately migrated workflow. Their absence
       // must never disable the core HR off-day, leave, or attendance modules.
-      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
+      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult]
         .some((result) => result.error?.code === "42P01" || result.error?.code === "PGRST205");
       const signatureSchemaMissing = signatureResult.error?.code === "42P01" || signatureResult.error?.code === "PGRST205";
       setSignatureSchemaReady(!signatureResult.error && !signatureSchemaMissing);
@@ -176,7 +168,6 @@ function HRManagerDashboard() {
       setOffdayRows(offdayResult.data || []);
       setLeaveRows(leaveResult.data || []);
       setEntitlementRows(entitlementResult.data || []);
-      setUsedOffdayRows(usedOffdayResult.data || []);
       setDevices(deviceResult.data || []);
       setSignatureStaff(signatureStaffResult.data || []);
       setSignatureRows(signatureResult.error ? [] : (signatureResult.data || []));
@@ -349,6 +340,17 @@ function HRManagerDashboard() {
         .eq("id", rosterId)
         .eq("school_id", schoolId);
       if (updateError) throw updateError;
+      const reviewedRequest = leaveRows.find((item) => item.id === requestId);
+      const employeeUserId = reviewedRequest?.employees?.user_id;
+      if (employeeUserId) {
+        const { error: notificationError } = await supabase.from("notifications").insert({
+          school_id: schoolId, user_id: employeeUserId,
+          title: status === "approved" ? "Leave request approved" : "Leave request rejected",
+          message: "Your leave request from " + reviewedRequest.start_date + " to " + reviewedRequest.end_date + " was " + status + ".",
+          notification_type: "leave_request", is_read: false,
+        });
+        if (notificationError) console.warn("Leave decision notification could not be created:", notificationError.message);
+      }
       await loadHRData();
     } catch (updateError) {
       setError(updateError.message || "Unable to update the off-day status.");
@@ -373,7 +375,7 @@ function HRManagerDashboard() {
     } finally {
       setLeaveActionId(null);
     }
-  }, [schoolId, leaveActionId, loadHRData]);
+  }, [schoolId, leaveActionId, leaveRows, loadHRData]);
 
   const recordAttendance = useCallback(async (employee, eventType) => {
     if (!schoolId || !schemaReady || !employee?.id || attendanceActionId) return;
