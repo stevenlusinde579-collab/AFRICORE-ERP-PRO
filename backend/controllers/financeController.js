@@ -2792,9 +2792,10 @@ export const getIncomeExpensesSummary = async (req, res) => {
                 const sourceType = String(entry.source_type || "").toLowerCase(); const receipt = receiptMap.get(String(entry.id));
                 const reference = String(receipt?.receipt_number || entry.reference_number || "").toUpperCase();
                 const description = String(receipt?.description || entry.description || "").toLowerCase();
+                const accountText = String((account.account_name || "") + " " + (account.account_category || "")).toLowerCase();
                 let label = "Other Income";
-                if (sourceType.includes("transport")) label = "Transport";
-                else if (["student_charge", "student_charge_adjustment", "fee_correction"].includes(sourceType)) label = "Student Fees";
+                if (sourceType.includes("transport") || accountText.includes("transport")) label = "Transport";
+                else if (["student_charge", "student_charge_adjustment", "fee_correction"].includes(sourceType) || /school fee|tuition|student fee/.test(accountText)) label = "Student Fees";
                 else if (reference.startsWith("STOCK-") || description.includes("stock order")) label = "Stock Sales";
                 addAmount(incomeBuckets, label, account.account_name || label, amount, entry.id);
             } else if (type === "expense") {
