@@ -7,6 +7,8 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import OffdayStaffSchedules from "./OffdayStaffSchedules";
+import HRLeaveManagementSection from "./HRLeaveManagementSection";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
@@ -49,9 +51,9 @@ function HRManagerDashboard() {
   const [offdayRows, setOffdayRows] = useState([]);
   const [leaveRows, setLeaveRows] = useState([]);
   const [entitlementRows, setEntitlementRows] = useState([]);
-  const [usedOffdayRows, setUsedOffdayRows] = useState([]);
   const [activeSection, setActiveSection] = useState("overview");
   const [entitlementEmployeeId, setEntitlementEmployeeId] = useState("");
+  const [offdayYear, setOffdayYear] = useState(Number(today().slice(0, 4)));
   const [entitlementDays, setEntitlementDays] = useState("7");
   const [savingEntitlement, setSavingEntitlement] = useState(false);
   const [offdayEmployeeId, setOffdayEmployeeId] = useState("");
@@ -83,7 +85,7 @@ function HRManagerDashboard() {
     const date = today();
     const year = Number(date.slice(0, 4));
     try {
-      const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult, signatureStaffResult, signatureResult] = await Promise.all([
+      const [staffResult, teacherRecordsResult, offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, signatureStaffResult, signatureResult] = await Promise.all([
         supabase.from("employees")
           .select("id,employee_number,first_name,middle_name,last_name,department,position,status")
           .eq("school_id", schoolId)
@@ -95,11 +97,11 @@ function HRManagerDashboard() {
         supabase.from("hr_offday_rosters")
           .select("id,employee_id,off_date,status,employees(first_name,middle_name,last_name,employee_number)")
           .eq("school_id", schoolId)
-          .gte("off_date", date)
-          .order("off_date", { ascending: true })
-          .limit(100),
+          .gte("off_date", `${year}-01-01`)
+          .lt("off_date", `${year + 2}-01-01`)
+          .order("off_date", { ascending: true }),
         supabase.from("hr_leave_requests")
-          .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,employees(first_name,middle_name,last_name,employee_number)")
+          .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,created_at,reviewed_at,employees(first_name,middle_name,last_name,employee_number,user_id)")
           .eq("school_id", schoolId)
           .order("created_at", { ascending: false })
           .limit(100),
@@ -114,13 +116,7 @@ function HRManagerDashboard() {
         supabase.from("hr_offday_entitlements")
           .select("id,employee_id,entitlement_year,entitled_days")
           .eq("school_id", schoolId)
-          .eq("entitlement_year", year),
-        supabase.from("hr_offday_rosters")
-          .select("employee_id")
-          .eq("school_id", schoolId)
-          .eq("status", "taken")
-          .gte("off_date", `${year}-01-01`)
-          .lt("off_date", `${year + 1}-01-01`),
+          .in("entitlement_year", [year, year + 1]),
         supabase.from("teachers")
           .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,status")
           .eq("school_id", schoolId)
@@ -133,7 +129,7 @@ function HRManagerDashboard() {
 
       // Staff signatures are an optional, separately migrated workflow. Their absence
       // must never disable the core HR off-day, leave, or attendance modules.
-      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
+      const missingHRSchema = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult]
         .some((result) => result.error?.code === "42P01" || result.error?.code === "PGRST205");
       const signatureSchemaMissing = signatureResult.error?.code === "42P01" || signatureResult.error?.code === "PGRST205";
       setSignatureSchemaReady(!signatureResult.error && !signatureSchemaMissing);
@@ -156,7 +152,7 @@ function HRManagerDashboard() {
         return;
       }
 
-      const errors = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
+      const errors = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult]
         .filter((result) => result.error);
       if (errors.length) throw errors[0].error;
 
@@ -172,7 +168,6 @@ function HRManagerDashboard() {
       setOffdayRows(offdayResult.data || []);
       setLeaveRows(leaveResult.data || []);
       setEntitlementRows(entitlementResult.data || []);
-      setUsedOffdayRows(usedOffdayResult.data || []);
       setDevices(deviceResult.data || []);
       setSignatureStaff(signatureStaffResult.data || []);
       setSignatureRows(signatureResult.error ? [] : (signatureResult.data || []));
@@ -280,7 +275,7 @@ function HRManagerDashboard() {
       const { error: upsertError } = await supabase.from("hr_offday_entitlements").upsert({
         school_id: schoolId,
         employee_id: Number(entitlementEmployeeId),
-        entitlement_year: Number(today().slice(0, 4)),
+        entitlement_year: Number(offdayYear),
         entitled_days: days
       }, { onConflict: "school_id,employee_id,entitlement_year" });
       if (upsertError) throw upsertError;
@@ -291,15 +286,16 @@ function HRManagerDashboard() {
     } finally {
       setSavingEntitlement(false);
     }
-  }, [schoolId, entitlementEmployeeId, entitlementDays, savingEntitlement, loadHRData]);
+  }, [schoolId, entitlementEmployeeId, entitlementDays, offdayYear, savingEntitlement, loadHRData]);
 
   const saveOffday = useCallback(async (event) => {
     event.preventDefault();
     if (!schoolId || !offdayEmployeeId || !offdayDate || !offdayEndDate || savingOffday) return;
-    if (offdayEndDate < offdayDate) {
-      setError("The end date cannot be earlier than the start date.");
-      return;
-    }
+    if (offdayEndDate < offdayDate) { setError("The end date cannot be earlier than the start date."); return; }
+    const selectedYear = Number(offdayDate.slice(0, 4));
+    if (Number(offdayEndDate.slice(0, 4)) !== selectedYear) { setError("Schedule one calendar year at a time so each year uses its own entitlement."); return; }
+    const entitlement = entitlementRows.find((row) => Number(row.employee_id) === Number(offdayEmployeeId) && Number(row.entitlement_year) === selectedYear);
+    if (!entitlement) { setError("Set this employee entitlement for " + selectedYear + " before scheduling dates."); return; }
     setSavingOffday(true);
     setError("");
     try {
@@ -314,8 +310,16 @@ function HRManagerDashboard() {
           status: "planned"
         });
       }
+      const alreadyScheduled = offdayRows.filter((row) => Number(row.employee_id) === Number(offdayEmployeeId) && row.status !== "cancelled" && Number(row.off_date.slice(0, 4)) === selectedYear).length;
+      const cancelledRows = offdayRows.filter((existing) => Number(existing.employee_id) === Number(offdayEmployeeId) && existing.status === "cancelled" && dayRows.some((row) => row.off_date === existing.off_date));
+      const newDates = dayRows.filter((row) => !offdayRows.some((existing) => Number(existing.employee_id) === Number(offdayEmployeeId) && existing.off_date === row.off_date && existing.status !== "cancelled"));
+      if (alreadyScheduled + newDates.length > Number(entitlement.entitled_days)) throw new Error("This schedule exceeds the " + selectedYear + " entitlement. Remaining days: " + Math.max(0, Number(entitlement.entitled_days) - alreadyScheduled) + ".");
       const { error: insertError } = await supabase.from("hr_offday_rosters").upsert(dayRows, { onConflict: "employee_id,off_date", ignoreDuplicates: true });
       if (insertError) throw insertError;
+      if (cancelledRows.length) {
+        const { error: reopenError } = await supabase.from("hr_offday_rosters").update({ status: "planned" }).in("id", cancelledRows.map((row) => row.id)).eq("school_id", schoolId);
+        if (reopenError) throw reopenError;
+      }
       setOffdayEmployeeId("");
       setOffdayDate("");
       setOffdayEndDate("");
@@ -325,7 +329,7 @@ function HRManagerDashboard() {
     } finally {
       setSavingOffday(false);
     }
-  }, [schoolId, offdayEmployeeId, offdayDate, offdayEndDate, savingOffday, loadHRData]);
+  }, [schoolId, offdayEmployeeId, offdayDate, offdayEndDate, savingOffday, entitlementRows, offdayRows, loadHRData]);
 
   const updateOffdayStatus = useCallback(async (rosterId, status) => {
     if (!schoolId || !rosterId) return;
@@ -336,6 +340,17 @@ function HRManagerDashboard() {
         .eq("id", rosterId)
         .eq("school_id", schoolId);
       if (updateError) throw updateError;
+      const reviewedRequest = leaveRows.find((item) => item.id === requestId);
+      const employeeUserId = reviewedRequest?.employees?.user_id;
+      if (employeeUserId) {
+        const { error: notificationError } = await supabase.from("notifications").insert({
+          school_id: schoolId, user_id: employeeUserId,
+          title: status === "approved" ? "Leave request approved" : "Leave request rejected",
+          message: "Your leave request from " + reviewedRequest.start_date + " to " + reviewedRequest.end_date + " was " + status + ".",
+          notification_type: "leave_request", is_read: false,
+        });
+        if (notificationError) console.warn("Leave decision notification could not be created:", notificationError.message);
+      }
       await loadHRData();
     } catch (updateError) {
       setError(updateError.message || "Unable to update the off-day status.");
@@ -354,13 +369,24 @@ function HRManagerDashboard() {
         .eq("school_id", schoolId)
         .eq("status", "pending");
       if (updateError) throw updateError;
+      const reviewedRequest = leaveRows.find((item) => item.id === requestId);
+      const employeeUserId = reviewedRequest?.employees?.user_id;
+      if (employeeUserId) {
+        const { error: notificationError } = await supabase.from("notifications").insert({
+          school_id: schoolId, user_id: employeeUserId,
+          title: status === "approved" ? "Leave request approved" : "Leave request rejected",
+          message: "Your leave request from " + reviewedRequest.start_date + " to " + reviewedRequest.end_date + " was " + status + ".",
+          notification_type: "leave_request", is_read: false,
+        });
+        if (notificationError) console.warn("Leave decision notification could not be created:", notificationError.message);
+      }
       await loadHRData();
     } catch (reviewError) {
       setError(reviewError.message || "Imeshindikana kufanya uamuzi wa ombi.");
     } finally {
       setLeaveActionId(null);
     }
-  }, [schoolId, leaveActionId, loadHRData]);
+  }, [schoolId, leaveActionId, leaveRows, loadHRData]);
 
   const recordAttendance = useCallback(async (employee, eventType) => {
     if (!schoolId || !schemaReady || !employee?.id || attendanceActionId) return;
@@ -577,7 +603,7 @@ function HRManagerDashboard() {
               <label className="text-sm font-medium text-slate-700">End date\n                <input required type="date" min={offdayDate || today()} value={offdayEndDate} onChange={(event) => setOffdayEndDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />\n              </label>\n              <div className="flex flex-col justify-end gap-1"><p className="text-xs text-slate-500">{offdayDate && offdayEndDate && offdayEndDate >= offdayDate ? `Total: ${Math.round((Date.parse(`${offdayEndDate}T00:00:00Z`) - Date.parse(`${offdayDate}T00:00:00Z`)) / 86400000) + 1} day(s)` : "Select a start and end date."}</p><button disabled={savingOffday || !offdayEmployeeId || !offdayDate || !offdayEndDate || offdayEndDate < offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Saving..." : "Schedule Off Days"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Scheduled Off Days</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">No off days scheduled.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Employee"}</span><span className="text-slate-500">{row.off_date}</span><span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.status === "taken" ? "bg-rose-100 text-rose-800" : row.status === "cancelled" ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-800"}`}>{row.status === "taken" ? "Closed" : row.status === "cancelled" ? "Cancelled" : "Open"}</span>{row.status !== "cancelled" && <button type="button" onClick={() => updateOffdayStatus(row.id, row.status === "taken" ? "planned" : "taken")} className={`rounded-md px-2.5 py-1.5 text-xs font-bold text-white ${row.status === "taken" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-rose-700 hover:bg-rose-800"}`}>{row.status === "taken" ? "Reopen" : "Close"}</button>}</div>)}</div>}</div>}
+          {schemaReady && <OffdayStaffSchedules staff={activeEmployeeStaff} rows={offdayRows} entitlements={entitlementRows} year={offdayYear} schoolId={schoolId} onStatusChange={updateOffdayStatus} onRefresh={loadHRData} />}
           {schemaReady && (
             <form onSubmit={saveEntitlement} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
               <label className="text-sm font-medium text-slate-700">Employee
@@ -586,13 +612,16 @@ function HRManagerDashboard() {
                   {activeEmployeeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</option>)}
                 </select>
               </label>
-              <label className="text-sm font-medium text-slate-700">Annual off-day entitlement ({today().slice(0, 4)})
+              <label className="text-sm font-medium text-slate-700">Entitlement year
+                <select value={offdayYear} onChange={(event) => setOffdayYear(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value={Number(today().slice(0, 4))}>{today().slice(0, 4)}</option><option value={Number(today().slice(0, 4)) + 1}>{Number(today().slice(0, 4)) + 1}</option></select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">Annual off-day entitlement
                 <input required type="number" min="0" max="366" step="0.5" value={entitlementDays} onChange={(event) => setEntitlementDays(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
               </label>
               <div className="flex items-end"><button disabled={savingEntitlement || !entitlementEmployeeId} className="w-full rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingEntitlement ? "Saving..." : "Save entitlement"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Closed</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const used = usedOffdayRows.filter((item) => item.employee_id === row.employee_id).length; const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{used}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - used)}</td></tr>; })}</tbody></table></div>}
+          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Year</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Closed</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitlement_year}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{offdayRows.filter((item) => item.employee_id === row.employee_id && item.status === "taken" && Number(item.off_date.slice(0, 4)) === Number(row.entitlement_year)).length}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - offdayRows.filter((item) => item.employee_id === row.employee_id && item.status !== "cancelled" && Number(item.off_date.slice(0, 4)) === Number(row.entitlement_year)).length)}</td></tr>; })}</tbody></table></div>}
           {!schemaReady && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Off-day records are not enabled in the database yet. Apply the required HR migration first.</p>}
         </section>
       )}
@@ -630,13 +659,7 @@ function HRManagerDashboard() {
         </section>
       )}
 
-      {activeSection === "leave" && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Leave Management</h2><p className="mt-1 text-sm text-slate-500">Kagua na amua maombi ya likizo ya wafanyakazi.</p>
-          {!schemaReady ? <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Leave workflow itawashwa baada ya database migration.</p> : leaveRows.length === 0 ? <p className="mt-4 text-sm text-slate-500">Hakuna maombi ya likizo yaliyorekodiwa.</p> :
-            <div className="mt-4 divide-y divide-slate-100">{leaveRows.map((request) => <article key={request.id} className="py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{[request.employees?.first_name, request.employees?.middle_name, request.employees?.last_name].filter(Boolean).join(" ") || request.employees?.employee_number || "Employee"}</p><p className="mt-1 text-sm text-slate-600">{request.leave_type} • {request.days_requested} day(s)</p><p className="text-xs text-slate-500">{request.start_date} hadi {request.end_date}</p>{request.reason && <p className="mt-2 text-sm text-slate-600">{request.reason}</p>}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-700">{request.status}</span></div>
-              {request.status === "pending" && <div className="mt-3 flex gap-2"><button type="button" disabled={leaveActionId === request.id} onClick={() => reviewLeave(request.id, "approved")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Approve</button><button type="button" disabled={leaveActionId === request.id} onClick={() => reviewLeave(request.id, "rejected")} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Reject</button></div>}</article>)}</div>}
-        </section>
-      )}
+      {activeSection === "leave" && <HRLeaveManagementSection requests={leaveRows} loading={loading} onReview={reviewLeave} busyId={leaveActionId} />}
 
       {activeSection === "reports" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">HR Reports & Documents</h2><p className="mt-1 text-sm text-slate-500">Staff register, attendance summaries, off-day balances, leave history na HR document records.</p></section>
