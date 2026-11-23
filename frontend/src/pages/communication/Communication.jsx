@@ -117,7 +117,7 @@ const Communication = () => {
 
     const roleName = profile?.roles?.role_name || "No role assigned";
     const isApprover = APPROVER_ROLE_IDS.includes(Number(profile?.role_id));
-    const isHRManager = Number(profile?.role_id) === 18;
+    const isHRManager = Number(selectedRoleId) === 18 || Number(profile?.role_id) === 18;
     const effectiveRoleName = String(selectedRoleName || roleName || "").trim().toLowerCase();
     const canManageParentPortal = [1, 2, 3, 4, 7].includes(Number(selectedRoleId)) || ["accountant", "super admin", "headmaster", "deputy headmaster", "academic master", "secretary"].includes(effectiveRoleName);
     const canViewParentPortal = canManageParentPortal || Number(selectedRoleId) === 12 || effectiveRoleName === "class teacher";
