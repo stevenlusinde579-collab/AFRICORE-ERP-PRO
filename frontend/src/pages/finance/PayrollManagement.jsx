@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FaCheckCircle, FaDownload, FaFileInvoiceDollar, FaPrint, FaRefresh, FaSave, FaSend, FaUndo, FaWallet } from "react-icons/fa";
+import { FaCheckCircle, FaDownload, FaFileInvoiceDollar, FaPrint, FaSyncAlt, FaSave, FaArrowRight, FaUndo, FaWallet } from "react-icons/fa";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 import api from "../../services/api";
@@ -210,7 +210,7 @@ function PayrollManagement() {
                         <h1 className="mt-2 text-3xl font-extrabold">Payroll Management</h1>
                         <p className="mt-2 text-sm text-blue-100">{school?.school_name || "Current School"} • Accountant preparation and HR approval</p>
                     </div>
-                    <button type="button" onClick={refresh} disabled={busy} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-950"><FaRefresh className="mr-2 inline" />Refresh</button>
+                    <button type="button" onClick={refresh} disabled={busy} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-950"><FaSyncAlt className="mr-2 inline" />Refresh</button>
                 </div>
             </div>
 
@@ -303,7 +303,7 @@ function PayrollManagement() {
                                 {[["Basic salary", selectedPayroll.total_basic_salary], ["Allowances", selectedPayroll.total_allowances], ["Deductions", selectedPayroll.total_deductions], ["Net payroll", selectedPayroll.total_net_salary]].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 font-bold text-slate-900">{money(value)}</p></div>)}
                             </div>
 
-                            {canPrepare && ["draft", "returned"].includes(selectedPayroll.status) && <div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => runAction(() => api.post(`/payroll/${selectedPayroll.id}/submit`, {}, requestConfig), "Submitted to HR.")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white"><FaSend className="mr-2 inline" />Send to HR</button></div>}
+                            {canPrepare && ["draft", "returned"].includes(selectedPayroll.status) && <div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => runAction(() => api.post(`/payroll/${selectedPayroll.id}/submit`, {}, requestConfig), "Submitted to HR.")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white"><FaArrowRight className="mr-2 inline" />Send to HR</button></div>}
 
                             {canReview && selectedPayroll.status === "submitted_for_review" && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                                 <h3 className="font-bold text-amber-950">HR Review Required</h3>
