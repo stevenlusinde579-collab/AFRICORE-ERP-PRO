@@ -61,7 +61,12 @@ export default function IncomeExpensesSummary() {
             if (refresh) setRefreshing(true); else setLoading(true);
             setError("");
             const params = { from, to };
-            if (isSuperAdmin && selectedSchoolId) params.school_id = selectedSchoolId;
+            // Use the school linked to the active profile role for every school-scoped request.
+            // Auth user metadata does not consistently expose school_id across all roles.
+            if (!selectedSchoolId) {
+                throw new Error("No school is linked to the active role. Please select a school role and try again.");
+            }
+            params.school_id = selectedSchoolId;
             const response = await api.get("/finance/reports/income-expenses-summary", { params });
             setReport(response.data?.data || null);
         } catch (err) {
