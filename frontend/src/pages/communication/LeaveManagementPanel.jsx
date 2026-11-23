@@ -61,6 +61,14 @@ export default function LeaveManagementPanel({ profile, canReview }) {
         reason: form.reason.trim(), status: "pending",
       });
       if (error) throw error;
+      const { data: hrAssignments, error: hrLookupError } = await supabase.from("profile_roles").select("profile_id").eq("school_id", profile.school_id).eq("role_id", 18).eq("is_active", true);
+      if (hrLookupError) console.warn("HR notification recipients could not be loaded:", hrLookupError.message);
+      const hrIds = [...new Set((hrAssignments || []).map((item) => item.profile_id).filter((id) => id && id !== profile.id))];
+      if (hrIds.length) {
+        const notifications = hrIds.map((userId) => ({ school_id: profile.school_id, user_id: userId, title: "New staff leave request", message: "A staff member submitted a " + form.leave_type + " request from " + form.start_date + " to " + form.end_date + ". Open Leave Management to review it.", notification_type: "leave_request", is_read: false }));
+        const { error: notificationError } = await supabase.from("notifications").insert(notifications);
+        if (notificationError) console.warn("HR leave notification could not be created:", notificationError.message);
+      }
       setForm({ leave_type: "Annual Leave", start_date: "", end_date: "", reason: "" });
       setNotice("Your leave request has been submitted to HR.");
       await load();
