@@ -5,7 +5,7 @@ const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_
 const dayCount = (start, end) => Math.max(1, Math.round((Date.parse(end + "T00:00:00Z") - Date.parse(start + "T00:00:00Z")) / 86400000) + 1);
 
 export default function LeaveManagementPanel({ profile, canReview }) {
-  const isHR = Boolean(canReview) || Number(profile?.role_id) === 18 || [1, 2].includes(Number(profile?.role_id));
+  const isHR = Boolean(canReview) || Number(profile?.role_id) === 18 || Number(profile?.role_id) === 1;
   const [requests, setRequests] = useState([]);
   const [employee, setEmployee] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,9 +61,9 @@ export default function LeaveManagementPanel({ profile, canReview }) {
         reason: form.reason.trim(), status: "pending",
       });
       if (error) throw error;
-      const { data: hrAssignments, error: hrLookupError } = await supabase.from("profile_roles").select("profile_id").eq("school_id", profile.school_id).eq("role_id", 18).eq("is_active", true);
+      const { data: hrAssignments, error: hrLookupError } = await supabase.from("profiles").select("id").eq("school_id", profile.school_id).eq("role_id", 18);
       if (hrLookupError) console.warn("HR notification recipients could not be loaded:", hrLookupError.message);
-      const hrIds = [...new Set((hrAssignments || []).map((item) => item.profile_id).filter((id) => id && id !== profile.id))];
+      const hrIds = [...new Set((hrAssignments || []).map((item) => item.id).filter((id) => id && id !== profile.id))];
       if (hrIds.length) {
         const notifications = hrIds.map((userId) => ({ school_id: profile.school_id, user_id: userId, title: "New staff leave request", message: "A staff member submitted a " + form.leave_type + " request from " + form.start_date + " to " + form.end_date + ". Open Leave Management to review it.", notification_type: "leave_request", is_read: false }));
         const { error: notificationError } = await supabase.from("notifications").insert(notifications);
