@@ -2,6 +2,7 @@
 -- Additive: preserves legacy payroll rows and their legacy foreign keys.
 
 alter table public.payrolls
+    add column if not exists workflow_managed boolean not null default false,
     add column if not exists submitted_at timestamptz,
     add column if not exists submitted_by uuid references auth.users(id) on delete set null,
     add column if not exists reviewed_at timestamptz,
@@ -15,6 +16,7 @@ alter table public.payrolls
     add column if not exists finance_journal_entry_id uuid references finance.journal_entries(id) on delete set null;
 
 alter table public.payroll_items
+    add column if not exists workflow_managed boolean not null default false,
     add column if not exists employee_snapshot jsonb not null default '{}'::jsonb,
     add column if not exists components_snapshot jsonb not null default '[]'::jsonb,
     add column if not exists finance_source_id uuid not null default gen_random_uuid(),
@@ -35,14 +37,17 @@ alter table public.payrolls
         'partially_paid',
         'paid',
         'cancelled'
-    ));
+    )) not valid;
 
+-- Legacy payroll rows are preserved as-is. New workflow rows are marked explicitly,
+-- so these indexes enforce the new workflow without rejecting historical duplicates.
 create unique index if not exists payrolls_one_active_month_per_school
     on public.payrolls(school_id, payroll_month)
-    where status <> 'cancelled';
+    where workflow_managed = true and status <> 'cancelled';
 
 create unique index if not exists payroll_items_employee_once_per_payroll
-    on public.payroll_items(payroll_id, employee_id);
+    on public.payroll_items(payroll_id, employee_id)
+    where workflow_managed = true;
 
 create unique index if not exists payrolls_finance_source_unique
     on public.payrolls(finance_source_id);
@@ -213,11 +218,11 @@ begin
 
     v_temp_number := 'TMP-' || gen_random_uuid()::text;
     insert into public.payrolls (
-        school_id, payroll_number, payroll_month, status,
+        school_id, payroll_number, payroll_month, status, workflow_managed,
         total_basic_salary, total_allowances, total_deductions,
         total_net_salary, created_by
     ) values (
-        p_school_id, v_temp_number, p_payroll_month, 'draft',
+        p_school_id, v_temp_number, p_payroll_month, 'draft', true,
         0, 0, 0, 0, p_created_by
     ) returning id into v_payroll_id;
 
@@ -266,10 +271,10 @@ begin
 
         insert into public.payroll_items (
             payroll_id, employee_id, basic_salary, allowances, deductions,
-            net_salary, payment_status, employee_snapshot, components_snapshot
+            net_salary, payment_status, workflow_managed, employee_snapshot, components_snapshot
         ) values (
             v_payroll_id, v_employee.id, v_basic, v_allowances, v_deductions,
-            v_net, 'unpaid',
+            v_net, 'unpaid', true,
             jsonb_build_object(
                 'employee_id', v_employee.id,
                 'employee_number', v_employee.employee_number,
