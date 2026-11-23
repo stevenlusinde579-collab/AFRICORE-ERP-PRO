@@ -10,6 +10,7 @@ import { useSchool } from "../../context/SchoolContext";
 import OffdayStaffSchedules from "./OffdayStaffSchedules";
 import HRLeaveManagementSection from "./HRLeaveManagementSection";
 import PayrollManagement from "../finance/PayrollManagement";
+import StaffSignaturePdfImport from "./StaffSignaturePdfImport";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
@@ -549,7 +550,7 @@ function HRManagerDashboard() {
 
       {activeSection === "signatures" && (
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
-          <div><h2 className="text-xl font-bold text-slate-900">Staff Signature Registration</h2><p className="mt-1 text-sm text-slate-500">HR husajili picha ya saini ya kila mfanyakazi. Secretary atatumia saini hizi kwenye mchakato wa kusaini nyaraka.</p></div>
+          <div><h2 className="text-xl font-bold text-slate-900">Staff Signature Registration</h2><p className="mt-1 text-sm text-slate-500">Pakia PDF moja ya rejesta iliyosainiwa kwa mkono. Mfumo utakuruhusu kukata na kuhifadhi saini ya kila mtu kwa kutumia User ID yake.</p></div>
           {signatureNotice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{signatureNotice}</p>}
           {!signatureSchemaReady ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
