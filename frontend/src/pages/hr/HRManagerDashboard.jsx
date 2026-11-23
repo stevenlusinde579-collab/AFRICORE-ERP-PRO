@@ -435,8 +435,9 @@ function HRManagerDashboard() {
     setSignatureNotice("");
     let uploadedPath = null;
     let insertedSignatureId = null;
+    let previousSignature = null;
     try {
-      const previousSignature = signatureRows.find((row) => row.teacher_id === teacher.id && row.is_active);
+      previousSignature = signatureRows.find((row) => row.teacher_id === teacher.id && row.is_active) || null;
       const path = `${schoolId}/${teacher.id}/signature-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       uploadedPath = path;
       const { error: uploadError } = await supabase.storage.from("hr-staff-signatures").upload(path, file, { contentType: file.type, upsert: false });
