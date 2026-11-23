@@ -256,7 +256,8 @@ with check (
 
 revoke all on public.document_signing_requests, public.document_signing_recipients from anon, authenticated;
 grant select, insert on public.document_signing_requests to authenticated;
-grant select, insert, update on public.document_signing_recipients to authenticated;
+grant select, insert on public.document_signing_recipients to authenticated;
+grant update (status, signed_at, signature_id) on public.document_signing_recipients to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('hr-staff-signatures', 'hr-staff-signatures', false, 2097152, array['image/png','image/jpeg'])
@@ -334,9 +335,16 @@ using (
     public.is_current_user_super_admin()
     or exists (
       select 1 from public.profile_roles pr
+      join public.roles r on r.id = pr.role_id
       where pr.profile_id = (select auth.uid())
         and pr.school_id = (storage.foldername(name))[1]::bigint
         and pr.is_active is true
+        and lower(trim(r.role_name)) in ('secretary','hr manager')
+    )
+    or exists (
+      select 1 from public.document_signing_recipients dsr
+      where dsr.profile_id = (select auth.uid())
+        and dsr.school_id = (storage.foldername(name))[1]::bigint
     )
   )
 );
