@@ -57,7 +57,9 @@ function PayrollManagement() {
     const [notice, setNotice] = useState("");
     const [printItemId, setPrintItemId] = useState(null);
 
-    const requestConfig = useMemo(() => ({ params: { school_id: schoolId } }), [schoolId]);
+    const requestConfig = useMemo(() => ({
+        params: { school_id: schoolId, payroll_month: payrollMonth },
+    }), [schoolId, payrollMonth]);
     const canPrepare = isSuperAdmin || selectedRoleName === "Accountant";
     const canReview = isSuperAdmin || selectedRoleName === "HR Manager";
     const canPay = canPrepare;
@@ -263,7 +265,7 @@ function PayrollManagement() {
                                             const net = Number(values.basic_salary || 0) + Number(values.allowances || 0) - Number(values.deductions || 0);
                                             return <tr key={person.id}>
                                                 <td className="px-3 py-3"><input type="checkbox" checked={selectedEmployeeIds.includes(person.id)} onChange={(event) => setSelectedEmployeeIds((old) => event.target.checked ? [...old, person.id] : old.filter((id) => id !== person.id))} /></td>
-                                                <td className="px-3 py-3"><p className="font-semibold text-slate-900">{fullName(person)}</p><p className="text-xs text-slate-500">{person.employee_number || "No employee number"} • {person.position || person.department || "Staff"}</p></td>
+                                                <td className="px-3 py-3"><p className="font-semibold text-slate-900">{fullName(person)}</p><p className="text-xs text-slate-500">{person.employee_number || "No employee number"} • {person.position || person.department || "Staff"}</p><p className="text-[10px] text-slate-400">{person.salary_source === "active_contract" ? "Salary from active contract" : "Salary from employee record"}</p></td>
                                                 {["basic_salary", "allowances", "deductions"].map((key) => <td key={key} className="px-3 py-3"><input type="number" min="0" step="0.01" value={values[key]} onChange={(event) => setEmployeeValues((old) => ({ ...old, [person.id]: { ...values, [key]: event.target.value } }))} className="w-32 rounded-lg border border-slate-300 px-2 py-1.5" /></td>)}
                                                 <td className="px-3 py-3 font-bold text-slate-900">{money(net)}</td>
                                             </tr>;
