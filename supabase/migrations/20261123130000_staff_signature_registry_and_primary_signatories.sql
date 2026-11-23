@@ -140,8 +140,8 @@ with check (
 );
 
 revoke all on public.hr_staff_signatures, public.hr_primary_signatories from anon, authenticated;
-grant select, insert, update, delete on public.hr_staff_signatures to authenticated;
-grant select, insert, update, delete on public.hr_primary_signatories to authenticated;
+grant select, insert, update on public.hr_staff_signatures to authenticated;
+grant select, insert, update on public.hr_primary_signatories to authenticated;
 
 -- The existing Secretary signing screen already expects these two tables.
 create table if not exists public.document_signing_requests (
