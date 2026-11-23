@@ -56,6 +56,7 @@ function HRManagerDashboard() {
   const [savingEntitlement, setSavingEntitlement] = useState(false);
   const [offdayEmployeeId, setOffdayEmployeeId] = useState("");
   const [offdayDate, setOffdayDate] = useState("");
+  const [offdayEndDate, setOffdayEndDate] = useState("");
   const [savingOffday, setSavingOffday] = useState(false);
   const [leaveActionId, setLeaveActionId] = useState(null);
   const [deviceName, setDeviceName] = useState("Main Office Fingerprint Scanner");
@@ -294,26 +295,37 @@ function HRManagerDashboard() {
 
   const saveOffday = useCallback(async (event) => {
     event.preventDefault();
-    if (!schoolId || !offdayEmployeeId || !offdayDate || savingOffday) return;
+    if (!schoolId || !offdayEmployeeId || !offdayDate || !offdayEndDate || savingOffday) return;
+    if (offdayEndDate < offdayDate) {
+      setError("Tarehe ya kumaliza Off Day haiwezi kuwa kabla ya tarehe ya kuanza.");
+      return;
+    }
     setSavingOffday(true);
     setError("");
     try {
-      const { error: insertError } = await supabase.from("hr_offday_rosters").insert({
-        school_id: schoolId,
-        employee_id: Number(offdayEmployeeId),
-        off_date: offdayDate,
-        status: "planned"
-      });
+      const start = new Date(`${offdayDate}T00:00:00Z`);
+      const end = new Date(`${offdayEndDate}T00:00:00Z`);
+      const dayRows = [];
+      for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+        dayRows.push({
+          school_id: schoolId,
+          employee_id: Number(offdayEmployeeId),
+          off_date: cursor.toISOString().slice(0, 10),
+          status: "planned"
+        });
+      }
+      const { error: insertError } = await supabase.from("hr_offday_rosters").insert(dayRows);
       if (insertError) throw insertError;
       setOffdayEmployeeId("");
       setOffdayDate("");
+      setOffdayEndDate("");
       await loadHRData();
     } catch (saveError) {
       setError(saveError.message || "Imeshindikana kuhifadhi ratiba ya off-day.");
     } finally {
       setSavingOffday(false);
     }
-  }, [schoolId, offdayEmployeeId, offdayDate, savingOffday, loadHRData]);
+  }, [schoolId, offdayEmployeeId, offdayDate, offdayEndDate, savingOffday, loadHRData]);
 
   const updateOffdayStatus = useCallback(async (rosterId, status) => {
     if (!schoolId || !rosterId) return;
@@ -552,7 +564,7 @@ function HRManagerDashboard() {
           <p className="mt-1 text-sm text-slate-500">Weka haki ya off-days kwa mwaka, panga siku za kila mfanyakazi kwa zamu, na fuatilia zilizotumika dhidi ya zilizobaki.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Annual entitlement</p><p className="mt-1 font-bold text-slate-800">Per staff member</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Rotation planning</p><p className="mt-1 font-bold text-slate-800">Staggered schedules</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Coverage control</p><p className="mt-1 font-bold text-slate-800">Avoid understaffing</p></div></div>
           {schemaReady && (
-            <form onSubmit={saveOffday} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+            <form onSubmit={saveOffday} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-4">
               <label className="text-sm font-medium text-slate-700 sm:col-span-1">Mfanyakazi
                 <select required value={offdayEmployeeId} onChange={(event) => setOffdayEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
                   <option value="">Chagua mfanyakazi</option>
@@ -562,7 +574,7 @@ function HRManagerDashboard() {
               <label className="text-sm font-medium text-slate-700">Tarehe ya off-day
                 <input required type="date" min={today()} value={offdayDate} onChange={(event) => setOffdayDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
               </label>
-              <div className="flex items-end"><button disabled={savingOffday || !offdayEmployeeId || !offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Inahifadhi..." : "Panga off-day"}</button></div>
+              <label className="text-sm font-medium text-slate-700">Tarehe ya kumaliza off-day\n                <input required type="date" min={offdayDate || today()} value={offdayEndDate} onChange={(event) => setOffdayEndDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />\n              </label>\n              <div className="flex flex-col justify-end gap-1"><p className="text-xs text-slate-500">{offdayDate && offdayEndDate && offdayEndDate >= offdayDate ? `Jumla: ${Math.round((Date.parse(`${offdayEndDate}T00:00:00Z`) - Date.parse(`${offdayDate}T00:00:00Z`)) / 86400000) + 1} siku` : "Chagua tarehe ya kuanza na kumaliza."}</p><button disabled={savingOffday || !offdayEmployeeId || !offdayDate || !offdayEndDate || offdayEndDate < offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Inahifadhi..." : "Panga off-day"}</button></div>
             </form>
           )}
           {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Ratiba zijazo</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">Hakuna ratiba iliyopo.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Mfanyakazi"}</span><span className="text-slate-500">{row.off_date}</span><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{row.status}</span>{row.status === "planned" && <div className="flex gap-2"><button type="button" onClick={() => updateOffdayStatus(row.id, "taken")} className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-bold text-white">Mark taken</button><button type="button" onClick={() => updateOffdayStatus(row.id, "cancelled")} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600">Cancel</button></div>}</div>)}</div>}</div>}
