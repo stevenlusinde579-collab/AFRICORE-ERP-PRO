@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, RefreshCw, Save, ShieldCheck, History, Printer } from "lucide-react";
+import { Download, RefreshCw, Save, ShieldCheck, History } from "lucide-react";
 import { supabase } from "../../services/supabase";
 
 const displayName = (person) => [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ") || person.employee_number || "Staff";
@@ -68,7 +68,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const roleNames = roles.filter((role) => role.members.some((member) => member.user_id === person.user_id)).map((role) => role.name).join(", ");
       return { person, roleNames };
     });
-    const popup = window.open("", "_blank", "noopener,noreferrer");
+    const popup = window.open("", "_blank");
     if (!popup) { setError("Browser imezuia dirisha la kuchapisha. Ruhusu pop-ups kisha jaribu tena."); return; }
     const schoolTitle = escapeHtml(document.title.replace(" | AfriCore", "") || "School");
     popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staff Signature Register</title><style>
@@ -117,7 +117,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       })}</tbody></table></div>
       {!roles.length && <p className="text-sm text-slate-500">No active staff roles were found for this school.</p>}
       <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900"><p className="font-semibold">Signature Register workflow</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Download and print the register.</li><li>Staff sign next to their own name and User ID.</li><li>HR uses Staff Signature Registration in the HR Dashboard to upload each staff signature image against the matching staff account.</li><li>Return here to select a Primary Signatory for each role.</li></ol><p className="mt-2 text-xs">The downloaded register is a printable template. It does not automatically crop handwritten signatures from a scanned page; HR must upload the individual signature image so it is linked to the correct account.</p></div>
-      <div className="border-t border-slate-200 pt-4"><div className="mb-3 flex items-center gap-2"><History className="h-4 w-4 text-slate-600"/><h3 className="font-bold text-slate-800">Signature Audit History</h3></div>{auditRows.length ? <div className="max-h-64 space-y-2 overflow-y-auto">{auditRows.map((row) => <div key={row.id} className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600"><div className="flex flex-wrap justify-between gap-2"><strong className="text-slate-800">{row.action} • {row.entity_type}</strong><span>{new Date(row.created_at).toLocaleString("en-GB")}</span></div><p>Actor User ID: {row.actor_user_id || "System"}</p></div>)}</div> : <p className="text-xs text-slate-500">No signature changes recorded yet.</p>}</div>
+      <div className="border-t border-slate-200 pt-4"><div className="mb-3 flex items-center gap-2"><History className="h-4 w-4 text-slate-600"/><h3 className="font-bold text-slate-800">Signature Audit History</h3></div>{auditRows.length ? <div className="max-h-64 space-y-2 overflow-y-auto">{auditRows.map((row) => <div key={row.id} className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600"><div className="flex flex-wrap justify-between gap-2"><strong className="text-slate-800">{row.action} • {row.entity_type}</strong><span>{new Date(row.created_at).toLocaleString("en-GB")}</span></div><p>Actor User ID: {row.actor_user_id || "System"}</p><p>Change reference: {row.entity_id}</p></div>)}</div> : <p className="text-xs text-slate-500">No signature changes recorded yet.</p>}</div>
     </>}
   </section>;
 }
