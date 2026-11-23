@@ -4,8 +4,8 @@ import { supabase } from "../../services/supabase";
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 const dayCount = (start, end) => Math.max(1, Math.round((Date.parse(end + "T00:00:00Z") - Date.parse(start + "T00:00:00Z")) / 86400000) + 1);
 
-export default function LeaveManagementPanel({ profile }) {
-  const isHR = Number(profile?.role_id) === 18 || [1, 2, 3].includes(Number(profile?.role_id));
+export default function LeaveManagementPanel({ profile, canReview }) {
+  const isHR = Boolean(canReview) || Number(profile?.role_id) === 18 || [1, 2].includes(Number(profile?.role_id));
   const [requests, setRequests] = useState([]);
   const [employee, setEmployee] = useState(null);
   const [loading, setLoading] = useState(true);
