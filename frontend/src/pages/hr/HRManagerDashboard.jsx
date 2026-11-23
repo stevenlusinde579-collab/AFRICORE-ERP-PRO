@@ -318,10 +318,15 @@ function HRManagerDashboard() {
         });
       }
       const alreadyScheduled = offdayRows.filter((row) => Number(row.employee_id) === Number(offdayEmployeeId) && row.status !== "cancelled" && Number(row.off_date.slice(0, 4)) === selectedYear).length;
+      const cancelledRows = offdayRows.filter((existing) => Number(existing.employee_id) === Number(offdayEmployeeId) && existing.status === "cancelled" && dayRows.some((row) => row.off_date === existing.off_date));
       const newDates = dayRows.filter((row) => !offdayRows.some((existing) => Number(existing.employee_id) === Number(offdayEmployeeId) && existing.off_date === row.off_date && existing.status !== "cancelled"));
       if (alreadyScheduled + newDates.length > Number(entitlement.entitled_days)) throw new Error("This schedule exceeds the " + selectedYear + " entitlement. Remaining days: " + Math.max(0, Number(entitlement.entitled_days) - alreadyScheduled) + ".");
       const { error: insertError } = await supabase.from("hr_offday_rosters").upsert(dayRows, { onConflict: "employee_id,off_date", ignoreDuplicates: true });
       if (insertError) throw insertError;
+      if (cancelledRows.length) {
+        const { error: reopenError } = await supabase.from("hr_offday_rosters").update({ status: "planned" }).in("id", cancelledRows.map((row) => row.id)).eq("school_id", schoolId);
+        if (reopenError) throw reopenError;
+      }
       setOffdayEmployeeId("");
       setOffdayDate("");
       setOffdayEndDate("");
