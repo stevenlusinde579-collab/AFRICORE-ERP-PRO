@@ -167,6 +167,7 @@ declare
     v_item jsonb;
     v_employee public.employees%rowtype;
     v_profile public.employee_financial_profiles%rowtype;
+    v_contract_salary numeric(14,2);
     v_basic numeric(14,2);
     v_allowances numeric(14,2);
     v_deductions numeric(14,2);
@@ -239,7 +240,18 @@ begin
         from public.employee_financial_profiles
         where employee_id = v_employee.id;
 
-        v_basic := round(coalesce((v_item->>'basic_salary')::numeric, v_employee.basic_salary, 0), 2);
+        select hc.basic_salary into v_contract_salary
+        from public.hr_employment_contracts hc
+        where hc.employee_id = v_employee.id
+          and hc.school_id = p_school_id
+          and hc.status = 'active'
+          and hc.start_date <= (p_payroll_month + interval '1 month - 1 day')::date
+          and (hc.end_date is null or hc.end_date >= p_payroll_month)
+          and hc.basic_salary is not null
+        order by hc.start_date desc, hc.id desc
+        limit 1;
+
+        v_basic := round(coalesce((v_item->>'basic_salary')::numeric, v_contract_salary, v_employee.basic_salary, 0), 2);
         v_allowances := round(coalesce((v_item->>'allowances')::numeric, 0), 2);
         v_deductions := round(coalesce((v_item->>'deductions')::numeric, 0), 2);
         v_net := round(v_basic + v_allowances - v_deductions, 2);
