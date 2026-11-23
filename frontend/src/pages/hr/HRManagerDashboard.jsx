@@ -53,6 +53,7 @@ function HRManagerDashboard() {
   const [usedOffdayRows, setUsedOffdayRows] = useState([]);
   const [activeSection, setActiveSection] = useState("overview");
   const [entitlementEmployeeId, setEntitlementEmployeeId] = useState("");
+  const [offdayYear, setOffdayYear] = useState(Number(today().slice(0, 4)));
   const [entitlementDays, setEntitlementDays] = useState("7");
   const [savingEntitlement, setSavingEntitlement] = useState(false);
   const [offdayEmployeeId, setOffdayEmployeeId] = useState("");
@@ -115,7 +116,7 @@ function HRManagerDashboard() {
         supabase.from("hr_offday_entitlements")
           .select("id,employee_id,entitlement_year,entitled_days")
           .eq("school_id", schoolId)
-          .eq("entitlement_year", year),
+          .in("entitlement_year", [year, year + 1]),
         supabase.from("hr_offday_rosters")
           .select("employee_id")
           .eq("school_id", schoolId)
@@ -281,7 +282,7 @@ function HRManagerDashboard() {
       const { error: upsertError } = await supabase.from("hr_offday_entitlements").upsert({
         school_id: schoolId,
         employee_id: Number(entitlementEmployeeId),
-        entitlement_year: Number(today().slice(0, 4)),
+        entitlement_year: Number(offdayYear),
         entitled_days: days
       }, { onConflict: "school_id,employee_id,entitlement_year" });
       if (upsertError) throw upsertError;
@@ -292,7 +293,7 @@ function HRManagerDashboard() {
     } finally {
       setSavingEntitlement(false);
     }
-  }, [schoolId, entitlementEmployeeId, entitlementDays, savingEntitlement, loadHRData]);
+  }, [schoolId, entitlementEmployeeId, entitlementDays, offdayYear, savingEntitlement, loadHRData]);
 
   const saveOffday = useCallback(async (event) => {
     event.preventDefault();
@@ -582,7 +583,7 @@ function HRManagerDashboard() {
               <label className="text-sm font-medium text-slate-700">End date\n                <input required type="date" min={offdayDate || today()} value={offdayEndDate} onChange={(event) => setOffdayEndDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />\n              </label>\n              <div className="flex flex-col justify-end gap-1"><p className="text-xs text-slate-500">{offdayDate && offdayEndDate && offdayEndDate >= offdayDate ? `Total: ${Math.round((Date.parse(`${offdayEndDate}T00:00:00Z`) - Date.parse(`${offdayDate}T00:00:00Z`)) / 86400000) + 1} day(s)` : "Select a start and end date."}</p><button disabled={savingOffday || !offdayEmployeeId || !offdayDate || !offdayEndDate || offdayEndDate < offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Saving..." : "Schedule Off Days"}</button></div>
             </form>
           )}
-          {schemaReady && <OffdayStaffSchedules staff={activeEmployeeStaff} rows={offdayRows} entitlements={entitlementRows} schoolId={schoolId} onStatusChange={updateOffdayStatus} onRefresh={loadHRData} />}
+          {schemaReady && <OffdayStaffSchedules staff={activeEmployeeStaff} rows={offdayRows} entitlements={entitlementRows} year={offdayYear} schoolId={schoolId} onStatusChange={updateOffdayStatus} onRefresh={loadHRData} />}
           {schemaReady && (
             <form onSubmit={saveEntitlement} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
               <label className="text-sm font-medium text-slate-700">Employee
@@ -591,13 +592,16 @@ function HRManagerDashboard() {
                   {activeEmployeeStaff.map((person) => <option key={person.id} value={person.id}>{[person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ")}</option>)}
                 </select>
               </label>
-              <label className="text-sm font-medium text-slate-700">Annual off-day entitlement ({today().slice(0, 4)})
+              <label className="text-sm font-medium text-slate-700">Entitlement year
+                <select value={offdayYear} onChange={(event) => setOffdayYear(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value={Number(today().slice(0, 4))}>{today().slice(0, 4)}</option><option value={Number(today().slice(0, 4)) + 1}>{Number(today().slice(0, 4)) + 1}</option></select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">Annual off-day entitlement
                 <input required type="number" min="0" max="366" step="0.5" value={entitlementDays} onChange={(event) => setEntitlementDays(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />
               </label>
               <div className="flex items-end"><button disabled={savingEntitlement || !entitlementEmployeeId} className="w-full rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingEntitlement ? "Saving..." : "Save entitlement"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Closed</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const used = usedOffdayRows.filter((item) => item.employee_id === row.employee_id).length; const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{used}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - used)}</td></tr>; })}</tbody></table></div>}
+          {schemaReady && <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Year</th><th className="px-3 py-2">Entitled</th><th className="px-3 py-2">Closed</th><th className="px-3 py-2">Remaining</th></tr></thead><tbody className="divide-y divide-slate-100">{entitlementRows.map((row) => { const used = usedOffdayRows.filter((item) => item.employee_id === row.employee_id).length; const person = staff.find((item) => item.id === row.employee_id); return <tr key={row.id}><td className="px-3 py-2">{[person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(" ") || "Staff"}</td><td className="px-3 py-2">{row.entitlement_year}</td><td className="px-3 py-2">{row.entitled_days}</td><td className="px-3 py-2">{usedOffdayRows.filter((item) => item.employee_id === row.employee_id && Number(item.off_date.slice(0, 4)) === Number(row.entitlement_year)).length}</td><td className="px-3 py-2 font-semibold">{Math.max(0, Number(row.entitled_days) - offdayRows.filter((item) => item.employee_id === row.employee_id && item.status !== "cancelled" && Number(item.off_date.slice(0, 4)) === Number(row.entitlement_year)).length)}</td></tr>; })}</tbody></table></div>}
           {!schemaReady && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Off-day records are not enabled in the database yet. Apply the required HR migration first.</p>}
         </section>
       )}
