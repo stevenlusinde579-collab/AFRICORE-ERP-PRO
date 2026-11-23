@@ -7,6 +7,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import OffdayStaffSchedules from "./OffdayStaffSchedules";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
@@ -95,9 +96,9 @@ function HRManagerDashboard() {
         supabase.from("hr_offday_rosters")
           .select("id,employee_id,off_date,status,employees(first_name,middle_name,last_name,employee_number)")
           .eq("school_id", schoolId)
-          .gte("off_date", date)
-          .order("off_date", { ascending: true })
-          .limit(100),
+          .gte("off_date", `${year}-01-01`)
+          .lt("off_date", `${year + 1}-01-01`)
+          .order("off_date", { ascending: true }),
         supabase.from("hr_leave_requests")
           .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,employees(first_name,middle_name,last_name,employee_number)")
           .eq("school_id", schoolId)
@@ -118,7 +119,6 @@ function HRManagerDashboard() {
         supabase.from("hr_offday_rosters")
           .select("employee_id")
           .eq("school_id", schoolId)
-          .eq("status", "taken")
           .gte("off_date", `${year}-01-01`)
           .lt("off_date", `${year + 1}-01-01`),
         supabase.from("teachers")
@@ -296,10 +296,11 @@ function HRManagerDashboard() {
   const saveOffday = useCallback(async (event) => {
     event.preventDefault();
     if (!schoolId || !offdayEmployeeId || !offdayDate || !offdayEndDate || savingOffday) return;
-    if (offdayEndDate < offdayDate) {
-      setError("The end date cannot be earlier than the start date.");
-      return;
-    }
+    if (offdayEndDate < offdayDate) { setError("The end date cannot be earlier than the start date."); return; }
+    const selectedYear = Number(offdayDate.slice(0, 4));
+    if (Number(offdayEndDate.slice(0, 4)) !== selectedYear) { setError("Schedule one calendar year at a time so each year uses its own entitlement."); return; }
+    const entitlement = entitlementRows.find((row) => Number(row.employee_id) === Number(offdayEmployeeId) && Number(row.entitlement_year) === selectedYear);
+    if (!entitlement) { setError("Set this employee entitlement for " + selectedYear + " before scheduling dates."); return; }
     setSavingOffday(true);
     setError("");
     try {
@@ -314,6 +315,9 @@ function HRManagerDashboard() {
           status: "planned"
         });
       }
+      const alreadyScheduled = offdayRows.filter((row) => Number(row.employee_id) === Number(offdayEmployeeId) && row.status !== "cancelled" && Number(row.off_date.slice(0, 4)) === selectedYear).length;
+      const newDates = dayRows.filter((row) => !offdayRows.some((existing) => Number(existing.employee_id) === Number(offdayEmployeeId) && existing.off_date === row.off_date && existing.status !== "cancelled"));
+      if (alreadyScheduled + newDates.length > Number(entitlement.entitled_days)) throw new Error("This schedule exceeds the " + selectedYear + " entitlement. Remaining days: " + Math.max(0, Number(entitlement.entitled_days) - alreadyScheduled) + ".");
       const { error: insertError } = await supabase.from("hr_offday_rosters").upsert(dayRows, { onConflict: "employee_id,off_date", ignoreDuplicates: true });
       if (insertError) throw insertError;
       setOffdayEmployeeId("");
@@ -325,7 +329,7 @@ function HRManagerDashboard() {
     } finally {
       setSavingOffday(false);
     }
-  }, [schoolId, offdayEmployeeId, offdayDate, offdayEndDate, savingOffday, loadHRData]);
+  }, [schoolId, offdayEmployeeId, offdayDate, offdayEndDate, savingOffday, entitlementRows, offdayRows, loadHRData]);
 
   const updateOffdayStatus = useCallback(async (rosterId, status) => {
     if (!schoolId || !rosterId) return;
@@ -577,7 +581,7 @@ function HRManagerDashboard() {
               <label className="text-sm font-medium text-slate-700">End date\n                <input required type="date" min={offdayDate || today()} value={offdayEndDate} onChange={(event) => setOffdayEndDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" />\n              </label>\n              <div className="flex flex-col justify-end gap-1"><p className="text-xs text-slate-500">{offdayDate && offdayEndDate && offdayEndDate >= offdayDate ? `Total: ${Math.round((Date.parse(`${offdayEndDate}T00:00:00Z`) - Date.parse(`${offdayDate}T00:00:00Z`)) / 86400000) + 1} day(s)` : "Select a start and end date."}</p><button disabled={savingOffday || !offdayEmployeeId || !offdayDate || !offdayEndDate || offdayEndDate < offdayDate} className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingOffday ? "Saving..." : "Schedule Off Days"}</button></div>
             </form>
           )}
-          {schemaReady && <div className="mt-5"><h3 className="font-semibold text-slate-800">Scheduled Off Days</h3>{offdayRows.length === 0 ? <p className="mt-2 text-sm text-slate-500">No off days scheduled.</p> : <div className="mt-2 divide-y divide-slate-100">{offdayRows.map((row) => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span>{[row.employees?.first_name, row.employees?.middle_name, row.employees?.last_name].filter(Boolean).join(" ") || row.employees?.employee_number || "Employee"}</span><span className="text-slate-500">{row.off_date}</span><span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.status === "taken" ? "bg-rose-100 text-rose-800" : row.status === "cancelled" ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-800"}`}>{row.status === "taken" ? "Closed" : row.status === "cancelled" ? "Cancelled" : "Open"}</span>{row.status !== "cancelled" && <button type="button" onClick={() => updateOffdayStatus(row.id, row.status === "taken" ? "planned" : "taken")} className={`rounded-md px-2.5 py-1.5 text-xs font-bold text-white ${row.status === "taken" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-rose-700 hover:bg-rose-800"}`}>{row.status === "taken" ? "Reopen" : "Close"}</button>}</div>)}</div>}</div>}
+          {schemaReady && <OffdayStaffSchedules staff={activeEmployeeStaff} rows={offdayRows} entitlements={entitlementRows} schoolId={schoolId} onStatusChange={updateOffdayStatus} onRefresh={loadHRData} />}
           {schemaReady && (
             <form onSubmit={saveEntitlement} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
               <label className="text-sm font-medium text-slate-700">Employee
