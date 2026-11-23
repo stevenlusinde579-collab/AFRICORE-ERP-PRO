@@ -152,7 +152,7 @@ function HRManagerDashboard() {
         return;
       }
 
-      const errors = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult, usedOffdayResult]
+      const errors = [offdayResult, leaveResult, attendanceResult, deviceResult, entitlementResult]
         .filter((result) => result.error);
       if (errors.length) throw errors[0].error;
 
@@ -369,6 +369,17 @@ function HRManagerDashboard() {
         .eq("school_id", schoolId)
         .eq("status", "pending");
       if (updateError) throw updateError;
+      const reviewedRequest = leaveRows.find((item) => item.id === requestId);
+      const employeeUserId = reviewedRequest?.employees?.user_id;
+      if (employeeUserId) {
+        const { error: notificationError } = await supabase.from("notifications").insert({
+          school_id: schoolId, user_id: employeeUserId,
+          title: status === "approved" ? "Leave request approved" : "Leave request rejected",
+          message: "Your leave request from " + reviewedRequest.start_date + " to " + reviewedRequest.end_date + " was " + status + ".",
+          notification_type: "leave_request", is_read: false,
+        });
+        if (notificationError) console.warn("Leave decision notification could not be created:", notificationError.message);
+      }
       await loadHRData();
     } catch (reviewError) {
       setError(reviewError.message || "Imeshindikana kufanya uamuzi wa ombi.");
