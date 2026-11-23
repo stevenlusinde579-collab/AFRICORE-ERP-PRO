@@ -8,6 +8,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 import OffdayStaffSchedules from "./OffdayStaffSchedules";
+import HRLeaveManagementSection from "./HRLeaveManagementSection";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
@@ -645,13 +646,7 @@ function HRManagerDashboard() {
         </section>
       )}
 
-      {activeSection === "leave" && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Leave Management</h2><p className="mt-1 text-sm text-slate-500">Kagua na amua maombi ya likizo ya wafanyakazi.</p>
-          {!schemaReady ? <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Leave workflow itawashwa baada ya database migration.</p> : leaveRows.length === 0 ? <p className="mt-4 text-sm text-slate-500">Hakuna maombi ya likizo yaliyorekodiwa.</p> :
-            <div className="mt-4 divide-y divide-slate-100">{leaveRows.map((request) => <article key={request.id} className="py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{[request.employees?.first_name, request.employees?.middle_name, request.employees?.last_name].filter(Boolean).join(" ") || request.employees?.employee_number || "Employee"}</p><p className="mt-1 text-sm text-slate-600">{request.leave_type} • {request.days_requested} day(s)</p><p className="text-xs text-slate-500">{request.start_date} hadi {request.end_date}</p>{request.reason && <p className="mt-2 text-sm text-slate-600">{request.reason}</p>}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-700">{request.status}</span></div>
-              {request.status === "pending" && <div className="mt-3 flex gap-2"><button type="button" disabled={leaveActionId === request.id} onClick={() => reviewLeave(request.id, "approved")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Approve</button><button type="button" disabled={leaveActionId === request.id} onClick={() => reviewLeave(request.id, "rejected")} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Reject</button></div>}</article>)}</div>}
-        </section>
-      )}
+      {activeSection === "leave" && <HRLeaveManagementSection requests={leaveRows} loading={loading} onReview={reviewLeave} busyId={leaveActionId} />}
 
       {activeSection === "reports" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">HR Reports & Documents</h2><p className="mt-1 text-sm text-slate-500">Staff register, attendance summaries, off-day balances, leave history na HR document records.</p></section>
