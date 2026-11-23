@@ -93,7 +93,7 @@ using (
     where pr.profile_id = (select auth.uid())
       and pr.school_id = hr_primary_signatories.school_id
       and pr.is_active is true
-      and lower(trim(r.role_name)) in ('secretary')
+      and lower(trim(r.role_name)) in ('secretary','hr manager')
   )
   or profile_id = (select auth.uid())
 );
@@ -387,5 +387,99 @@ with check (
     )
   )
 );
+
+
+-- Immutable audit trail for signature registration/replacement and primary signatory changes.
+create table if not exists public.hr_signature_audit (
+  id uuid primary key default gen_random_uuid(),
+  school_id bigint not null references public.schools(id) on delete restrict,
+  entity_type text not null check (entity_type in ('staff_signature','primary_signatory')),
+  entity_id uuid not null,
+  action text not null check (action in ('registered','replaced','deactivated','primary_assigned','primary_changed','primary_removed')),
+  actor_user_id uuid references auth.users(id) on delete set null,
+  old_value jsonb,
+  new_value jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists hr_signature_audit_school_created_idx
+  on public.hr_signature_audit(school_id, created_at desc);
+alter table public.hr_signature_audit enable row level security;
+drop policy if exists hr_signature_audit_hr_read on public.hr_signature_audit;
+create policy hr_signature_audit_hr_read on public.hr_signature_audit
+for select to authenticated using (
+  public.is_current_user_super_admin()
+  or exists (
+    select 1 from public.profile_roles pr
+    join public.roles r on r.id = pr.role_id
+    where pr.profile_id = (select auth.uid())
+      and pr.school_id = hr_signature_audit.school_id
+      and pr.is_active is true
+      and lower(trim(r.role_name)) = 'hr manager'
+  )
+);
+revoke all on public.hr_signature_audit from anon, authenticated;
+grant select on public.hr_signature_audit to authenticated;
+
+create or replace function public.audit_hr_signature_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_school_id bigint;
+  v_entity_id uuid;
+  v_old jsonb;
+  v_new jsonb;
+  v_action text;
+begin
+  if tg_op = 'DELETE' then
+    v_school_id := old.school_id;
+    v_entity_id := old.id;
+    v_old := to_jsonb(old) - 'storage_path';
+    v_new := null;
+    v_action := case when tg_table_name = 'hr_staff_signatures' then 'deactivated' else 'primary_removed' end;
+  elsif tg_op = 'INSERT' then
+    v_school_id := new.school_id;
+    v_entity_id := new.id;
+    v_old := null;
+    v_new := to_jsonb(new) - 'storage_path';
+    v_action := case when tg_table_name = 'hr_staff_signatures' then 'registered' else 'primary_assigned' end;
+  else
+    v_school_id := new.school_id;
+    v_entity_id := new.id;
+    v_old := to_jsonb(old) - 'storage_path';
+    v_new := to_jsonb(new) - 'storage_path';
+    if tg_table_name = 'hr_staff_signatures' then
+      v_action := case when old.is_active and not new.is_active then 'deactivated' else 'replaced' end;
+    else
+      v_action := 'primary_changed';
+    end if;
+  end if;
+
+  insert into public.hr_signature_audit
+    (school_id, entity_type, entity_id, action, actor_user_id, old_value, new_value)
+  values (
+    v_school_id,
+    case when tg_table_name = 'hr_staff_signatures' then 'staff_signature' else 'primary_signatory' end,
+    v_entity_id,
+    v_action,
+    auth.uid(),
+    v_old,
+    v_new
+  );
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists trg_audit_hr_staff_signatures on public.hr_staff_signatures;
+create trigger trg_audit_hr_staff_signatures
+after insert or update or delete on public.hr_staff_signatures
+for each row execute function public.audit_hr_signature_change();
+
+drop trigger if exists trg_audit_hr_primary_signatories on public.hr_primary_signatories;
+create trigger trg_audit_hr_primary_signatories
+after insert or update or delete on public.hr_primary_signatories
+for each row execute function public.audit_hr_signature_change();
 
 commit;
