@@ -473,7 +473,10 @@ begin
   end if;
   return new;
 end;
-$$;
+$;
+
+-- Trigger-only SECURITY DEFINER function: prevent direct invocation through the Data API.
+revoke all on function public.audit_hr_signature_change() from public, anon, authenticated;
 
 drop trigger if exists trg_audit_hr_staff_signatures on public.hr_staff_signatures;
 create trigger trg_audit_hr_staff_signatures
