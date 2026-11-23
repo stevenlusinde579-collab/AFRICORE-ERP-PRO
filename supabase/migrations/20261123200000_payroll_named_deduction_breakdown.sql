@@ -111,7 +111,7 @@ begin
             where component->>'type' = 'deduction'
               and (
                 coalesce(trim(component->>'name'), '') = ''
-                or jsonb_typeof(component->'amount') <> 'number'
+                or coalesce(jsonb_typeof(component->'amount'), '') <> 'number'
                 or (component->>'amount')::numeric < 0
               )
         ) then
@@ -220,7 +220,7 @@ begin
         where component->>'type' = 'deduction'
           and (
             coalesce(trim(component->>'name'), '') = ''
-            or jsonb_typeof(component->'amount') <> 'number'
+            or coalesce(jsonb_typeof(component->'amount'), '') <> 'number'
             or (component->>'amount')::numeric < 0
           )
     ) then
