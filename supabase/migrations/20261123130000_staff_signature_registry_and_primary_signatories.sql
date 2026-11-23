@@ -122,6 +122,32 @@ with check (
       and pr.is_active is true
       and lower(trim(r.role_name)) = 'hr manager'
   )
+)
+with check (
+  public.is_current_user_super_admin()
+  or (
+    exists (
+      select 1 from public.profile_roles pr
+      where pr.profile_id = hr_primary_signatories.profile_id
+        and pr.school_id = hr_primary_signatories.school_id
+        and pr.role_id = hr_primary_signatories.role_id
+        and pr.is_active is true
+    )
+    and exists (
+      select 1 from public.teachers t
+      where t.id = hr_primary_signatories.teacher_id
+        and t.school_id = hr_primary_signatories.school_id
+        and t.user_id = hr_primary_signatories.profile_id
+    )
+    and exists (
+      select 1 from public.profile_roles actor
+      join public.roles ar on ar.id = actor.role_id
+      where actor.profile_id = (select auth.uid())
+        and actor.school_id = hr_primary_signatories.school_id
+        and actor.is_active is true
+        and lower(trim(ar.role_name)) = 'hr manager'
+    )
+  )
 );
 
 revoke all on public.hr_staff_signatures, public.hr_primary_signatories from anon, authenticated;
@@ -228,6 +254,12 @@ with check (
       and dsr.school_id = document_signing_recipients.school_id
       and dsr.created_by = (select auth.uid())
   )
+  and exists (
+    select 1 from public.teachers t
+    where t.id = document_signing_recipients.teacher_id
+      and t.school_id = document_signing_recipients.school_id
+      and t.user_id = document_signing_recipients.profile_id
+  )
 );
 
 drop policy if exists document_signing_recipients_self_update on public.document_signing_recipients;
@@ -249,6 +281,7 @@ with check (
           and hs.school_id = document_signing_recipients.school_id
           and hs.teacher_id = document_signing_recipients.teacher_id
           and hs.profile_id = (select auth.uid())
+          and hs.is_active is true
       )
     )
   )
