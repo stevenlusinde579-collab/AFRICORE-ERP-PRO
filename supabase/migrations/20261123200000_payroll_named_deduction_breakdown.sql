@@ -111,7 +111,8 @@ begin
             where component->>'type' = 'deduction'
               and (
                 coalesce(trim(component->>'name'), '') = ''
-                or coalesce(component->>'amount', '') !~ '^\\d+(\\.\\d{1,2})?
+                or jsonb_typeof(component->'amount') <> 'number'
+                or (component->>'amount')::numeric < 0
             raise exception 'Salary values cannot be negative or exceed gross earnings';
         end if;
         if jsonb_typeof(v_components) <> 'array' then
@@ -275,7 +276,8 @@ begin
         where component->>'type' = 'deduction'
           and (
             coalesce(trim(component->>'name'), '') = ''
-            or coalesce(component->>'amount', '') !~ '^\\d+(\\.\\d{1,2})?
+                or jsonb_typeof(component->'amount') <> 'number'
+                or (component->>'amount')::numeric < 0
 
     update public.payroll_items
     set basic_salary = round(p_basic_salary, 2),
