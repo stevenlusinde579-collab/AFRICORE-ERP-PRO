@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FaFileInvoiceDollar, FaPlus, FaPrint, FaSave, FaTrash } from "react-icons/fa";
 import { supabase } from "../../services/supabase";
 import api from "../../services/api";
+import SchoolOfficialSeal from "../../components/SchoolOfficialSeal";
 
 const money = value => new Intl.NumberFormat("en-TZ", { maximumFractionDigits: 2 }).format(Number(value || 0));
 const blankItem = () => ({ id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: "", category: "Ada", classId: "", term1: "0", term2: "0", term3: "0" });
@@ -312,6 +313,7 @@ export default function AnnualFeeGuidanceLetters({ school }) {
                     <div style={{ border:"1px solid #333", padding:10, margin:"14px 0" }}><strong>Taarifa muhimu za kalenda ya shule</strong><p style={{ margin:"6px 0" }}>Tarehe ya kufunga shule: <strong>{closingDate ? new Date(closingDate+"T00:00:00").toLocaleDateString("sw-TZ",{day:"2-digit",month:"long",year:"numeric"}) : "Itatangazwa na shule"}</strong></p><p style={{ margin:"6px 0" }}>Tarehe ya kufungua shule: <strong>{reopeningDate ? new Date(reopeningDate+"T00:00:00").toLocaleDateString("sw-TZ",{day:"2-digit",month:"long",year:"numeric"}) : "Itatangazwa na shule"}</strong></p></div>
                     <p style={{ textAlign:"justify" }}>{extraMessage}</p><p>Tunawashukuru kwa kuendelea kushirikiana nasi katika kuhakikisha mwanafunzi anapata mazingira bora ya kujifunzia.</p>
                     <p>Wako katika huduma,</p><div style={{ marginTop:35, width:250, borderTop:"1px solid #111", paddingTop:8 }}><strong>{accountantName || "Muhasibu"}</strong><p style={{ margin:3 }}>Muhasibu wa Shule</p>{accountantPhone && <p style={{ margin:3 }}>Simu: {accountantPhone}</p>}<p style={{ marginTop:15 }}>Saini: ________________________</p></div>
+                    <SchoolOfficialSeal className="mt-4" />
                     <p style={{ textAlign:"center", fontSize:9, marginTop:24 }}>Barua ya mwongozo wa maandalizi ya malipo · {index+1} / {selectedRows.length}</p>
                     </div>
                 </article>;

@@ -109,6 +109,7 @@ function Settings() {
         show_address: true,
         show_phone: true,
         show_email: true,
+        show_official_seal: false,
     });
 
     // =====================================================
@@ -306,6 +307,13 @@ function Settings() {
             return;
         }
 
+        const { data: sealSettings, error: sealSettingsError } = await supabase
+            .from("school_document_settings")
+            .select("show_official_seal")
+            .eq("school_id", schoolId)
+            .maybeSingle();
+        if (sealSettingsError) throw sealSettingsError;
+
         setSchool(data);
 
         setSchoolForm({
@@ -325,6 +333,7 @@ function Settings() {
             show_address: data.show_address ?? true,
             show_phone: data.show_phone ?? true,
             show_email: data.show_email ?? true,
+            show_official_seal: sealSettings?.show_official_seal === true,
         });
     };
 
@@ -1132,6 +1141,15 @@ function Settings() {
                 throw updateError;
             }
 
+            const { error: sealSaveError } = await supabase
+                .from("school_document_settings")
+                .upsert({
+                    school_id: school.id,
+                    show_official_seal: documentSettings.show_official_seal,
+                    updated_by: user?.id || null,
+                }, { onConflict: "school_id" });
+            if (sealSaveError) throw sealSaveError;
+
             setSchool(data);
 
             await refreshSchool();
@@ -1804,6 +1822,16 @@ function Settings() {
                                             value={documentSettings.show_email}
                                             onChange={() =>
                                                 handleDocumentSettingChange("show_email")
+                                            }
+                                        />
+
+                                        <DocumentSetting
+                                            icon={<ShieldCheck className="h-5 w-5" />}
+                                            title="Official School Seal"
+                                            description="Print the official ink-style school seal with the Headmaster title on supported school documents."
+                                            value={documentSettings.show_official_seal}
+                                            onChange={() =>
+                                                handleDocumentSettingChange("show_official_seal")
                                             }
                                         />
                                     </div>

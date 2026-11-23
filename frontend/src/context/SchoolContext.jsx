@@ -74,6 +74,8 @@ export const SchoolProvider = ({ children }) => {
     // =================================================
 
     const [school, setSchool] = useState(null);
+    const [showOfficialSeal, setShowOfficialSeal] = useState(false);
+    const [headmasterName, setHeadmasterName] = useState("");
 
     const [schoolId, setSchoolId] = useState(null);
 
@@ -793,6 +795,8 @@ export const SchoolProvider = ({ children }) => {
                 if (!user) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
+                    setHeadmasterName("");
 
                     setSchoolId(null);
 
@@ -836,6 +840,8 @@ export const SchoolProvider = ({ children }) => {
                 if (!profile) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
+                    setHeadmasterName("");
 
                     setSchoolId(null);
 
@@ -862,6 +868,8 @@ export const SchoolProvider = ({ children }) => {
                 if (!resolvedSchoolId) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
+                    setHeadmasterName("");
 
                     setSchoolId(null);
 
@@ -928,6 +936,8 @@ export const SchoolProvider = ({ children }) => {
                 if (!schoolData) {
 
                     setSchool(null);
+                    setShowOfficialSeal(false);
+                    setHeadmasterName("");
 
                     setSchoolId(null);
 
@@ -940,6 +950,51 @@ export const SchoolProvider = ({ children }) => {
                     );
 
                     return null;
+                }
+
+                const { data: sealSettings, error: sealSettingsError } = await supabase
+                    .from("school_document_settings")
+                    .select("show_official_seal")
+                    .eq("school_id", resolvedSchoolId)
+                    .maybeSingle();
+                if (sealSettingsError) throw sealSettingsError;
+                setShowOfficialSeal(sealSettings?.show_official_seal === true);
+
+                // Resolve the currently assigned Headmaster name for the generated seal.
+                try {
+                    const { data: headmasterRole } = await supabase
+                        .from("roles").select("id").eq("role_name", "Headmaster").maybeSingle();
+                    if (headmasterRole?.id) {
+                        const { data: assignments } = await supabase
+                            .from("profile_roles").select("profile_id")
+                            .eq("school_id", resolvedSchoolId)
+                            .eq("role_id", headmasterRole.id)
+                            .eq("is_active", true)
+                            .order("is_primary", { ascending: false })
+                            .limit(1);
+                        let headmasterProfileId = assignments?.[0]?.profile_id || null;
+                        if (!headmasterProfileId) {
+                            const { data: legacyHeadmaster } = await supabase
+                                .from("profiles").select("id")
+                                .eq("school_id", resolvedSchoolId)
+                                .eq("role_id", headmasterRole.id)
+                                .limit(1).maybeSingle();
+                            headmasterProfileId = legacyHeadmaster?.id || null;
+                        }
+                        if (headmasterProfileId) {
+                            const { data: headmasterProfile } = await supabase
+                                .from("profiles").select("full_name")
+                                .eq("id", headmasterProfileId).maybeSingle();
+                            setHeadmasterName(headmasterProfile?.full_name || "");
+                        } else {
+                            setHeadmasterName("");
+                        }
+                    } else {
+                        setHeadmasterName("");
+                    }
+                } catch (headmasterLookupError) {
+                    console.warn("Unable to resolve Headmaster name for school seal:", headmasterLookupError);
+                    setHeadmasterName("");
                 }
 
                 // =========================================
@@ -980,6 +1035,8 @@ export const SchoolProvider = ({ children }) => {
                 );
 
                 setSchool(null);
+                    setShowOfficialSeal(false);
+                    setHeadmasterName("");
 
                 setSchoolId(null);
 
@@ -1325,6 +1382,8 @@ export const SchoolProvider = ({ children }) => {
             showPhone,
 
             showEmail,
+            showOfficialSeal,
+            headmasterName,
         }),
         [
             schoolId,
@@ -1340,6 +1399,8 @@ export const SchoolProvider = ({ children }) => {
             showAddress,
             showPhone,
             showEmail,
+            showOfficialSeal,
+            headmasterName,
         ]
     );
 
@@ -1385,6 +1446,8 @@ export const SchoolProvider = ({ children }) => {
             showPhone,
 
             showEmail,
+            showOfficialSeal,
+            headmasterName,
 
             // =========================================
             // DOCUMENT BRANDING
@@ -1443,6 +1506,8 @@ export const SchoolProvider = ({ children }) => {
             showAddress,
             showPhone,
             showEmail,
+            showOfficialSeal,
+            headmasterName,
 
             documentBranding,
 

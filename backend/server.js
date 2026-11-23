@@ -15,6 +15,7 @@ import schoolManagementRoutes from "./routes/schoolManagementRoutes.js";
 import parentPortalRoutes from "./routes/parentPortalRoutes.js";
 import sponsorPortalRoutes from "./routes/sponsorPortalRoutes.js";
 import hrBiometricRoutes from "./routes/hrBiometricRoutes.js";
+import payrollRoutes from "./routes/payrollRoutes.js";
 
 /* =========================================================
    APP
@@ -127,6 +128,11 @@ app.use(
 app.use(
     "/api/hr/biometric",
     hrBiometricRoutes
+);
+
+app.use(
+    "/api/payroll",
+    payrollRoutes
 );
 
 

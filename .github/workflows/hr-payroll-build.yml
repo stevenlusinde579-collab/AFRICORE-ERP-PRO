@@ -1,0 +1,48 @@
+name: HR Payroll Build Checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/controllers/payrollController.js"
+      - "backend/routes/payrollRoutes.js"
+      - "backend/server.js"
+      - "frontend/src/pages/finance/PayrollManagement.jsx"
+      - "frontend/src/pages/finance/FinanceDashboard.jsx"
+      - "frontend/src/pages/hr/HRManagerDashboard.jsx"
+      - "frontend/src/routes/AppRoutes.jsx"
+      - "frontend/src/context/SchoolContext.jsx"
+      - "frontend/src/components/SchoolOfficialSeal.jsx"
+      - "supabase/migrations/**"
+      - ".github/workflows/hr-payroll-build.yml"
+
+jobs:
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
+  backend-payroll-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --prefix backend
+      - name: Check payroll backend syntax
+        run: |
+          node --check backend/server.js
+          node --check backend/controllers/payrollController.js
+          node --check backend/routes/payrollRoutes.js

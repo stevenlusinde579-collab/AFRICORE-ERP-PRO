@@ -24,6 +24,7 @@ import Layout from "../components/layout/Layout";
 import Dashboard from "../pages/dashboard/Dashboard";
 import HRManagerDashboard from "../pages/hr/HRManagerDashboard";
 import EmployeeDigitalFile from "../pages/hr/EmployeeDigitalFile";
+import PayrollManagement from "../pages/finance/PayrollManagement";
 import SecretaryDocumentSigning from "../pages/communication/SecretaryDocumentSigning";
 import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
 
@@ -325,6 +326,25 @@ export default function AppRoutes() {
                     <Route
                         path="hr-management/employees/:employeeId"
                         element={<EmployeeDigitalFile />}
+                    />
+                    <Route
+                        path="hr-management/payroll"
+                        element={<PayrollManagement />}
+                    />
+                </Route>
+
+                {/* ACCOUNTANT PAYROLL WORKSPACE */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 6]}
+                            allowedRoleNames={["Accountant"]}
+                        />
+                    }
+                >
+                    <Route
+                        path="payroll-management"
+                        element={<PayrollManagement />}
                     />
                 </Route>
 
