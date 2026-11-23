@@ -1,5 +1,5 @@
 -- Allow employees to submit and track only their own leave requests.
--- HR Manager, Headmaster and Super Admin retain school-level review access.
+-- HR Manager and Super Admin retain school-level review access.
 ALTER TABLE public.hr_leave_requests ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS hr_school_scope ON public.hr_leave_requests;
@@ -20,7 +20,7 @@ USING (
     WHERE pr.profile_id = (SELECT auth.uid())
       AND pr.is_active IS TRUE
       AND pr.school_id = hr_leave_requests.school_id
-      AND lower(trim(r.role_name)) IN ('hr manager', 'headmaster')
+      AND lower(trim(r.role_name)) = 'hr manager'
   )
   OR EXISTS (
     SELECT 1
