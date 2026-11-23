@@ -366,6 +366,7 @@ function PayrollManagement() {
                             const payroll = snapshot.payroll || {};
                             const schoolSnapshot = snapshot.school || {};
                             const isPayslip = printIsPayslip;
+                            const paymentInfo = (selectedPayroll?.payroll_items || []).find((row) => String(row.id) === String(item.payroll_item_id)) || {};
                             return <article key={item.payroll_item_id} className="payroll-print-page mx-auto max-w-4xl bg-white text-slate-900">
                                 <header className="border-b-2 border-slate-800 pb-4 text-center">
                                     {schoolSnapshot.logo && <img src={schoolSnapshot.logo} alt="School logo" className="mx-auto mb-2 h-16 w-16 object-contain" />}
@@ -387,12 +388,20 @@ function PayrollManagement() {
                                             <tr><td className="border p-2">Deductions</td><td className="border p-2 text-right">{money(item.deductions)}</td></tr>
                                             <tr><td className="border p-2 font-bold">Net pay</td><td className="border p-2 text-right font-bold">{money(item.net_salary)}</td></tr>
                                         </tbody></table>
-                                        <p className="mt-3 text-xs">Payment status: {(selectedPayroll?.payroll_items || []).find((row) => row.id === item.payroll_item_id)?.payment_status || "unpaid"}</p>
+                                        <div className="mt-4 rounded border p-3 text-xs">
+                                            <p><strong>Payment status:</strong> {paymentInfo.payment_status || "unpaid"}</p>
+                                            {paymentInfo.payment_date && <p><strong>Payment date:</strong> {paymentInfo.payment_date}</p>}
+                                            {paymentInfo.payment_method && <p><strong>Payment method:</strong> {paymentInfo.payment_method}</p>}
+                                            {paymentInfo.payment_reference && <p><strong>Payment reference:</strong> {paymentInfo.payment_reference}</p>}
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="mt-5">
-                                        <table className="w-full border-collapse text-xs"><thead><tr>{["No.","Employee","Employee No","Basic","Allowances","Deductions","Net Pay"].map((label) => <th key={label} className="border p-2 text-left">{label}</th>)}</tr></thead><tbody>
-                                            {snapshot.items.map((row, i) => <tr key={row.payroll_item_id}><td className="border p-2">{i + 1}</td><td className="border p-2">{fullName(row.employee)}</td><td className="border p-2">{row.employee?.employee_number || "—"}</td><td className="border p-2 text-right">{money(row.basic_salary)}</td><td className="border p-2 text-right">{money(row.allowances)}</td><td className="border p-2 text-right">{money(row.deductions)}</td><td className="border p-2 text-right">{money(row.net_salary)}</td></tr>)}
+                                        <table className="w-full border-collapse text-xs"><thead><tr>{["No.","Employee","Employee No","Basic","Allowances","Deductions","Net Pay","Payment"].map((label) => <th key={label} className="border p-2 text-left">{label}</th>)}</tr></thead><tbody>
+                                            {snapshot.items.map((row, i) => {
+                                                const paidItem = (selectedPayroll?.payroll_items || []).find((current) => String(current.id) === String(row.payroll_item_id)) || {};
+                                                return <tr key={row.payroll_item_id}><td className="border p-2">{i + 1}</td><td className="border p-2">{fullName(row.employee)}</td><td className="border p-2">{row.employee?.employee_number || "—"}</td><td className="border p-2 text-right">{money(row.basic_salary)}</td><td className="border p-2 text-right">{money(row.allowances)}</td><td className="border p-2 text-right">{money(row.deductions)}</td><td className="border p-2 text-right">{money(row.net_salary)}</td><td className="border p-2">{paidItem.payment_status || "unpaid"}</td></tr>;
+                                            })}
                                         </tbody></table>
                                         <div className="mt-4 ml-auto max-w-xs space-y-1 text-sm"><p>Gross: <strong>{money(payroll.total_gross_salary)}</strong></p><p>Deductions: <strong>{money(payroll.total_deductions)}</strong></p><p>Net payroll: <strong>{money(payroll.total_net_salary)}</strong></p></div>
                                     </div>
