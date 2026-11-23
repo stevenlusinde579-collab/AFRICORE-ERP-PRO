@@ -30,6 +30,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { useRole } from "../../context/RoleContext";
 import api from "../../services/api";
+import SchoolOfficialSeal from "../../components/SchoolOfficialSeal";
 
 
 // =====================================================
@@ -1258,6 +1259,7 @@ function FinanceDashboard() {
                             <p className="mt-3 text-lg font-extrabold tracking-widest">OFFICIAL SCHOOL FEES RECEIPT</p>
                             
                         </header>
+                        <SchoolOfficialSeal className="px-8 pb-2" />
                         <div className="p-8">
                             <div className="mb-5 grid grid-cols-2 gap-x-8 gap-y-3 border-b pb-5 text-sm">
                                 <p><b>Receipt Number:</b> {r.receipt_number}</p><p><b>Receipt Date:</b> {formatDate(r.receipt_date)}</p>
@@ -1280,7 +1282,7 @@ function FinanceDashboard() {
                     <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
                         <div className="sticky top-0 flex items-center justify-between border-b bg-white p-4"><h2 className="font-extrabold">Receipt preview · {viewingReceipt.receipt_number}</h2><button type="button" onClick={() => setViewingReceipt(null)} className="rounded-lg border px-3 py-1.5 text-sm font-bold">Close</button></div>
                         <article className="m-5 border border-slate-300 text-slate-900">
-                            <header className="px-6 py-6 text-center" style={{ backgroundColor: receiptHeaderColor, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}><h2 className="text-2xl font-black uppercase">{school?.school_name || "School"}</h2><p className="mt-1 text-sm font-semibold">{school?.address || school?.school_address || school?.postal_address || school?.location || ""}</p><p className="mt-3 text-lg font-extrabold tracking-widest">OFFICIAL SCHOOL FEES RECEIPT</p><p className="text-xs font-semibold">AFRICORE ERP PRO · ORIGINAL RECEIPT</p></header>
+                            <header className="px-6 py-6 text-center" style={{ backgroundColor: receiptHeaderColor, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}><h2 className="text-2xl font-black uppercase">{school?.school_name || "School"}</h2><p className="mt-1 text-sm font-semibold">{school?.address || school?.school_address || school?.postal_address || school?.location || ""}</p><p className="mt-3 text-lg font-extrabold tracking-widest">OFFICIAL SCHOOL FEES RECEIPT</p><p className="text-xs font-semibold">AFRICORE ERP PRO · ORIGINAL RECEIPT</p></header><SchoolOfficialSeal className="px-6 pb-2" />
                             <div className="p-6 text-sm"><div className="grid grid-cols-2 gap-3 border-b pb-5"><p><b>Receipt Number:</b> {viewingReceipt.receipt_number}</p><p><b>Date:</b> {formatDate(viewingReceipt.receipt_date)}</p><p><b>Parent / Payer:</b> {viewingReceipt.payer_name || "Not recorded"}</p><p><b>Student:</b> {viewingReceipt.student ? [viewingReceipt.student.first_name, viewingReceipt.student.middle_name, viewingReceipt.student.last_name].filter(Boolean).join(" ") : "Not linked"}</p><p><b>Admission Number:</b> {viewingReceipt.student?.admission_number || viewingReceipt.student?.admission_no || "Not available"}</p><p><b>Guardian:</b> {viewingReceipt.student?.parent_name || viewingReceipt.student?.guardian_name || "Not recorded"}</p><p><b>Payment Method:</b> {viewingReceipt.payment_method || "Not specified"}</p><p><b>Reference:</b> {viewingReceipt.reference_number || "Not provided"}</p><p><b>Status:</b> {viewingReceipt.status || "Posted"}</p><p><b>Amount:</b> <strong>{money(viewingReceipt.amount)} TZS</strong></p></div><h3 className="mt-5 font-extrabold">Payment description</h3><p className="mt-2 min-h-16 rounded-lg bg-slate-50 p-3">{viewingReceipt.description || "School fees payment"}</p><p className="mt-8 text-xs text-slate-500">Asante kwa kufanya malipo. Kwa ufafanuzi, wasiliana na ofisi ya shule.</p></div>
                         </article>
                         <div className="flex justify-end gap-2 border-t p-4"><button type="button" onClick={() => { setSelectedReceiptIds(current => current.includes(String(viewingReceipt.id)) ? current : [...current, String(viewingReceipt.id)]); setTimeout(() => window.print(), 0); }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Print this receipt</button><button type="button" onClick={() => setViewingReceipt(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">Done</button></div>
