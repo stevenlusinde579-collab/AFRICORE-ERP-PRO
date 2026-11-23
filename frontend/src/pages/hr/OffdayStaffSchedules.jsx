@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { supabase } from "../../services/supabase";
 
 export default function OffdayStaffSchedules({ staff = [], rows = [], entitlements = [], schoolId, onStatusChange, onRefresh }) {
   const year = new Date().getFullYear();
@@ -16,7 +17,7 @@ export default function OffdayStaffSchedules({ staff = [], rows = [], entitlemen
     if (!schoolId || !window.confirm("Delete all " + year + " off-day dates for " + personName + "? This will not delete the employee record.")) return;
     setBusyId(employeeId); setNotice("");
     try {
-      const { error } = await (await import("../../services/supabase")).supabase
+      const { error } = await supabase
         .from("hr_offday_rosters").delete().eq("school_id", schoolId).eq("employee_id", employeeId)
         .gte("off_date", year + "-01-01").lt("off_date", (year + 1) + "-01-01");
       if (error) throw error;
