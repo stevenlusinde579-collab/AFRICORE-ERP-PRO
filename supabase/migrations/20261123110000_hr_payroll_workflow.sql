@@ -44,6 +44,11 @@ create unique index if not exists payrolls_one_active_month_per_school
 create unique index if not exists payroll_items_employee_once_per_payroll
     on public.payroll_items(payroll_id, employee_id);
 
+create unique index if not exists payrolls_finance_source_unique
+    on public.payrolls(finance_source_id);
+create unique index if not exists payroll_items_finance_source_unique
+    on public.payroll_items(finance_source_id);
+
 create table if not exists public.payroll_settings (
     id bigserial primary key,
     school_id bigint not null unique references public.schools(id) on delete cascade,
@@ -109,6 +114,8 @@ grant all on public.salary_components to service_role;
 grant all on public.employee_financial_profiles to service_role;
 grant usage, select on sequence public.payroll_settings_id_seq to service_role;
 grant usage, select on sequence public.hr_payroll_audit_events_id_seq to service_role;
+grant usage, select on sequence public.payrolls_id_seq to service_role;
+grant usage, select on sequence public.payroll_items_id_seq to service_role;
 
 drop policy if exists af_score_authenticated_base on public.payrolls;
 drop policy if exists af_score_tenant_guard on public.payrolls;
