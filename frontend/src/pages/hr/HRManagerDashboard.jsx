@@ -10,6 +10,7 @@ import { useSchool } from "../../context/SchoolContext";
 import OffdayStaffSchedules from "./OffdayStaffSchedules";
 import HRLeaveManagementSection from "./HRLeaveManagementSection";
 import PayrollManagement from "../finance/PayrollManagement";
+import StaffSignaturePdfImport from "./StaffSignaturePdfImport";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
@@ -549,27 +550,33 @@ function HRManagerDashboard() {
 
       {activeSection === "signatures" && (
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
-          <div><h2 className="text-xl font-bold text-slate-900">Staff Signature Registration</h2><p className="mt-1 text-sm text-slate-500">HR husajili picha ya saini ya kila mfanyakazi. Secretary atatumia saini hizi kwenye mchakato wa kusaini nyaraka.</p></div>
+          <div><h2 className="text-xl font-bold text-slate-900">Staff Signature Registration</h2><p className="mt-1 text-sm text-slate-500">Pakia PDF moja ya rejesta iliyosainiwa kwa mkono. Chagua mfanyakazi na kata eneo la saini yake; mfumo utaihifadhi kwa User ID sahihi.</p></div>
           {signatureNotice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{signatureNotice}</p>}
           {!signatureSchemaReady ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               Usajili wa saini unasubiri migration yake tofauti. Hii haiathiri Staff Records, Off Days, Leave au Attendance.
             </p>
-          ) : <div className="divide-y divide-slate-100">
-            {signatureStaff.map((person) => {
-              const existing = signatureRows.find((row) => row.teacher_id === person.id && row.is_active);
-              const fullName = [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ");
-              return <div key={person.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div><p className="font-semibold text-slate-900">{fullName || person.employee_number}</p><p className="text-xs text-slate-500">{person.employee_number || "No employee number"} • {existing ? "Signature registered" : "No signature registered"}</p></div>
-                <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                  {signatureBusyId === person.id ? "Saving..." : existing ? "Replace signature" : "Upload signature"}
-                  <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={signatureBusyId === person.id} onChange={(event) => { const file = event.target.files?.[0]; if (file) registerStaffSignature(person, file); event.target.value = ""; }} />
-                </label>
-              </div>;
-            })}
-            {signatureStaff.length === 0 && <p className="py-5 text-sm text-slate-500">Hakuna Staff wenye akaunti za kuingia zilizounganishwa na shule hii.</p>}
-          </div>}
-          <p className="text-xs text-slate-500">Picha zinakubaliwa PNG/JPG, hadi 2 MB. Hifadhi ni ya faragha na inapatikana kwa HR na watumiaji wenye ruhusa husika.</p>
+          ) : <>
+            <StaffSignaturePdfImport schoolId={schoolId} staff={signatureStaff} signatures={signatureRows} onSaved={loadHRData} />
+            <details className="rounded-lg border border-slate-200 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">Legacy: register one signature image</summary>
+              <div className="divide-y divide-slate-100">
+                {signatureStaff.map((person) => {
+                  const existing = signatureRows.find((row) => row.teacher_id === person.id && row.is_active);
+                  const fullName = [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ");
+                  return <div key={person.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div><p className="font-semibold text-slate-900">{fullName || person.employee_number}</p><p className="text-xs text-slate-500">User ID: {person.user_id} • {existing ? "Signature registered" : "No signature registered"}</p></div>
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      {signatureBusyId === person.id ? "Saving..." : existing ? "Replace signature" : "Upload signature"}
+                      <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={signatureBusyId === person.id} onChange={(event) => { const selectedFile = event.target.files?.[0]; if (selectedFile) registerStaffSignature(person, selectedFile); event.target.value = ""; }} />
+                    </label>
+                  </div>;
+                })}
+                {signatureStaff.length === 0 && <p className="py-5 text-sm text-slate-500">Hakuna Staff wenye akaunti za kuingia zilizounganishwa na shule hii.</p>}
+              </div>
+            </details>
+          </>}
+          <p className="text-xs text-slate-500">PDF nzima inahifadhiwa kama kumbukumbu ya batch; saini za watu binafsi zinaunganishwa na User ID zao. Historia ya saini za zamani haifutwi.</p>
         </section>
       )}
 

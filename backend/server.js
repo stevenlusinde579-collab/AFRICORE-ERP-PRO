@@ -15,6 +15,7 @@ import schoolManagementRoutes from "./routes/schoolManagementRoutes.js";
 import parentPortalRoutes from "./routes/parentPortalRoutes.js";
 import sponsorPortalRoutes from "./routes/sponsorPortalRoutes.js";
 import hrBiometricRoutes from "./routes/hrBiometricRoutes.js";
+import hrSignatureRegisterRoutes from "./routes/hrSignatureRegisterRoutes.js";
 import payrollRoutes from "./routes/payrollRoutes.js";
 
 /* =========================================================
@@ -128,6 +129,11 @@ app.use(
 app.use(
     "/api/hr/biometric",
     hrBiometricRoutes
+);
+
+app.use(
+    "/api/hr/signature-register",
+    hrSignatureRegisterRoutes
 );
 
 app.use(
