@@ -9,6 +9,50 @@ import { createPortalSession, getPortalSession, revokePortalSession, revokePorta
 
 const router = express.Router();
 const loginAttempts = new Map();
+async function getOfficialSchoolSealSnapshot(schoolId, schoolRow = null) {
+  const [settingsResult, schoolResult, headmasterRoleResult] = await Promise.all([
+    supabase.from("school_document_settings")
+      .select("show_official_seal").eq("school_id", schoolId).maybeSingle(),
+    schoolRow ? Promise.resolve({ data: schoolRow, error: null })
+      : supabase.from("schools").select("id,school_name,registration_number").eq("id", schoolId).maybeSingle(),
+    supabase.from("roles").select("id").eq("role_name", "Headmaster").maybeSingle(),
+  ]);
+  if (settingsResult.error || schoolResult.error || headmasterRoleResult.error) {
+    throw settingsResult.error || schoolResult.error || headmasterRoleResult.error;
+  }
+  const school = schoolResult.data || {};
+  const enabled = settingsResult.data?.show_official_seal === true;
+  let headmasterName = "";
+  if (enabled && headmasterRoleResult.data?.id) {
+    const { data: assignment, error: assignmentError } = await supabase
+      .from("profile_roles").select("profile_id")
+      .eq("school_id", schoolId).eq("role_id", headmasterRoleResult.data.id)
+      .eq("is_active", true).order("is_primary", { ascending: false }).limit(1).maybeSingle();
+    if (assignmentError) throw assignmentError;
+    let profileId = assignment?.profile_id || null;
+    if (!profileId) {
+      const { data: legacyProfile, error: legacyError } = await supabase
+        .from("profiles").select("id").eq("school_id", schoolId)
+        .eq("role_id", headmasterRoleResult.data.id).limit(1).maybeSingle();
+      if (legacyError) throw legacyError;
+      profileId = legacyProfile?.id || null;
+    }
+    if (profileId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles").select("full_name").eq("id", profileId).maybeSingle();
+      if (profileError) throw profileError;
+      headmasterName = profile?.full_name || "";
+    }
+  }
+  return {
+    show_official_seal: enabled,
+    school_name: school.school_name || "",
+    registration_number: school.registration_number || "",
+    headmaster_title: "Headmaster",
+    headmaster_name: headmasterName,
+  };
+}
+
 // Process-local presence with a short lease. A client is online only while it
 // continues sending authenticated heartbeats; stale records expire quickly.
 const parentPortalPresence = new Map();
@@ -937,10 +981,11 @@ router.post("/staff/letters/publish", authenticateUser, parentPortalStaffAccess,
     const valid = await supabase.from("students").select("id").eq("school_id",schoolId).in("id",ids);
     if (valid.error) throw valid.error;
     if ((valid.data || []).length !== ids.length) return res.status(403).json({success:false,message:"Mwanafunzi hayupo kwenye shule yako."});
+    const sealSnapshot = await getOfficialSchoolSealSnapshot(schoolId);
     const rows = entries.map(entry => ({
       school_id:schoolId, student_id:Number(entry.student_id), letter_type:type,
       title:String(entry.title || (type === "fee_reminder" ? "Barua ya Makumbusho ya Ada" : type === "annual_fee_guidance" ? "Barua za Mwongozo wa Ada za Mwaka Mpya" : "Official Letter")).slice(0,180),
-      payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
+      payload: { ...(entry.payload && typeof entry.payload === "object" ? entry.payload : {}), seal: sealSnapshot },
       published_by:req.user.id, published_at:new Date().toISOString()
     }));
     const saved=await supabase.from("parent_portal_published_letters").insert(rows).select("id");
@@ -1051,6 +1096,7 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
         }
       }
       const school = schoolResult.data;
+      const sealSnapshot = await getOfficialSchoolSealSnapshot(schoolId, school);
       const schoolAddress = school.address || school.school_address || school.postal_address || school.location || "";
       const existingResult = await supabase.from("parent_portal_documents")
         .select("id,student_id,publication_status,payload,document_number,source_type,source_id")
@@ -1093,6 +1139,7 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
             description: receipt.description || "School fees payment",
             receipt_header_color: "#e0f2fe",
             original_receipt: true,
+            seal: sealSnapshot,
           },
         };
       });
@@ -1143,7 +1190,11 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
     const publishTimestamp = new Date().toISOString();
     const updates = await Promise.all(found.data.filter(row => publishable.includes(row.id)).map(async row => {
       const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload) ? row.payload : {};
-      const nextPayload = receiptHeaderColor ? { ...payload, receipt_header_color: receiptHeaderColor } : payload;
+      const nextPayload = {
+        ...payload,
+        ...(receiptHeaderColor ? { receipt_header_color: receiptHeaderColor } : {}),
+        seal: sealSnapshot,
+      };
       return supabase.from("parent_portal_documents")
         .update({ publication_status: "published", published_at: publishTimestamp, published_by: req.user.id, payload: nextPayload })
         .eq("school_id", schoolId).eq("id", row.id).select("id").single();
