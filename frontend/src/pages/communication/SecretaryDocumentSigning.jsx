@@ -124,7 +124,7 @@ function SecretaryDocumentSigning() {
       const { data: sourceFile, error: sourceError } = await supabase.storage.from("school-signing-documents").download(request.document_path);
       if (sourceError) throw sourceError;
       const pdf = await PDFDocument.load(await sourceFile.arrayBuffer());
-      const page = pdf.addPage([595.28, 841.89]);
+      let page = pdf.addPage([595.28, 841.89]);
       const font = await pdf.embedFont(StandardFonts.Helvetica);
       const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
       page.drawText("AFRICORE — SIGNATURE RECORD", { x: 42, y: 790, size: 15, font: bold, color: rgb(0.08, 0.16, 0.3) });
@@ -147,11 +147,10 @@ function SecretaryDocumentSigning() {
         page.drawLine({ start: { x: 42, y: y - 24 }, end: { x: 550, y: y - 24 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
         y -= 95;
         if (y < 85 && recipient !== recipients[recipients.length - 1]) {
-          const nextPage = pdf.addPage([595.28, 841.89]);
           page.drawText("Additional signatories continued on next page.", { x: 42, y: 40, size: 8, font });
-          y = 790;
-          // Continue drawing on a fresh page for long signer lists.
-          Object.defineProperty(page, "_unused", { value: nextPage, configurable: true });
+          page = pdf.addPage([595.28, 841.89]);
+          page.drawText("AFRICORE — SIGNATURE RECORD (CONTINUED)", { x: 42, y: 790, size: 13, font: bold });
+          y = 755;
         }
       }
       const bytes = await pdf.save();
