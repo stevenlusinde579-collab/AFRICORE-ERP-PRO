@@ -40,6 +40,7 @@ import { supabase } from "../../services/supabase";
 import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
+import LeaveManagementPanel from "./LeaveManagementPanel";
 
 const APPROVER_ROLE_IDS = [1, 2, 3, 4];
 const TEACHER_ROLE_IDS = [5, 12, 13, 14, 15, 16, 17];
@@ -116,6 +117,7 @@ const Communication = () => {
 
     const roleName = profile?.roles?.role_name || "No role assigned";
     const isApprover = APPROVER_ROLE_IDS.includes(Number(profile?.role_id));
+    const isHRManager = Number(profile?.role_id) === 18;
     const effectiveRoleName = String(selectedRoleName || roleName || "").trim().toLowerCase();
     const canManageParentPortal = [1, 2, 3, 4, 7].includes(Number(selectedRoleId)) || ["accountant", "super admin", "headmaster", "deputy headmaster", "academic master", "secretary"].includes(effectiveRoleName);
     const canViewParentPortal = canManageParentPortal || Number(selectedRoleId) === 12 || effectiveRoleName === "class teacher";
@@ -493,6 +495,7 @@ const Communication = () => {
         { title: "Notifications", description: "View your personal system notifications and alerts.", icon: Bell, action: () => navigate("/communication/notifications") },
         { title: "Announcements", description: "Create and manage school announcements.", icon: Megaphone, action: () => navigate("/communication/announcements") },
         { title: "Suggestion Box", description: "Share ideas, suggestions and recommendations to improve the school.", icon: Lightbulb, action: () => navigate("/communication/suggestions") },
+        { title: "Leave Management", description: isHRManager ? "Review, approve or reject staff leave requests." : "Apply for leave and track your approval status.", icon: CalendarCheck2, action: () => setActivePanel("leave-management"), badge: "HR" },
         { title: "Office Permission", description: "Request official school or office permission and receive an approval document.", icon: FileCheck2, action: openPermissionRequest, badge: "Official" },
         { title: isApprover ? "Permission Approval Desk" : "My Permissions", description: isApprover ? "Review, approve or reject office permission requests." : "Track your office permission requests and approved documents.", icon: ClipboardList, action: isApprover ? openApprovalDesk : openMyPermissions },
         { title: "Analytics", description: "View communication activity and performance information.", icon: Activity, action: () => setActivePanel("analytics") },
@@ -540,6 +543,8 @@ const Communication = () => {
 
             {activePanel && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><div className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
                 <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">{activePanel === "composer" ? <Send className="h-5 w-5" /> : activePanel === "analytics" ? <BarChart3 className="h-5 w-5" /> : activePanel === "permissions" ? <ShieldCheck className="h-5 w-5" /> : activePanel === "users" ? <Users className="h-5 w-5" /> : <FileCheck2 className="h-5 w-5" />}</div><div><h2 className="text-lg font-bold text-slate-900">{panelTitle(activePanel, composer, isApprover)}</h2><p className="text-xs text-slate-500">{panelDescription(activePanel, isApprover)}</p></div></div><button type="button" onClick={closePanel} disabled={sending || officeSaving} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"><X className="h-5 w-5" /></button></div>
+
+                {activePanel === "leave-management" && <div className="p-5"><LeaveManagementPanel profile={profile} /></div>}
 
                 {activePanel === "office-request" && <PermissionRequestForm form={permissionForm} setForm={setPermissionForm} onSubmit={createOfficePermission} saving={officeSaving} result={officeResult} isStudent={isStudent} />}
 
@@ -815,8 +820,8 @@ const ActivityRow = ({ label, value }) => <div className="flex items-center just
 const PermissionInfo = ({ icon: Icon, title, description, status }) => <div className="rounded-2xl border border-slate-200 p-5"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900">{title}</h3><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">{status}</span></div><p className="mt-2 text-sm leading-5 text-slate-500">{description}</p></div></div></div>;
 const ResultBox = ({ result }) => <div className={result.type === "success" ? "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" : "rounded-2xl border border-red-200 bg-red-50 p-4"}><p className={result.type === "success" ? "text-sm font-bold text-emerald-800" : "text-sm font-bold text-red-800"}>{result.type === "success" ? "Success" : "Action failed"}</p><p className={result.type === "success" ? "mt-1 text-xs text-emerald-700" : "mt-1 text-xs text-red-700"}>{result.message}</p>{result.provider && <p className="mt-2 text-xs text-slate-600">Provider: <span className="font-semibold">{result.provider}</span>{result.status ? ` • Status: ${result.status}` : ""}</p>}</div>;
 const EmptyState = ({ icon: Icon, title, text }) => <div className="rounded-2xl border border-dashed border-slate-200 py-12 text-center"><Icon className="mx-auto h-9 w-9 text-slate-300" /><p className="mt-3 text-sm font-semibold text-slate-600">{title}</p><p className="mt-1 text-xs text-slate-400">{text}</p></div>;
-const panelTitle = (panel, composer, approver) => ({ composer: `${capitalize(composer.channel)} Communication`, "sms-center": "SMS Center", analytics: "Communication Analytics", permissions: "System Access", users: "System Users", "office-request": "Request Office Permission", "office-requests": "My Office Permissions", "office-approval": approver ? "Permission Approval Desk" : "Office Permissions" }[panel] || "Communication");
-const panelDescription = (panel, approver) => ({ composer: "Communication form connected to the AfriCore gateway.", "sms-center": "Send NewHope SMS to staff or parents/guardians in your school.", analytics: "Current activity summary from the Communication Center.", permissions: "Current AfriCore feature-access context.", users: "Users available in your school communication scope.", "office-request": "Submit an official office or school permission request.", "office-requests": "Track your requests and print approved permission documents.", "office-approval": approver ? "Review and process pending office permission requests." : "Office permission records." }[panel] || "");
+const panelTitle = (panel, composer, approver) => ({ composer: `${capitalize(composer.channel)} Communication`, "sms-center": "SMS Center", analytics: "Communication Analytics", permissions: "System Access", users: "System Users", "office-request": "Request Office Permission", "office-requests": "My Office Permissions", "office-approval": approver ? "Permission Approval Desk" : "Office Permissions", "leave-management": "Leave Management" }[panel] || "Communication");
+const panelDescription = (panel, approver) => ({ composer: "Communication form connected to the AfriCore gateway.", "sms-center": "Send NewHope SMS to staff or parents/guardians in your school.", analytics: "Current activity summary from the Communication Center.", permissions: "Current AfriCore feature-access context.", users: "Users available in your school communication scope.", "office-request": "Submit an official office or school permission request.", "office-requests": "Track your requests and print approved permission documents.", "office-approval": approver ? "Review and process pending office permission requests." : "Office permission records.", "leave-management": "Submit leave requests and manage approvals through HR." }[panel] || "");
 const formatDate = (value) => { if (!value) return "Date not set"; try { return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`)); } catch { return value; } };
 const formatTime = (value) => value ? String(value).slice(0, 5) : "Time not set";
 const capitalize = (value) => { const text = String(value || ""); return text ? text.charAt(0).toUpperCase() + text.slice(1) : ""; };
