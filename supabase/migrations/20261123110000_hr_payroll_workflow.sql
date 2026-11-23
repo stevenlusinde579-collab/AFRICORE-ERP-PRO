@@ -245,7 +245,7 @@ begin
         v_net := round(v_basic + v_allowances - v_deductions, 2);
         v_components := coalesce(v_item->'components', '[]'::jsonb);
 
-        if v_basic < 0 or v_allowances < 0 or v_deductions < 0 or v_net < 0 then
+        if v_basic < 0 or v_allowances < 0 or v_deductions < 0 or v_net <= 0 then
             raise exception 'Salary values cannot be negative or exceed gross earnings';
         end if;
         if jsonb_typeof(v_components) <> 'array' then
@@ -332,7 +332,7 @@ begin
 
     v_net := round(coalesce(p_basic_salary, 0) + coalesce(p_allowances, 0) - coalesce(p_deductions, 0), 2);
     if coalesce(p_basic_salary, 0) < 0 or coalesce(p_allowances, 0) < 0
-       or coalesce(p_deductions, 0) < 0 or v_net < 0 then
+       or coalesce(p_deductions, 0) < 0 or v_net <= 0 then
         raise exception 'Invalid salary amounts';
     end if;
     if jsonb_typeof(coalesce(p_components, '[]'::jsonb)) <> 'array' then
