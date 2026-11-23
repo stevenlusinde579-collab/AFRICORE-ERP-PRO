@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
+import SchoolOfficialSeal from "../components/SchoolOfficialSeal";
 
 const today = () => new Date().toLocaleDateString("sw-TZ", { day: "2-digit", month: "long", year: "numeric" });
 
@@ -194,6 +195,7 @@ export default function OfficialLetters() {
           <div className="mt-14 w-72 border-t border-black pt-2 text-sm">
             <p className="font-bold">{authorName}</p><p>{authorTitle === "Other" ? customAuthorTitle : authorTitle}</p><p className="mt-1">Simu: {phone}</p><p className="mt-8">Saini: ______________________________</p>
           </div>
+          <SchoolOfficialSeal className="mt-5" />
           <p className="mt-8 text-center text-[9px] text-slate-500">{context?.school?.school_name || "AfriCore ERP PRO"} · Barua rasmi · {index + 1}/{selectedRecipients.length}</p>
         </article>)}
       </div>
