@@ -82,6 +82,6 @@ WITH CHECK (
     WHERE pr.profile_id = (SELECT auth.uid())
       AND pr.is_active IS TRUE
       AND pr.school_id = hr_leave_requests.school_id
-      AND lower(trim(r.role_name)) IN ('hr manager', 'headmaster')
+      AND lower(trim(r.role_name)) = 'hr manager'
   )
 );
