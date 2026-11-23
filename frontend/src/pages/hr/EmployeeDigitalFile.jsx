@@ -248,7 +248,7 @@ function EmployeeDigitalFile() {
       )}
 
       {activeTab === "personal" && (
-        {canManage ? <form onSubmit={saveProfile} className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:grid-cols-2">
+        canManage ? <form onSubmit={saveProfile} className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:grid-cols-2">
           <div className="md:col-span-2"><h2 className="text-lg font-bold text-slate-900">Additional Personal Details</h2><p className="text-sm text-slate-500">Core identity, contact and employment fields remain sourced from the existing Employees / Teachers records.</p></div>
           <label className="text-sm font-medium text-slate-700">Date of Birth<input type="date" value={profile.date_of_birth || ""} onChange={(e) => setProfile((p) => ({ ...p, date_of_birth: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm font-medium text-slate-700">Nationality<input value={profile.nationality || ""} onChange={(e) => setProfile((p) => ({ ...p, nationality: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
@@ -260,7 +260,7 @@ function EmployeeDigitalFile() {
           <label className="text-sm font-medium text-slate-700">Postal Address<input value={profile.postal_address || ""} onChange={(e) => setProfile((p) => ({ ...p, postal_address: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm font-medium text-slate-700 md:col-span-2">HR Notes<textarea rows="3" value={profile.notes || ""} onChange={(e) => setProfile((p) => ({ ...p, notes: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <div className="md:col-span-2 flex justify-end"><button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"><FaSave /> {saving ? "Saving..." : "Save Personal Details"}</button></div>
-        </form> : <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Personal details are read-only for this role.</section>}
+        </form> : <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Personal details are read-only for this role.</section>
       )}
 
       {activeTab === "contacts" && (
