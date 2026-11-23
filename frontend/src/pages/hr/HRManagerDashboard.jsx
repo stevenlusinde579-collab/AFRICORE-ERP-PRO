@@ -9,6 +9,7 @@ import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
 import OffdayStaffSchedules from "./OffdayStaffSchedules";
 import HRLeaveManagementSection from "./HRLeaveManagementSection";
+import PayrollManagement from "../finance/PayrollManagement";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date());
 
@@ -489,6 +490,7 @@ function HRManagerDashboard() {
     { id: "leave", label: "Leave Management", icon: <FaUmbrellaBeach /> },
     { id: "reports", label: "HR Reports & Documents", icon: <FaFileAlt /> },
     { id: "signatures", label: "Staff Signature Registry", icon: <FaPen /> },
+    { id: "payroll", label: "Payroll Review", icon: <FaClipboardCheck /> },
   ];
 
   return (
@@ -660,6 +662,8 @@ function HRManagerDashboard() {
       )}
 
       {activeSection === "leave" && <HRLeaveManagementSection requests={leaveRows} loading={loading} onReview={reviewLeave} busyId={leaveActionId} />}
+
+      {activeSection === "payroll" && <PayrollManagement />}
 
       {activeSection === "reports" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">HR Reports & Documents</h2><p className="mt-1 text-sm text-slate-500">Staff register, attendance summaries, off-day balances, leave history na HR document records.</p></section>
