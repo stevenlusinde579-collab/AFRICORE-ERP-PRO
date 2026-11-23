@@ -36,7 +36,25 @@ using (
   )
 );
 revoke all on public.hr_signature_register_batches from anon, authenticated;
-grant select on public.hr_signature_register_batches to authenticated;
+grant select, insert on public.hr_signature_register_batches to authenticated;
+
+drop policy if exists hr_signature_register_batches_hr_insert on public.hr_signature_register_batches;
+create policy hr_signature_register_batches_hr_insert
+on public.hr_signature_register_batches for insert to authenticated
+with check (
+  uploaded_by = (select auth.uid())
+  and (
+    public.is_current_user_super_admin()
+    or exists (
+      select 1 from public.profile_roles pr
+      join public.roles r on r.id = pr.role_id
+      where pr.profile_id = (select auth.uid())
+        and pr.school_id = hr_signature_register_batches.school_id
+        and pr.is_active is true
+        and lower(trim(r.role_name)) = 'hr manager'
+    )
+  )
+);
 
 drop policy if exists school_signing_documents_secretary_insert on storage.objects;
 drop policy if exists school_signing_documents_hr_insert on storage.objects;
