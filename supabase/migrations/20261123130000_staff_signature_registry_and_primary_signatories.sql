@@ -104,34 +104,23 @@ on public.hr_primary_signatories for all to authenticated
 using (
   public.is_current_user_super_admin()
   or exists (
-    select 1 from public.profile_roles pr
-    join public.roles r on r.id = pr.role_id
-    where pr.profile_id = (select auth.uid())
-      and pr.school_id = hr_primary_signatories.school_id
-      and pr.is_active is true
-      and lower(trim(r.role_name)) = 'hr manager'
-  )
-)
-with check (
-  public.is_current_user_super_admin()
-  or exists (
-    select 1 from public.profile_roles pr
-    join public.roles r on r.id = pr.role_id
-    where pr.profile_id = (select auth.uid())
-      and pr.school_id = hr_primary_signatories.school_id
-      and pr.is_active is true
-      and lower(trim(r.role_name)) = 'hr manager'
+    select 1 from public.profile_roles actor
+    join public.roles ar on ar.id = actor.role_id
+    where actor.profile_id = (select auth.uid())
+      and actor.school_id = hr_primary_signatories.school_id
+      and actor.is_active is true
+      and lower(trim(ar.role_name)) = 'hr manager'
   )
 )
 with check (
   public.is_current_user_super_admin()
   or (
     exists (
-      select 1 from public.profile_roles pr
-      where pr.profile_id = hr_primary_signatories.profile_id
-        and pr.school_id = hr_primary_signatories.school_id
-        and pr.role_id = hr_primary_signatories.role_id
-        and pr.is_active is true
+      select 1 from public.profile_roles target_role
+      where target_role.profile_id = hr_primary_signatories.profile_id
+        and target_role.school_id = hr_primary_signatories.school_id
+        and target_role.role_id = hr_primary_signatories.role_id
+        and target_role.is_active is true
     )
     and exists (
       select 1 from public.teachers t
