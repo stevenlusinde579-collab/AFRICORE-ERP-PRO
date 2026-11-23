@@ -124,7 +124,7 @@ function HRManagerDashboard() {
           .eq("school_id", schoolId)
           .eq("status", "taken")
           .gte("off_date", `${year}-01-01`)
-          .lt("off_date", `${year + 1}-01-01`),
+          .lt("off_date", `${year + 2}-01-01`),
         supabase.from("teachers")
           .select("id,school_id,user_id,employee_number,first_name,middle_name,last_name,status")
           .eq("school_id", schoolId)
