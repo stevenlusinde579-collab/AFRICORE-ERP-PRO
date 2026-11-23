@@ -80,6 +80,7 @@ import {
 
     getTrialBalance,
     getIncomeStatement,
+    getIncomeExpensesSummary,
     getFinancialPosition,
     getReceivablesReport,
     getPayablesReport
@@ -332,6 +333,15 @@ router.get(
 
 
 // ------------------------------------------------------------
+// INCOME AND EXPENSES SUMMARY
+// ------------------------------------------------------------
+
+router.get(
+    "/reports/income-expenses-summary",
+    getIncomeExpensesSummary
+);
+
+
 // INCOME STATEMENT
 // ------------------------------------------------------------
 
