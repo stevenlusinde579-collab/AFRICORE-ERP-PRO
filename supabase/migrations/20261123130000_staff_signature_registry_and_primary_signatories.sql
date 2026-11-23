@@ -47,10 +47,13 @@ using (
   public.is_current_user_super_admin()
   or exists (
     select 1 from public.profile_roles pr
+    join public.roles r on r.id = pr.role_id
     where pr.profile_id = (select auth.uid())
       and pr.school_id = hr_staff_signatures.school_id
       and pr.is_active is true
+      and lower(trim(r.role_name)) = 'secretary'
   )
+  or profile_id = (select auth.uid())
 );
 
 drop policy if exists hr_staff_signatures_hr_manage on public.hr_staff_signatures;
@@ -86,10 +89,13 @@ using (
   public.is_current_user_super_admin()
   or exists (
     select 1 from public.profile_roles pr
+    join public.roles r on r.id = pr.role_id
     where pr.profile_id = (select auth.uid())
       and pr.school_id = hr_primary_signatories.school_id
       and pr.is_active is true
+      and lower(trim(r.role_name)) in ('secretary')
   )
+  or profile_id = (select auth.uid())
 );
 
 drop policy if exists hr_primary_signatories_hr_manage on public.hr_primary_signatories;
@@ -233,7 +239,19 @@ using (
 with check (
   profile_id = (select auth.uid())
   and status in ('signed','declined')
-  and (status <> 'signed' or (signed_at is not null and signature_id is not null))
+  and (
+    status <> 'signed'
+    or (
+      signed_at is not null
+      and exists (
+        select 1 from public.hr_staff_signatures hs
+        where hs.id = document_signing_recipients.signature_id
+          and hs.school_id = document_signing_recipients.school_id
+          and hs.teacher_id = document_signing_recipients.teacher_id
+          and hs.profile_id = (select auth.uid())
+      )
+    )
+  )
 );
 
 revoke all on public.document_signing_requests, public.document_signing_recipients from anon, authenticated;
@@ -256,9 +274,20 @@ using (
     public.is_current_user_super_admin()
     or exists (
       select 1 from public.profile_roles pr
+      join public.roles r on r.id = pr.role_id
       where pr.profile_id = (select auth.uid())
         and pr.school_id = (storage.foldername(name))[1]::bigint
         and pr.is_active is true
+        and lower(trim(r.role_name)) in ('hr manager','secretary')
+    )
+    or exists (
+      select 1 from public.hr_staff_signatures hs
+      where hs.storage_path = name and hs.profile_id = (select auth.uid())
+    )
+    or exists (
+      select 1 from public.document_signing_recipients dsr
+      join public.hr_staff_signatures hs on hs.id = dsr.signature_id
+      where dsr.profile_id = (select auth.uid()) and hs.storage_path = name
     )
   )
 );
