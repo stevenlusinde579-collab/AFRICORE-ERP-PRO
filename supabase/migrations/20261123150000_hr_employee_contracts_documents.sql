@@ -152,8 +152,8 @@ using (
   and (storage.foldername(name))[2] ~ '^[0-9]+$'
   and exists (
     select 1 from public.employees e
-    where e.id=((storage.foldername(name))[2])::bigint
-      and e.school_id=((storage.foldername(name))[1])::bigint
+    where e.id::text=(storage.foldername(name))[2]
+      and e.school_id::text=(storage.foldername(name))[1]
   )
   and (
     public.is_current_user_super_admin()
@@ -162,7 +162,7 @@ using (
       join public.roles r on r.id=pr.role_id
       where pr.profile_id=(select auth.uid())
         and pr.is_active is true
-        and pr.school_id=((storage.foldername(name))[1])::bigint
+        and pr.school_id::text=(storage.foldername(name))[1]
         and lower(trim(r.role_name))='hr manager'
     )
   )
@@ -177,8 +177,8 @@ with check (
   and (storage.foldername(name))[2] ~ '^[0-9]+$'
   and exists (
     select 1 from public.employees e
-    where e.id=((storage.foldername(name))[2])::bigint
-      and e.school_id=((storage.foldername(name))[1])::bigint
+    where e.id::text=(storage.foldername(name))[2]
+      and e.school_id::text=(storage.foldername(name))[1]
   )
   and (
     public.is_current_user_super_admin()
@@ -187,7 +187,7 @@ with check (
       join public.roles r on r.id=pr.role_id
       where pr.profile_id=(select auth.uid())
         and pr.is_active is true
-        and pr.school_id=((storage.foldername(name))[1])::bigint
+        and pr.school_id::text=(storage.foldername(name))[1]
         and lower(trim(r.role_name))='hr manager'
     )
   )
@@ -202,8 +202,8 @@ using (
   and (storage.foldername(name))[2] ~ '^[0-9]+$'
   and exists (
     select 1 from public.employees e
-    where e.id=((storage.foldername(name))[2])::bigint
-      and e.school_id=((storage.foldername(name))[1])::bigint
+    where e.id::text=(storage.foldername(name))[2]
+      and e.school_id::text=(storage.foldername(name))[1]
   )
   and (
     public.is_current_user_super_admin()
@@ -212,7 +212,7 @@ using (
       join public.roles r on r.id=pr.role_id
       where pr.profile_id=(select auth.uid())
         and pr.is_active is true
-        and pr.school_id=((storage.foldername(name))[1])::bigint
+        and pr.school_id::text=(storage.foldername(name))[1]
         and lower(trim(r.role_name))='hr manager'
     )
   )
