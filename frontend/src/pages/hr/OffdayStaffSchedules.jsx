@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { supabase } from "../../services/supabase";
 
-export default function OffdayStaffSchedules({ staff = [], rows = [], entitlements = [], schoolId, onStatusChange, onRefresh }) {
-  const year = new Date().getFullYear();
+export default function OffdayStaffSchedules({ staff = [], rows = [], entitlements = [], schoolId, year = new Date().getFullYear(), onStatusChange, onRefresh }) {
   const [expandedId, setExpandedId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState("");
