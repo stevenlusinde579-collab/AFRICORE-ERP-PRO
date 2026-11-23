@@ -5,13 +5,22 @@ import { useSchool } from "../context/SchoolContext";
  * School-specific official seal for supported printed documents.
  * This is a visual school stamp, not a cryptographic signature.
  */
-export default function SchoolOfficialSeal({ className = "" }) {
+export default function SchoolOfficialSeal({ className = "", seal: sealSnapshot }) {
     const { school, showOfficialSeal, headmasterName } = useSchool();
 
-    if (!showOfficialSeal || !school) return null;
+    const sealData = sealSnapshot || {
+        show_official_seal: showOfficialSeal,
+        school_name: school?.school_name || "School",
+        registration_number: school?.registration_number || "",
+        headmaster_title: "Headmaster",
+        headmaster_name: headmasterName || "",
+    };
 
-    const schoolName = String(school.school_name || "School").trim();
-    const registration = String(school.registration_number || "").trim();
+    if (!sealData.show_official_seal || (!sealSnapshot && !school)) return null;
+
+    const schoolName = String(sealData.school_name || school?.school_name || "School").trim();
+    const registration = String(sealData.registration_number || "").trim();
+    const printedHeadmasterName = String(sealData.headmaster_name || headmasterName || "").trim();
 
     return (
         <div className={`school-official-seal flex justify-end ${className}`} aria-label={`Official school seal for ${schoolName}`}>
@@ -29,11 +38,11 @@ export default function SchoolOfficialSeal({ className = "" }) {
                     Official Seal
                 </span>
                 <span className="relative text-[9px] font-black uppercase tracking-[0.12em]">
-                    Headmaster
+                    {sealData.headmaster_title || "Headmaster"}
                 </span>
-                {headmasterName ? (
+                {printedHeadmasterName ? (
                     <span className="relative mt-0.5 max-w-full text-[7px] font-bold leading-tight">
-                        {headmasterName}
+                        {printedHeadmasterName}
                     </span>
                 ) : null}
             </div>
