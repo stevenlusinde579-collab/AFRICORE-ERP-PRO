@@ -1008,6 +1008,7 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
     return res.status(400).json({ success: false, message: "Chagua risiti halali za kuchapisha." });
   }
   try {
+    const sealSnapshot = await getOfficialSchoolSealSnapshot(schoolId);
     let ids = documentIds;
     if (receiptIds.length) {
       const selectedReceipts = await supabase.schema("finance").from("receipts")
@@ -1096,7 +1097,6 @@ router.post("/staff/documents/publish", authenticateUser, parentPortalStaffAcces
         }
       }
       const school = schoolResult.data;
-      const sealSnapshot = await getOfficialSchoolSealSnapshot(schoolId, school);
       const schoolAddress = school.address || school.school_address || school.postal_address || school.location || "";
       const existingResult = await supabase.from("parent_portal_documents")
         .select("id,student_id,publication_status,payload,document_number,source_type,source_id")
