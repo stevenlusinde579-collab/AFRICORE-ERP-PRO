@@ -11,6 +11,7 @@ function SecretaryDocumentSigning() {
   const [userId, setUserId] = useState(null);
   const [staff, setStaff] = useState([]);
   const [signatures, setSignatures] = useState([]);
+  const [primarySignatories, setPrimarySignatories] = useState([]);
   const [requests, setRequests] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -28,17 +29,20 @@ function SecretaryDocumentSigning() {
     try {
       const { data: auth } = await supabase.auth.getUser();
       setUserId(auth.user?.id || null);
-      const [staffResult, signatureResult, requestResult] = await Promise.all([
+      const [staffResult, signatureResult, requestResult, primaryResult] = await Promise.all([
         supabase.from("teachers").select("id,user_id,employee_number,first_name,middle_name,last_name").eq("school_id", schoolId).not("user_id", "is", null).order("first_name"),
-        supabase.from("hr_staff_signatures").select("id,teacher_id,profile_id,is_active").eq("school_id", schoolId).eq("is_active", true),
+        supabase.from("hr_staff_signatures").select("id,teacher_id,profile_id,is_active").eq("school_id", schoolId),
         supabase.from("document_signing_requests").select("id,title,description,document_path,status,created_at,created_by,document_signing_recipients(id,teacher_id,profile_id,status,signed_at,teachers(first_name,middle_name,last_name,employee_number))").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(100),
+        supabase.from("hr_primary_signatories").select("id,role_id,profile_id,teacher_id,roles(role_name)").eq("school_id", schoolId),
       ]);
       if (staffResult.error) throw staffResult.error;
       if (signatureResult.error) throw signatureResult.error;
       if (requestResult.error) throw requestResult.error;
+      if (primaryResult.error) throw primaryResult.error;
       setStaff(staffResult.data || []);
       setSignatures(signatureResult.data || []);
       setRequests(requestResult.data || []);
+      setPrimarySignatories(primaryResult.data || []);
     } catch (loadError) {
       setError(loadError.message || "Imeshindikana kupakia taarifa za kusaini nyaraka.");
     } finally { setLoading(false); }
@@ -136,9 +140,9 @@ function SecretaryDocumentSigning() {
           <label className="grid gap-1 text-sm font-semibold text-slate-700">Jina la nyaraka<input value={title} onChange={(e) => setTitle(e.target.value)} required className="rounded-lg border border-slate-300 px-3 py-2 font-normal" placeholder="Mfano: Staff Meeting Minutes" /></label>
           <label className="grid gap-1 text-sm font-semibold text-slate-700">Maelezo (si lazima)<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="rounded-lg border border-slate-300 px-3 py-2 font-normal" /></label>
           <label className="grid gap-1 text-sm font-semibold text-slate-700">PDF ya kusainiwa<input type="file" accept="application/pdf,.pdf" onChange={(e) => setDocumentFile(e.target.files?.[0] || null)} required className="rounded-lg border border-slate-300 p-2 font-normal" /></label>
-          <div><p className="mb-2 text-sm font-semibold text-slate-700">Chagua wasaini (wanaohitaji akaunti ya mfumo na saini iliyosajiliwa na HR)</p><div className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-slate-200 p-3 sm:grid-cols-2">{staff.map((person) => {
+          <div><p className="mb-2 text-sm font-semibold text-slate-700">Primary signatories by role</p><div className="mb-3 grid gap-2 rounded-xl border border-indigo-100 bg-indigo-50 p-3 sm:grid-cols-2">{primarySignatories.map((primary) => { const person = staff.find((row) => row.id === primary.teacher_id && row.user_id === primary.profile_id); if (!person) return null; const hasSignature = signatures.some((sig) => sig.teacher_id === person.id && sig.profile_id === person.user_id); return <label key={primary.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedSigners.includes(person.id)} disabled={!hasSignature} onChange={(e) => setSelectedSigners((current) => e.target.checked ? [...new Set([...current, person.id])] : current.filter((id) => id !== person.id))} /><span className="text-slate-800">{primary.roles?.role_name || `Role #${primary.role_id}`} — {staffName(person)} <span className="text-xs text-indigo-700">(Primary)</span></span></label>; })}{primarySignatories.length === 0 && <p className="text-xs text-slate-500">HR bado hajachagua Primary Signatory kwa role yoyote.</p>}</div><p className="mb-2 text-sm font-semibold text-slate-700">Au chagua wasaini wengine</p><div className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-slate-200 p-3 sm:grid-cols-2">{staff.map((person) => {
             const hasSignature = signatures.some((sig) => sig.teacher_id === person.id && sig.profile_id === person.user_id);
-            return <label key={person.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedSigners.includes(person.id)} disabled={!hasSignature} onChange={(e) => setSelectedSigners((current) => e.target.checked ? [...current, person.id] : current.filter((id) => id !== person.id))} /><span className={hasSignature ? "text-slate-800" : "text-slate-400"}>{staffName(person)}{!hasSignature ? " (HR hajahifadhi saini)" : ""}</span></label>;
+            return <label key={person.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedSigners.includes(person.id)} disabled={!hasSignature} onChange={(e) => setSelectedSigners((current) => e.target.checked ? [...new Set([...current, person.id])] : current.filter((id) => id !== person.id))} /><span className={hasSignature ? "text-slate-800" : "text-slate-400"}>{staffName(person)}{!hasSignature ? " (HR hajahifadhi saini)" : ""}</span></label>;
           })}</div></div>
           <button disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-60"><FaFileSignature />{saving ? "Inatuma..." : "Tuma kwa wasaini"}</button>
         </form>
@@ -156,7 +160,7 @@ function SecretaryDocumentSigning() {
         <h2 className="text-xl font-bold text-slate-900">Nyaraka ninazotakiwa kusaini</h2>
         {myTasks.length === 0 ? <p className="py-5 text-sm text-slate-500">Huna nyaraka zinazosubiri saini kwa sasa.</p> : <div className="divide-y divide-slate-100">{myTasks.map((task) => <article key={task.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-slate-900">{task.request.title}</h3><p className="text-xs text-slate-500">{statusLabel(task.status)} • {task.request.description || "Hakuna maelezo"}</p><button onClick={() => openDocument(task.request.document_path)} className="mt-2 text-sm font-semibold text-blue-700 underline">Soma PDF</button></div>{task.status === "pending" && <div className="flex gap-2"><button disabled={actionId === task.id} onClick={() => respondToTask(task, "signed")} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"><FaCheckCircle className="mr-1 inline" /> Nimesaini</button><button disabled={actionId === task.id} onClick={() => respondToTask(task, "declined")} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-50"><FaTimesCircle className="mr-1 inline" /> Kataa</button></div>}</article>)}</div>}
       </section>
-      <p className="text-xs text-slate-500">Kumbuka: hatua ya “Nimesaini” inarekodi uthibitisho na muda wa msaini pamoja na saini aliyosajiliwa na HR. PDF ya asili haibadilishwi moja kwa moja; kwa saini yenye muhuri ndani ya PDF na uthibitishaji wa kisheria, itahitajika hatua ya ziada ya PDF signing.</p>
+      <p className="text-xs text-slate-500">Kumbuka: hatua ya “Nimesaini” inarekodi uthibitisho na muda wa msaini pamoja na saini aliyosajiliwa na HR. PDF ya asili bado haibadilishwi; PDF yenye saini zilizopachikwa itahitaji utekelezaji na majaribio ya ziada kabla ya kutumika.</p>
     </main>
   );
 }

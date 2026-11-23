@@ -29,6 +29,8 @@ import {
 
 import { supabase } from "../../services/supabase";
 import { useSchool } from "../../context/SchoolContext";
+import { useRole } from "../../context/RoleContext";
+import StaffSignatureSettings from "./StaffSignatureSettings";
 
 
 const PromotionMetric = ({ label, value }) => (
@@ -45,7 +47,9 @@ const PromotionMetric = ({ label, value }) => (
 
 function Settings() {
     const navigate = useNavigate();
+    const { selectedRoleName = "", isSuperAdmin = false, loading: roleLoading = false } = useRole();
     const {
+        schoolId,
         refreshSchool,
         academicYears,
         activeAcademicYear,
@@ -157,6 +161,9 @@ function Settings() {
         String(profile.role_id).trim() === ""
             ? null
             : Number(profile.role_id);
+
+    const canManageSignatures =
+        !roleLoading && (isSuperAdmin || String(selectedRoleName).trim().toLowerCase() === "hr manager");
 
     const canManageSchoolSettings =
         profile !== null &&
@@ -2253,6 +2260,10 @@ function Settings() {
                         </div>
                     )}
                 </>
+            )}
+
+            {canManageSignatures && schoolId && (
+                <StaffSignatureSettings schoolId={schoolId} canManage={canManageSignatures} />
             )}
         </div>
     );

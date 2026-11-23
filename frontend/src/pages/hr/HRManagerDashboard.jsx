@@ -433,31 +433,53 @@ function HRManagerDashboard() {
     }
     setSignatureBusyId(teacher.id);
     setSignatureNotice("");
+    let uploadedPath = null;
+    let insertedSignatureId = null;
+    let previousSignature = null;
     try {
-      const previousSignature = signatureRows.find((row) => row.teacher_id === teacher.id);
+      previousSignature = signatureRows.find((row) => row.teacher_id === teacher.id && row.is_active) || null;
       const path = `${schoolId}/${teacher.id}/signature-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      uploadedPath = path;
       const { error: uploadError } = await supabase.storage.from("hr-staff-signatures").upload(path, file, { contentType: file.type, upsert: false });
       if (uploadError) throw uploadError;
+
       const { data: { user } } = await supabase.auth.getUser();
-      const { error: saveError } = await supabase.from("hr_staff_signatures").upsert({
+      const { data: inserted, error: insertError } = await supabase.from("hr_staff_signatures").insert({
         school_id: schoolId,
         teacher_id: teacher.id,
         profile_id: teacher.user_id,
         storage_path: path,
-        is_active: true,
+        is_active: false,
         registered_by: user?.id || null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "school_id,teacher_id" });
-      if (saveError) {
-        await supabase.storage.from("hr-staff-signatures").remove([path]);
-        throw saveError;
+      }).select("id").single();
+      if (insertError) throw insertError;
+      insertedSignatureId = inserted.id;
+
+      if (previousSignature?.id) {
+        const { error: deactivateError } = await supabase.from("hr_staff_signatures")
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq("id", previousSignature.id)
+          .eq("school_id", schoolId)
+          .eq("is_active", true);
+        if (deactivateError) throw deactivateError;
       }
-      if (previousSignature?.storage_path && previousSignature.storage_path !== path) {
-        await supabase.storage.from("hr-staff-signatures").remove([previousSignature.storage_path]);
-      }
-      setSignatureNotice("Saini limehifadhiwa kwa mafanikio.");
+
+      const { error: activateError } = await supabase.from("hr_staff_signatures")
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq("id", insertedSignatureId)
+        .eq("school_id", schoolId);
+      if (activateError) throw activateError;
+
+      setSignatureNotice("Saini limehifadhiwa. Toleo la awali limehifadhiwa kwa nyaraka zilizokwisha sainiwa.");
       await loadHRData();
     } catch (saveError) {
+      if (insertedSignatureId) {
+        if (previousSignature?.id) {
+          await supabase.from("hr_staff_signatures").update({ is_active: true, updated_at: new Date().toISOString() }).eq("id", previousSignature.id).eq("school_id", schoolId);
+        }
+        await supabase.from("hr_staff_signatures").update({ is_active: false, updated_at: new Date().toISOString() }).eq("id", insertedSignatureId).eq("school_id", schoolId);
+      }
+      if (uploadedPath) await supabase.storage.from("hr-staff-signatures").remove([uploadedPath]);
       setSignatureNotice(saveError.message || "Imeshindikana kuhifadhi saini.");
     } finally {
       setSignatureBusyId(null);
