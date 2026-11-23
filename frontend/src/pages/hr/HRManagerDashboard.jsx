@@ -103,7 +103,7 @@ function HRManagerDashboard() {
           .lt("off_date", `${year + 2}-01-01`)
           .order("off_date", { ascending: true }),
         supabase.from("hr_leave_requests")
-          .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,employees(first_name,middle_name,last_name,employee_number)")
+          .select("id,employee_id,leave_type,start_date,end_date,days_requested,reason,status,created_at,reviewed_at,employees(first_name,middle_name,last_name,employee_number)")
           .eq("school_id", schoolId)
           .order("created_at", { ascending: false })
           .limit(100),
