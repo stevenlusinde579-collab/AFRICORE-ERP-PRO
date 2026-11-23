@@ -144,7 +144,19 @@ export const getPayrollDetails = async (req, res) => {
             .eq("school_id", payroll.school_id).eq("payroll_id", payroll.id)
             .order("created_at", { ascending: true });
         if (error) throw error;
-        return res.json({ success: true, data: { ...payroll, audit: audit || [] } });
+        const actorIds = [...new Set((audit || []).map((event) => event.actor_id).filter(Boolean))];
+        let actorMap = new Map();
+        if (actorIds.length) {
+            const { data: actors, error: actorsError } = await supabase
+                .from("profiles").select("id,full_name").in("id", actorIds);
+            if (actorsError) throw actorsError;
+            actorMap = new Map((actors || []).map((actor) => [actor.id, actor.full_name]));
+        }
+        const auditWithNames = (audit || []).map((event) => ({
+            ...event,
+            actor_name: actorMap.get(event.actor_id) || "System user",
+        }));
+        return res.json({ success: true, data: { ...payroll, audit: auditWithNames } });
     } catch (error) {
         return responseError(res, error, "Unable to load payroll details.");
     }
