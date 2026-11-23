@@ -368,6 +368,7 @@ function PayrollManagement() {
                             const isPayslip = printIsPayslip;
                             return <article key={item.payroll_item_id} className="payroll-print-page mx-auto max-w-4xl bg-white text-slate-900">
                                 <header className="border-b-2 border-slate-800 pb-4 text-center">
+                                    {schoolSnapshot.logo && <img src={schoolSnapshot.logo} alt="School logo" className="mx-auto mb-2 h-16 w-16 object-contain" />}
                                     <h1 className="text-xl font-black uppercase">{schoolSnapshot.school_name || school?.school_name}</h1>
                                     {schoolSnapshot.registration_number && <p className="text-xs">Registration No: {schoolSnapshot.registration_number}</p>}
                                     {schoolSnapshot.address && <p className="text-xs">{schoolSnapshot.address}</p>}
