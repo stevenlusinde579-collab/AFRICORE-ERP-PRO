@@ -13,16 +13,25 @@ function getSelectedMarketingRole(req) {
     }
 
     const activeProfileRoles = req.access?.profile_roles || [];
-    const assignedRole = activeProfileRoles.find(
-        (item) => Number(item.role_id) === selectedRoleId && item.is_active === true
+    const selectedProfileRoleId = Number(req.headers["x-africore-profile-role-id"]);
+    const assignedRole = activeProfileRoles.find((item) =>
+        item.is_active === true &&
+        Number(item.role_id) === selectedRoleId &&
+        (!Number.isInteger(selectedProfileRoleId) || selectedProfileRoleId <= 0 ||
+            Number(item.id) === selectedProfileRoleId)
     );
 
-    // Legacy single-role accounts may not yet have profile_roles rows.
+    // If a user has the same role in multiple schools, require the exact
+    // active profile_roles assignment so tenant context cannot be guessed.
+    const duplicateSchoolAssignments = activeProfileRoles.filter(
+        (item) => Number(item.role_id) === selectedRoleId && item.is_active === true
+    ).length > 1;
     const legacyAssigned =
         activeProfileRoles.length === 0 &&
         Number(req.profile?.role_id) === selectedRoleId;
 
     if (!assignedRole && !legacyAssigned) return null;
+    if (duplicateSchoolAssignments && (!Number.isInteger(selectedProfileRoleId) || selectedProfileRoleId <= 0)) return null;
 
     return {
         roleId: selectedRoleId,
