@@ -4,9 +4,11 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../services/supabase";
+import { useSchool } from "../../context/SchoolContext";
 
 function Layout() {
   const { user, loading: authLoading } = useAuth();
+  const { schoolName, showOfficialSeal, headmasterName } = useSchool();
   const [profile, setProfile] = useState({
     fullName: "",
     avatarUrl: "",
@@ -92,6 +94,18 @@ function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {showOfficialSeal && (
+        <div className="school-official-seal-print" aria-hidden="true">
+          <div className="school-official-seal-ring">
+            <span className="school-official-seal-top">OFFICIAL SCHOOL SEAL</span>
+            <span className="school-official-seal-school">{schoolName || "SCHOOL"}</span>
+            <span className="school-official-seal-center">✦</span>
+            <span className="school-official-seal-role">HEADMASTER</span>
+            {headmasterName && <span className="school-official-seal-name">{headmasterName}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
