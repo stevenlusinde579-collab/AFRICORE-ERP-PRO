@@ -2742,7 +2742,7 @@ export const getIncomeExpensesSummary = async (req, res) => {
         const fromDate = String(req.query.from || (todayDate.slice(0, 4) + "-01-01"));
         const toDate = String(req.query.to || todayDate);
         const validDate = value => {
-            if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
             const [year, month, day] = value.split("-").map(Number);
             const parsed = new Date(Date.UTC(year, month - 1, day));
             return parsed.getUTCFullYear() === year &&
@@ -2858,7 +2858,7 @@ export const getIncomeExpensesSummary = async (req, res) => {
                 const expense = expenseMap.get(String(entry.id));
                 const sourceType = String(entry.source_type || "").toLowerCase();
                 const rawCategory = String(expense?.expense_category || account.account_category || account.account_name || "Other Expenses");
-                const label = sourceType.includes("transport") ? "Transport" : sourceType.includes("payroll") ? "Staff Payroll" : rawCategory.replace(/[_-]+/g, " ").replace(/\\b\\w/g, c => c.toUpperCase());
+                const label = sourceType.includes("transport") ? "Transport" : sourceType.includes("payroll") ? "Staff Payroll" : rawCategory.replace(/[_-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
                 addAmount(expenseBuckets, label, account.account_name || label, amount, entry.id);
             }
         }
