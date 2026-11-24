@@ -4,12 +4,14 @@ import { authenticateUser } from "../middleware/authMiddleware.js";
 import { previewSignatureRegisterPdf } from "../controllers/hrSignatureRegisterController.js";
 
 const router = Router();
+const allowedTypes = new Set(["application/pdf", "image/png", "image/jpeg"]);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
-    if (file.mimetype !== "application/pdf" || !/\.pdf$/i.test(file.originalname || "")) {
-      return callback(new Error("Upload PDF pekee."));
+    const extensionAllowed = /\.(pdf|png|jpe?g)$/i.test(file.originalname || "");
+    if (!allowedTypes.has(file.mimetype) || !extensionAllowed) {
+      return callback(new Error("Upload PDF, PNG au JPG/JPEG pekee."));
     }
     callback(null, true);
   }
