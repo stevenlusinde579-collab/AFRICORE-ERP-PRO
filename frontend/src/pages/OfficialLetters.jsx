@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import SchoolOfficialSeal from "../components/SchoolOfficialSeal";
+import StaffSignatureImage from "../components/StaffSignatureImage";
 
 const today = () => new Date().toLocaleDateString("sw-TZ", { day: "2-digit", month: "long", year: "numeric" });
 
@@ -162,7 +163,7 @@ export default function OfficialLetters() {
             <label className="block text-xs font-bold text-slate-600">Namba ya simu
               <input type="tel" value={phone} onChange={(e)=>setPhone(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal" placeholder="07XX XXX XXX" />
             </label>
-            <p className="text-xs text-slate-500">Sehemu ya saini itaachwa wazi kwenye barua iliyochapishwa ili mwandishi aweze kusaini kwa mkono.</p>
+            <p className="text-xs text-slate-500">Saini iliyosajiliwa ya mwandishi itaonekana juu ya mstari; ikiwa haijasajiliwa, mstari utaachwa wazi kwa saini ya mkono.</p>
             <div className="flex flex-wrap gap-3 border-t pt-4">
               <button type="button" onClick={print} disabled={busy || !selectedIds.length} className="rounded-xl bg-slate-800 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">Print Letter ({selectedIds.length})</button>
               <button type="button" onClick={publish} disabled={busy || !selectedIds.length} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? "Inachapisha..." : "Publish to Parent Portal"}</button>
@@ -193,7 +194,7 @@ export default function OfficialLetters() {
           <div className="mt-5 whitespace-pre-wrap text-justify text-sm leading-7">{body}</div>
           <p className="mt-5 text-sm">Wako katika huduma,</p>
           <div className="mt-14 w-72 border-t border-black pt-2 text-sm">
-            <p className="font-bold">{authorName}</p><p>{authorTitle === "Other" ? customAuthorTitle : authorTitle}</p><p className="mt-1">Simu: {phone}</p><p className="mt-8">Saini: ______________________________</p>
+            <p className="font-bold">{authorName}</p><p>{authorTitle === "Other" ? customAuthorTitle : authorTitle}</p><p className="mt-1">Simu: {phone}</p><div className="mt-5 w-64"><p className="mb-1 text-xs">Saini:</p><StaffSignatureImage schoolId={context?.school?.id} teacherId={context?.author?.teacher_id} /></div>
           </div>
           <SchoolOfficialSeal className="mt-5" />
           <p className="mt-8 text-center text-[9px] text-slate-500">{context?.school?.school_name || "AfriCore ERP PRO"} · Barua rasmi · {index + 1}/{selectedRecipients.length}</p>
