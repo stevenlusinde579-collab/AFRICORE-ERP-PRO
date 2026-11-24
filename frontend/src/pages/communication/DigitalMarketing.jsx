@@ -1,16 +1,39 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    AlertCircle, Camera, CheckCircle2, Globe,
-    Megaphone, MessageCircle, Plus, RefreshCw, Send, ShieldCheck,
-    X
+    AlertCircle, CheckCircle2, Megaphone, Plus, RefreshCw, Send, ShieldCheck, X
 } from "lucide-react";
 import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
 
 const PLATFORM_META = {
-    facebook: { label: "Facebook", description: "Publish posts to the school's official Facebook Page.", icon: Globe },
-    instagram: { label: "Instagram", description: "Publish photos and videos to the school's professional Instagram account.", icon: Camera },
-    whatsapp: { label: "WhatsApp", description: "Send approved campaign messages to opted-in parents and guardians.", icon: MessageCircle }
+    facebook: { label: "Facebook", description: "Publish posts to the school's official Facebook Page." },
+    instagram: { label: "Instagram", description: "Publish photos and videos to the school's professional Instagram account." },
+    whatsapp: { label: "WhatsApp", description: "Send approved campaign messages to opted-in parents and guardians." }
+};
+
+// Inline brand marks keep the official platform identities visible without
+// relying on generic interface icons or a third-party icon package.
+const PlatformLogo = ({ platform, size = 24 }) => {
+    if (platform === "facebook") {
+        return <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size}>
+            <circle cx="16" cy="16" r="16" fill="#1877F2" />
+            <path fill="#fff" d="M18.1 27V17.4h3.2l.5-3.8h-3.7v-2.4c0-1.1.3-1.8 1.9-1.8H22V6a21 21 0 0 0-2.9-.2c-2.9 0-4.9 1.8-4.9 5.1v2.8H11v3.8h3.2V27z" />
+        </svg>;
+    }
+    if (platform === "instagram") {
+        return <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size}>
+            <defs><linearGradient id="instagram-brand-gradient" x1="4" y1="29" x2="28" y2="3" gradientUnits="userSpaceOnUse"><stop stopColor="#FFDC80"/><stop offset=".32" stopColor="#F77737"/><stop offset=".62" stopColor="#E1306C"/><stop offset="1" stopColor="#833AB4"/></linearGradient></defs>
+            <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#instagram-brand-gradient)" />
+            <rect x="8" y="8" width="16" height="16" rx="5" fill="none" stroke="#fff" strokeWidth="2.2"/>
+            <circle cx="16" cy="16" r="3.8" fill="none" stroke="#fff" strokeWidth="2.2"/>
+            <circle cx="22" cy="10" r="1.4" fill="#fff"/>
+        </svg>;
+    }
+    return <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size}>
+        <circle cx="16" cy="16" r="16" fill="#25D366"/>
+        <path fill="#fff" d="M8.1 24.2 9.3 20a10 10 0 1 1 3.7 3.1zm5.1-3.2.6.3a7.7 7.7 0 1 0-2.3-2l.4.6-.7 2.3z"/>
+        <path fill="#25D366" d="M13.1 11.8c-.2-.5-.5-.5-.8-.5h-.7c-.2 0-.6.1-.9.4-.3.3-1.1 1.1-1.1 2.6s1.1 3 1.3 3.2c.2.2 2.1 3.3 5.2 4.5 2.6 1 3.1.8 3.7.8.6-.1 1.9-.8 2.2-1.5.3-.7.3-1.3.2-1.5-.1-.1-.3-.2-.7-.4l-2.1-1c-.3-.1-.5-.2-.7.2-.2.3-.8 1-1-1.2-.2.2-.4.2-.7.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.7z"/>
+    </svg>;
 };
 
 const DigitalMarketing = () => {
@@ -175,13 +198,12 @@ const DigitalMarketing = () => {
                 </div>
                 <div className="grid gap-4 lg:grid-cols-3">
                     {Object.entries(PLATFORM_META).map(([key, item]) => {
-                        const Icon = item.icon;
                         const accounts = platforms.find((platform) => platform.platform === key)?.accounts || [];
                         const connected = accounts.filter((account) => account.connection_status === "connected");
                         return (
                             <div key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                                 <div className="flex items-center gap-3">
-                                    <div className="rounded-xl bg-slate-100 p-3 text-slate-700"><Icon size={22} /></div>
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 ring-1 ring-slate-100"><PlatformLogo platform={key} size={30} /></div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="font-bold text-slate-900">{item.label}</h3>
                                         <p className="text-xs text-slate-500">{connected.length ? connected[0].account_name || connected[0].external_account_id : "Not connected"}</p>
@@ -239,7 +261,7 @@ const DigitalMarketing = () => {
                             <div>
                                 <p className="mb-2 text-sm font-medium text-slate-700">Publish on</p>
                                 <div className="grid gap-2 sm:grid-cols-3">
-                                    {Object.entries(PLATFORM_META).map(([key, item]) => <label key={key} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm"><input type="checkbox" checked={form.platforms.includes(key)} onChange={() => togglePlatform(key)} />{item.label}</label>)}
+                                    {Object.entries(PLATFORM_META).map(([key, item]) => <label key={key} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm"><input type="checkbox" checked={form.platforms.includes(key)} onChange={() => togglePlatform(key)} /><PlatformLogo platform={key} size={22} /><span>{item.label}</span></label>)}
                                 </div>
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
