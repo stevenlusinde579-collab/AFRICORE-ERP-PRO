@@ -26,6 +26,7 @@ export default function TransportManagement() {
   const currentRole = String(selectedRoleName || "").trim().toLowerCase();
   const canManage = Number(selectedRoleId) === 1 || currentRole === "secretary";
   const canSubmitFinance = Number(selectedRoleId) === 1 || currentRole === "accountant";
+  const canViewFinance = canSubmitFinance || canReview;
   const [activeTab, setActiveTab] = useState("Overview");
   const [data, setData] = useState({ overview: {}, vehicles: [], routes: [], crew: [], students: [], employees: [], assignments: [], transactions: [], pending: [], options: { accounts: [], cashAccounts: [] } });
   const [vehicle, setVehicle] = useState(blankVehicle);
@@ -45,9 +46,9 @@ export default function TransportManagement() {
       const requests = await Promise.all([
         api.get("/transport/overview"), api.get("/transport/vehicles"), api.get("/transport/routes"),
         api.get("/transport/crew"), api.get("/transport/students"), api.get("/transport/employees"),
-        api.get("/transport/assignments"), api.get("/transport/finance/transactions"),
+        api.get("/transport/assignments"), api.get("/transport/finance/transactions").catch(() => ({ data: { data: [] } })),
         api.get("/transport/finance/pending").catch(() => ({ data: { data: [] } })),
-        api.get("/transport/finance/options")
+        api.get("/transport/finance/options").catch(() => ({ data: { data: { accounts: [], cashAccounts: [] } } }))
       ]);
       setData({
         overview: requests[0].data.data || {}, vehicles: requests[1].data.data || [], routes: requests[2].data.data || [],
@@ -92,7 +93,7 @@ export default function TransportManagement() {
     </div>
     {notice && <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">{notice}</div>}
     <div className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-2">
-      {tabs.filter(tab => tab !== "HR Review" || canReview).map(tab => <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${activeTab === tab ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{tab}</button>)}
+      {tabs.filter(tab => (tab !== "HR Review" || canReview) && (tab !== "Transport Finance" || canViewFinance)).map(tab => <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${activeTab === tab ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{tab}</button>)}
     </div>
     {loading ? <div className="rounded-xl bg-white p-10 text-center text-slate-500">Loading transport records…</div> : <>
       {activeTab === "Overview" && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
