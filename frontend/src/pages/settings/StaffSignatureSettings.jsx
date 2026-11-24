@@ -147,7 +147,12 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
         class_id: context.classId ?? null, subject_id: context.subjectId ?? null,
         set_by: auth.user?.id || null, updated_at: new Date().toISOString(),
       }, { onConflict: "school_id,role_id,assignment_key" });
-      if (saveError) {\n        if (/class_id|subject_id|assignment_key|schema cache/i.test(saveError.message || "")) {\n          throw new Error("Assignment-specific signatory database update is pending. The included Supabase migration must be applied before saving selections.");\n        }\n        throw saveError;\n      }
+      if (saveError) {
+        if (/class_id|subject_id|assignment_key|schema cache/i.test(saveError.message || "")) {
+          throw new Error("Assignment-specific signatory database update is pending. The included Supabase migration must be applied before saving selections.");
+        }
+        throw saveError;
+      }
       setMessage(`Primary signatory wa ${context.roleName} — ${context.label} amehifadhiwa.`);
       await load();
     } catch (saveError) { setError(saveError.message || "Imeshindikana kuhifadhi Primary Signatory."); }
