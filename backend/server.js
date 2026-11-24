@@ -17,6 +17,7 @@ import sponsorPortalRoutes from "./routes/sponsorPortalRoutes.js";
 import hrBiometricRoutes from "./routes/hrBiometricRoutes.js";
 import hrSignatureRegisterRoutes from "./routes/hrSignatureRegisterRoutes.js";
 import payrollRoutes from "./routes/payrollRoutes.js";
+import transportRoutes from "./routes/transportRoutes.js";
 
 /* =========================================================
    APP
@@ -81,6 +82,11 @@ app.use(
 app.use(
     "/api/finance",
     financeRoutes
+);
+
+app.use(
+    "/api/transport",
+    transportRoutes
 );
 
 app.use(
