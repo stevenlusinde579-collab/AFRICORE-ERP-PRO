@@ -22,6 +22,11 @@ const SUPER_ADMIN_ROLE_ID = 1;
 const permissionCache = new Map();
 const PERMISSION_CACHE_TTL_MS = 30 * 1000;
 
+const getRoleDashboardPath = (roleName) =>
+    String(roleName || "").trim().toLowerCase() === "hr manager"
+        ? "/hr-dashboard"
+        : "/dashboard";
+
 
 /**
  * =========================================================
@@ -60,6 +65,7 @@ const PermissionRoute = ({
         loading: roleLoading,
         selectedRoleId,
         selectedProfileRoleId,
+        selectedRoleName,
     } = useRole();
 
 
@@ -889,7 +895,7 @@ const PermissionRoute = ({
         return (
 
             <Navigate
-                to="/dashboard"
+                to={getRoleDashboardPath(selectedRoleName)}
                 replace
             />
 
