@@ -33,7 +33,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const roleMap = new Map();
       for (const assignment of roleResult.data || []) {
         const name = assignment.roles?.role_name;
-        if (!name || name.trim().toLowerCase() === "parent") continue;
+        if (!name) continue;
         const current = roleMap.get(Number(assignment.role_id)) || { id: Number(assignment.role_id), name, profileIds: new Set() };
         current.profileIds.add(assignment.profile_id);
         roleMap.set(Number(assignment.role_id), current);
