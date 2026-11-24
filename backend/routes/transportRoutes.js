@@ -5,7 +5,7 @@ import {
   getTransportOverview, listTransportVehicles, saveTransportVehicle,
   listTransportEmployees, listTransportStudents, listTransportRoutes,
   saveTransportRoute, addTransportStop, listTransportCrew, assignTransportCrew,
-  listTransportAssignments, assignTransportStudent, getTransportFinanceOptions,
+  listTransportAssignments, assignTransportStudent, assignTransportStudentsBulk, getTransportFinanceOptions,
   listTransportFinanceTransactions, submitTransportFinanceTransaction,
   listTransportFinancePending, approveTransportFinanceTransaction, rejectTransportFinanceTransaction
 } from "../controllers/transportController.js";
@@ -29,6 +29,7 @@ router.get("/crew", requirePermission("view_transport"), listTransportCrew);
 router.post("/crew", requirePermission("manage_transport"), assignTransportCrew);
 router.get("/assignments", requirePermission("view_transport"), listTransportAssignments);
 router.post("/assignments", requirePermission("manage_transport"), assignTransportStudent);
+router.post("/assignments/bulk", requirePermission("manage_transport"), assignTransportStudentsBulk);
 
 router.get("/finance/options", requirePermission("view_transport_finance"), getTransportFinanceOptions);
 router.get("/finance/transactions", requirePermission("view_transport_finance"), listTransportFinanceTransactions);
