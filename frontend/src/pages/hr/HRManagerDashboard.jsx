@@ -71,6 +71,7 @@ function HRManagerDashboard() {
   const [signatureRows, setSignatureRows] = useState([]);
   const [signatureBusyId, setSignatureBusyId] = useState(null);
   const [signatureNotice, setSignatureNotice] = useState("");
+  const [legacySignatureStaffId, setLegacySignatureStaffId] = useState("");
   const [attendanceEvents, setAttendanceEvents] = useState([]);
   const [attendanceActionId, setAttendanceActionId] = useState(null);
   const [attendanceNotice, setAttendanceNotice] = useState("");
@@ -566,17 +567,30 @@ function HRManagerDashboard() {
                   const fullName = [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(" ");
                   return <div key={person.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div><p className="font-semibold text-slate-900">{fullName || person.employee_number}</p><p className="text-xs text-slate-500">User ID: {person.user_id} • {existing ? "Signature registered" : "No signature registered"}</p></div>
-                    <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                      {signatureBusyId === person.id ? "Saving..." : existing ? "Replace signature" : "Upload signature"}
-                      <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={signatureBusyId === person.id} onChange={(event) => { const selectedFile = event.target.files?.[0]; if (selectedFile) registerStaffSignature(person, selectedFile); event.target.value = ""; }} />
-                    </label>
+                    <button type="button" onClick={() => setLegacySignatureStaffId(String(person.id))} className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      {existing ? "Replace signature (PDF / image)" : "Register signature (PDF / image)"}
+                    </button>
                   </div>;
                 })}
                 {signatureStaff.length === 0 && <p className="py-5 text-sm text-slate-500">Hakuna Staff wenye akaunti za kuingia zilizounganishwa na shule hii.</p>}
               </div>
             </details>
+            {legacySignatureStaffId && (() => {
+              const selectedLegacyStaff = signatureStaff.find((person) => String(person.id) === legacySignatureStaffId);
+              return selectedLegacyStaff ? (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 sm:p-6">
+                  <div className="my-auto w-full max-w-6xl rounded-2xl bg-white p-4 shadow-2xl sm:p-6">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div><h3 className="text-lg font-bold text-slate-900">Legacy — Register one staff signature</h3><p className="text-sm text-slate-600">{[selectedLegacyStaff.first_name, selectedLegacyStaff.middle_name, selectedLegacyStaff.last_name].filter(Boolean).join(" ") || selectedLegacyStaff.employee_number} • User ID: {selectedLegacyStaff.user_id}</p></div>
+                      <button type="button" onClick={() => setLegacySignatureStaffId("")} className="rounded-lg border px-3 py-2 text-sm font-semibold">Close</button>
+                    </div>
+                    <StaffSignaturePdfImport key={selectedLegacyStaff.id} schoolId={schoolId} staff={[selectedLegacyStaff]} signatures={signatureRows} fixedStaffId={selectedLegacyStaff.id} onSaved={loadHRData} />
+                  </div>
+                </div>
+              ) : null;
+            })()}
           </>}
-          <p className="text-xs text-slate-500">PDF nzima inahifadhiwa kama kumbukumbu ya batch; saini za watu binafsi zinaunganishwa na User ID zao. Historia ya saini za zamani haifutwi.</p>
+          <p className="text-xs text-slate-500">PDF nzima inahifadhiwa kama kumbukumbu ya mtu husika; saini iliyokatwa inaunganishwa na Teacher ID na User ID yake. Historia ya saini za zamani haifutwi.</p>
         </section>
       )}
 
