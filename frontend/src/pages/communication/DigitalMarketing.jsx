@@ -245,7 +245,7 @@ const DigitalMarketing = () => {
                                     </a>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="font-bold text-slate-900">{item.label}</h3>
-                                        <p className="text-xs text-slate-500">{connected.length ? connected[0].account_name || connected[0].external_account_id : "Not linked in AfriCore"}</p>
+                                        <p className="text-xs text-slate-500">{connected.length ? connected[0].account_name || connected[0].external_account_id : "No account connected yet"}</p>
                                     </div>
                                     {connected.length ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Linked</span> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Open account</span>}
                                 </div>
