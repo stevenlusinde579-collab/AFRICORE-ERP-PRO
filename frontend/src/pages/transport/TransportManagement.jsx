@@ -32,8 +32,11 @@ export default function TransportManagement() {
   const [vehicle, setVehicle] = useState(blankVehicle);
   const [route, setRoute] = useState(blankRoute);
   const [crew, setCrew] = useState({ vehicle_id: "", employee_id: "", crew_role: "driver" });
-  const [assignment, setAssignment] = useState({ student_id: "", route_id: "", monthly_fee: 0 });
-  const [transaction, setTransaction] = useState({ transaction_type: "income", category: "Student transport fee", description: "", amount: "", transaction_date: new Date().toISOString().slice(0,10), revenue_account_id: "", expense_account_id: "", cash_account_id: "", payment_method: "cash", payer_name: "", student_id: "" });
+  const [assignment, setAssignment] = useState({ student_ids: [], route_id: "", monthly_fee: 0 });
+  const [studentClassFilter, setStudentClassFilter] = useState("all");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [transaction, setTransaction] = useState({ transaction_type: "income", category: "Student transport fee", description: "", amount: "", transaction_date: new Date().toISOString().slice(0,10), revenue_account_id: "", expense_account_id: "", cash_account_id: "", payment_method: "cash", payer_name: "", student_id: "", vehicle_id: "" });
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
@@ -75,6 +78,25 @@ export default function TransportManagement() {
   const incomeAccounts = accounts.filter(a => a.account_type === "revenue");
   const expenseAccounts = accounts.filter(a => a.account_type === "expense");
   const activeAssignments = useMemo(() => data.assignments.filter(a => a.is_active), [data.assignments]);
+  const classOptions = useMemo(() => [...new Map(data.students.map(s => {
+    const key = String(s.current_class_id ?? s.class_name ?? "unassigned");
+    return [key, { value: key, label: s.class_name || (key === "unassigned" ? "Unassigned class" : "Class " + key) }];
+  })).values()].sort((a,b) => a.label.localeCompare(b.label)), [data.students]);
+  const filteredStudents = useMemo(() => data.students.filter(s => {
+    const classKey = String(s.current_class_id ?? s.class_name ?? "unassigned");
+    const q = studentSearch.trim().toLowerCase();
+    return (studentClassFilter === "all" || classKey === studentClassFilter) &&
+      (!q || [label(s),s.admission_number,s.admission_no,s.class_name].filter(Boolean).join(" ").toLowerCase().includes(q));
+  }), [data.students, studentClassFilter, studentSearch]);
+  const selectedVehicle = data.vehicles.find(v => String(v.id) === String(selectedVehicleId));
+  const vehicleRoutes = data.routes.filter(r => String(r.vehicle_id) === String(selectedVehicleId));
+  const vehicleRouteIds = new Set(vehicleRoutes.map(r => r.id));
+  const vehicleAssignments = activeAssignments.filter(a => vehicleRouteIds.has(a.route_id));
+  const vehicleCrew = data.crew.filter(c => String(c.vehicle_id) === String(selectedVehicleId) && c.is_active);
+  const vehicleTransactions = data.transactions.filter(t => String(t.vehicle_id || "") === String(selectedVehicleId));
+  const vehicleIncome = vehicleTransactions.filter(t => t.transaction_type === "income" && t.status === "approved").reduce((sum,t)=>sum+Number(t.amount||0),0);
+  const vehiclePendingIncome = vehicleTransactions.filter(t => t.transaction_type === "income" && t.status === "pending").reduce((sum,t)=>sum+Number(t.amount||0),0);
+  const vehicleExpenses = vehicleTransactions.filter(t => t.transaction_type === "expense" && t.status === "approved").reduce((sum,t)=>sum+Number(t.amount||0),0);
 
   const submitTransaction = async (event) => {
     event.preventDefault();
@@ -112,7 +134,13 @@ export default function TransportManagement() {
           <div className="grid grid-cols-2 gap-3"><Field label="Insurance expiry"><input className={inputClass} type="date" value={vehicle.insurance_expiry} onChange={e=>setVehicle({...vehicle,insurance_expiry:e.target.value})}/></Field><Field label="Inspection expiry"><input className={inputClass} type="date" value={vehicle.inspection_expiry} onChange={e=>setVehicle({...vehicle,inspection_expiry:e.target.value})}/></Field></div>
           <button className={buttonClass} disabled={busy}>Save vehicle</button>
         </form></Panel>}
-        <Panel title="Registered vehicles"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Registration</th><th className="p-2">Vehicle</th><th className="p-2">Seats</th><th className="p-2">Status</th></tr></thead><tbody>{data.vehicles.map(v=><tr key={v.id} className="border-b last:border-0"><td className="p-2 font-semibold">{v.registration_number}</td><td className="p-2">{[v.make,v.model].filter(Boolean).join(" ") || v.vehicle_type}</td><td className="p-2">{v.seating_capacity}</td><td className="p-2 capitalize">{v.status}</td></tr>)}</tbody></table>{!data.vehicles.length && <p className="p-4 text-slate-500">No vehicles registered.</p>}</div></Panel>
+        <Panel title="Registered vehicles"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Registration</th><th className="p-2">Vehicle</th><th className="p-2">Seats</th><th className="p-2">Status</th><th className="p-2">Details</th></tr></thead><tbody>{data.vehicles.map(v=><tr key={v.id} className="border-b last:border-0"><td className="p-2 font-semibold">{v.registration_number}</td><td className="p-2">{[v.make,v.model].filter(Boolean).join(" ") || v.vehicle_type}</td><td className="p-2">{v.seating_capacity}</td><td className="p-2 capitalize">{v.status}</td><td className="p-2"><button type="button" onClick={()=>setSelectedVehicleId(String(v.id))} className="font-semibold text-blue-700 hover:underline">View details</button></td></tr>)}</tbody></table>{!data.vehicles.length && <p className="p-4 text-slate-500">No vehicles registered.</p>}</div></Panel>
+        {selectedVehicle && <Panel title={"Vehicle file — " + selectedVehicle.registration_number} action={<button type="button" onClick={()=>setSelectedVehicleId("")} className="text-sm font-semibold text-blue-700">Close</button>}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Seats occupied</p><p className="text-xl font-bold">{vehicleAssignments.length} / {selectedVehicle.seating_capacity}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Approved income</p><p className="text-xl font-bold">{money(vehicleIncome)}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Pending income</p><p className="text-xl font-bold">{money(vehiclePendingIncome)}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Approved expenses</p><p className="text-xl font-bold">{money(vehicleExpenses)}</p></div></div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2"><div><h3 className="mb-2 font-semibold">Vehicle & crew</h3><p className="text-sm text-slate-600">{[selectedVehicle.make,selectedVehicle.model].filter(Boolean).join(" ")||selectedVehicle.vehicle_type} · {selectedVehicle.status}</p><p className="text-sm text-slate-600">Insurance: {selectedVehicle.insurance_expiry||"—"} · Inspection: {selectedVehicle.inspection_expiry||"—"}</p>{vehicleCrew.map(c=><p key={c.id} className="text-sm">{c.crew_role}: {label(c.employee)}</p>)}{!vehicleCrew.length&&<p className="text-sm text-slate-500">No active driver or conductor assigned.</p>}</div><div><h3 className="mb-2 font-semibold">Routes & stops</h3>{vehicleRoutes.map(r=><div key={r.id} className="mb-2 rounded-lg border p-3"><p className="font-semibold">{r.route_name}</p><p className="text-sm text-slate-600">{r.start_location||"Start"} → {r.end_location||"Destination"}</p><p className="text-xs text-slate-500">Stops: {r.stops?.map(s=>s.stop_name).join(" → ")||"None"}</p></div>)}{!vehicleRoutes.length&&<p className="text-sm text-slate-500">No routes assigned.</p>}</div></div>
+          <div className="mt-4"><h3 className="mb-2 font-semibold">Students assigned ({vehicleAssignments.length})</h3><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Student</th><th className="p-2">Admission</th><th className="p-2">Route</th><th className="p-2">Monthly fee</th></tr></thead><tbody>{vehicleAssignments.map(a=><tr key={a.id} className="border-b"><td className="p-2">{label(a.student)}</td><td className="p-2">{a.student?.admission_number||a.student?.admission_no||"—"}</td><td className="p-2">{a.route?.route_name||"—"}</td><td className="p-2">{money(a.monthly_fee)}</td></tr>)}</tbody></table>{!vehicleAssignments.length&&<p className="p-3 text-sm text-slate-500">No students assigned.</p>}</div></div>
+          <div className="mt-4"><h3 className="mb-2 font-semibold">Vehicle transactions</h3><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Type</th><th className="p-2">Vehicle</th><th className="p-2">Description</th><th className="p-2">Amount</th><th className="p-2">Status</th></tr></thead><tbody>{vehicleTransactions.map(t=><tr key={t.id} className="border-b"><td className="p-2">{t.transaction_date}</td><td className="p-2 capitalize">{t.transaction_type}</td><td className="p-2">{data.vehicles.find(v=>String(v.id)===String(t.vehicle_id))?.registration_number||"—"}</td><td className="p-2">{t.description}</td><td className="p-2">{money(t.amount)}</td><td className="p-2 capitalize">{t.status}</td></tr>)}</tbody></table>{!vehicleTransactions.length&&<p className="p-3 text-sm text-slate-500">No transactions linked to this vehicle.</p>}</div></div>
+        </Panel>}
       </div>}
       {activeTab === "Routes" && <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
         {canManage && <Panel title="Create a route"><form className="space-y-3" onSubmit={async e=>{e.preventDefault();if(await save("/transport/routes",route,"Route saved successfully."))setRoute(blankRoute);}}>
@@ -135,18 +163,40 @@ export default function TransportManagement() {
         </form></Panel>}
         <Panel title="Vehicle crew"><div className="space-y-2">{data.crew.map(c=><div key={c.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-200 p-3"><div><p className="font-semibold">{label(c.employee)}</p><p className="text-xs text-slate-500">{data.vehicles.find(v=>v.id===c.vehicle_id)?.registration_number || "Vehicle"} · {c.crew_role}</p></div><span className="text-xs capitalize text-slate-600">{c.is_active?"Active":"Ended"}</span></div>)}{!data.crew.length&&<p className="text-slate-500">No crew assignments.</p>}</div></Panel>
       </div>}
-      {activeTab === "Students" && <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        {canManage && <Panel title="Allocate a student to a route"><form className="space-y-3" onSubmit={async e=>{e.preventDefault();if(await save("/transport/assignments",assignment,"Student allocated successfully."))setAssignment({student_id:"",route_id:"",monthly_fee:0});}}>
-          <Field label="Student"><select className={inputClass} required value={assignment.student_id} onChange={e=>setAssignment({...assignment,student_id:e.target.value})}><option value="">Select student</option>{data.students.map(s=><option key={s.id} value={s.id}>{label(s)} — {s.admission_number || s.admission_no}</option>)}</select></Field>
-          <Field label="Route"><select className={inputClass} required value={assignment.route_id} onChange={e=>setAssignment({...assignment,route_id:e.target.value})}><option value="">Select route</option>{routeOptions.map(r=><option key={r.id} value={r.id}>{r.route_name}</option>)}</select></Field>
-          <Field label="Monthly fee (TZS)"><input className={inputClass} type="number" min="0" value={assignment.monthly_fee} onChange={e=>setAssignment({...assignment,monthly_fee:e.target.value})}/></Field>
-          <button className={buttonClass} disabled={busy}>Allocate student</button>
-        </form></Panel>}
-        <Panel title={`Student allocations (${activeAssignments.length})`}><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Student</th><th className="p-2">Admission No.</th><th className="p-2">Route</th><th className="p-2">Monthly fee</th></tr></thead><tbody>{activeAssignments.map(a=><tr key={a.id} className="border-b"><td className="p-2">{label(a.student)}</td><td className="p-2">{a.student?.admission_number || a.student?.admission_no}</td><td className="p-2">{a.route?.route_name}</td><td className="p-2">{money(a.monthly_fee)}</td></tr>)}</tbody></table>{!activeAssignments.length&&<p className="p-4 text-slate-500">No students allocated.</p>}</div></Panel>
+      {activeTab === "Students" && <div className="space-y-5">
+        {canManage && <Panel title="Bulk student allocation">
+          <form className="grid gap-4 lg:grid-cols-3" onSubmit={async e=>{
+            e.preventDefault();
+            if (!assignment.route_id || !assignment.student_ids.length) { setNotice("Select a route and at least one student."); return; }
+            const count = assignment.student_ids.length;
+            if (await save("/transport/assignments/bulk",{route_id:Number(assignment.route_id),student_ids:assignment.student_ids,monthly_fee:Number(assignment.monthly_fee||0)},count + " students allocated successfully.")) setAssignment({student_ids:[],route_id:"",monthly_fee:0});
+          }}>
+            <div className="space-y-3">
+              <Field label="Route / Vehicle"><select className={inputClass} required value={assignment.route_id} onChange={e=>setAssignment({...assignment,route_id:e.target.value})}><option value="">Select route</option>{routeOptions.map(r=><option key={r.id} value={r.id}>{r.route_name} — {data.vehicles.find(v=>v.id===r.vehicle_id)?.registration_number || "Vehicle"}</option>)}</select></Field>
+              <Field label="Student group"><select className={inputClass} value={studentClassFilter} onChange={e=>setStudentClassFilter(e.target.value)}><option value="all">Whole school — all classes</option>{classOptions.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></Field>
+              <Field label="Search student"><input className={inputClass} value={studentSearch} onChange={e=>setStudentSearch(e.target.value)} placeholder="Name or admission number"/></Field>
+              <Field label="Monthly fee (TZS)"><input className={inputClass} type="number" min="0" value={assignment.monthly_fee} onChange={e=>setAssignment({...assignment,monthly_fee:e.target.value})}/></Field>
+              <p className="rounded-lg bg-slate-50 p-3 text-sm">Selected students: <strong>{assignment.student_ids.length}</strong></p>
+              <button className={buttonClass} disabled={busy || !assignment.route_id || !assignment.student_ids.length}>Allocate selected students</button>
+            </div>
+            <div className="lg:col-span-2">
+              <div className="mb-2 flex flex-wrap justify-between gap-2 rounded-lg border p-3">
+                <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={filteredStudents.length>0 && filteredStudents.every(s=>assignment.student_ids.includes(s.id))} onChange={e=>setAssignment(prev=>({...prev,student_ids:e.target.checked?[...new Set([...prev.student_ids,...filteredStudents.map(s=>s.id)])]:prev.student_ids.filter(id=>!filteredStudents.some(s=>s.id===id))}))}/> Select all students shown</label>
+                <button type="button" className="text-sm font-semibold text-blue-700" onClick={()=>setAssignment(prev=>({...prev,student_ids:[]}))}>Clear selection</button>
+              </div>
+              <div className="max-h-[440px] overflow-auto rounded-lg border">{filteredStudents.map(s=><label key={s.id} className="flex cursor-pointer items-center gap-3 border-b px-3 py-2 text-sm hover:bg-slate-50">
+                <input type="checkbox" checked={assignment.student_ids.includes(s.id)} onChange={e=>setAssignment(prev=>({...prev,student_ids:e.target.checked?[...prev.student_ids,s.id]:prev.student_ids.filter(id=>id!==s.id)}))}/>
+                <span className="min-w-0 flex-1"><strong>{label(s)}</strong><span className="ml-2 text-xs text-slate-500">{s.admission_number||s.admission_no||"No admission no."}</span></span><span className="text-xs text-slate-500">{s.class_name||"Unassigned"}</span>
+              </label>)}{!filteredStudents.length&&<p className="p-5 text-center text-sm text-slate-500">No students match this selection.</p>}</div>
+            </div>
+          </form>
+        </Panel>}
+        <Panel title={"Student allocations (" + activeAssignments.length + ")"}><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Student</th><th className="p-2">Admission No.</th><th className="p-2">Route</th><th className="p-2">Monthly fee</th></tr></thead><tbody>{activeAssignments.map(a=><tr key={a.id} className="border-b"><td className="p-2">{label(a.student)}</td><td className="p-2">{a.student?.admission_number || a.student?.admission_no}</td><td className="p-2">{a.route?.route_name}</td><td className="p-2">{money(a.monthly_fee)}</td></tr>)}</tbody></table>{!activeAssignments.length&&<p className="p-4 text-slate-500">No students allocated.</p>}</div></Panel>
       </div>}
       {activeTab === "Transport Finance" && <div className="grid gap-5 xl:grid-cols-[400px_1fr]">
         {canSubmitFinance && <Panel title="Submit income or expense"><form className="space-y-3" onSubmit={submitTransaction}>
           <Field label="Transaction type"><select className={inputClass} value={transaction.transaction_type} onChange={e=>setTransaction({...transaction,transaction_type:e.target.value,revenue_account_id:"",expense_account_id:""})}><option value="income">Income</option><option value="expense">Expense</option></select></Field>
+          {transaction.transaction_type==="income" && <Field label="Vehicle generating income"><select className={inputClass} required value={transaction.vehicle_id||""} onChange={e=>setTransaction({...transaction,vehicle_id:e.target.value})}><option value="">Select vehicle</option>{data.vehicles.map(v=><option key={v.id} value={v.id}>{v.registration_number}</option>)}</select></Field>}
           <Field label="Category"><input className={inputClass} required value={transaction.category} onChange={e=>setTransaction({...transaction,category:e.target.value})}/></Field>
           <Field label="Description"><textarea className={inputClass} required rows="2" value={transaction.description} onChange={e=>setTransaction({...transaction,description:e.target.value})}/></Field>
           <Field label="Amount (TZS)"><input className={inputClass} type="number" min="1" required value={transaction.amount} onChange={e=>setTransaction({...transaction,amount:e.target.value})}/></Field>

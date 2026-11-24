@@ -195,6 +195,25 @@ export const listTransportAssignments = async (req, res) => {
   } catch (error) { return fail(res, 400, error.message); }
 };
 
+export const assignTransportStudentsBulk = async (req, res) => {
+  try {
+    if (!canManageTransport(req)) return fail(res, 403, "Only the Secretary or Super Admin can assign students to routes.");
+    const schoolId = schoolIdFor(req);
+    const route_id = Number(req.body?.route_id);
+    const studentIds = [...new Set((Array.isArray(req.body?.student_ids) ? req.body.student_ids : []).map(Number).filter(id => Number.isInteger(id) && id > 0))];
+    if (!Number.isInteger(route_id) || !studentIds.length) return fail(res, 400, "Select an active route and at least one student.");
+    const { data, error } = await supabase.rpc("assign_transport_students_bulk", {
+      p_school_id: schoolId,
+      p_route_id: route_id,
+      p_student_ids: studentIds,
+      p_monthly_fee: Math.max(0, Number(req.body?.monthly_fee || 0)),
+      p_actor_id: req.user.id
+    });
+    if (error) throw error;
+    return res.status(201).json({ success: true, message: `${data?.allocated || studentIds.length} students allocated successfully.`, data });
+  } catch (error) { return fail(res, 400, error.message || "Unable to allocate selected students."); }
+};
+
 export const assignTransportStudent = async (req, res) => {
   try {
     if (!canManageTransport(req)) return fail(res, 403, "Only the Secretary or Super Admin can assign students to routes.");
@@ -269,8 +288,14 @@ export const submitTransportFinanceTransaction = async (req, res) => {
     ]);
     if (!account || !cash) return fail(res, 400, "The selected account does not belong to this school or is inactive.");
     const number = `TRN-${schoolId}-${Date.now()}`;
+    const vehicleId = body.vehicle_id ? Number(body.vehicle_id) : null;
+    if (transaction_type === "income" && !Number.isInteger(vehicleId)) return fail(res, 400, "Select the vehicle that generated this transport income.");
+    if (vehicleId) {
+      const vehicle = await db(supabase.from("transport_vehicles").select("id").eq("id", vehicleId).eq("school_id", schoolId).single());
+      if (!vehicle) return fail(res, 400, "Selected vehicle does not belong to this school.");
+    }
     const payload = {
-      school_id: schoolId, transaction_number: number, transaction_type, category, description, amount,
+      school_id: schoolId, transaction_number: number, transaction_type, category, description, amount, vehicle_id: vehicleId,
       transaction_date: body.transaction_date || today(),
       student_id: body.student_id ? Number(body.student_id) : null,
       payer_name: body.payer_name?.trim() || null,
