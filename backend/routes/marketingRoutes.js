@@ -71,6 +71,34 @@ async function validateSchoolId(schoolId) {
 
 router.use(authenticateUser, requireMarketingRole);
 
+router.get("/schools", async (req, res) => {
+    try {
+        if (req.marketingRole?.isSuperAdmin) {
+            const { data, error } = await supabase
+                .from("schools")
+                .select("id, school_name, is_active")
+                .order("school_name");
+            if (error) throw error;
+            return res.json({ success: true, schools: data || [] });
+        }
+
+        const schoolId = req.marketingRole?.schoolId;
+        if (!schoolId || !(await validateSchoolId(Number(schoolId)))) {
+            return res.status(400).json({ success: false, message: "Your account is not assigned to a valid school." });
+        }
+        const { data, error } = await supabase
+            .from("schools")
+            .select("id, school_name, is_active")
+            .eq("id", Number(schoolId))
+            .maybeSingle();
+        if (error) throw error;
+        return res.json({ success: true, schools: data ? [data] : [] });
+    } catch (error) {
+        console.error("DIGITAL MARKETING SCHOOLS ERROR:", error);
+        return res.status(500).json({ success: false, message: "Unable to load schools." });
+    }
+});
+
 router.get("/status", async (req, res) => {
     try {
         const schoolId = resolveSchoolId(req, req.query.school_id);
