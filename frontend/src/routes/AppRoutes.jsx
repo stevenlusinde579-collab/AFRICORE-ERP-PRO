@@ -237,7 +237,7 @@ function SuperAdminOrAllowedRoleRoute({
     if (!allowedById && !allowedByName) {
         return (
             <Navigate
-                to="/access-denied"
+                to="/dashboard"
                 replace
             />
         );
