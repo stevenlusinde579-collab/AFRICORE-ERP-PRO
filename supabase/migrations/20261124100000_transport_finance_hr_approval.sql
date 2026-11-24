@@ -109,6 +109,19 @@ begin
       p_actor_id
     ) rr;
 
+    -- Mark the ledger source explicitly so Finance reports classify it as Transport.
+    update finance.journal_entries
+    set source_type = 'transport_income',
+        reference_number = v_tx.transaction_number,
+        description = 'Transport income: ' || v_tx.category || ' — ' || v_tx.description
+    where id = v_journal_id
+      and school_id = p_school_id;
+
+    update finance.receipts
+    set description = v_tx.category || ': ' || v_tx.description
+    where id = v_receipt_id
+      and school_id = p_school_id;
+
   elsif v_tx.transaction_type = 'expense' then
     if coalesce(v_tx.payment_method, 'cash') not in ('cash','bank','mobile_money') then
       raise exception 'Transport expenses must use cash, bank or mobile money payment method';
