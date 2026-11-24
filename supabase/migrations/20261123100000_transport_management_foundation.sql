@@ -198,6 +198,13 @@ begin
     );
     execute format('revoke insert, update, delete on public.%I from anon, authenticated', t);
     execute format('grant select on public.%I to authenticated', t);
+    execute format('grant all privileges on public.%I to service_role', t);
+    if pg_get_serial_sequence(format('public.%I', t), 'id') is not null then
+      execute format(
+        'grant usage, select on sequence %s to service_role',
+        pg_get_serial_sequence(format('public.%I', t), 'id')
+      );
+    end if;
   end loop;
 end $$;
 
