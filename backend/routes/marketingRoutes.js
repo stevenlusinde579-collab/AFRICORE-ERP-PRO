@@ -172,7 +172,9 @@ router.post("/campaigns", async (req, res) => {
                 platforms,
                 audience_type: audienceType,
                 target_class_id: targetClassId,
-                status: scheduledAt ? "scheduled" : "draft",
+                // Keep campaigns as drafts until the background publishing
+                // worker and provider OAuth connections are configured.
+                status: "draft",
                 scheduled_at: scheduledAt?.toISOString() || null,
                 created_by: req.user.id
             })
