@@ -288,6 +288,12 @@ export const submitTransportFinanceTransaction = async (req, res) => {
     ]);
     if (!account || !cash) return fail(res, 400, "The selected account does not belong to this school or is inactive.");
     const number = `TRN-${schoolId}-${Date.now()}`;
+    const vehicleId = body.vehicle_id ? Number(body.vehicle_id) : null;
+    if (transaction_type === "income" && !Number.isInteger(vehicleId)) return fail(res, 400, "Select the vehicle that generated this transport income.");
+    if (vehicleId) {
+      const vehicle = await db(supabase.from("transport_vehicles").select("id").eq("id", vehicleId).eq("school_id", schoolId).single());
+      if (!vehicle) return fail(res, 400, "Selected vehicle does not belong to this school.");
+    }
     const payload = {
       school_id: schoolId, transaction_number: number, transaction_type, category, description, amount, vehicle_id: vehicleId,
       transaction_date: body.transaction_date || today(),
