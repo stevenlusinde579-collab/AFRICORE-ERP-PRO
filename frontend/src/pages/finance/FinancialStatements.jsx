@@ -719,36 +719,6 @@ function FinancialStatements() {
                     )
                     : [];
 
-            // Match the Income & Expenses Summary ledger basis exactly:
-            // only posted entries that have not been reversed are eligible.
-            // The RPC intentionally returns the full ledger and does not expose
-            // reversed_at, so verify eligibility through the tenant-scoped table
-            // policy in bounded batches before using entries in statements.
-            const eligibleEntryIds = new Set();
-            for (let offset = 0; offset < safeEntries.length; offset += 100) {
-                const batch = safeEntries.slice(offset, offset + 100);
-                const { data: eligibleRows, error: eligibleError } = await supabase
-                    .schema("finance")
-                    .from("journal_entries")
-                    .select("id")
-                    .eq("school_id", Number(profileData.school_id))
-                    .eq("status", "posted")
-                    .is("reversed_at", null)
-                    .in("id", batch.map(entry => entry.id));
-
-                if (eligibleError) {
-                    throw eligibleError;
-                }
-
-                (eligibleRows || []).forEach(row => {
-                    eligibleEntryIds.add(String(row.id));
-                });
-            }
-
-            const activeEntries = safeEntries.filter(
-                entry => eligibleEntryIds.has(String(entry.id))
-            );
-
             setSchool(
                 schoolResult.data || null
             );
@@ -757,8 +727,12 @@ function FinancialStatements() {
                 safeAccounts
             );
 
+            // Keep the ledger returned by the SECURITY DEFINER RPC.
+            // Direct table reads are restricted by finance RLS and can return
+            // no rows even when the authorized ledger RPC contains entries.
+            // The statement's postedEntries selector below excludes drafts.
             setEntries(
-                activeEntries
+                safeEntries
             );
         } catch (loadError) {
             console.error(
