@@ -17,6 +17,16 @@ import { useRole } from "../context/RoleContext";
 
 const SUPER_ADMIN_ROLE_ID = 1;
 
+// Cache permissions per role briefly to avoid repeating the same Supabase
+// query on every route transition. The selected role remains the cache key.
+const permissionCache = new Map();
+const PERMISSION_CACHE_TTL_MS = 30 * 1000;
+
+const getRoleDashboardPath = (roleName) =>
+    String(roleName || "").trim().toLowerCase() === "hr manager"
+        ? "/hr-dashboard"
+        : "/dashboard";
+
 
 /**
  * =========================================================
@@ -55,6 +65,7 @@ const PermissionRoute = ({
         loading: roleLoading,
         selectedRoleId,
         selectedProfileRoleId,
+        selectedRoleName,
     } = useRole();
 
 
@@ -524,16 +535,15 @@ const PermissionRoute = ({
                     // 8. LOAD PERMISSIONS FOR SELECTED ROLE ONLY
                     // =================================================
 
-                    const {
-                        data:
-                            rolePermissions,
-                        error:
-                            rolePermissionsError,
-                    } =
-                        await supabase
-                            .from(
-                                "role_permissions"
-                            )
+                    const cachedPermissions = permissionCache.get(effectiveRole);
+                    let rolePermissions = cachedPermissions && cachedPermissions.expiresAt > Date.now()
+                        ? cachedPermissions.rows
+                        : null;
+                    let rolePermissionsError = null;
+
+                    if (!rolePermissions) {
+                        const queryResult = await supabase
+                            .from("role_permissions")
                             .select(`
                                 role_id,
                                 permissions (
@@ -541,11 +551,18 @@ const PermissionRoute = ({
                                     permission_name
                                 )
                             `)
-                            .eq(
-                                "role_id",
-                                effectiveRole
-                            );
+                            .eq("role_id", effectiveRole);
 
+                        rolePermissions = queryResult.data;
+                        rolePermissionsError = queryResult.error;
+
+                        if (!rolePermissionsError && Array.isArray(rolePermissions)) {
+                            permissionCache.set(effectiveRole, {
+                                rows: rolePermissions,
+                                expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS,
+                            });
+                        }
+                    }
 
                     if (
                         rolePermissionsError
@@ -878,7 +895,7 @@ const PermissionRoute = ({
         return (
 
             <Navigate
-                to="/access-denied"
+                to={getRoleDashboardPath(selectedRoleName)}
                 replace
             />
 
