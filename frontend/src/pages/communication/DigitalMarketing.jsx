@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    AlertCircle, CheckCircle2, Megaphone, Plus, RefreshCw, Send, ShieldCheck, X
+    AlertCircle, CheckCircle2, Copy, Eye, Megaphone, Plus, RefreshCw, Send, ShieldCheck, X
 } from "lucide-react";
 import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
@@ -60,6 +60,7 @@ const DigitalMarketing = () => {
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const [showComposer, setShowComposer] = useState(false);
+    const [copyNotice, setCopyNotice] = useState("");
     const [form, setForm] = useState({
         title: "", message: "", platforms: ["facebook", "instagram", "whatsapp"],
         audience_type: "all_school", target_class_id: "", scheduled_at: ""
@@ -111,6 +112,10 @@ const DigitalMarketing = () => {
         () => platforms.filter((item) => (item.accounts || []).some((account) => account.connection_status === "connected")).length,
         [platforms]
     );
+    const scheduledCount = useMemo(
+        () => campaigns.filter((item) => item.scheduled_at && item.status !== "published").length,
+        [campaigns]
+    );
 
     const togglePlatform = (platform) => {
         setForm((current) => ({
@@ -121,8 +126,21 @@ const DigitalMarketing = () => {
         }));
     };
 
+    const copyCampaignMessage = async () => {
+        try {
+            await navigator.clipboard.writeText(form.message || "");
+            setCopyNotice("Ujumbe umenakiliwa. Unaweza kuubandika kwenye jukwaa husika.");
+        } catch {
+            setCopyNotice("Imeshindikana kunakili ujumbe. Tafadhali nakili maandishi mwenyewe.");
+        }
+    };
+
     const saveCampaign = async (event) => {
         event.preventDefault();
+        if (form.scheduled_at && new Date(form.scheduled_at).getTime() <= Date.now()) {
+            setError("Muda wa kupanga kampeni lazima uwe wa baadaye.");
+            return;
+        }
         setSaving(true);
         setError("");
         setNotice("");
@@ -194,8 +212,8 @@ const DigitalMarketing = () => {
                     <p className="mt-2 text-3xl font-bold text-slate-900">{campaigns.length}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-sm text-slate-500">Scheduled</p>
-                    <p className="mt-2 text-3xl font-bold text-slate-900">{campaigns.filter((item) => item.status === "scheduled").length}</p>
+                    <p className="text-sm text-slate-500">Scheduled drafts</p>
+                    <p className="mt-2 text-3xl font-bold text-slate-900">{scheduledCount}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-sm text-slate-500">Published</p>
@@ -286,7 +304,27 @@ const DigitalMarketing = () => {
                         </div>
                         <form onSubmit={saveCampaign} className="space-y-4 p-5">
                             <label className="block text-sm font-medium text-slate-700">Campaign title<input required maxLength={160} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" placeholder="e.g. Admission Open 2027" /></label>
-                            <label className="block text-sm font-medium text-slate-700">Message<textarea required rows={5} maxLength={5000} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" placeholder="Write the school's announcement..." /></label>
+                            <label className="block text-sm font-medium text-slate-700">
+                                Message
+                                <textarea required rows={5} maxLength={5000} value={form.message} onChange={(e) => { setForm({ ...form, message: e.target.value }); setCopyNotice(""); }} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" placeholder="Write the school's announcement..." />
+                                <span className="mt-1 flex items-center justify-between text-xs font-normal text-slate-500">
+                                    <span>Maximum 5,000 characters</span>
+                                    <span>{form.message.length}/5,000</span>
+                                </span>
+                            </label>
+                            <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4" aria-label="Campaign preview">
+                                <div className="mb-3 flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-indigo-900"><Eye size={16} /> Preview ya tangazo</div>
+                                    <button type="button" onClick={copyCampaignMessage} disabled={!form.message.trim()} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><Copy size={14} /> Copy message</button>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <p className="font-semibold text-slate-900">{form.title || "Kichwa cha tangazo kitaonekana hapa"}</p>
+                                    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">{form.message || "Ujumbe wa tangazo utaonekana hapa unapouandika."}</p>
+                                    <p className="mt-3 text-xs text-slate-400">{schools.find((school) => String(school.id) === String(selectedSchoolId))?.school_name || schoolName || "School"}</p>
+                                </div>
+                                <p className="mt-2 text-xs text-indigo-800">Huu ni mwonekano wa jumla wa maandishi; kila jukwaa linaweza kuonyesha tangazo kwa mpangilio tofauti.</p>
+                                {copyNotice && <p role="status" className="mt-2 text-xs text-indigo-800">{copyNotice}</p>}
+                            </section>
                             <div>
                                 <p className="mb-2 text-sm font-medium text-slate-700">Publish on</p>
                                 <div className="grid gap-2 sm:grid-cols-3">
@@ -297,7 +335,11 @@ const DigitalMarketing = () => {
                                 <label className="block text-sm font-medium text-slate-700">WhatsApp audience<select value={form.audience_type} onChange={(e) => setForm({ ...form, audience_type: e.target.value, target_class_id: "" })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"><option value="all_school">Whole school</option><option value="class">Selected class / form</option></select></label>
                                 {form.audience_type === "class" && <label className="block text-sm font-medium text-slate-700">Class<select required value={form.target_class_id} onChange={(e) => setForm({ ...form, target_class_id: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"><option value="">Choose class</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.class_name}{item.academic_level ? ` · ${item.academic_level}` : ""}</option>)}</select></label>}
                             </div>
-                            <label className="block text-sm font-medium text-slate-700">Schedule (optional)<input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label>
+                            <label className="block text-sm font-medium text-slate-700">
+                                Schedule (optional)
+                                <input type="datetime-local" min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" />
+                                <span className="mt-1 block text-xs font-normal text-slate-500">Muda unaotumia hapa ni muda wa eneo la shule. Kampeni itahifadhiwa kama rasimu; haitachapishwa moja kwa moja mpaka huduma rasmi ya uchapishaji iwekwe.</span>
+                            </label>
                             <div className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"><ShieldCheck size={17} /> Saving a campaign does not send it. WhatsApp will only target guardians with recorded opt-in consent; publishing is enabled after official platform accounts are connected.</div>
                             <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={() => setShowComposer(false)} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700">Cancel</button><button type="submit" disabled={saving || !form.platforms.length} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving..." : "Save campaign"}</button></div>
                         </form>
