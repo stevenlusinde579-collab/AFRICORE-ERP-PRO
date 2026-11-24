@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../../services/api";
+import { useRole } from "../../context/RoleContext";
 
 const tabs = ["Overview", "Vehicles", "Routes", "Crew", "Students", "Transport Finance", "HR Review"];
 const blankVehicle = { registration_number: "", make: "", model: "", seating_capacity: 30, vehicle_type: "bus", status: "active", insurance_expiry: "", inspection_expiry: "" };
@@ -20,6 +21,8 @@ const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2
 const buttonClass = "rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function TransportManagement() {
+  const { selectedRoleName, selectedRoleId } = useRole();
+  const canReview = Number(selectedRoleId) === 1 || String(selectedRoleName || "").trim().toLowerCase() === "hr manager";
   const [activeTab, setActiveTab] = useState("Overview");
   const [data, setData] = useState({ overview: {}, vehicles: [], routes: [], crew: [], students: [], employees: [], assignments: [], transactions: [], pending: [], options: { accounts: [], cashAccounts: [] } });
   const [vehicle, setVehicle] = useState(blankVehicle);
@@ -30,6 +33,7 @@ export default function TransportManagement() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+  const [rejectionReasons, setRejectionReasons] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,7 +154,7 @@ export default function TransportManagement() {
         </form></Panel>
         <Panel title="Transport transactions"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Date / Ref</th><th className="p-2">Type</th><th className="p-2">Description</th><th className="p-2">Amount</th><th className="p-2">Status</th></tr></thead><tbody>{data.transactions.map(t=><tr key={t.id} className="border-b"><td className="p-2">{t.transaction_date}<br/><span className="text-xs text-slate-400">{t.transaction_number}</span></td><td className="p-2 capitalize">{t.transaction_type}</td><td className="p-2">{t.description}</td><td className="p-2">{money(t.amount)}</td><td className="p-2 capitalize">{t.status}</td></tr>)}</tbody></table>{!data.transactions.length&&<p className="p-4 text-slate-500">No transport transactions.</p>}</div></Panel>
       </div>}
-      {activeTab === "HR Review" && <Panel title="Pending HR Manager review"><p className="mb-4 text-sm text-slate-600">This queue displays transactions awaiting HR review. Approval and rejection actions will be enabled with the secured Finance posting workflow so approved entries are posted exactly once to the General Journal.</p><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Reference</th><th className="p-2">Type</th><th className="p-2">Description</th><th className="p-2">Amount</th><th className="p-2">Submitted</th></tr></thead><tbody>{data.pending.map(t=><tr key={t.id} className="border-b"><td className="p-2">{t.transaction_number}</td><td className="p-2 capitalize">{t.transaction_type}</td><td className="p-2">{t.description}</td><td className="p-2">{money(t.amount)}</td><td className="p-2">{new Date(t.submitted_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!data.pending.length&&<p className="p-4 text-slate-500">No pending transactions.</p>}</div></Panel>}
+      {activeTab === "HR Review" && <Panel title="Pending HR Manager review"><p className="mb-4 text-sm text-slate-600">HR Manager verifies each request. Approval posts the income or expense to Finance and the General Journal in one database transaction; duplicate approval is blocked.</p><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Reference</th><th className="p-2">Type</th><th className="p-2">Description</th><th className="p-2">Amount</th><th className="p-2">Submitted</th>{canReview&&<th className="p-2">Action</th>}</tr></thead><tbody>{data.pending.map(t=><tr key={t.id} className="border-b align-top"><td className="p-2">{t.transaction_number}</td><td className="p-2 capitalize">{t.transaction_type}</td><td className="p-2">{t.description}</td><td className="p-2">{money(t.amount)}</td><td className="p-2">{new Date(t.submitted_at).toLocaleDateString()}</td>{canReview&&<td className="min-w-52 p-2"><div className="space-y-2"><button disabled={busy} onClick={async()=>{if(!window.confirm("Approve this transaction and post it to Finance and the General Journal?"))return;setBusy(true);setNotice("");try{await api.post(`/transport/finance/transactions/${t.id}/approve`);setNotice("Transaction approved and posted successfully.");await load();}catch(error){setNotice(error?.response?.data?.message||"Approval failed.");}finally{setBusy(false);}}} className={buttonClass}>Approve & Post</button><input className={inputClass} placeholder="Reason for rejection" value={rejectionReasons[t.id]||""} onChange={e=>setRejectionReasons({...rejectionReasons,[t.id]:e.target.value})}/><button disabled={busy||!(rejectionReasons[t.id]||"").trim()} onClick={async()=>{setBusy(true);setNotice("");try{await api.post(`/transport/finance/transactions/${t.id}/reject`,{reason:rejectionReasons[t.id]});setNotice("Transaction rejected.");await load();}catch(error){setNotice(error?.response?.data?.message||"Rejection failed.");}finally{setBusy(false);}}} className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Reject</button></div></td>}</tr>)}</tbody></table>{!data.pending.length&&<p className="p-4 text-slate-500">No pending transactions.</p>}</div></Panel>}
     </>}
   </div>;
 }
