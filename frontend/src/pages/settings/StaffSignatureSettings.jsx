@@ -32,7 +32,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const [staffResult, roleResult, primaryResult, signatureResult, auditResult, assignmentResult] = await Promise.all([
         supabase.from("teachers").select("id,user_id,employee_number,first_name,middle_name,last_name").eq("school_id", schoolId).not("user_id", "is", null).order("first_name"),
         supabase.from("profile_roles").select("profile_id,role_id,roles(id,role_name)").eq("school_id", schoolId).eq("is_active", true),
-        supabase.from("hr_primary_signatories").select("id,role_id,profile_id,teacher_id,updated_at").eq("school_id", schoolId),
+        supabase.from("hr_primary_signatories").select("id,role_id,profile_id,teacher_id,class_id,subject_id,updated_at").eq("school_id", schoolId),
         supabase.from("hr_staff_signatures").select("id,teacher_id,profile_id,storage_path,is_active,created_at,registered_by").eq("school_id", schoolId),
         supabase.from("hr_signature_audit").select("id,entity_type,entity_id,action,actor_user_id,old_value,new_value,created_at").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(50),
         supabase.from("teacher_assignments").select("id,teacher_id,subject_id,class_id,school_id").eq("school_id", schoolId),
