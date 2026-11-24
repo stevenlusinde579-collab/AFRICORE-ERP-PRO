@@ -2733,7 +2733,14 @@ export const getIncomeExpensesSummary = async (req, res) => {
         const todayDate = today();
         const fromDate = String(req.query.from || (todayDate.slice(0, 4) + "-01-01"));
         const toDate = String(req.query.to || todayDate);
-        const validDate = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z"));
+        const validDate = value => {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+            const [year, month, day] = value.split("-").map(Number);
+            const parsed = new Date(Date.UTC(year, month - 1, day));
+            return parsed.getUTCFullYear() === year &&
+                parsed.getUTCMonth() === month - 1 &&
+                parsed.getUTCDate() === day;
+        };
         if (!validDate(fromDate) || !validDate(toDate) || fromDate > toDate) {
             return res.status(400).json({ success: false, message: "Choose a valid reporting date range." });
         }
