@@ -6,22 +6,46 @@ const router = express.Router();
 const MARKETING_ROLE_IDS = new Set([1, 2, 7, 18]);
 const ALLOWED_PLATFORMS = new Set(["facebook", "instagram", "whatsapp"]);
 
+function getSelectedMarketingRole(req) {
+    const selectedRoleId = Number(req.headers["x-africore-role-id"]);
+    if (!Number.isInteger(selectedRoleId) || !MARKETING_ROLE_IDS.has(selectedRoleId)) {
+        return null;
+    }
+
+    const activeProfileRoles = req.access?.profile_roles || [];
+    const assignedRole = activeProfileRoles.find(
+        (item) => Number(item.role_id) === selectedRoleId && item.is_active === true
+    );
+
+    // Legacy single-role accounts may not yet have profile_roles rows.
+    const legacyAssigned =
+        activeProfileRoles.length === 0 &&
+        Number(req.profile?.role_id) === selectedRoleId;
+
+    if (!assignedRole && !legacyAssigned) return null;
+
+    return {
+        roleId: selectedRoleId,
+        isSuperAdmin: selectedRoleId === 1,
+        schoolId: assignedRole?.school_id ?? req.profile?.school_id ?? null
+    };
+}
+
 function requireMarketingRole(req, res, next) {
-    const roleIds = (req.access?.roles || []).map((role) => Number(role.id));
-    if (!roleIds.some((roleId) => MARKETING_ROLE_IDS.has(roleId))) {
+    const selectedRole = getSelectedMarketingRole(req);
+    if (!selectedRole) {
         return res.status(403).json({
             success: false,
-            message: "You do not have permission to access Digital Marketing & Publicity."
+            message: "Switch to Secretary, HR Manager, Headmaster or Super Admin to access Digital Marketing & Publicity."
         });
     }
+    req.marketingRole = selectedRole;
     return next();
 }
 
 function resolveSchoolId(req, suppliedSchoolId) {
-    const roleIds = (req.access?.roles || []).map((role) => Number(role.id));
-    const isSuperAdmin = req.access?.isSuperAdmin === true || roleIds.includes(1);
-    const ownSchoolId = req.profile?.school_id;
-    if (isSuperAdmin && suppliedSchoolId) return Number(suppliedSchoolId);
+    const ownSchoolId = req.marketingRole?.schoolId;
+    if (req.marketingRole?.isSuperAdmin && suppliedSchoolId) return Number(suppliedSchoolId);
     return ownSchoolId == null ? null : Number(ownSchoolId);
 }
 
