@@ -526,6 +526,13 @@ const isTemporaryGeminiError = (
     return false;
 };
 
+// A hard quota applies to the current model. It must stop retries for that
+// model, but it should not prevent trying the next configured fallback model.
+// If every configured model is exhausted, the final quota error is returned.
+export const isGeminiModelFallbackEligible = (error) =>
+    isHardQuotaExceeded(error) ||
+    isTemporaryGeminiError(error);
+
 // ============================================================
 // GEMINI URL
 // ============================================================
@@ -1121,10 +1128,10 @@ const makeGeminiRequest =
                         status === 429 &&
                         hardQuota
                     ) {
-                        handleGeminiError(
-                            error,
-                            currentModel
+                        console.warn(
+                            "Gemini daily/project quota reached for this model; skipping retries and trying the next configured model."
                         );
+                        break;
                     }
 
                     // ====================================================
@@ -1223,12 +1230,13 @@ const makeGeminiRequest =
             // ============================================================
             // MODEL FAILED
             //
-            // Move to next model only for temporary errors,
-            // including temporary 429 rate limits.
+            // Move to the next configured model when this model has
+            // a temporary outage/rate limit OR its own hard quota is
+            // exhausted. A hard quota must never be retried on the same model.
             // ============================================================
 
             if (
-                isTemporaryGeminiError(
+                isGeminiModelFallbackEligible(
                     modelLastError
                 ) &&
                 modelIndex <
