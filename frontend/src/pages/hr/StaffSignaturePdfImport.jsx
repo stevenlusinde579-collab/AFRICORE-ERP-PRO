@@ -26,11 +26,11 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
   const previewPdf = async (nextFile) => {
     setError(""); setNotice(""); setPages([]); setBatch(null); setRect(null);
     if (!nextFile) return;
-    if (nextFile.type !== "application/pdf" || !/\.pdf$/i.test(nextFile.name)) {
-      setError("Chagua PDF ya fomu ya saini pekee."); return;
-    }
+    const isPdf = nextFile.type === "application/pdf" && /\.pdf$/i.test(nextFile.name);
+    const isImage = ["image/png", "image/jpeg"].includes(nextFile.type) && /\.(png|jpe?g)$/i.test(nextFile.name);
+    if (!isPdf && !isImage) { setError("Chagua PDF, PNG au JPG/JPEG."); return; }
     if (nextFile.size > 15 * 1024 * 1024) {
-      setError("PDF isizidi 15 MB."); return;
+      setError("Faili isizidi 15 MB."); return;
     }
     setBusy(true);
     try {
@@ -45,8 +45,10 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.message || "PDF haikuweza kusomwa.");
       setFile(nextFile); setPages(result.pages || []); setPageIndex(0);
+      setFileType(result.fileType || (isPdf ? "pdf" : "image"));
+      setRecognizedText(result.recognizedText || "");
       setSelectedId((current) => current || String(staff[0]?.id || ""));
-      setNotice(`PDF imefunguliwa: kurasa ${result.pageCount}. Chagua mfanyakazi kisha chora eneo la saini yake.`);
+      setNotice(`${isPdf ? "PDF" : "Picha"} imefunguliwa: kurasa ${result.pageCount}. OCR imesoma maandishi ya hati.`);
     } catch (previewError) { setError(previewError.message || "Imeshindikana kusoma PDF."); }
     finally { setBusy(false); }
   };
@@ -95,7 +97,7 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
       if (!blob) throw new Error("Imeshindikana kuandaa picha ya saini.");
       const signatureFile = new File([blob], `signature-${cleanName(person.user_id)}.png`, { type: "image/png" });
       const batchId = batch?.id || crypto.randomUUID();
-      if (!batch) {
+      if (!batch && fileType === "pdf") {
         const path = `${schoolId}/signature-registers/${batchId}-${Date.now()}-${cleanName(file.name)}`;
         const { error: uploadPdfError } = await supabase.storage.from("school-signing-documents").upload(path, file, { contentType: "application/pdf", upsert: false });
         if (uploadPdfError) throw uploadPdfError;
