@@ -41,6 +41,10 @@ api.interceptors.request.use(
                     config.headers = config.headers || {};
                     config.headers["X-AfriCore-Role-ID"] =
                         String(selectedRole.role_id ?? selectedRole.id);
+                    if (selectedRole?.profileRoleId || selectedRole?.profile_role_id) {
+                        config.headers["X-AfriCore-Profile-Role-ID"] =
+                            String(selectedRole.profileRoleId ?? selectedRole.profile_role_id);
+                    }
                 }
             } catch {
                 // Ignore invalid local role state; backend will fail closed.
