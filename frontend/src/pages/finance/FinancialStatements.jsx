@@ -1566,16 +1566,16 @@ function FinancialStatements() {
                          * Then make only the financial statement
                          * print area visible again.
                          */
-                        .financial-statement-print-area,
-                        .financial-statement-print-area * {
+                        /* Print only the actual financial statement paper.
+                         * This prevents unrelated report widgets or page chrome
+                         * from leaking into the printed document.
+                         */
+                        .statement-shell,
+                        .statement-shell * {
                             visibility: visible !important;
                         }
 
-                        /*
-                         * Pull the statement out of the normal dashboard
-                         * layout so it becomes the only printable area.
-                         */
-                        .financial-statement-print-area {
+                        .statement-shell {
                             position: absolute !important;
                             left: 0 !important;
                             top: 0 !important;
@@ -1601,6 +1601,16 @@ function FinancialStatements() {
                             width: 100% !important;
                             max-width: none !important;
                             margin: 0 !important;
+                        }
+
+                        .statement-shell > div:first-child {
+                            background: #ffffff !important;
+                            color: #000000 !important;
+                            border-bottom: 1px solid #333333 !important;
+                        }
+
+                        .statement-shell > div:first-child * {
+                            color: #000000 !important;
                         }
 
                         .statement-page {
@@ -1926,44 +1936,36 @@ function FinancialStatements() {
 
                             <div className="flex items-center gap-4">
 
-                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/20">
-
-                                    {school?.logo ? (
+                                {school?.logo ? (
+                                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10 ring-1 ring-white/20">
                                         <img
                                             src={school.logo}
-                                            alt={
-                                                school.school_name ||
-                                                "School"
-                                            }
+                                            alt={school.school_name || "School logo"}
                                             className="h-full w-full object-contain p-2"
                                         />
-                                    ) : (
-                                        <FaUniversity className="text-2xl text-white/80" />
-                                    )}
-
-                                </div>
-
+                                    </div>
+                                ) : null}
 
                                 <div className="min-w-0">
+                                    {school?.school_name ? (
+                                        <h2 className="text-xl font-extrabold md:text-2xl">
+                                            {school.school_name}
+                                        </h2>
+                                    ) : null}
 
-                                    <h2 className="truncate text-xl font-extrabold md:text-2xl">
-                                        {school?.school_name ||
-                                            "AfriCore School"}
-                                    </h2>
+                                    {school?.registration_number ? (
+                                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
+                                            Registration No. {school.registration_number}
+                                        </p>
+                                    ) : null}
 
-                                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
-                                        {school?.registration_number
-                                            ? `Registration No. ${school.registration_number}`
-                                            : "Financial Management System"}
-                                    </p>
-
-                                    <p className="mt-1 text-xs text-slate-400">
-                                        {school?.address ||
-                                            school?.phone ||
-                                            school?.email ||
-                                            "AfriCore ERP PRO"}
-                                    </p>
-
+                                    {[school?.address, school?.phone, school?.email]
+                                        .filter(Boolean)
+                                        .map((detail, index) => (
+                                            <p key={index} className="mt-1 text-xs text-slate-300">
+                                                {detail}
+                                            </p>
+                                        ))}
                                 </div>
 
                             </div>
