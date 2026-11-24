@@ -47,7 +47,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const subjectIds = [...new Set(assignments.map((row) => Number(row.subject_id)).filter(Boolean))];
       const [classResult, subjectResult] = await Promise.all([
         classIds.length ? supabase.from("classes").select("id,class_name,short_name").eq("school_id", schoolId).in("id", classIds) : Promise.resolve({ data: [], error: null }),
-        subjectIds.length ? supabase.from("subjects").select("id,subject_name,subject_code").eq("school_id", schoolId).in("id", subjectIds) : Promise.resolve({ data: [], error: null }),
+        subjectIds.length ? supabase.from("subjects").select("id,subject_name,subject_code").in("id", subjectIds) : Promise.resolve({ data: [], error: null }),
       ]);
       if (classResult.error) throw classResult.error;
       if (subjectResult.error) throw subjectResult.error;
