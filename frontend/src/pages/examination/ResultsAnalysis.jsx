@@ -54,6 +54,7 @@ import { normalizeExamMarksToPercentage } from "../../utils/examMarkNormalizatio
 import { calculateAcseeResult, getAcseeGrade } from "../../utils/acseeResultCalculator";
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
+import StaffSignatureImage from "../../components/StaffSignatureImage";
 
 
 
@@ -480,7 +481,27 @@ export default function ResultsAnalysis() {
     const [questionSearch, setQuestionSearch] = useState("");
     const [detail, setDetail] = useState(null);
     const [printReport, setPrintReport] = useState(null);
+    const [signatureProfile, setSignatureProfile] = useState(null);
     const [studentReportFields, setStudentReportFields] = useState({});
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data: { user } = {}, error: authError } = await supabase.auth.getUser();
+                if (authError || !user?.id) return;
+                const { data, error } = await supabase
+                    .from("profiles")
+                    .select("id, school_id")
+                    .eq("id", user.id)
+                    .maybeSingle();
+                if (!error && data && !cancelled) setSignatureProfile(data);
+            } catch (error) {
+                console.warn("REPORT SIGNATURE PROFILE WARNING:", error);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
 
     // ========================================================
@@ -4225,11 +4246,11 @@ export default function ResultsAnalysis() {
 
             {printReport && typeof document !== "undefined" && createPortal(
                 <div className="print-report">
-                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} isAlevel={isAlevelClass(printReport.data.class_id)} examGradingScales={examGradingScales} />}
+                    {printReport.type === "student" && <StudentReportPrint exam={exam} report={printReport.data} isCseeExam={isCseeClass(printReport.data.class_id)} isAlevel={isAlevelClass(printReport.data.class_id)} examGradingScales={examGradingScales} signatureContext={{ schoolId: signatureProfile?.school_id, profileId: signatureProfile?.id, roleId: Number(selectedRoleId) }} />}
                     {printReport.type === "subject" && <SubjectReportPrint exam={exam} report={printReport.data} examGradingScales={examGradingScales} />}
-                    {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} />}
-                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} isAlevelExam={isAlevelExam} examGradingScales={examGradingScales} />}
-                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeClass(printReport.data.classId)} isAlevelExam={isAlevelClass(printReport.data.classId)} examGradingScales={examGradingScales} />}
+                    {printReport.type === "overall" && <OverallReportPrint exam={exam} data={printReport.data} signatureContext={{ schoolId: signatureProfile?.school_id, profileId: signatureProfile?.id, roleId: Number(selectedRoleId) }} />}
+                    {printReport.type === "school" && <SchoolOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeExam} isAlevelExam={isAlevelExam} examGradingScales={examGradingScales} signatureContext={{ schoolId: signatureProfile?.school_id, profileId: signatureProfile?.id, roleId: Number(selectedRoleId) }} />}
+                    {printReport.type === "class" && <ClassOverallReportPrint exam={exam} data={printReport.data} isCseeExam={isCseeClass(printReport.data.classId)} isAlevelExam={isAlevelClass(printReport.data.classId)} examGradingScales={examGradingScales} signatureContext={{ schoolId: signatureProfile?.school_id, profileId: signatureProfile?.id, roleId: Number(selectedRoleId) }} />}
                 </div>,
                 document.body
             )}
@@ -4408,7 +4429,18 @@ function RecommendationBox({ recommendations }) {
     );
 }
 
-export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [], schoolName, hideFinalClassification = false }) {
+function ReportSignatureSlot({ schoolId, profileId, label }) {
+    return (
+        <div className="flex min-w-0 flex-col">
+            <div className="min-h-14">
+                <StaffSignatureImage schoolId={schoolId} profileId={profileId || undefined} className="max-w-full" alt="Staff signature" />
+            </div>
+            <p className="pt-1">{label}</p>
+        </div>
+    );
+}
+
+export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false, examGradingScales = [], schoolName, hideFinalClassification = false, signatureContext = {} }) {
     const levelType = getReportLevelType(exam, report);
     const levelLabel = getReportLevelLabel(levelType);
     // Best 7, Aggregate, GPA and Division are CSEE/O-Level-specific.
@@ -4517,7 +4549,7 @@ export function StudentReportPrint({ exam, report, isCseeExam, isAlevel = false,
                 <div className="border border-slate-400 rounded-lg p-3 min-h-[80px]"><h3 className="font-extrabold text-xs mb-1">Bidii za Kazi za Mikono</h3><p className="text-[10px] whitespace-pre-wrap">{report.manualWorkEffort || "____________________________________________"}</p></div>
             </div>
             <RecommendationBox recommendations={report.recommendations} />
-            <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><div className="border-t border-slate-500 pt-2">Class Teacher</div><div className="border-t border-slate-500 pt-2">Academic Officer</div><div className="border-t border-slate-500 pt-2">Headmaster</div></div>
+            <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 12 ? signatureContext.profileId : null} label="Class Teacher" /><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 2 ? signatureContext.profileId : null} label="Academic Officer" /><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 4 ? signatureContext.profileId : null} label="Headmaster" /></div>
         </div>
     );
 }
@@ -4654,7 +4686,7 @@ function StudentSubjectMatrix({ students = [], subjects = [] }) {
     );
 }
 
-function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam = false, examGradingScales = [] }) {
+function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam = false, examGradingScales = [], signatureContext = {} }) {
     const levelType = getReportLevelType(exam, data);
     const levelLabel = getReportLevelLabel(levelType);
     const students = data.allStudents || data.topStudents || [];
@@ -4763,12 +4795,12 @@ function SchoolOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam
                 </table>
             </div>
             {isCseeExam && <div className="mt-4 text-[8px] text-slate-600">Final GPA, Aggregate and Division are calculated from the Best Seven subjects. Subjects without marks remain F and may occupy a Best Seven position when required.</div>}
-            <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><div className="border-t border-slate-500 pt-2">Prepared By</div><div className="border-t border-slate-500 pt-2">Academic Officer</div><div className="border-t border-slate-500 pt-2">Headmaster</div></div>
+            <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.profileId} label="Prepared By" /><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 2 ? signatureContext.profileId : null} label="Academic Officer" /><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 4 ? signatureContext.profileId : null} label="Headmaster" /></div>
         </div>
     );
 }
 
-function ClassOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam = false, examGradingScales = [] }) {
+function ClassOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam = false, examGradingScales = [], signatureContext = {} }) {
     const levelType = getReportLevelType(exam, data);
     const levelLabel = getReportLevelLabel(levelType);
     const students = data.students || data.topStudents || [];
@@ -4834,12 +4866,12 @@ function ClassOverallReportPrint({ exam, data, isCseeExam = false, isAlevelExam 
                 </table>
             </div>
             {isCseeExam && <div className="mt-4 text-[8px] text-slate-600">Final GPA, Aggregate and Division use the Best Seven subjects. Missing marks are treated as F when a subject is required to complete the seven counted subjects.</div>}
-            <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><div className="border-t border-slate-500 pt-2">Prepared By</div><div className="border-t border-slate-500 pt-2">Academic Officer</div><div className="border-t border-slate-500 pt-2">Headmaster</div></div>
+            <div className="mt-7 grid grid-cols-3 gap-8 text-[9px]"><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.profileId} label="Prepared By" /><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 2 ? signatureContext.profileId : null} label="Academic Officer" /><ReportSignatureSlot schoolId={signatureContext.schoolId} profileId={signatureContext.roleId === 4 ? signatureContext.profileId : null} label="Headmaster" /></div>
         </div>
     );
 }
 
-function OverallReportPrint({ exam, data }) {
+function OverallReportPrint({ exam, data, signatureContext = {} }) {
     const students = data.students || [];
     const subjects = data.subjects || [];
     const levelType = getReportLevelType(exam, data);
