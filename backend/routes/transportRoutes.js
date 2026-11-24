@@ -30,10 +30,10 @@ router.post("/crew", requirePermission("manage_transport"), assignTransportCrew)
 router.get("/assignments", requirePermission("view_transport"), listTransportAssignments);
 router.post("/assignments", requirePermission("manage_transport"), assignTransportStudent);
 
-router.get("/finance/options", requirePermission("view_transport"), getTransportFinanceOptions);
-router.get("/finance/transactions", requirePermission("view_transport"), listTransportFinanceTransactions);
+router.get("/finance/options", requirePermission("view_transport_finance"), getTransportFinanceOptions);
+router.get("/finance/transactions", requirePermission("view_transport_finance"), listTransportFinanceTransactions);
 router.post("/finance/transactions", requirePermission("manage_transport_finance"), submitTransportFinanceTransaction);
-router.get("/finance/pending", requirePermission("view_transport"), listTransportFinancePending);
+router.get("/finance/pending", requirePermission("approve_transport_finance"), listTransportFinancePending);
 router.post("/finance/transactions/:id/approve", requirePermission("approve_transport_finance"), approveTransportFinanceTransaction);
 router.post("/finance/transactions/:id/reject", requirePermission("approve_transport_finance"), rejectTransportFinanceTransaction);
 
