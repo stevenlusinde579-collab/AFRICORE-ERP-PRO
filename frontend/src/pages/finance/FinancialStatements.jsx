@@ -25,6 +25,7 @@ import {
 import { supabase } from "../../services/supabase";
 import FeeReminderLetters from "./FeeReminderLetters";
 import AnnualFeeGuidanceLetters from "./AnnualFeeGuidanceLetters";
+import StaffSignatureImage from "../../components/StaffSignatureImage";
 
 
 // ============================================================
@@ -557,6 +558,8 @@ function FinancialStatements() {
         setSchool,
     ] = useState(null);
 
+    const [currentProfileId, setCurrentProfileId] = useState(null);
+
     const [
         accounts,
         setAccounts,
@@ -624,6 +627,8 @@ function FinancialStatements() {
                     "Your login session could not be found."
                 );
             }
+
+            setCurrentProfileId(user.id);
 
             const {
                 data: profileData,
@@ -2539,9 +2544,14 @@ function FinancialStatements() {
 
                             <div>
 
-                                <span className="font-semibold text-slate-600">
-                                    Prepared by AfriCore ERP PRO
-                                </span>
+                                <div className="flex flex-col items-start gap-1">
+                                    <span className="font-semibold text-slate-600">
+                                        Prepared by {school?.school_name || "School"}
+                                    </span>
+                                    <div className="w-56">
+                                        <StaffSignatureImage schoolId={school?.id} profileId={currentProfileId} alt="Financial statement preparer signature" />
+                                    </div>
+                                </div>
 
                                 <span className="mx-2 text-slate-300">
                                     •
