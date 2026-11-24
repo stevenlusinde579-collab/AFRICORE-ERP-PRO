@@ -14,6 +14,7 @@ import {
   FaMoneyBillWave,
   FaShieldAlt,
   FaComments,
+  FaBullhorn,
   FaRobot,
   FaHandHoldingHeart,
   FaUserShield,
@@ -343,6 +344,13 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
     },
 
     {
+      name: "Digital Marketing & Publicity",
+      path: "/digital-marketing",
+      icon: <FaBullhorn />,
+      roles: ["super admin", "headmaster", "secretary", "hr manager"]
+    },
+
+    {
       name: "AI",
       path: "/ai",
       icon: <FaRobot />,
@@ -425,6 +433,7 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
       { name: "HR Management", path: "/hr-management", icon: <FaFingerprint /> },
       { name: "Transport Management", path: "/transport", icon: <FaBus /> },
       { name: "Communication", path: "/communication", icon: <FaComments /> },
+      { name: "Digital Marketing & Publicity", path: "/digital-marketing", icon: <FaBullhorn /> },
       { name: "Personal Settings", path: "/settings", icon: <FaCog /> },
     ];
 
