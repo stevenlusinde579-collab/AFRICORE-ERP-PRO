@@ -24,6 +24,7 @@ const GEMINI_BASE_URL =
 // Fallbacks:
 //   gemini-3.7-flash
 //   gemini-3.6-flash
+//   gemini-3.5-flash-lite
 //
 // Temporary capacity/server/rate-limit errors may move to
 // the next model.
@@ -32,6 +33,7 @@ const GEMINI_BASE_URL =
 // ============================================================
 
 const DEFAULT_MODEL_FALLBACKS = [
+    "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
 ];
