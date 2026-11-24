@@ -1,4 +1,4 @@
-﻿import React from "react";
+﻿import React, { Suspense } from "react";
 
 import {
     Routes,
@@ -7,132 +7,128 @@ import {
     Navigate
 } from "react-router-dom";
 
-import Login from "../pages/auth/Login";
-import AuthTest from "../pages/AuthTest";
-import AccessScopeTest from "../pages/AccessScopeTest";
+const Login = React.lazy(() => import("../pages/auth/Login"));
+const AuthTest = React.lazy(() => import("../pages/AuthTest"));
+const AccessScopeTest = React.lazy(() => import("../pages/AccessScopeTest"));
 
-import AccessDenied from "../pages/access/AccessDenied";
+const AccessDenied = React.lazy(() => import("../pages/access/AccessDenied"));
 import PermissionRoute from "../auth/PermissionRoute";
 import { useRole } from "../context/RoleContext";
 
-import LandingPage from "../pages/landing/LandingPage";
-import ParentPortal from "../pages/ParentPortal";
-import ParentPortalManagement from "../pages/ParentPortalManagement";
+const LandingPage = React.lazy(() => import("../pages/landing/LandingPage"));
+const ParentPortal = React.lazy(() => import("../pages/ParentPortal"));
+const ParentPortalManagement = React.lazy(() => import("../pages/ParentPortalManagement"));
 
-import Layout from "../components/layout/Layout";
+const Layout = React.lazy(() => import("../components/layout/Layout"));
 
-import Dashboard from "../pages/dashboard/Dashboard";
-import HRManagerDashboard from "../pages/hr/HRManagerDashboard";
-import HRDashboard from "../pages/hr/HRDashboard";
-import EmployeeDigitalFile from "../pages/hr/EmployeeDigitalFile";
-import PayrollManagement from "../pages/finance/PayrollManagement";
-import SecretaryDocumentSigning from "../pages/communication/SecretaryDocumentSigning";
-import TeacherOnDuty from "../pages/teacher-on-duty/TeacherOnDuty";
+const Dashboard = React.lazy(() => import("../pages/dashboard/Dashboard"));
+const HRManagerDashboard = React.lazy(() => import("../pages/hr/HRManagerDashboard"));
+const HRDashboard = React.lazy(() => import("../pages/hr/HRDashboard"));
+const EmployeeDigitalFile = React.lazy(() => import("../pages/hr/EmployeeDigitalFile"));
+const PayrollManagement = React.lazy(() => import("../pages/finance/PayrollManagement"));
+const SecretaryDocumentSigning = React.lazy(() => import("../pages/communication/SecretaryDocumentSigning"));
+const TeacherOnDuty = React.lazy(() => import("../pages/teacher-on-duty/TeacherOnDuty"));
 
 /* SCHOOL MANAGEMENT */
-import SchoolManagement from "../pages/school-management/SchoolManagement";
-import AIUsageMonitoring from "../pages/school-management/AIUsageMonitoring";
-import SchoolOverview from "../pages/school-management/SchoolOverview";
-import AddHeadmaster from "../pages/school-management/AddHeadmaster";
-import HeadmasterProfile from "../pages/school-management/HeadmasterProfile";
+const SchoolManagement = React.lazy(() => import("../pages/school-management/SchoolManagement"));
+const AIUsageMonitoring = React.lazy(() => import("../pages/school-management/AIUsageMonitoring"));
+const SchoolOverview = React.lazy(() => import("../pages/school-management/SchoolOverview"));
+const AddHeadmaster = React.lazy(() => import("../pages/school-management/AddHeadmaster"));
+const HeadmasterProfile = React.lazy(() => import("../pages/school-management/HeadmasterProfile"));
 
-import Students from "../pages/students/Students";
-import AddStudent from "../pages/students/AddStudent";
-import EditStudent from "../pages/students/EditStudent";
-import StudentProfile from "../pages/students/StudentProfile";
+const Students = React.lazy(() => import("../pages/students/Students"));
+const AddStudent = React.lazy(() => import("../pages/students/AddStudent"));
+const EditStudent = React.lazy(() => import("../pages/students/EditStudent"));
+const StudentProfile = React.lazy(() => import("../pages/students/StudentProfile"));
 
-import Teachers from "../pages/teachers/Teachers";
-import AddTeacher from "../pages/teachers/AddTeacher";
-import EditTeacher from "../pages/teachers/EditTeacher";
-import TeacherProfile from "../pages/teachers/TeacherProfile";
+const Teachers = React.lazy(() => import("../pages/teachers/Teachers"));
+const AddTeacher = React.lazy(() => import("../pages/teachers/AddTeacher"));
+const EditTeacher = React.lazy(() => import("../pages/teachers/EditTeacher"));
+const TeacherProfile = React.lazy(() => import("../pages/teachers/TeacherProfile"));
 
-import Subjects from "../pages/subjects/Subjects";
-import AddSubject from "../pages/subjects/AddSubject";
-import EditSubject from "../pages/subjects/EditSubject";
-import SubjectProfile from "../pages/subjects/SubjectProfile";
-import AdvancedCombinations from "../pages/subjects/AdvancedCombinations";
+const Subjects = React.lazy(() => import("../pages/subjects/Subjects"));
+const AddSubject = React.lazy(() => import("../pages/subjects/AddSubject"));
+const EditSubject = React.lazy(() => import("../pages/subjects/EditSubject"));
+const SubjectProfile = React.lazy(() => import("../pages/subjects/SubjectProfile"));
+const AdvancedCombinations = React.lazy(() => import("../pages/subjects/AdvancedCombinations"));
 
-import Classes from "../pages/classes/Classes";
-import Addclass from "../pages/classes/Addclass";
-import EditClass from "../pages/classes/EditClass";
-import ClassProfile from "../pages/classes/ClassProfile";
+const Classes = React.lazy(() => import("../pages/classes/Classes"));
+const Addclass = React.lazy(() => import("../pages/classes/Addclass"));
+const EditClass = React.lazy(() => import("../pages/classes/EditClass"));
+const ClassProfile = React.lazy(() => import("../pages/classes/ClassProfile"));
 
-import Academics from "../pages/academics/Academics";
-import AcademicYears from "../pages/academic-years/AcademicYears";
+const Academics = React.lazy(() => import("../pages/academics/Academics"));
+const AcademicYears = React.lazy(() => import("../pages/academic-years/AcademicYears"));
 
-import TeacherAssignment from "../pages/teacher-assignment/TeacherAssignment";
-import AssignmentForm from "../pages/teacher-assignment/AssignmentForm";
-import EditAssignment from "../pages/teacher-assignment/EditAssignment";
-import AssignmentProfile from "../pages/teacher-assignment/AssignmentProfile";
+const TeacherAssignment = React.lazy(() => import("../pages/teacher-assignment/TeacherAssignment"));
+const AssignmentForm = React.lazy(() => import("../pages/teacher-assignment/AssignmentForm"));
+const EditAssignment = React.lazy(() => import("../pages/teacher-assignment/EditAssignment"));
+const AssignmentProfile = React.lazy(() => import("../pages/teacher-assignment/AssignmentProfile"));
 
-import Periods from "../pages/periods/Periods";
+const Periods = React.lazy(() => import("../pages/periods/Periods"));
 
-import Timetable from "../pages/timetable/Timetable";
-import AddTimetable from "../pages/timetable/AddTimetable";
-import EditTimetable from "../pages/timetable/EditTimetable";
-import TimetableSettings from "../pages/timetable/TimetableSettings";
-import DutyScheduleManager from "../pages/timetable/DutyScheduleManager";
+const Timetable = React.lazy(() => import("../pages/timetable/Timetable"));
+const AddTimetable = React.lazy(() => import("../pages/timetable/AddTimetable"));
+const EditTimetable = React.lazy(() => import("../pages/timetable/EditTimetable"));
+const TimetableSettings = React.lazy(() => import("../pages/timetable/TimetableSettings"));
+const DutyScheduleManager = React.lazy(() => import("../pages/timetable/DutyScheduleManager"));
 
-import ClassTeacherAttendance
-    from "../pages/class-teacher/ClassTeacherAttendance";
+const ClassTeacherAttendance = React.lazy(() => import("../pages/class-teacher/ClassTeacherAttendance"));
 
-import ClassTeacherSubjectTeachers
-    from "../pages/class-teacher/ClassTeacherSubjectTeachers";
+const ClassTeacherSubjectTeachers = React.lazy(() => import("../pages/class-teacher/ClassTeacherSubjectTeachers"));
 
-import ExaminationDashboard from "../pages/examination/ExaminationDashboard";
-import AddExam from "../pages/examination/AddExam";
-import EditExam from "../pages/examination/EditExam";
-import ViewExam from "../pages/examination/ViewExam";
-import ExamList from "../pages/examination/ExamList";
-import ExamSubjects from "../pages/examination/ExamSubjects";
-import AddExamSubject from "../pages/examination/AddExamSubject";
-import ExamUpload from "../pages/examination/ExamUpload";
-import AIAnalysisDashboard from "../pages/examination/AIAnalysisDashboard";
-import ExamApproval from "../pages/examination/ExamApproval";
-import EnterMarks from "../pages/examination/EnterMarks";
-import ResultsAnalysis from "../pages/examination/ResultsAnalysis";
-import ExaminationRoleDashboard from "../pages/examination/ExaminationRoleDashboard";
-import SubjectTeacherExamUpload from "../pages/examination/SubjectTeacherExamUpload";
-import ExamPrintingUnit from "../pages/examination/ExamPrintingUnit";
+const ExaminationDashboard = React.lazy(() => import("../pages/examination/ExaminationDashboard"));
+const AddExam = React.lazy(() => import("../pages/examination/AddExam"));
+const EditExam = React.lazy(() => import("../pages/examination/EditExam"));
+const ViewExam = React.lazy(() => import("../pages/examination/ViewExam"));
+const ExamList = React.lazy(() => import("../pages/examination/ExamList"));
+const ExamSubjects = React.lazy(() => import("../pages/examination/ExamSubjects"));
+const AddExamSubject = React.lazy(() => import("../pages/examination/AddExamSubject"));
+const ExamUpload = React.lazy(() => import("../pages/examination/ExamUpload"));
+const AIAnalysisDashboard = React.lazy(() => import("../pages/examination/AIAnalysisDashboard"));
+const ExamApproval = React.lazy(() => import("../pages/examination/ExamApproval"));
+const EnterMarks = React.lazy(() => import("../pages/examination/EnterMarks"));
+const ResultsAnalysis = React.lazy(() => import("../pages/examination/ResultsAnalysis"));
+const ExaminationRoleDashboard = React.lazy(() => import("../pages/examination/ExaminationRoleDashboard"));
+const SubjectTeacherExamUpload = React.lazy(() => import("../pages/examination/SubjectTeacherExamUpload"));
+const ExamPrintingUnit = React.lazy(() => import("../pages/examination/ExamPrintingUnit"));
 
-import Finance from "../pages/finance/Finance";
-import TransportManagement from "../pages/transport/TransportManagement";
-import StockManagement from "../pages/stock/StockManagement";
-import FinanceDashboard from "../pages/finance/FinanceDashboard";
-import IncomeExpensesSummary from "../pages/finance/IncomeExpensesSummary";
-import ChartOfAccounts from "../pages/finance/ChartOfAccounts";
-import CashAccounts from "../pages/finance/CashAccounts";
-import PaymentProviderSetup from "../pages/finance/PaymentProviderSetup";
-import RecordPayment from "../pages/finance/RecordPayment";
-import AddExpense from "../pages/finance/AddExpense";
-import GeneralLedger from "../pages/finance/GeneralLedger";
-import FinancialStatements from "../pages/finance/FinancialStatements";
-import ClassFeeCollection from "../pages/finance/ClassFeeCollection";
-import FeeControlCorrectionCenter from "../pages/finance/FeeControlCorrectionCenter";
-import RecordReceivable from "../pages/finance/RecordReceivable";
-import RecordPayable from "../pages/finance/RecordPayable";
+const Finance = React.lazy(() => import("../pages/finance/Finance"));
+const TransportManagement = React.lazy(() => import("../pages/transport/TransportManagement"));
+const StockManagement = React.lazy(() => import("../pages/stock/StockManagement"));
+const FinanceDashboard = React.lazy(() => import("../pages/finance/FinanceDashboard"));
+const IncomeExpensesSummary = React.lazy(() => import("../pages/finance/IncomeExpensesSummary"));
+const ChartOfAccounts = React.lazy(() => import("../pages/finance/ChartOfAccounts"));
+const CashAccounts = React.lazy(() => import("../pages/finance/CashAccounts"));
+const PaymentProviderSetup = React.lazy(() => import("../pages/finance/PaymentProviderSetup"));
+const RecordPayment = React.lazy(() => import("../pages/finance/RecordPayment"));
+const AddExpense = React.lazy(() => import("../pages/finance/AddExpense"));
+const GeneralLedger = React.lazy(() => import("../pages/finance/GeneralLedger"));
+const FinancialStatements = React.lazy(() => import("../pages/finance/FinancialStatements"));
+const ClassFeeCollection = React.lazy(() => import("../pages/finance/ClassFeeCollection"));
+const FeeControlCorrectionCenter = React.lazy(() => import("../pages/finance/FeeControlCorrectionCenter"));
+const RecordReceivable = React.lazy(() => import("../pages/finance/RecordReceivable"));
+const RecordPayable = React.lazy(() => import("../pages/finance/RecordPayable"));
 
-import Communication from "../pages/communication/Communication";
-import CommunicationChat from "../pages/communication/CommunicationChat";
-import CommunicationMeetings from "../pages/communication/CommunicationMeetings";
-import CommunicationMeeting from "../pages/communication/CommunicationMeeting";
-import CommunicationNotifications from "../pages/communication/CommunicationNotifications";
-import CommunicationAnnouncements from "../pages/communication/CommunicationAnnouncements";
-import SuggestionBox from "../pages/communication/SuggestionBox";
+const Communication = React.lazy(() => import("../pages/communication/Communication"));
+const CommunicationChat = React.lazy(() => import("../pages/communication/CommunicationChat"));
+const CommunicationMeetings = React.lazy(() => import("../pages/communication/CommunicationMeetings"));
+const CommunicationMeeting = React.lazy(() => import("../pages/communication/CommunicationMeeting"));
+const CommunicationNotifications = React.lazy(() => import("../pages/communication/CommunicationNotifications"));
+const CommunicationAnnouncements = React.lazy(() => import("../pages/communication/CommunicationAnnouncements"));
+const SuggestionBox = React.lazy(() => import("../pages/communication/SuggestionBox"));
 
-import SocialWelfareDashboard
-    from "../pages/social-welfare/SocialWelfareDashboard";
+const SocialWelfareDashboard = React.lazy(() => import("../pages/social-welfare/SocialWelfareDashboard"));
 
-import PatronMatron
-    from "../pages/patron-matron/PatronMatron";
+const PatronMatron = React.lazy(() => import("../pages/patron-matron/PatronMatron"));
 
-import Report from "../pages/report/Report";
+const Report = React.lazy(() => import("../pages/report/Report"));
 
-import AI from "../pages/ai/AI";
+const AI = React.lazy(() => import("../pages/ai/AI"));
 
-import Settings from "../pages/settings/Settings";
+const Settings = React.lazy(() => import("../pages/settings/Settings"));
 
-import SystemManual from "../pages/manual/SystemManual";
+const SystemManual = React.lazy(() => import("../pages/manual/SystemManual"));
 
 
 /* ============================================================
@@ -257,6 +253,18 @@ function SuperAdminOrAllowedRoleRoute({
 
 export default function AppRoutes() {
     return (
+        <Suspense fallback={(
+            <div className="flex min-h-[60vh] w-full items-center justify-center" role="status" aria-live="polite">
+                <div className="w-full max-w-5xl animate-pulse space-y-4 px-4">
+                    <div className="h-8 w-56 rounded-lg bg-slate-200" />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="h-28 rounded-2xl bg-slate-100" />
+                        <div className="h-28 rounded-2xl bg-slate-100" />
+                        <div className="h-28 rounded-2xl bg-slate-100" />
+                    </div>
+                </div>
+            </div>
+        )}>
         <Routes>
 
             {/* LANDING PAGE */}
@@ -1115,5 +1123,6 @@ export default function AppRoutes() {
 
             </Route>
         </Routes>
+        </Suspense>
     );
 }
