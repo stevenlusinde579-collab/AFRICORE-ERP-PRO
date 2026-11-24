@@ -15,6 +15,8 @@ const PLATFORM_META = {
 
 const DigitalMarketing = () => {
     const { schoolName } = useSchool();
+    const [schools, setSchools] = useState([]);
+    const [selectedSchoolId, setSelectedSchoolId] = useState("");
     const [platforms, setPlatforms] = useState([]);
     const [classes, setClasses] = useState([]);
     const [campaigns, setCampaigns] = useState([]);
@@ -28,14 +30,34 @@ const DigitalMarketing = () => {
         audience_type: "all_school", target_class_id: "", scheduled_at: ""
     });
 
+    const loadSchools = useCallback(async () => {
+        setError("");
+        try {
+            const response = await api.get("/marketing/schools");
+            const availableSchools = response.data?.schools || [];
+            setSchools(availableSchools);
+            setSelectedSchoolId((current) => {
+                if (current && availableSchools.some((school) => String(school.id) === String(current))) return current;
+                return availableSchools[0]?.id ? String(availableSchools[0].id) : "";
+            });
+        } catch (err) {
+            setError(err?.response?.data?.message || "Imeshindikana kupata shule zinazopatikana.");
+        }
+    }, []);
+
     const loadModule = useCallback(async () => {
+        if (!selectedSchoolId) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError("");
         try {
+            const params = { school_id: selectedSchoolId };
             const [statusResponse, audienceResponse, campaignResponse] = await Promise.all([
-                api.get("/marketing/status"),
-                api.get("/marketing/audiences"),
-                api.get("/marketing/campaigns")
+                api.get("/marketing/status", { params }),
+                api.get("/marketing/audiences", { params }),
+                api.get("/marketing/campaigns", { params })
             ]);
             setPlatforms(statusResponse.data?.platforms || []);
             setClasses(audienceResponse.data?.classes || []);
@@ -45,9 +67,10 @@ const DigitalMarketing = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedSchoolId]);
 
-    useEffect(() => { loadModule(); }, [loadModule]);
+    useEffect(() => { loadSchools(); }, [loadSchools]);
+    useEffect(() => { if (selectedSchoolId) loadModule(); }, [selectedSchoolId, loadModule]);
 
     const connectedCount = useMemo(
         () => platforms.filter((item) => (item.accounts || []).some((account) => account.connection_status === "connected")).length,
@@ -71,6 +94,7 @@ const DigitalMarketing = () => {
         try {
             const payload = {
                 ...form,
+                school_id: Number(selectedSchoolId),
                 target_class_id: form.audience_type === "class" ? Number(form.target_class_id) : null,
                 scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null
             };
@@ -94,10 +118,10 @@ const DigitalMarketing = () => {
                         <Megaphone size={18} /> SCHOOL DIGITAL COMMUNICATION
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Digital Marketing &amp; Publicity</h1>
-                    <p className="mt-1 text-sm text-slate-500">{schoolName || "School"} · Manage campaigns across social platforms.</p>
+                    <p className="mt-1 text-sm text-slate-500">{schools.find((school) => String(school.id) === String(selectedSchoolId))?.school_name || schoolName || "School"} · Manage campaigns across social platforms.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button type="button" onClick={loadModule} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <button type="button" onClick={() => { loadSchools(); if (selectedSchoolId) loadModule(); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                         <RefreshCw size={16} /> Refresh
                     </button>
                     <button type="button" onClick={() => { setError(""); setNotice(""); setShowComposer(true); }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">
@@ -105,6 +129,22 @@ const DigitalMarketing = () => {
                     </button>
                 </div>
             </div>
+
+            {schools.length > 1 && (
+                <div className="max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <label className="block text-sm font-semibold text-slate-700">
+                        School workspace
+                        <select value={selectedSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5">
+                            {schools.map((school) => <option key={school.id} value={school.id}>{school.school_name}{school.is_active === false ? " (Inactive)" : ""}</option>)}
+                        </select>
+                    </label>
+                </div>
+            )}
+            {!selectedSchoolId && !loading && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    Hakuna shule iliyochaguliwa au akaunti yako haijaunganishwa na shule. Tafadhali wasiliana na msimamizi.
+                </div>
+            )}
 
             {error && <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={18} className="mt-0.5 shrink-0" />{error}</div>}
             {notice && <div role="status" className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700"><CheckCircle2 size={18} />{notice}</div>}
