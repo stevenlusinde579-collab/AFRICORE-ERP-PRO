@@ -946,10 +946,21 @@ router.get("/staff/letters/context", authenticateUser, parentPortalStaffAccess, 
       .eq("id",schoolId).maybeSingle();
     if (schoolResult.error) throw schoolResult.error;
     if (!schoolResult.data) return res.status(404).json({ success:false, message:"Shule haijapatikana." });
+    const teacherResult = await supabase.from("teachers")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+    if (teacherResult.error) throw teacherResult.error;
     return res.json({
       success:true,
       school:schoolResult.data,
-      author:{ full_name:req.profile.full_name || "", phone:req.profile.phone || "", role_name:(req.access?.roles || []).map(role => role.role_name).filter(Boolean).join(" / ") || "" },
+      author:{
+        full_name:req.profile.full_name || "",
+        phone:req.profile.phone || "",
+        role_name:(req.access?.roles || []).map(role => role.role_name).filter(Boolean).join(" / ") || "",
+        teacher_id:teacherResult.data?.id || null,
+      },
     });
   } catch(error) {
     console.error("PARENT PORTAL LETTER CONTEXT ERROR:",error);
