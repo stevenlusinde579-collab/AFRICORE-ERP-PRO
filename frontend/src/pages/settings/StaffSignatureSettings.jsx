@@ -32,7 +32,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const [staffResult, roleResult, primaryResult, signatureResult, auditResult, assignmentResult] = await Promise.all([
         supabase.from("teachers").select("id,user_id,employee_number,first_name,middle_name,last_name").eq("school_id", schoolId).not("user_id", "is", null).order("first_name"),
         supabase.from("profile_roles").select("profile_id,role_id,roles(id,role_name)").eq("school_id", schoolId).eq("is_active", true),
-        supabase.from("hr_primary_signatories").select("id,role_id,profile_id,teacher_id,class_id,subject_id,assignment_key,updated_at").eq("school_id", schoolId),
+        supabase.from("hr_primary_signatories").select("id,role_id,profile_id,teacher_id,updated_at").eq("school_id", schoolId),
         supabase.from("hr_staff_signatures").select("id,teacher_id,profile_id,storage_path,is_active,created_at,registered_by").eq("school_id", schoolId),
         supabase.from("hr_signature_audit").select("id,entity_type,entity_id,action,actor_user_id,old_value,new_value,created_at").eq("school_id", schoolId).order("created_at", { ascending: false }).limit(50),
         supabase.from("teacher_assignments").select("id,teacher_id,subject_id,class_id,school_id").eq("school_id", schoolId),
@@ -47,7 +47,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const subjectIds = [...new Set(assignments.map((row) => Number(row.subject_id)).filter(Boolean))];
       const [classResult, subjectResult] = await Promise.all([
         classIds.length ? supabase.from("classes").select("id,class_name,short_name").eq("school_id", schoolId).in("id", classIds) : Promise.resolve({ data: [], error: null }),
-        subjectIds.length ? supabase.from("subjects").select("id,subject_name,subject_code").in("id", subjectIds) : Promise.resolve({ data: [], error: null }),
+        subjectIds.length ? supabase.from("subjects").select("id,subject_name,subject_code").eq("school_id", schoolId).in("id", subjectIds) : Promise.resolve({ data: [], error: null }),
       ]);
       if (classResult.error) throw classResult.error;
       if (subjectResult.error) throw subjectResult.error;
@@ -147,7 +147,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
         class_id: context.classId ?? null, subject_id: context.subjectId ?? null,
         set_by: auth.user?.id || null, updated_at: new Date().toISOString(),
       }, { onConflict: "school_id,role_id,assignment_key" });
-      if (saveError) throw saveError;
+      if (saveError) {\n        if (/class_id|subject_id|assignment_key|schema cache/i.test(saveError.message || "")) {\n          throw new Error("Assignment-specific signatory database update is pending. The included Supabase migration must be applied before saving selections.");\n        }\n        throw saveError;\n      }
       setMessage(`Primary signatory wa ${context.roleName} — ${context.label} amehifadhiwa.`);
       await load();
     } catch (saveError) { setError(saveError.message || "Imeshindikana kuhifadhi Primary Signatory."); }
