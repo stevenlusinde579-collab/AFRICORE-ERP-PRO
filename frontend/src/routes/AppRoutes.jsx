@@ -237,7 +237,7 @@ function SuperAdminOrAllowedRoleRoute({
     if (!allowedById && !allowedByName) {
         return (
             <Navigate
-                to="/dashboard"
+                to={currentRoleName === "hr manager" ? "/hr-dashboard" : "/dashboard"}
                 replace
             />
         );
