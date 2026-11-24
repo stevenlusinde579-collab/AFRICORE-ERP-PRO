@@ -55,7 +55,6 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
     loadingRoles = true,
     selectedRoleName = "",
     selectedRoleId = null,
-    isSuperAdmin = false,
     selectedRoleIsSuperAdmin = false,
     roles: availableRoles = [],
   } = useRole();
@@ -75,7 +74,6 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
   ======================================================= */
 
   const superAdmin =
-    Boolean(isSuperAdmin) ||
     Boolean(selectedRoleIsSuperAdmin) ||
     Number(selectedRoleId) === 1 ||
     currentRole === "super admin" ||
