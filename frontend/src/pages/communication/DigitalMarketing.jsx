@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    AlertCircle, CalendarClock, CheckCircle2, Facebook, Instagram,
+    AlertCircle, Camera, CheckCircle2, Globe,
     Megaphone, MessageCircle, Plus, RefreshCw, Send, ShieldCheck,
-    Users, X
+    X
 } from "lucide-react";
 import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
 
 const PLATFORM_META = {
-    facebook: { label: "Facebook", description: "Publish posts to the school's official Facebook Page.", icon: Facebook },
-    instagram: { label: "Instagram", description: "Publish photos and videos to the school's professional Instagram account.", icon: Instagram },
+    facebook: { label: "Facebook", description: "Publish posts to the school's official Facebook Page.", icon: Globe },
+    instagram: { label: "Instagram", description: "Publish photos and videos to the school's professional Instagram account.", icon: Camera },
     whatsapp: { label: "WhatsApp", description: "Send approved campaign messages to opted-in parents and guardians.", icon: MessageCircle }
 };
 
