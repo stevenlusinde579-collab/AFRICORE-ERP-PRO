@@ -9,7 +9,7 @@ create or replace function public.approve_transport_finance_transaction(
 ) returns jsonb
 language plpgsql
 security definer
-set search_path = public, finance
+set search_path = public, finance, pg_temp
 as $$
 declare
   v_tx public.transport_finance_transactions%rowtype;
@@ -221,7 +221,7 @@ create or replace function public.reject_transport_finance_transaction(
 ) returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_tx public.transport_finance_transactions%rowtype;
