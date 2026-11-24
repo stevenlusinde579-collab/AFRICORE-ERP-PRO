@@ -202,25 +202,15 @@ export const assignTransportStudentsBulk = async (req, res) => {
     const route_id = Number(req.body?.route_id);
     const studentIds = [...new Set((Array.isArray(req.body?.student_ids) ? req.body.student_ids : []).map(Number).filter(id => Number.isInteger(id) && id > 0))];
     if (!Number.isInteger(route_id) || !studentIds.length) return fail(res, 400, "Select an active route and at least one student.");
-    if (studentIds.length > 1000) return fail(res, 400, "Select no more than 1,000 students at a time.");
-    const route = await db(supabase.from("transport_routes").select("id,vehicle_id").eq("id", route_id).eq("school_id", schoolId).eq("status", "active").single());
-    if (!route) return fail(res, 404, "Active route was not found in this school.");
-    const [vehicle, students, vehicleRoutes] = await Promise.all([
-      db(supabase.from("transport_vehicles").select("id,seating_capacity").eq("id", route.vehicle_id).eq("school_id", schoolId).single()),
-      db(supabase.from("students").select("id").eq("school_id", schoolId).in("id", studentIds)),
-      db(supabase.from("transport_routes").select("id").eq("school_id", schoolId).eq("vehicle_id", route.vehicle_id).eq("status", "active"))
-    ]);
-    if (students.length !== studentIds.length) return fail(res, 400, "Some selected students do not belong to this school.");
-    const routeIds = vehicleRoutes.map(item => item.id);
-    const activeRows = routeIds.length ? await db(supabase.from("transport_student_assignments").select("id,student_id").eq("school_id", schoolId).eq("is_active", true).in("route_id", routeIds)) : [];
-    const alreadyAssigned = activeRows.filter(row => studentIds.includes(Number(row.student_id)));
-    if (alreadyAssigned.length) return fail(res, 409, `${alreadyAssigned.length} selected student(s) are already assigned to this vehicle.`);
-    if (activeRows.length + studentIds.length > Number(vehicle.seating_capacity)) {
-      return fail(res, 409, `Vehicle capacity exceeded. Available seats: ${Math.max(0, Number(vehicle.seating_capacity) - activeRows.length)}; selected: ${studentIds.length}.`);
-    }
-    const payload = studentIds.map(student_id => ({ school_id: schoolId, student_id, route_id, monthly_fee: Math.max(0, Number(req.body?.monthly_fee || 0)), start_date: req.body?.start_date || today(), assigned_by: req.user.id }));
-    const data = await db(supabase.from("transport_student_assignments").insert(payload).select("*"));
-    return res.status(201).json({ success: true, message: `${data.length} students allocated successfully.`, data });
+    const { data, error } = await supabase.rpc("assign_transport_students_bulk", {
+      p_school_id: schoolId,
+      p_route_id: route_id,
+      p_student_ids: studentIds,
+      p_monthly_fee: Math.max(0, Number(req.body?.monthly_fee || 0)),
+      p_actor_id: req.user.id
+    });
+    if (error) throw error;
+    return res.status(201).json({ success: true, message: `${data?.allocated || studentIds.length} students allocated successfully.`, data });
   } catch (error) { return fail(res, 400, error.message || "Unable to allocate selected students."); }
 };
 
