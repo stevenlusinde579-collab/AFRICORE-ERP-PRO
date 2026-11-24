@@ -111,6 +111,7 @@ const RecordReceivable = React.lazy(() => import("../pages/finance/RecordReceiva
 const RecordPayable = React.lazy(() => import("../pages/finance/RecordPayable"));
 
 const Communication = React.lazy(() => import("../pages/communication/Communication"));
+const DigitalMarketing = React.lazy(() => import("../pages/communication/DigitalMarketing"));
 const CommunicationChat = React.lazy(() => import("../pages/communication/CommunicationChat"));
 const CommunicationMeetings = React.lazy(() => import("../pages/communication/CommunicationMeetings"));
 const CommunicationMeeting = React.lazy(() => import("../pages/communication/CommunicationMeeting"));
@@ -1009,6 +1010,21 @@ export default function AppRoutes() {
                     <Route
                         path="document-signing"
                         element={<SecretaryDocumentSigning />}
+                    />
+                </Route>
+
+                {/* DIGITAL MARKETING & PUBLICITY - APPROVED SCHOOL ROLES ONLY */}
+                <Route
+                    element={
+                        <SuperAdminOrAllowedRoleRoute
+                            allowedRoles={[1, 2, 7, 18]}
+                            allowedRoleNames={["Super Admin", "Headmaster", "Secretary", "HR Manager"]}
+                        />
+                    }
+                >
+                    <Route
+                        path="digital-marketing"
+                        element={<DigitalMarketing />}
                     />
                 </Route>
 

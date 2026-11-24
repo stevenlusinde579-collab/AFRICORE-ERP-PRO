@@ -10,6 +10,7 @@ import resultAnalysisRoutes from "./routes/resultAnalysisRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import teacherRoutes from "./routes/teacherRoutes.js";
 import communicationRoutes from "./routes/communicationRoutes.js";
+import marketingRoutes from "./routes/marketingRoutes.js";
 import financeRoutes from "./routes/financeRoutes.js";
 import schoolManagementRoutes from "./routes/schoolManagementRoutes.js";
 import parentPortalRoutes from "./routes/parentPortalRoutes.js";
@@ -163,6 +164,11 @@ app.use(
 app.use(
     "/api/communication",
     communicationRoutes
+);
+
+app.use(
+    "/api/marketing",
+    marketingRoutes
 );
 
 

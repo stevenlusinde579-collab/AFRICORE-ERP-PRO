@@ -30,6 +30,26 @@ api.interceptors.request.use(
             const accessToken =
                 data?.session?.access_token;
 
+            // Pass the currently selected ERP role to protected APIs.
+            // The backend validates it against active profile_roles; this
+            // header is never trusted on its own.
+            try {
+                const selectedRole = JSON.parse(
+                    localStorage.getItem("africore_selected_role") || "null"
+                );
+                if (selectedRole?.role_id || selectedRole?.id) {
+                    config.headers = config.headers || {};
+                    config.headers["X-AfriCore-Role-ID"] =
+                        String(selectedRole.role_id ?? selectedRole.id);
+                    if (selectedRole?.profileRoleId || selectedRole?.profile_role_id) {
+                        config.headers["X-AfriCore-Profile-Role-ID"] =
+                            String(selectedRole.profileRoleId ?? selectedRole.profile_role_id);
+                    }
+                }
+            } catch {
+                // Ignore invalid local role state; backend will fail closed.
+            }
+
             if (accessToken) {
                 config.headers =
                     config.headers || {};
