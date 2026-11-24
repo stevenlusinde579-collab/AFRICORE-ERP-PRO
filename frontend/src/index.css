@@ -38,6 +38,47 @@ svg {
   max-width: 100%;
 }
 
+@media print {
+  /* ERP chrome must never be part of a school document printout. */
+  [data-system-branding="true"],
+  [data-app-branding="true"],
+  .system-branding,
+  .app-branding,
+  .powered-by-africore,
+  .africore-branding,
+  .print-hide,
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* The printable identity is exclusively the active school's identity. */
+  [data-school-document-header="true"] {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  [data-school-document-header="true"] img {
+    max-height: 80px;
+    object-fit: contain;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 @media (max-width: 640px) {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
