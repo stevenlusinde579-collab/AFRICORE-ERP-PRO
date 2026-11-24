@@ -32,6 +32,7 @@ import { supabase } from "../../services/supabase";
 import { useRole } from "../../context/RoleContext";
 import api from "../../services/api";
 import SchoolOfficialSeal from "../../components/SchoolOfficialSeal";
+import StaffSignatureImage from "../../components/StaffSignatureImage";
 
 
 // =====================================================
@@ -542,7 +543,7 @@ function FinanceDashboard() {
             );
 
             let receiptsQuery = supabase.schema("finance").from("receipts")
-                .select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status")
+                .select("id,school_id,receipt_number,receipt_date,student_id,payer_name,amount,payment_method,reference_number,description,status,issued_by")
                 .like("receipt_number", "FEE-%").order("receipt_date", { ascending: false }).limit(500);
             if (!superAdmin && schoolId) receiptsQuery = receiptsQuery.eq("school_id", schoolId);
             const { data: receiptsData, error: receiptsError } = await receiptsQuery;
@@ -1274,7 +1275,7 @@ function FinanceDashboard() {
                             <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide">Payment details</h3>
                             <table className="w-full border-collapse text-sm"><thead><tr className="bg-slate-100"><th className="border p-3 text-left">Description</th><th className="border p-3 text-right">Amount (TZS)</th></tr></thead><tbody><tr><td className="border p-3">{r.description || "School fees payment"}</td><td className="border p-3 text-right font-bold">{money(r.amount)}</td></tr></tbody><tfoot><tr><td className="border p-3 text-right font-extrabold">TOTAL RECEIVED</td><td className="border p-3 text-right text-lg font-black">{money(r.amount)} TZS</td></tr></tfoot></table>
                             <div className="mt-6 rounded-lg border border-slate-300 p-4"><p className="text-xs font-bold uppercase text-slate-600">Amount received</p><p className="mt-1 text-2xl font-black">{money(r.amount)} TZS</p><p className="mt-2 text-xs text-slate-600">This receipt confirms that the amount stated above was recorded as received by the school, subject to the school's financial records.</p></div>
-                            <div className="mt-14 grid grid-cols-2 gap-12 text-center text-xs"><p className="border-t border-slate-500 pt-2">Cashier / Accountant signature</p><p className="border-t border-slate-500 pt-2">Parent / Payer acknowledgement</p></div>
+                            <div className="mt-14 grid grid-cols-2 gap-12 text-center text-xs"><div><div className="mx-auto w-full max-w-56"><StaffSignatureImage schoolId={school?.id} profileId={r.issued_by} className="items-center" alt="Cashier signature" /></div><p className="mt-2">Cashier / Accountant signature</p></div><div><div className="mx-auto h-14 w-full max-w-56 border-b border-slate-500" aria-hidden="true" /><p className="mt-2">Parent / Payer acknowledgement</p></div></div>
                             <div className="mt-8 border-t pt-3 text-center text-xs text-slate-500"><p>Asante kwa kufanya malipo. Kwa ufafanuzi, wasiliana na ofisi ya shule.</p></div>
                         </div>
                     </article>)}</div>

@@ -3,6 +3,7 @@ import { FaCheckCircle, FaDownload, FaFileInvoiceDollar, FaPrint, FaSyncAlt, FaS
 import { useSchool } from "../../context/SchoolContext";
 import { useRole } from "../../context/RoleContext";
 import api from "../../services/api";
+import StaffSignatureImage from "../../components/StaffSignatureImage";
 
 const currentMonth = () => {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -420,6 +421,8 @@ function PayrollManagement() {
                             const schoolSnapshot = snapshot.school || {};
                             const isPayslip = printIsPayslip;
                             const paymentInfo = (selectedPayroll?.payroll_items || []).find((row) => String(row.id) === String(item.payroll_item_id)) || {};
+                            const preparerEvent = (selectedPayroll?.audit || []).find((event) => /create/i.test(String(event.event_type || "")));
+                            const reviewerEvent = (selectedPayroll?.audit || []).find((event) => /approv|review/i.test(String(event.event_type || "")) && !/return/i.test(String(event.event_type || "")));
                             return <article key={item.payroll_item_id} className="payroll-print-page mx-auto max-w-4xl bg-white text-slate-900">
                                 <header className="border-b-2 border-slate-800 pb-4 text-center">
                                     {schoolSnapshot.logo && <img src={schoolSnapshot.logo} alt="School logo" className="mx-auto mb-2 h-16 w-16 object-contain" />}
@@ -462,8 +465,16 @@ function PayrollManagement() {
                                     </div>
                                 )}
                                 <div className="mt-6 grid grid-cols-2 gap-8 text-xs">
-                                    <div><p>Prepared by: {payroll.prepared_by_name || "—"}</p><p className="mt-8 border-t border-slate-500 pt-1">Accountant</p></div>
-                                    <div><p>Reviewed / approved by: {payroll.reviewed_by_name || "—"}</p><p className="mt-8 border-t border-slate-500 pt-1">HR Manager</p></div>
+                                    <div>
+                                        <p>Prepared by: {payroll.prepared_by_name || "—"}</p>
+                                        <div className="mt-2 max-w-56"><StaffSignatureImage schoolId={school?.id} profileId={preparerEvent?.actor_id} alt="Payroll preparer signature" /></div>
+                                        <p className="mt-1">Accountant</p>
+                                    </div>
+                                    <div>
+                                        <p>Reviewed / approved by: {payroll.reviewed_by_name || "—"}</p>
+                                        <div className="mt-2 max-w-56"><StaffSignatureImage schoolId={school?.id} profileId={reviewerEvent?.actor_id} alt="Payroll reviewer signature" /></div>
+                                        <p className="mt-1">HR Manager</p>
+                                    </div>
                                 </div>
                                 <OfficialSeal seal={snapshot.seal} />
                                 <p className="mt-2 text-center text-[10px] text-slate-500">Approved on {payroll.approved_at ? new Date(payroll.approved_at).toLocaleDateString("en-GB") : "—"}</p>
