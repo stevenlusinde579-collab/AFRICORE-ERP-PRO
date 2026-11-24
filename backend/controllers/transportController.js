@@ -195,6 +195,35 @@ export const listTransportAssignments = async (req, res) => {
   } catch (error) { return fail(res, 400, error.message); }
 };
 
+export const assignTransportStudentsBulk = async (req, res) => {
+  try {
+    if (!canManageTransport(req)) return fail(res, 403, "Only the Secretary or Super Admin can assign students to routes.");
+    const schoolId = schoolIdFor(req);
+    const route_id = Number(req.body?.route_id);
+    const studentIds = [...new Set((Array.isArray(req.body?.student_ids) ? req.body.student_ids : []).map(Number).filter(id => Number.isInteger(id) && id > 0))];
+    if (!Number.isInteger(route_id) || !studentIds.length) return fail(res, 400, "Select an active route and at least one student.");
+    if (studentIds.length > 1000) return fail(res, 400, "Select no more than 1,000 students at a time.");
+    const route = await db(supabase.from("transport_routes").select("id,vehicle_id").eq("id", route_id).eq("school_id", schoolId).eq("status", "active").single());
+    if (!route) return fail(res, 404, "Active route was not found in this school.");
+    const [vehicle, students, vehicleRoutes] = await Promise.all([
+      db(supabase.from("transport_vehicles").select("id,seating_capacity").eq("id", route.vehicle_id).eq("school_id", schoolId).single()),
+      db(supabase.from("students").select("id").eq("school_id", schoolId).in("id", studentIds)),
+      db(supabase.from("transport_routes").select("id").eq("school_id", schoolId).eq("vehicle_id", route.vehicle_id).eq("status", "active"))
+    ]);
+    if (students.length !== studentIds.length) return fail(res, 400, "Some selected students do not belong to this school.");
+    const routeIds = vehicleRoutes.map(item => item.id);
+    const activeRows = routeIds.length ? await db(supabase.from("transport_student_assignments").select("id,student_id").eq("school_id", schoolId).eq("is_active", true).in("route_id", routeIds)) : [];
+    const alreadyAssigned = activeRows.filter(row => studentIds.includes(Number(row.student_id)));
+    if (alreadyAssigned.length) return fail(res, 409, `${alreadyAssigned.length} selected student(s) are already assigned to this vehicle.`);
+    if (activeRows.length + studentIds.length > Number(vehicle.seating_capacity)) {
+      return fail(res, 409, `Vehicle capacity exceeded. Available seats: ${Math.max(0, Number(vehicle.seating_capacity) - activeRows.length)}; selected: ${studentIds.length}.`);
+    }
+    const payload = studentIds.map(student_id => ({ school_id: schoolId, student_id, route_id, monthly_fee: Math.max(0, Number(req.body?.monthly_fee || 0)), start_date: req.body?.start_date || today(), assigned_by: req.user.id }));
+    const data = await db(supabase.from("transport_student_assignments").insert(payload).select("*"));
+    return res.status(201).json({ success: true, message: `${data.length} students allocated successfully.`, data });
+  } catch (error) { return fail(res, 400, error.message || "Unable to allocate selected students."); }
+};
+
 export const assignTransportStudent = async (req, res) => {
   try {
     if (!canManageTransport(req)) return fail(res, 403, "Only the Secretary or Super Admin can assign students to routes.");
@@ -270,7 +299,7 @@ export const submitTransportFinanceTransaction = async (req, res) => {
     if (!account || !cash) return fail(res, 400, "The selected account does not belong to this school or is inactive.");
     const number = `TRN-${schoolId}-${Date.now()}`;
     const payload = {
-      school_id: schoolId, transaction_number: number, transaction_type, category, description, amount,
+      school_id: schoolId, transaction_number: number, transaction_type, category, description, amount, vehicle_id: vehicleId,
       transaction_date: body.transaction_date || today(),
       student_id: body.student_id ? Number(body.student_id) : null,
       payer_name: body.payer_name?.trim() || null,
