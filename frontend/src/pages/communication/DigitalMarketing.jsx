@@ -76,7 +76,7 @@ const DigitalMarketing = () => {
             };
             const response = await api.post("/marketing/campaigns", payload);
             setCampaigns((current) => [response.data.campaign, ...current]);
-            setNotice(form.scheduled_at ? "Kampeni imehifadhiwa kwa ratiba. Haijachapishwa bado." : "Rasimu ya kampeni imehifadhiwa.");
+            setNotice(form.scheduled_at ? "Rasimu imehifadhiwa pamoja na tarehe uliyopanga. Uchapishaji wa moja kwa moja utawezeshwa baada ya kuunganishwa kwa akaunti na scheduler." : "Rasimu ya kampeni imehifadhiwa. Haijatumwa wala kuchapishwa.");
             setShowComposer(false);
             setForm({ title: "", message: "", platforms: ["facebook", "instagram", "whatsapp"], audience_type: "all_school", target_class_id: "", scheduled_at: "" });
         } catch (err) {
