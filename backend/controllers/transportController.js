@@ -207,8 +207,11 @@ export const assignTransportStudent = async (req, res) => {
     ]);
     if (!student || !route) return fail(res, 404, "Student or active route was not found in this school.");
     const vehicle = await db(supabase.from("transport_vehicles").select("seating_capacity").eq("id", route.vehicle_id).eq("school_id", schoolId).single());
-    const activeRows = await db(supabase.from("transport_student_assignments").select("id").eq("school_id", schoolId).eq("route_id", route_id).eq("is_active", true));
-    if (activeRows.length >= Number(vehicle.seating_capacity)) return fail(res, 409, "This vehicle has reached its seating capacity.");
+    const vehicleRoutes = await db(supabase.from("transport_routes").select("id").eq("school_id", schoolId).eq("vehicle_id", route.vehicle_id).eq("status", "active"));
+    const activeRows = vehicleRoutes.length
+      ? await db(supabase.from("transport_student_assignments").select("id").eq("school_id", schoolId).eq("is_active", true).in("route_id", vehicleRoutes.map(item => item.id)))
+      : [];
+    if (activeRows.length >= Number(vehicle.seating_capacity)) return fail(res, 409, "This vehicle has reached its total seating capacity across its active routes.");
     const payload = {
       school_id: schoolId, student_id, route_id,
       pickup_stop_id: req.body?.pickup_stop_id ? Number(req.body.pickup_stop_id) : null,
@@ -253,6 +256,12 @@ export const submitTransportFinanceTransaction = async (req, res) => {
     if (!["income", "expense"].includes(transaction_type) || !category || !description || !Number.isFinite(amount) || amount <= 0) return fail(res, 400, "Enter a valid transaction type, category, description and amount.");
     const accountId = transaction_type === "income" ? body.revenue_account_id : body.expense_account_id;
     if (!accountId || !body.cash_account_id) return fail(res, 400, "Select the correct Finance account and cash/bank account.");
+    if (transaction_type === "expense" && !["cash", "bank", "mobile_money"].includes(body.payment_method || "cash")) {
+      return fail(res, 400, "Transport expenses must be paid by cash, bank or mobile money.");
+    }
+    if (transaction_type === "income" && !["cash", "bank", "mobile_money", "cheque", "other"].includes(body.payment_method || "cash")) {
+      return fail(res, 400, "Select a valid income payment method.");
+    }
     const accountType = transaction_type === "income" ? "revenue" : "expense";
     const [account, cash] = await Promise.all([
       db(supabase.schema("finance").from("chart_of_accounts").select("id").eq("id", accountId).eq("school_id", schoolId).eq("account_type", accountType).eq("is_active", true).single()),
