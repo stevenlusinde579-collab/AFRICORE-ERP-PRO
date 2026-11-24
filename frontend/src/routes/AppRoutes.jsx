@@ -1017,7 +1017,7 @@ export default function AppRoutes() {
                 <Route
                     element={
                         <SuperAdminOrAllowedRoleRoute
-                            allowedRoles={[1, 2, 7, 18]}
+                            allowedRoles={[1, 4, 7, 18]}
                             allowedRoleNames={["Super Admin", "Headmaster", "Secretary", "HR Manager"]}
                         />
                     }
