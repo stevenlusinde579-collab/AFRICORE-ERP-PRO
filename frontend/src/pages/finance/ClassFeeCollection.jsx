@@ -5215,10 +5215,51 @@ function ClassFeeCollection() {
                             display: none !important;
                         }
 
-                        table {
+                        /* The screen table is intentionally wide for scrolling.
+                         * On paper, compress it to the printable A4 landscape width.
+                         */
+                        #class-fee-print-area table {
                             width: 100% !important;
+                            min-width: 0 !important;
+                            max-width: 100% !important;
+                            table-layout: fixed !important;
+                            border-collapse: collapse !important;
                             page-break-inside: auto !important;
                             break-inside: auto !important;
+                            font-size: 7pt !important;
+                            line-height: 1.2 !important;
+                        }
+
+                        #class-fee-print-area th,
+                        #class-fee-print-area td {
+                            min-width: 0 !important;
+                            max-width: none !important;
+                            padding: 2px 3px !important;
+                            white-space: normal !important;
+                            overflow-wrap: anywhere !important;
+                            word-break: normal !important;
+                            font-size: 7pt !important;
+                            color: #000000 !important;
+                        }
+
+                        #class-fee-print-area th {
+                            font-weight: 700 !important;
+                            vertical-align: middle !important;
+                        }
+
+                        #class-fee-print-area td {
+                            vertical-align: top !important;
+                        }
+
+                        #class-fee-print-area .sticky {
+                            position: static !important;
+                            left: auto !important;
+                            right: auto !important;
+                            z-index: auto !important;
+                        }
+
+                        #class-fee-print-area .min-w-\\[2250px\\] {
+                            min-width: 0 !important;
                         }
 
                         tr {
@@ -5246,6 +5287,8 @@ function ClassFeeCollection() {
 
                         .overflow-x-auto {
                             overflow: visible !important;
+                            width: 100% !important;
+                            max-width: 100% !important;
                         }
 
                         #class-fee-print-area .shadow,
