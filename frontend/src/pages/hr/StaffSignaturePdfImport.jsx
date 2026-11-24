@@ -14,6 +14,8 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
   const [batch, setBatch] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [recognizedText, setRecognizedText] = useState("");
+  const [fileType, setFileType] = useState("pdf");
   const [error, setError] = useState("");
   const imageRef = useRef(null);
   const page = pages[pageIndex];
@@ -24,11 +26,11 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
   const previewPdf = async (nextFile) => {
     setError(""); setNotice(""); setPages([]); setBatch(null); setRect(null);
     if (!nextFile) return;
-    if (nextFile.type !== "application/pdf" || !/\.pdf$/i.test(nextFile.name)) {
-      setError("Chagua PDF ya fomu ya saini pekee."); return;
-    }
+    const isPdf = nextFile.type === "application/pdf" && /\.pdf$/i.test(nextFile.name);
+    const isImage = ["image/png", "image/jpeg"].includes(nextFile.type) && /\.(png|jpe?g)$/i.test(nextFile.name);
+    if (!isPdf && !isImage) { setError("Chagua PDF, PNG au JPG/JPEG."); return; }
     if (nextFile.size > 15 * 1024 * 1024) {
-      setError("PDF isizidi 15 MB."); return;
+      setError("Faili isizidi 15 MB."); return;
     }
     setBusy(true);
     try {
@@ -43,8 +45,10 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.message || "PDF haikuweza kusomwa.");
       setFile(nextFile); setPages(result.pages || []); setPageIndex(0);
+      setFileType(result.fileType || (isPdf ? "pdf" : "image"));
+      setRecognizedText(result.recognizedText || "");
       setSelectedId((current) => current || String(staff[0]?.id || ""));
-      setNotice(`PDF imefunguliwa: kurasa ${result.pageCount}. Chagua mfanyakazi kisha chora eneo la saini yake.`);
+      setNotice(`${isPdf ? "PDF" : "Picha"} imefunguliwa: kurasa ${result.pageCount}. OCR imesoma maandishi ya hati.`);
     } catch (previewError) { setError(previewError.message || "Imeshindikana kusoma PDF."); }
     finally { setBusy(false); }
   };
@@ -93,7 +97,7 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
       if (!blob) throw new Error("Imeshindikana kuandaa picha ya saini.");
       const signatureFile = new File([blob], `signature-${cleanName(person.user_id)}.png`, { type: "image/png" });
       const batchId = batch?.id || crypto.randomUUID();
-      if (!batch) {
+      if (!batch && fileType === "pdf") {
         const path = `${schoolId}/signature-registers/${batchId}-${Date.now()}-${cleanName(file.name)}`;
         const { error: uploadPdfError } = await supabase.storage.from("school-signing-documents").upload(path, file, { contentType: "application/pdf", upsert: false });
         if (uploadPdfError) throw uploadPdfError;
@@ -113,7 +117,7 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
       const { data: authData } = await supabase.auth.getUser();
       const { data: inserted, error: insertError } = await supabase.from("hr_staff_signatures").insert({
         school_id: schoolId, teacher_id: person.id, profile_id: person.user_id,
-        storage_path: path, source_batch_id: batchId, is_active: false, registered_by: authData.user?.id || null
+        storage_path: path, source_batch_id: fileType === "pdf" ? batchId : null, is_active: false, registered_by: authData.user?.id || null
       }).select("id").single();
       if (insertError) throw insertError;
       insertedId = inserted.id;
@@ -138,11 +142,11 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
 
   const savedIds = new Set(signatures.filter((row) => row.is_active).map((row) => row.teacher_id));
   return <section className="space-y-4 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
-    <div><h3 className="font-bold text-slate-900">Import Signed Staff Register (One PDF)</h3><p className="mt-1 text-sm text-slate-600">Pakia PDF moja iliyosainiwa. Mfumo utaonyesha kurasa zake; chagua mfanyakazi na chora kwa mouse eneo la saini yake. Kila saini itahifadhiwa kwenye akaunti yake kwa User ID.</p></div>
-    <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white">{busy ? "Processing..." : "Choose signed PDF"}<input className="sr-only" type="file" accept="application/pdf,.pdf" disabled={busy} onChange={(event) => { previewPdf(event.target.files?.[0]); event.target.value = ""; }} /></label>
+    <div><h3 className="font-bold text-slate-900">Import Signed Staff Register (One PDF)</h3><p className="mt-1 text-sm text-slate-600">Pakia PDF au picha iliyosainiwa. OCR itasoma maandishi yaliyochapishwa/yanayoonekana ili kusaidia kuthibitisha majina; kisha chagua mfanyakazi na kata eneo la saini pekee. Karatasi nzima haitahifadhiwa kama saini.</p></div>
+    <label className="inline-flex cursor-pointer items-center rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white">{busy ? "Processing..." : "Choose PDF or image"}<input className="sr-only" type="file" accept="application/pdf,.pdf,image/png,image/jpeg,.png,.jpg,.jpeg" disabled={busy} onChange={(event) => { previewPdf(event.target.files?.[0]); event.target.value = ""; }} /></label>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
-    {pages.length > 0 && <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+    {recognizedText && <details className="rounded-lg border border-slate-200 bg-white p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Maandishi yaliyosomwa na OCR</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-slate-600">{recognizedText}</pre></details>}\n    {pages.length > 0 && <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center gap-2"><button type="button" className="rounded border px-3 py-1.5 text-sm" disabled={pageIndex===0} onClick={()=>{setPageIndex(v=>v-1);setRect(null);}}>Previous page</button><span className="text-sm font-semibold">Page {pageIndex+1} / {pages.length}</span><button type="button" className="rounded border px-3 py-1.5 text-sm" disabled={pageIndex===pages.length-1} onClick={()=>{setPageIndex(v=>v+1);setRect(null);}}>Next page</button><button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={()=>setRect(null)}>Clear crop</button></div>
         <div className="overflow-auto rounded-lg border bg-slate-200 p-2">
