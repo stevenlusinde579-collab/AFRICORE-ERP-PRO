@@ -7,7 +7,7 @@ import {
   saveTransportRoute, addTransportStop, listTransportCrew, assignTransportCrew,
   listTransportAssignments, assignTransportStudent, getTransportFinanceOptions,
   listTransportFinanceTransactions, submitTransportFinanceTransaction,
-  listTransportFinancePending
+  listTransportFinancePending, approveTransportFinanceTransaction, rejectTransportFinanceTransaction
 } from "../controllers/transportController.js";
 
 const router = express.Router();
@@ -34,5 +34,7 @@ router.get("/finance/options", requirePermission("view_transport"), getTransport
 router.get("/finance/transactions", requirePermission("view_transport"), listTransportFinanceTransactions);
 router.post("/finance/transactions", requirePermission("manage_transport_finance"), submitTransportFinanceTransaction);
 router.get("/finance/pending", requirePermission("view_transport"), listTransportFinancePending);
+router.post("/finance/transactions/:id/approve", requirePermission("approve_transport_finance"), approveTransportFinanceTransaction);
+router.post("/finance/transactions/:id/reject", requirePermission("approve_transport_finance"), rejectTransportFinanceTransaction);
 
 export default router;
