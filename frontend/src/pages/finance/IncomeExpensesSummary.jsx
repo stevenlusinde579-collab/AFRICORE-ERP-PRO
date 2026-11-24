@@ -4,11 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { useRole } from "../../context/RoleContext";
 import api from "../../services/api";
 
-const localDate = date => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+const localDate = (date = new Date()) => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Dar_es_Salaam",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
 };
 const money = value => new Intl.NumberFormat("en-TZ", { style: "currency", currency: "TZS", maximumFractionDigits: 2 }).format(Number(value || 0));
 
