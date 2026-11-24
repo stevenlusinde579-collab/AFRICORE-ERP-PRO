@@ -6,9 +6,21 @@ import api from "../../services/api";
 import { useSchool } from "../../context/SchoolContext";
 
 const PLATFORM_META = {
-    facebook: { label: "Facebook", description: "Publish posts to the school's official Facebook Page." },
-    instagram: { label: "Instagram", description: "Publish photos and videos to the school's professional Instagram account." },
-    whatsapp: { label: "WhatsApp", description: "Send approved campaign messages to opted-in parents and guardians." }
+    facebook: {
+        label: "Facebook",
+        description: "Open Facebook and sign in or create the school's account.",
+        url: "https://www.facebook.com/"
+    },
+    instagram: {
+        label: "Instagram",
+        description: "Open Instagram and sign in or create the school's account.",
+        url: "https://www.instagram.com/"
+    },
+    whatsapp: {
+        label: "WhatsApp",
+        description: "Open WhatsApp Web and link the school's WhatsApp account.",
+        url: "https://web.whatsapp.com/"
+    }
 };
 
 // Inline brand marks keep the official platform identities visible without
@@ -203,15 +215,32 @@ const DigitalMarketing = () => {
                         return (
                             <div key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                                 <div className="flex items-center gap-3">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 ring-1 ring-slate-100"><PlatformLogo platform={key} size={30} /></div>
+                                    <a
+                                        href={item.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label={`Open ${item.label}`}
+                                        title={`Open ${item.label}`}
+                                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-50 ring-1 ring-slate-100 transition hover:scale-105 hover:ring-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <PlatformLogo platform={key} size={30} />
+                                    </a>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="font-bold text-slate-900">{item.label}</h3>
-                                        <p className="text-xs text-slate-500">{connected.length ? connected[0].account_name || connected[0].external_account_id : "Not connected"}</p>
+                                        <p className="text-xs text-slate-500">{connected.length ? connected[0].account_name || connected[0].external_account_id : "Not linked in AfriCore"}</p>
                                     </div>
-                                    {connected.length ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Connected</span> : <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Setup required</span>}
+                                    {connected.length ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Linked</span> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Open account</span>}
                                 </div>
                                 <p className="mt-4 min-h-10 text-sm text-slate-600">{item.description}</p>
-                                <p className="mt-3 text-xs text-slate-500">{connected.length ? "Account credentials are stored securely by the backend." : "Official Meta account authorization will be required before publishing."}</p>
+                                <a
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-4 inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                >
+                                    Open {item.label}
+                                </a>
+                                <p className="mt-3 text-xs text-slate-500">Sign in on the official platform. AfriCore does not ask for or store your social-media password.</p>
                             </div>
                         );
                     })}
