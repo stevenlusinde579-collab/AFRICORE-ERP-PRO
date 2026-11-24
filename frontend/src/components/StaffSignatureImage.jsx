@@ -6,20 +6,20 @@ import { supabase } from "../services/supabase";
  * in the current school. If no signature is registered, the handwritten line
  * remains available.
  */
-export default function StaffSignatureImage({ schoolId, teacherId, className = "", alt = "Staff signature" }) {
+export default function StaffSignatureImage({ schoolId, teacherId, profileId, className = "", alt = "Staff signature" }) {
   const [src, setSrc] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setSrc("");
-    if (!schoolId || !teacherId) return undefined;
+    if (!schoolId || (!teacherId && !profileId)) return undefined;
 
     (async () => {
       const { data, error } = await supabase
         .from("hr_staff_signatures")
         .select("storage_path")
         .eq("school_id", schoolId)
-        .eq("teacher_id", teacherId)
+        .eq(profileId ? "profile_id" : "teacher_id", profileId || teacherId)
         .eq("is_active", true)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -33,7 +33,7 @@ export default function StaffSignatureImage({ schoolId, teacherId, className = "
     })();
 
     return () => { cancelled = true; };
-  }, [schoolId, teacherId]);
+  }, [schoolId, teacherId, profileId]);
 
   return (
     <div className={`flex min-h-14 flex-col justify-end ${className}`}>
