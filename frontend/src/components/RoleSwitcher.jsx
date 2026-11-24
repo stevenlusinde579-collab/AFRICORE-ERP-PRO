@@ -4,6 +4,8 @@ import React, {
     useState,
 } from "react";
 
+import { useNavigate } from "react-router-dom";
+
 import {
     FaChevronDown,
     FaCheck,
@@ -13,6 +15,8 @@ import {
 import { useRole } from "../context/RoleContext";
 
 function RoleSwitcher() {
+    const navigate = useNavigate();
+
     const {
         roles,
         selectedRole,
@@ -369,6 +373,8 @@ function RoleSwitcher() {
                                                 role.id
                                         );
 
+                                        const selectedName = String(role.role_name || role.name || role.roleName || role.role?.role_name || role.role?.name || "").trim().toLowerCase();
+                                        navigate(selectedName === "hr manager" ? "/hr-dashboard" : "/dashboard", { replace: true });
                                         setOpen(false);
                                     }}
                                     className={`
