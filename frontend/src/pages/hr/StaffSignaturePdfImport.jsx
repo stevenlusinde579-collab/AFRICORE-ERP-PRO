@@ -4,11 +4,11 @@ import { supabase } from "../../services/supabase";
 const apiBase = () => new URL(import.meta.env.VITE_API_URL || "https://africore-erp-pro.onrender.com").origin;
 const cleanName = (value) => String(value || "staff").replace(/[^a-zA-Z0-9_-]/g, "_");
 
-export default function StaffSignaturePdfImport({ schoolId, staff, signatures, onSaved }) {
+export default function StaffSignaturePdfImport({ schoolId, staff, signatures, onSaved, fixedStaffId = null }) {
   const [file, setFile] = useState(null);
   const [pages, setPages] = useState([]);
   const [pageIndex, setPageIndex] = useState(0);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(String(fixedStaffId || ""));
   const [rect, setRect] = useState(null);
   const [dragStart, setDragStart] = useState(null);
   const [batch, setBatch] = useState(null);
@@ -47,7 +47,7 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
       setFile(nextFile); setPages(result.pages || []); setPageIndex(0);
       setFileType(result.fileType || (isPdf ? "pdf" : "image"));
       setRecognizedText(result.recognizedText || "");
-      setSelectedId((current) => current || String(staff[0]?.id || ""));
+      setSelectedId(String(fixedStaffId || staff[0]?.id || ""));
       setNotice(`${isPdf ? "PDF" : "Picha"} imefunguliwa: kurasa ${result.pageCount}. OCR imesoma maandishi ya hati.`);
     } catch (previewError) { setError(previewError.message || "Imeshindikana kusoma PDF."); }
     finally { setBusy(false); }
@@ -158,10 +158,12 @@ export default function StaffSignaturePdfImport({ schoolId, staff, signatures, o
         <p className="text-xs text-slate-500">Bonyeza na vuta mouse kuzungushia saini pekee; usijumuishe jina au saini ya mtu mwingine.</p>
       </div>
       <div className="space-y-3 rounded-lg border bg-white p-3">
-        <label className="block text-sm font-semibold text-slate-700">Staff member</label>
-        <select className="w-full rounded-lg border p-2 text-sm" value={selectedId} onChange={(event)=>{setSelectedId(event.target.value);setRect(null);}}>
-          {staff.map((row)=><option key={row.id} value={row.id}>{fullName(row)} • ID {row.user_id?.slice(0,8)}</option>)}
-        </select>
+        {!fixedStaffId && <>
+          <label className="block text-sm font-semibold text-slate-700">Staff member</label>
+          <select className="w-full rounded-lg border p-2 text-sm" value={selectedId} onChange={(event)=>{setSelectedId(event.target.value);setRect(null);}}>
+            {staff.map((row)=><option key={row.id} value={row.id}>{fullName(row)} • ID {row.user_id?.slice(0,8)}</option>)}
+          </select>
+        </>}
         {person && <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600"><p className="font-bold text-slate-900">{fullName(person)}</p><p>User ID: {person.user_id}</p><p>Employee No: {person.employee_number || "—"}</p><p>Current signature: {existing ? "Registered (will be versioned)" : "Not registered"}</p></div>}
         <button type="button" onClick={saveCrop} disabled={busy || !rect || !person} className="w-full rounded-lg bg-emerald-700 px-3 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Saving..." : existing ? "Save / Replace signature" : "Save this person's signature"}</button>
         <div className="border-t pt-3"><p className="mb-2 text-xs font-bold text-slate-700">Registration progress</p><p className="text-sm">{savedIds.size} / {staff.length} staff with active signatures</p><div className="mt-2 max-h-44 space-y-1 overflow-auto">{staff.map((row)=><div key={row.id} className="flex justify-between gap-2 text-xs"><span className="truncate">{fullName(row)}</span><span className={savedIds.has(row.id)?"text-emerald-700":"text-amber-700"}>{savedIds.has(row.id)?"Saved":"Pending"}</span></div>)}</div></div>
