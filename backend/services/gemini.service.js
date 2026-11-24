@@ -32,8 +32,8 @@ const GEMINI_BASE_URL =
 // ============================================================
 
 const DEFAULT_MODEL_FALLBACKS = [
-    "gemini-3.7-flash",
     "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
 ];
 
 const GEMINI_MODELS = [
