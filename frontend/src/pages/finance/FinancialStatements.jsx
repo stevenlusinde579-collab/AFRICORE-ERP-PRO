@@ -1231,6 +1231,11 @@ function FinancialStatements() {
                 const accountAmount =
                     normalizeNumber(incomeValues.get(String(account.id)));
 
+                // Always retain the original revenue account in the statement.
+                // When transport is split out, its remaining balance must still be
+                // displayed; otherwise the non-transport portion disappears.
+                displayRevenueAccounts.push(account);
+
                 if (Math.abs(transportAmount) > 0.005) {
                     displayRevenueValues.set(
                         String(account.id),
@@ -1246,8 +1251,6 @@ function FinancialStatements() {
                         `transport-income-${account.id}`,
                         transportAmount
                     );
-                } else {
-                    displayRevenueAccounts.push(account);
                 }
             });
 
