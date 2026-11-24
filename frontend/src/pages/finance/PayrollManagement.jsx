@@ -462,8 +462,16 @@ function PayrollManagement() {
                                     </div>
                                 )}
                                 <div className="mt-6 grid grid-cols-2 gap-8 text-xs">
-                                    <div><p>Prepared by: {payroll.prepared_by_name || "—"}</p><p className="mt-8 border-t border-slate-500 pt-1">Accountant</p></div>
-                                    <div><p>Reviewed / approved by: {payroll.reviewed_by_name || "—"}</p><p className="mt-8 border-t border-slate-500 pt-1">HR Manager</p></div>
+                                    <div>
+                                        <p>Prepared by: {payroll.prepared_by_name || "—"}</p>
+                                        <div className="mt-2 max-w-56"><StaffSignatureImage schoolId={school?.id} profileId={payroll.prepared_by} alt="Payroll preparer signature" /></div>
+                                        <p className="mt-1">Accountant</p>
+                                    </div>
+                                    <div>
+                                        <p>Reviewed / approved by: {payroll.reviewed_by_name || "—"}</p>
+                                        <div className="mt-2 max-w-56"><StaffSignatureImage schoolId={school?.id} profileId={payroll.reviewed_by} alt="Payroll reviewer signature" /></div>
+                                        <p className="mt-1">HR Manager</p>
+                                    </div>
                                 </div>
                                 <OfficialSeal seal={snapshot.seal} />
                                 <p className="mt-2 text-center text-[10px] text-slate-500">Approved on {payroll.approved_at ? new Date(payroll.approved_at).toLocaleDateString("en-GB") : "—"}</p>
