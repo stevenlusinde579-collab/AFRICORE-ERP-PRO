@@ -41,60 +41,57 @@ function money(value) {
 }
 
 
-function todayKey() {
-    const date = new Date();
+function tanzaniaDateParts(date = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Dar_es_Salaam",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(date);
 
-    return [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, "0"),
-        String(date.getDate()).padStart(2, "0"),
-    ].join("-");
+    return Object.fromEntries(
+        parts.map(part => [part.type, part.value])
+    );
+}
+
+
+function todayKey() {
+    const { year, month, day } = tanzaniaDateParts();
+    return `${year}-${month}-${day}`;
 }
 
 
 function yearStartKey(dateValue = new Date()) {
-    return `${dateValue.getFullYear()}-01-01`;
+    const { year } = tanzaniaDateParts(dateValue);
+    return `${year}-01-01`;
 }
 
 
 function monthStartKey(dateValue = new Date()) {
-    return `${dateValue.getFullYear()}-${String(
-        dateValue.getMonth() + 1
-    ).padStart(2, "0")}-01`;
+    const { year, month } = tanzaniaDateParts(dateValue);
+    return `${year}-${month}-01`;
 }
 
 
 function previousMonthRange() {
-    const now = new Date();
-
-    const firstDay = new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1
-    );
-
-    const lastDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        0
-    );
+    const { year, month } = tanzaniaDateParts();
+    const firstDay = new Date(Date.UTC(Number(year), Number(month) - 2, 1));
+    const lastDay = new Date(Date.UTC(Number(year), Number(month) - 1, 0));
+    const dateKey = date => [
+        date.getUTCFullYear(),
+        String(date.getUTCMonth() + 1).padStart(2, "0"),
+        String(date.getUTCDate()).padStart(2, "0"),
+    ].join("-");
 
     return {
-        start: `${firstDay.getFullYear()}-${String(
-            firstDay.getMonth() + 1
-        ).padStart(2, "0")}-01`,
-
-        end: `${lastDay.getFullYear()}-${String(
-            lastDay.getMonth() + 1
-        ).padStart(2, "0")}-${String(
-            lastDay.getDate()
-        ).padStart(2, "0")}`,
+        start: `${dateKey(firstDay).slice(0, 7)}-01`,
+        end: dateKey(lastDay),
     };
 }
 
 
 function previousYearRange() {
-    const year = new Date().getFullYear() - 1;
+    const year = Number(tanzaniaDateParts().year) - 1;
 
     return {
         start: `${year}-01-01`,
@@ -1190,10 +1187,70 @@ function FinancialStatements() {
                         "expense"
                 );
 
+            // Split transport-origin revenue out of its shared ledger account
+            // for presentation only. The underlying journal remains untouched and
+            // the residual account amount is reduced by exactly the displayed split,
+            // preventing any double counting in totals.
+            const transportRevenueByAccount = new Map();
+            const accountById = new Map(
+                accounts.map(account => [String(account.id), account])
+            );
+
+            periodEntries.forEach(entry => {
+                if (!String(entry?.source_type || "").toLowerCase().includes("transport")) {
+                    return;
+                }
+
+                (entry.lines || []).forEach(line => {
+                    const account = accountById.get(String(line.account_id));
+                    if (account?.account_type !== "revenue") return;
+
+                    const amount =
+                        normalizeNumber(line.credit) -
+                        normalizeNumber(line.debit);
+                    if (!amount) return;
+
+                    const key = String(account.id);
+                    transportRevenueByAccount.set(
+                        key,
+                        (transportRevenueByAccount.get(key) || 0) + amount
+                    );
+                });
+            });
+
+            const displayRevenueValues = new Map(incomeValues);
+            const displayRevenueAccounts = [];
+
+            revenueAccounts.forEach(account => {
+                const transportAmount =
+                    transportRevenueByAccount.get(String(account.id)) || 0;
+                const accountAmount =
+                    normalizeNumber(incomeValues.get(String(account.id)));
+
+                if (Math.abs(transportAmount) > 0.005) {
+                    displayRevenueValues.set(
+                        String(account.id),
+                        accountAmount - transportAmount
+                    );
+                    displayRevenueAccounts.push({
+                        ...account,
+                        id: `transport-income-${account.id}`,
+                        account_code: "TRN",
+                        account_name: "Transport Income",
+                    });
+                    displayRevenueValues.set(
+                        `transport-income-${account.id}`,
+                        transportAmount
+                    );
+                } else {
+                    displayRevenueAccounts.push(account);
+                }
+            });
+
             const revenueGroups =
                 groupAccounts(
-                    revenueAccounts,
-                    incomeValues
+                    displayRevenueAccounts,
+                    displayRevenueValues
                 );
 
             const expenseGroups =
