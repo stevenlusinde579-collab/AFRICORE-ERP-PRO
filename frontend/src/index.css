@@ -79,6 +79,84 @@ svg {
   }
 }
 
+/* Official school seal: hidden in the app UI and printed on every document
+   rendered through the authenticated school layout when the school enables it. */
+.school-official-seal-print {
+  display: none;
+}
+
+@media print {
+  .school-official-seal-print {
+    display: flex !important;
+    position: fixed !important;
+    right: 12mm !important;
+    bottom: 10mm !important;
+    z-index: 2147483000 !important;
+    width: 31mm !important;
+    height: 31mm !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #243b68 !important;
+    opacity: 0.82 !important;
+    pointer-events: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .school-official-seal-ring {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    border: 1.2pt solid currentColor;
+    border-radius: 50%;
+    outline: 1px solid currentColor;
+    outline-offset: -4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4mm;
+    text-align: center;
+    font-family: Georgia, serif;
+    line-height: 1.1;
+    overflow: hidden;
+  }
+
+  .school-official-seal-top {
+    font-size: 5.2pt;
+    font-weight: 800;
+    letter-spacing: 0.35pt;
+  }
+
+  .school-official-seal-school {
+    max-width: 100%;
+    margin-top: 1.2mm;
+    font-size: 6.2pt;
+    font-weight: 900;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+
+  .school-official-seal-center {
+    font-size: 13pt;
+    line-height: 1.15;
+  }
+
+  .school-official-seal-role {
+    font-size: 5.8pt;
+    font-weight: 900;
+    letter-spacing: 0.4pt;
+  }
+
+  .school-official-seal-name {
+    max-width: 100%;
+    margin-top: 0.8mm;
+    font-size: 5pt;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (max-width: 640px) {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
