@@ -22,6 +22,7 @@ import {
   FaBed,
   FaBuilding,
   FaBoxes,
+  FaBus,
   FaFingerprint,
   FaFileSignature,
 } from "react-icons/fa";
@@ -243,6 +244,13 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
     },
 
     {
+      name: "Transport Management",
+      path: "/transport",
+      icon: <FaBus />,
+      roles: ["super admin", "headmaster", "deputy headmaster", "accountant", "secretary", "hr manager"]
+    },
+
+    {
       name: "Finance",
       path: "/finance",
       icon: <FaMoneyBillWave />,
@@ -417,6 +425,7 @@ function Sidebar({ profile, mobileOpen = false, onClose = () => {} }) {
     const hrMenu = [
       { name: "Dashboard", path: "/hr-dashboard", icon: <FaTachometerAlt /> },
       { name: "HR Management", path: "/hr-management", icon: <FaFingerprint /> },
+      { name: "Transport Management", path: "/transport", icon: <FaBus /> },
       { name: "Communication", path: "/communication", icon: <FaComments /> },
       { name: "Personal Settings", path: "/settings", icon: <FaCog /> },
     ];
