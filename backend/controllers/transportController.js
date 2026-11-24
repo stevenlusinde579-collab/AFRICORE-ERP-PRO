@@ -278,6 +278,41 @@ export const submitTransportFinanceTransaction = async (req, res) => {
   } catch (error) { return fail(res, 400, error.message || "Unable to submit transport transaction."); }
 };
 
+export const approveTransportFinanceTransaction = async (req, res) => {
+  try {
+    if (!canReviewFinance(req)) return fail(res, 403, "Only the HR Manager or Super Admin can approve transport finance transactions.");
+    const schoolId = schoolIdFor(req);
+    const transactionId = Number(req.params.id);
+    if (!Number.isInteger(transactionId) || transactionId < 1) return fail(res, 400, "Valid transaction ID is required.");
+    const { data, error } = await supabase.rpc("approve_transport_finance_transaction", {
+      p_transaction_id: transactionId,
+      p_school_id: schoolId,
+      p_actor_id: req.user.id
+    });
+    if (error) throw error;
+    return res.json({ success: true, message: "Transaction approved and posted to Finance and General Journal.", data });
+  } catch (error) { return fail(res, 400, error.message || "Unable to approve transport transaction."); }
+};
+
+export const rejectTransportFinanceTransaction = async (req, res) => {
+  try {
+    if (!canReviewFinance(req)) return fail(res, 403, "Only the HR Manager or Super Admin can reject transport finance transactions.");
+    const schoolId = schoolIdFor(req);
+    const transactionId = Number(req.params.id);
+    const reason = String(req.body?.reason || "").trim();
+    if (!Number.isInteger(transactionId) || transactionId < 1) return fail(res, 400, "Valid transaction ID is required.");
+    if (!reason) return fail(res, 400, "A rejection reason is required.");
+    const { data, error } = await supabase.rpc("reject_transport_finance_transaction", {
+      p_transaction_id: transactionId,
+      p_school_id: schoolId,
+      p_actor_id: req.user.id,
+      p_reason: reason
+    });
+    if (error) throw error;
+    return res.json({ success: true, message: "Transaction rejected.", data });
+  } catch (error) { return fail(res, 400, error.message || "Unable to reject transport transaction."); }
+};
+
 export const listTransportFinancePending = async (req, res) => {
   try {
     if (!canReviewFinance(req)) return fail(res, 403, "Only the HR Manager or Super Admin can review transport finance transactions.");
