@@ -119,7 +119,7 @@ create table if not exists public.transport_student_assignments (
     references public.transport_route_stops(id, route_id, school_id) on delete restrict,
   constraint transport_assignment_dropoff_fk
     foreign key (dropoff_stop_id, route_id, school_id)
-    references public.transport_route_stops(id, route_id, school_id) on delete set null,
+    references public.transport_route_stops(id, route_id, school_id) on delete restrict,
   constraint transport_student_assignment_dates_check check (end_date is null or end_date >= start_date)
 );
 
