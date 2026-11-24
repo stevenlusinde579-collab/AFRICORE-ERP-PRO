@@ -19,6 +19,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
   const [signatures, setSignatures] = useState([]);
   const [auditRows, setAuditRows] = useState([]);
   const [selection, setSelection] = useState({});
+  const [selectedContexts, setSelectedContexts] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState(null);
   const [message, setMessage] = useState("");
@@ -102,12 +103,14 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       nextContexts.sort((a, b) => a.roleName.localeCompare(b.roleName) || a.label.localeCompare(b.label));
       const primary = primaryResult.data || [];
       const nextSelection = {};
+      const nextSelectedContexts = {};
       for (const context of nextContexts) {
         const saved = primary.find((row) => Number(row.role_id) === context.roleId && Number(row.class_id || 0) === Number(context.classId || 0) && Number(row.subject_id || 0) === Number(context.subjectId || 0));
         nextSelection[context.key] = saved && context.members.some((person) => person.user_id === saved.profile_id) ? saved.profile_id : "";
+        nextSelectedContexts[context.key] = Boolean(saved);
       }
       setStaff(staffRows); setContexts(nextContexts); setPrimaryRows(primary); setSignatures(signatureResult.data || []);
-      setAuditRows(auditResult.data || []); setSelection(nextSelection);
+      setAuditRows(auditResult.data || []); setSelection(nextSelection); setSelectedContexts(nextSelectedContexts);
     } catch (loadError) {
       setError(loadError.message || "Could not load staff signature settings.");
     } finally { setLoading(false); }
@@ -131,6 +134,7 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
   };
 
   const savePrimary = async (context) => {
+    if (!selectedContexts[context.key]) { setError("Weka tiki kwenye assignment unayotaka kusajili kwanza."); return; }
     const profileId = selection[context.key];
     const person = context.members.find((member) => member.user_id === profileId);
     if (!person) { setError("Chagua mfanyakazi mwenye assignment husika."); return; }
@@ -164,9 +168,9 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
           const saved = primaryRows.find((row) => Number(row.role_id) === context.roleId && Number(row.class_id || 0) === Number(context.classId || 0) && Number(row.subject_id || 0) === Number(context.subjectId || 0));
           const selectedPerson = context.members.find((person) => person.user_id === selection[context.key]);
           return <div key={context.key} className="rounded-xl border border-slate-200 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-slate-900">{context.roleName}</p><p className="text-sm text-indigo-700">{context.label}</p><p className="text-xs text-slate-500">{context.members.length} eligible staff member(s)</p></div>{saved && <span className="text-xs font-semibold text-emerald-700">Primary saved</span>}</div>
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-slate-900">{context.roleName}</p><p className="text-sm text-indigo-700">{context.label}</p><p className="text-xs text-slate-500">{context.members.length} eligible staff member(s)</p></div><label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={Boolean(selectedContexts[context.key])} onChange={(event) => setSelectedContexts((previous) => ({ ...previous, [context.key]: event.target.checked }))} className="h-4 w-4"/> Select assignment</label>{saved && <span className="text-xs font-semibold text-emerald-700">Primary saved</span>}</div>
             {context.kind !== "general" && <div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="mb-2 text-xs font-semibold uppercase text-slate-500">{context.kind === "class" ? "Class Teacher — selected class" : "Subject Teacher — exact subject and class assignment"}</p><label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked readOnly className="h-4 w-4"/> {context.label}</label></div>}
-            <div className="mt-3 flex flex-wrap items-end gap-3"><label className="min-w-64 flex-1 text-sm font-medium text-slate-700">Choose primary signatory<select value={selection[context.key] || ""} onChange={(event) => setSelection((previous) => ({ ...previous, [context.key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Select staff member</option>{context.members.map((person) => <option key={person.user_id} value={person.user_id}>{displayName(person)}{activeSignatureProfiles.has(person.user_id) ? " • Signature registered" : " • Signature not yet registered"}</option>)}</select></label><button type="button" onClick={() => savePrimary(context)} disabled={!selectedPerson || savingKey === context.key} className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4"/>{savingKey === context.key ? "Saving..." : "Save selection"}</button></div>
+            <div className="mt-3 flex flex-wrap items-end gap-3"><label className="min-w-64 flex-1 text-sm font-medium text-slate-700">Choose primary signatory<select disabled={!selectedContexts[context.key]} value={selection[context.key] || ""} onChange={(event) => setSelection((previous) => ({ ...previous, [context.key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"><option value="">Select staff member</option>{context.members.map((person) => <option key={person.user_id} value={person.user_id}>{displayName(person)}{activeSignatureProfiles.has(person.user_id) ? " • Signature registered" : " • Signature not yet registered"}</option>)}</select></label><button type="button" onClick={() => savePrimary(context)} disabled={!selectedContexts[context.key] || !selectedPerson || savingKey === context.key} className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4"/>{savingKey === context.key ? "Saving..." : "Save selection"}</button></div>
             {selectedPerson && !activeSignatureProfiles.has(selectedPerson.user_id) && <p className="mt-2 text-xs text-amber-700">Saini bado haijasajiliwa. Mfanyakazi amechaguliwa na anaweza kusajiliwa kupitia HR → Staff Signature Registry.</p>}
           </div>;
         })}
