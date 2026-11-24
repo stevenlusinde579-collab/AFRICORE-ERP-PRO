@@ -49,8 +49,12 @@ export default function StaffSignatureSettings({ schoolId, canManage }) {
       const nextSelection = {};
       for (const role of roleRows) {
         const saved = primary.find((row) => Number(row.role_id) === role.id);
-        const savedIsValid = saved && role.members.some((person) => person.user_id === saved.profile_id);
-        nextSelection[role.id] = savedIsValid ? saved.profile_id : (role.members.find((person) => activeSignatures.some((sig) => sig.profile_id === person.user_id))?.user_id || "");
+        const savedIsValid = saved
+          && role.members.some((person) => person.user_id === saved.profile_id)
+          && activeSignatures.some((signature) => signature.profile_id === saved.profile_id);
+        // Do not auto-select the first signed staff member for every role.
+        // HR must explicitly choose a primary signatory per role.
+        nextSelection[role.id] = savedIsValid ? saved.profile_id : "";
       }
       setStaff(staffRows); setRoles(roleRows); setPrimaryRows(primary); setSignatures(signatureResult.data || []);
       setAuditRows(auditResult.data || []); setSelection(nextSelection);
