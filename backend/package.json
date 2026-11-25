@@ -11,7 +11,8 @@
     "test:subject-registration": "node --test tests/student-subject-eligibility.test.js",
     "test:rule-based-exam-analysis": "node --test tests/rule-based-exam-analysis.test.js",
     "test:pdf-ocr": "node --test tests/pdf-ocr.test.js",
-    "test:gemini-fallback": "node --test tests/gemini-model-fallback.test.js"
+    "test:gemini-fallback": "node --test tests/gemini-model-fallback.test.js",
+    "test:gemini-pricing": "node --test tests/gemini-pricing.test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
