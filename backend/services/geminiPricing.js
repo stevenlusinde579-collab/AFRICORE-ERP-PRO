@@ -34,14 +34,17 @@ export const estimateGeminiUsageCost = (usageAttempts = [], at = new Date()) => 
     let costUsd = 0, inputCost = 0, outputCost = 0, inputTokenBasis = 0, outputTokenBasis = 0;
     for (const item of successful) {
         const meta = item.usageMetadata;
-        const rates = getGeminiStandardPricing(item.model, at);
-        if (!rates) return { status: "missing_model_rate", costUsd: null, inputRate: null, outputRate: null, tokens: totals };
         const prompt = readCount(meta, "promptTokenCount", "prompt_token_count");
         const candidates = readCount(meta, "candidatesTokenCount", "candidates_token_count", "outputTokenCount", "output_token_count");
         const thoughts = readCount(meta, "thoughtsTokenCount", "thoughts_token_count");
         const cached = Math.min(prompt, readCount(meta, "cachedContentTokenCount", "cached_content_token_count"));
         const total = readCount(meta, "totalTokenCount", "total_token_count") || prompt + candidates + thoughts;
         totals.prompt += prompt; totals.candidates += candidates; totals.thoughts += thoughts; totals.cached += cached; totals.total += total;
+
+        const rates = getGeminiStandardPricing(item.model, at);
+        if (!rates) {
+            return { status: "missing_model_rate", costUsd: null, inputRate: null, outputRate: null, tokens: totals };
+        }
         const uncachedInput = Math.max(0, prompt - cached), output = candidates + thoughts;
         const thisInputCost = (uncachedInput * rates.input + cached * rates.cached) / 1_000_000;
         const thisOutputCost = output * rates.output / 1_000_000;
