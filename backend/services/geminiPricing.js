@@ -10,7 +10,7 @@ export const getGeminiStandardPricing = (model, at = new Date()) => {
     const name = normalizeModel(model);
     if (["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"].includes(name)) {
         const future = new Date(at) >= new Date("2027-01-01T00:00:00Z");
-        return future ? { input: 1.50, output: 7.50, cached: 0.15 } : { input: 0.75, output: 3.75, cached: 0.075 };
+        return future ? { input: 0.75, output: 3.75, cached: 0.075 } : { input: 0.75, output: 1.875, cached: 0.0375 };
     }
     if (name === "gemini-3-flash" || name.startsWith("gemini-3-flash-preview")) return PRICING["gemini-3-flash"];
     for (const [prefix, rates] of Object.entries(PRICING)) {
