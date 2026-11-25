@@ -19,23 +19,21 @@ const GEMINI_BASE_URL =
 // MODEL FALLBACKS
 //
 // Primary:
-//   gemini-3.8-flash
-//
-// Fallbacks:
-//   gemini-3.7-flash
-//   gemini-3.6-flash
 //   gemini-3.5-flash-lite
 //
-// Temporary capacity/server/rate-limit errors may move to
-// the next model.
+// Fallback:
+//   gemini-3.1-flash-lite
+//
+// Keep the fallback list restricted to the Free Tier models
+// selected for AfriCore. Temporary capacity/server/rate-limit
+// errors and model-specific quota exhaustion may move to the
+// next configured model.
 //
 // Permanent quota exhaustion does NOT keep retrying forever.
 // ============================================================
 
 const DEFAULT_MODEL_FALLBACKS = [
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
 ];
 
 const GEMINI_MODELS = [
@@ -936,22 +934,16 @@ const makeGeminiRequestInternal =
 // GEMINI REQUEST WITH MODEL FALLBACK
 //
 // Flow:
-//
-// 3.8
-//   ↓ temporary 429/503/etc
-// retry 3.8
-//   ↓ still temporary
-// 3.7
-//   ↓ temporary
-// retry 3.7
-//   ↓
-// 3.6
+//   gemini-3.5-flash-lite
+//     ↓ eligible temporary error or model quota exhaustion
+//   gemini-3.1-flash-lite
 //
 // HARD QUOTA:
-//   STOP immediately.
+//   Stop retries for the affected model and try the next
+//   configured Free Tier model.
 //
 // PERMANENT ERROR:
-//   STOP immediately.
+//   Stop immediately.
 //
 // ============================================================
 
