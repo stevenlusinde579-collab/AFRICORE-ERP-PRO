@@ -58,3 +58,8 @@ test("fails over on an unclassified 429 response instead of stopping at the curr
     const unknownRateLimit = { response: { status: 429, data: { error: { message: "Resource exhausted." } } } };
     assert.equal(isGeminiModelFallbackEligible(unknownRateLimit), true);
 });
+
+
+test("fails over when a configured Gemini model ID is unavailable", () => {
+    assert.equal(isGeminiModelFallbackEligible({ response: { status: 404 } }), true);
+});
