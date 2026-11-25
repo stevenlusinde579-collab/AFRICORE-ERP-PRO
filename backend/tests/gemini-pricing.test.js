@@ -13,3 +13,10 @@ test("cached input and thinking tokens are priced separately", () => {
 test("applies Gemini 3.8 Flash rate change from 2027", () => assert.deepEqual(getGeminiStandardPricing("gemini-3.8-flash",new Date("2027-01-01T00:00:00Z")),{input:0.75,output:3.75,cached:0.075}));
 test("unknown successful model is unpriced", () => { const r=estimateGeminiUsageCost([{model:"unlisted-model",success:true,usageMetadata:{totalTokenCount:100}}]); assert.equal(r.status,"missing_model_rate"); assert.equal(r.costUsd,null); });
 test("missing usage metadata is distinguished", () => assert.equal(estimateGeminiUsageCost([{model:"gemini-3.1-flash-lite",success:false}]).status,"missing_usage_metadata"));
+
+test("preserves token totals when a successful model has no known price", () => {
+ const r=estimateGeminiUsageCost([{model:"unlisted-model",success:true,usageMetadata:{promptTokenCount:80,candidatesTokenCount:20,totalTokenCount:100}}]);
+ assert.equal(r.status,"missing_model_rate");
+ assert.equal(r.costUsd,null);
+ assert.deepEqual(r.tokens,{prompt:80,candidates:20,thoughts:0,cached:0,total:100});
+});
