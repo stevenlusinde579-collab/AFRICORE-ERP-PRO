@@ -10,6 +10,6 @@ test("cached input and thinking tokens are priced separately", () => {
  const r=estimateGeminiUsageCost([{model:"gemini-2.5-flash-lite",success:true,usageMetadata:{promptTokenCount:1000,cachedContentTokenCount:400,candidatesTokenCount:100,thoughtsTokenCount:50,totalTokenCount:1150}}]);
  assert.ok(Math.abs(r.costUsd-(600*.10+400*.01+150*.40)/1_000_000)<1e-12);
 });
-test("applies Gemini 3.8 Flash rate change from 2027", () => assert.deepEqual(getGeminiStandardPricing("gemini-3.8-flash",new Date("2027-01-01T00:00:00Z")),{input:1.50,output:7.50,cached:0.15}));
+test("applies Gemini 3.8 Flash rate change from 2027", () => assert.deepEqual(getGeminiStandardPricing("gemini-3.8-flash",new Date("2027-01-01T00:00:00Z")),{input:0.75,output:3.75,cached:0.075}));
 test("unknown successful model is unpriced", () => { const r=estimateGeminiUsageCost([{model:"unlisted-model",success:true,usageMetadata:{totalTokenCount:100}}]); assert.equal(r.status,"missing_model_rate"); assert.equal(r.costUsd,null); });
 test("missing usage metadata is distinguished", () => assert.equal(estimateGeminiUsageCost([{model:"gemini-3.1-flash-lite",success:false}]).status,"missing_usage_metadata"));
