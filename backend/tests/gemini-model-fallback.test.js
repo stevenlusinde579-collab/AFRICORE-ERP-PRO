@@ -52,3 +52,9 @@ test("does not treat a generic quota word outside a 429 response as model quota 
     };
     assert.equal(isGeminiModelFallbackEligible(badRequest), false);
 });
+
+
+test("fails over on an unclassified 429 response instead of stopping at the current model", () => {
+    const unknownRateLimit = { response: { status: 429, data: { error: { message: "Resource exhausted." } } } };
+    assert.equal(isGeminiModelFallbackEligible(unknownRateLimit), true);
+});
