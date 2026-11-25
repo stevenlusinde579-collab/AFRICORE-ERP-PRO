@@ -5,6 +5,7 @@ import { askGeminiWithPDF } from "../services/gemini.service.js";
 import { parseAIResult } from "../services/aiJsonParser.js";
 import { extractDeclaredTotalMarks, resolveExamTotalMarks, hasMarkTotalMismatch } from "../services/examMarkValidation.js";
 import { reserveGeminiAiSlot, updateGeminiReservationStatus } from "../services/aiUsageControlService.js";
+import { estimateGeminiUsageCost } from "../services/geminiPricing.js";
 
 // ============================================================
 // AI ANALYSIS LOCKS
@@ -1787,25 +1788,13 @@ const persistGeminiUsageLog = async ({
     usageAttempts = [], startedAt = Date.now()
 }) => {
     try {
-        const successfulUsage = usageAttempts.filter((item) => item?.success && item?.usageMetadata);
-        const totals = successfulUsage.reduce((sum, item) => {
-            const meta = item.usageMetadata || {};
-            sum.prompt += Number(meta.promptTokenCount ?? meta.prompt_token_count ?? 0);
-            sum.candidates += Number(meta.candidatesTokenCount ?? meta.candidates_token_count ?? meta.outputTokenCount ?? 0);
-            sum.thoughts += Number(meta.thoughtsTokenCount ?? meta.thoughts_token_count ?? 0);
-            sum.cached += Number(meta.cachedContentTokenCount ?? meta.cached_content_token_count ?? 0);
-            sum.total += Number(meta.totalTokenCount ?? meta.total_token_count ?? 0);
-            return sum;
-        }, { prompt: 0, candidates: 0, thoughts: 0, cached: 0, total: 0 });
+        const pricing = estimateGeminiUsageCost(usageAttempts, new Date(startedAt));
+        const totals = pricing.tokens;
         const models = [...new Set(usageAttempts.map((item) => item?.model).filter(Boolean))];
-        const knownFlash = models.length > 0 && models.every((name) => ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"].includes(name));
-        const futureRate = new Date(startedAt) >= new Date("2027-01-01T00:00:00Z");
-        const inputRate = knownFlash ? (futureRate ? 1.5 : 0.75) : null;
-        const outputRate = knownFlash ? (futureRate ? 7.5 : 3.75) : null;
-        const hasUsage = successfulUsage.length > 0 && totals.total > 0;
-        const costUsd = knownFlash && hasUsage
-            ? ((Math.max(0, totals.prompt - totals.cached) * inputRate) + ((totals.candidates + totals.thoughts) * outputRate) + (totals.cached * (futureRate ? 0.15 : 0.075))) / 1000000
-            : null;
+        const hasUsage = pricing.status !== "missing_usage_metadata";
+        const inputRate = pricing.inputRate;
+        const outputRate = pricing.outputRate;
+        const costUsd = pricing.costUsd;
         const fx = Number(process.env.GEMINI_USD_TO_TZS);
         const row = {
             school_id: Number(schoolId), exam_id: examId, exam_subject_id: examSubjectId,
@@ -1824,8 +1813,8 @@ const persistGeminiUsageLog = async ({
             estimated_cost_usd: costUsd,
             usd_to_tzs: Number.isFinite(fx) && fx > 0 ? fx : null,
             estimated_cost_tzs: costUsd !== null && Number.isFinite(fx) && fx > 0 ? costUsd * fx : null,
-            pricing_status: !hasUsage ? "missing_usage_metadata" : !knownFlash ? "missing_model_rate" : "estimated",
-            pricing_source: "Google Gemini Developer API Standard paid-tier pricing, dated by analysis start. Cached input is priced separately. Configure GEMINI_USD_TO_TZS for TZS.",
+            pricing_status: pricing.status,
+            pricing_source: "Google Gemini Developer API Standard paid-tier model-specific pricing, dated by analysis start. Successful model attempts only are priced; cached input and thinking tokens are included. Configure GEMINI_USD_TO_TZS for TZS.",
             duration_ms: Math.max(0, Date.now() - startedAt)
         };
         if (!Number.isInteger(row.school_id) || row.school_id <= 0 || usageAttempts.length === 0) return;

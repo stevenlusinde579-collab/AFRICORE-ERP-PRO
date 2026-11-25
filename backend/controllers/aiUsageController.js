@@ -9,12 +9,21 @@ const sendError = (res, error, fallback) => res.status(500).json({
 export const getAiUsageOverview = async (req, res) => {
     try {
         const year = Number(req.query.year) || null;
-        const { data, error } = await supabase.rpc("get_ai_usage_admin_overview", { p_year: year });
+        const [{ data, error }, { data: budget, error: budgetError }] = await Promise.all([
+            supabase.rpc("get_ai_usage_admin_overview", { p_year: year }),
+            supabase.rpc("get_gemini_ai_credit_budget"),
+        ]);
         if (error) throw error;
-        return res.json({ success: true, year: year || new Date().getFullYear(), schools: data || [] });
+        if (budgetError) throw budgetError;
+        return res.json({
+            success: true,
+            year: year || new Date().getFullYear(),
+            schools: data || [],
+            budget: budget || {},
+        });
     } catch (error) {
         console.error("AI USAGE OVERVIEW ERROR:", error);
-        return sendError(res, error, "Unable to load AI usage overview.");
+        return sendError(res, error, "Unable to load AI usage and credit budget overview.");
     }
 };
 
@@ -60,10 +69,36 @@ export const updateAiUsagePolicy = async (req, res) => {
             p_actor_user_id: req.user.id,
         });
         if (error) throw error;
-
         return res.json({ success: true, message: "AI usage policy updated.", policy: data });
     } catch (error) {
         console.error("AI USAGE POLICY UPDATE ERROR:", error);
         return sendError(res, error, "Unable to update AI usage policy.");
+    }
+};
+
+export const recordAiCreditPurchase = async (req, res) => {
+    try {
+        const { amount_usd, exchange_rate_tzs, paid_amount_tzs, payment_reference, admin_note } = req.body || {};
+        const amount = Number(amount_usd);
+        const rate = exchange_rate_tzs === "" || exchange_rate_tzs == null ? null : Number(exchange_rate_tzs);
+        const paid = paid_amount_tzs === "" || paid_amount_tzs == null ? null : Number(paid_amount_tzs);
+        if (!Number.isFinite(amount) || amount <= 0 ||
+            (rate !== null && (!Number.isFinite(rate) || rate <= 0)) ||
+            (paid !== null && (!Number.isFinite(paid) || paid < 0))) {
+            return res.status(400).json({ success: false, message: "Enter a valid credit amount in USD and optional valid TZS amounts." });
+        }
+        const { data, error } = await supabase.rpc("record_gemini_ai_credit_purchase", {
+            p_amount_usd: amount,
+            p_exchange_rate_tzs: rate,
+            p_paid_amount_tzs: paid,
+            p_payment_reference: String(payment_reference || "").trim().slice(0, 120) || null,
+            p_admin_note: String(admin_note || "").trim().slice(0, 500) || null,
+            p_recorded_by: req.user.id,
+        });
+        if (error) throw error;
+        return res.status(201).json({ success: true, message: "Gemini credit purchase recorded.", purchase_id: data });
+    } catch (error) {
+        console.error("GEMINI CREDIT PURCHASE ERROR:", error);
+        return sendError(res, error, "Unable to record Gemini credit purchase.");
     }
 };
