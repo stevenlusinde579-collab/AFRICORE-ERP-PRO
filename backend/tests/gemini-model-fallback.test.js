@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isGeminiModelFallbackEligible } from "../services/gemini.service.js";
+import { GEMINI_FAILOVER_BUDGET_MS, isGeminiModelFallbackEligible } from "../services/gemini.service.js";
+
+test("uses a strict 15-second total budget for the Gemini model failover chain", () => {
+    assert.equal(GEMINI_FAILOVER_BUDGET_MS, 15000);
+});
 
 test("falls through to the next model when the current model daily quota is exhausted", () => {
     const error = {
