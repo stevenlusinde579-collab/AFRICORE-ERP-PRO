@@ -28,6 +28,8 @@ export default function AIUsageMonitoring() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const [budget, setBudget] = useState(null);
+    const [purchase, setPurchase] = useState({ amount_usd: "5", exchange_rate_tzs: "", paid_amount_tzs: "", payment_reference: "", admin_note: "" });
     const [policy, setPolicy] = useState({
         is_enabled: true,
         annual_upload_limit: 10,
@@ -41,6 +43,7 @@ export default function AIUsageMonitoring() {
         try {
             const { data } = await api.get("/ai-usage/overview", { params: { year } });
             setSchools(Array.isArray(data?.schools) ? data.schools : []);
+            setBudget(data?.budget || null);
         } catch (e) {
             setError(e?.response?.data?.message || e.message || "Failed to load AI usage data.");
         } finally {
@@ -75,6 +78,22 @@ export default function AIUsageMonitoring() {
         costUsd: sum.costUsd + Number(s.estimated_cost_usd || 0),
         costUnknown: sum.costUnknown || s.estimated_cost_usd === null || s.estimated_cost_usd === undefined,
     }), { uploads: 0, exams: 0, tokens: 0, costUsd: 0, costUnknown: false }), [schools]);
+
+    const recordPurchase = async () => {
+        setSaving(true); setError(""); setNotice("");
+        try {
+            await api.post("/ai-usage/credit-purchases", {
+                ...purchase,
+                amount_usd: Number(purchase.amount_usd),
+                exchange_rate_tzs: purchase.exchange_rate_tzs === "" ? null : Number(purchase.exchange_rate_tzs),
+                paid_amount_tzs: purchase.paid_amount_tzs === "" ? null : Number(purchase.paid_amount_tzs),
+            });
+            setNotice("Gemini credit purchase recorded. This updates the budget ledger only; it does not purchase credits from Google.");
+            await loadOverview();
+        } catch (e) {
+            setError(e?.response?.data?.message || e.message || "Unable to record credit purchase.");
+        } finally { setSaving(false); }
+    };
 
     const savePolicy = async () => {
         if (!selectedSchoolId) return;
@@ -115,6 +134,33 @@ export default function AIUsageMonitoring() {
 
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         {notice && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div>}
+
+        <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4 sm:p-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div><p className="text-sm font-bold text-blue-900">GEMINI CREDIT BUDGET — ALL SCHOOLS</p><p className="mt-1 text-xs text-slate-600">Record credits after purchasing them in Google AI Studio. Balance is calculated from recorded purchases minus estimated API usage.</p></div>
+                <span className="text-xs font-semibold text-slate-600">Lifetime balance ledger</span>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Credits purchased" value={money(budget?.total_purchased_usd, "USD")} hint={`${number(budget?.purchase_count)} recorded purchases`} />
+                <Metric label="AI usage cost" value={money(budget?.total_spent_usd, "USD")} hint={`${number(budget?.analyses_recorded)} recorded analyses`} />
+                <Metric label="Estimated balance remaining" value={money(budget?.remaining_usd, "USD")} hint="Purchased credits less recorded usage" />
+                <Metric label="Unpriced analyses" value={number(budget?.unpriced_analyses)} hint="Must be priced before balance is exact" />
+            </div>
+            {budget?.balance_is_estimate && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Warning: some analyses do not have a verified model price or token record. The remaining balance is an estimate and may be higher or lower than Google’s actual balance.</p>}
+            <div className="mt-4 rounded-xl border border-white bg-white p-4">
+                <h3 className="font-semibold text-slate-900">Record a Google AI Studio credit purchase</h3>
+                <p className="mt-1 text-xs text-slate-500">Enter this only after Google confirms the payment/credit purchase. This does not charge your NMB card or Google account.</p>
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <label className="text-xs font-semibold text-slate-600">Credits purchased (USD)<input type="number" min="0.01" step="0.01" value={purchase.amount_usd} onChange={e=>setPurchase(p=>({...p,amount_usd:e.target.value}))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+                    <label className="text-xs font-semibold text-slate-600">USD → TZS rate<input type="number" min="0.01" step="0.01" value={purchase.exchange_rate_tzs} onChange={e=>setPurchase(p=>({...p,exchange_rate_tzs:e.target.value}))} placeholder="e.g. 2,600" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+                    <label className="text-xs font-semibold text-slate-600">Actual amount paid (TZS)<input type="number" min="0" step="1" value={purchase.paid_amount_tzs} onChange={e=>setPurchase(p=>({...p,paid_amount_tzs:e.target.value}))} placeholder="Optional" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+                    <label className="text-xs font-semibold text-slate-600">Payment reference<input value={purchase.payment_reference} onChange={e=>setPurchase(p=>({...p,payment_reference:e.target.value}))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Optional" /></label>
+                    <label className="text-xs font-semibold text-slate-600">Note<input value={purchase.admin_note} onChange={e=>setPurchase(p=>({...p,admin_note:e.target.value}))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Optional" /></label>
+                </div>
+                <button disabled={saving || !Number(purchase.amount_usd) || Number(purchase.amount_usd)<=0} onClick={recordPurchase} className="mt-3 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Record confirmed purchase"}</button>
+            </div>
+            {budget?.purchases?.length > 0 && <div className="mt-4 overflow-x-auto rounded-xl border border-white bg-white"><table className="min-w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Purchase date</th><th className="px-3 py-2">Credits (USD)</th><th className="px-3 py-2">Paid (TZS)</th><th className="px-3 py-2">Reference / note</th></tr></thead><tbody className="divide-y divide-slate-100">{budget.purchases.map(p=><tr key={p.id}><td className="px-3 py-2">{new Date(p.purchased_at).toLocaleString()}</td><td className="px-3 py-2 font-semibold">{money(p.amount_usd,"USD")}</td><td className="px-3 py-2">{p.paid_amount_tzs==null?"—":money(p.paid_amount_tzs)}</td><td className="px-3 py-2">{p.payment_reference || p.admin_note || "—"}</td></tr>)}</tbody></table></div>}
+        </section>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="Schools monitored" value={number(schools.length)} />
