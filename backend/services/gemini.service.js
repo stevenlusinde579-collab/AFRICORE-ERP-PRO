@@ -55,12 +55,7 @@ const GEMINI_MODELS = [
 // ============================================================
 // RETRIES
 //
-// Maximum retries per model.
-// Default:
-//   1 retry
-//
-// This applies to temporary server errors and temporary
-// rate-limit responses.
+// Per-model retries are disabled; failures move straight to the next model.
 // ============================================================
 
 // Failover must be fast: do not retry a failed model. The next model
@@ -68,7 +63,8 @@ const GEMINI_MODELS = [
 const MAX_RETRIES = 0;
 
 // ============================================================
-// RETRY DELAYS
+// Legacy retry-delay helpers remain for Retry-After diagnostics only.
+// They are not used to delay model failover.
 // ============================================================
 
 const DEFAULT_RETRY_DELAY =
