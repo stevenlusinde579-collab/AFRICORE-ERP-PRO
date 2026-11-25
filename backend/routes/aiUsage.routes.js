@@ -5,6 +5,7 @@ import {
     getAiUsageOverview,
     getAiUsageSchoolDetail,
     updateAiUsagePolicy,
+    recordAiCreditPurchase,
 } from "../controllers/aiUsageController.js";
 
 const router = express.Router();
@@ -12,5 +13,6 @@ router.use(authenticateUser, requireSuperAdmin);
 router.get("/overview", getAiUsageOverview);
 router.get("/schools/:schoolId", getAiUsageSchoolDetail);
 router.put("/schools/:schoolId/policy", updateAiUsagePolicy);
+router.post("/credit-purchases", recordAiCreditPurchase);
 
 export default router;
