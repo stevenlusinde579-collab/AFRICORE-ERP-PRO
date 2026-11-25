@@ -63,17 +63,9 @@ const GEMINI_MODELS = [
 // rate-limit responses.
 // ============================================================
 
-const MAX_RETRIES =
-    Math.max(
-        0,
-        Math.min(
-            1,
-            Number(
-                process.env.GEMINI_MAX_RETRIES ||
-                1
-            )
-        )
-    );
+// Failover must be fast: do not retry a failed model. The next model
+// is attempted immediately within the shared 15-second total budget.
+const MAX_RETRIES = 0;
 
 // ============================================================
 // RETRY DELAYS
