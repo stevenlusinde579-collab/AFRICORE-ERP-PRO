@@ -523,7 +523,7 @@ const isTemporaryGeminiError = (
 // model, but it should not prevent trying the next configured fallback model.
 // If every configured model is exhausted, the final quota error is returned.
 export const isGeminiModelFallbackEligible = (error) =>
-    isHardQuotaExceeded(error) ||
+    error?.response?.status === 429 ||
     isTemporaryGeminiError(error);
 
 // ============================================================
