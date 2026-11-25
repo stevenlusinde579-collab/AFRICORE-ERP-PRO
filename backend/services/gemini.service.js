@@ -34,7 +34,14 @@ const GEMINI_BASE_URL =
 
 const DEFAULT_MODEL_FALLBACKS = [
     "gemini-3.1-flash-lite",
+    "gemini-3-flash",
+    "gemini-2.5-flash-lite",
 ];
+
+// The complete fallback chain has a strict 15-second budget.
+// Time is shared across the remaining models so a slow/unresponsive
+// provider cannot prevent later models from being attempted.
+export const GEMINI_FAILOVER_BUDGET_MS = 15000;
 
 const GEMINI_MODELS = [
     GEMINI_MODEL,
@@ -48,28 +55,16 @@ const GEMINI_MODELS = [
 // ============================================================
 // RETRIES
 //
-// Maximum retries per model.
-// Default:
-//   1 retry
-//
-// This applies to temporary server errors and temporary
-// rate-limit responses.
+// Per-model retries are disabled; failures move straight to the next model.
 // ============================================================
 
-const MAX_RETRIES =
-    Math.max(
-        0,
-        Math.min(
-            1,
-            Number(
-                process.env.GEMINI_MAX_RETRIES ||
-                1
-            )
-        )
-    );
+// Failover must be fast: do not retry a failed model. The next model
+// is attempted immediately within the shared 15-second total budget.
+const MAX_RETRIES = 0;
 
 // ============================================================
-// RETRY DELAYS
+// Legacy retry-delay helpers remain for Retry-After diagnostics only.
+// They are not used to delay model failover.
 // ============================================================
 
 const DEFAULT_RETRY_DELAY =
@@ -528,7 +523,8 @@ const isTemporaryGeminiError = (
 // model, but it should not prevent trying the next configured fallback model.
 // If every configured model is exhausted, the final quota error is returned.
 export const isGeminiModelFallbackEligible = (error) =>
-    isHardQuotaExceeded(error) ||
+    error?.response?.status === 404 ||
+    error?.response?.status === 429 ||
     isTemporaryGeminiError(error);
 
 // ============================================================
@@ -860,7 +856,7 @@ const handleGeminiError = (
 // REQUEST CONFIG
 // ============================================================
 
-const getRequestConfig = () => {
+const getRequestConfig = (timeoutMs = GEMINI_TIMEOUT_MS) => {
     const apiKey =
         process.env.GEMINI_API_KEY;
 
@@ -886,7 +882,7 @@ const getRequestConfig = () => {
 
     return {
         timeout:
-            GEMINI_TIMEOUT_MS,
+            Math.max(1, Math.min(GEMINI_TIMEOUT_MS, timeoutMs)),
 
         headers: {
             "Content-Type":
@@ -913,7 +909,8 @@ const getRequestConfig = () => {
 const makeGeminiRequestInternal =
     async (
         payload,
-        model
+        model,
+        timeoutMs = GEMINI_TIMEOUT_MS
     ) => {
         const url =
             getGeminiUrl(
@@ -924,7 +921,7 @@ const makeGeminiRequestInternal =
             await axios.post(
                 url,
                 payload,
-                getRequestConfig()
+                getRequestConfig(timeoutMs)
             );
 
         return response.data;
@@ -935,8 +932,14 @@ const makeGeminiRequestInternal =
 //
 // Flow:
 //   gemini-3.5-flash-lite
-//     ↓ eligible temporary error or model quota exhaustion
+//     ↓ immediate failover on temporary error or model quota exhaustion
 //   gemini-3.1-flash-lite
+//     ↓
+//   gemini-3-flash
+//     ↓
+//   gemini-2.5-flash-lite
+//
+// All configured models share one strict 15-second failover budget.
 //
 // HARD QUOTA:
 //   Stop retries for the affected model and try the next
@@ -953,8 +956,9 @@ const makeGeminiRequest =
         includeUsage = false
     ) => {
         const usageAttempts = [];
-        let lastError =
-            null;
+        let lastError = null;
+        const failoverStartedAt = Date.now();
+        const failoverDeadline = failoverStartedAt + GEMINI_FAILOVER_BUDGET_MS;
 
         for (
             let modelIndex = 0;
@@ -967,8 +971,21 @@ const makeGeminiRequest =
                     modelIndex
                 ];
 
-            let modelLastError =
-                null;
+            let modelLastError = null;
+            const remainingModels = GEMINI_MODELS.length - modelIndex;
+            const remainingBudget = Math.max(1, failoverDeadline - Date.now());
+            const modelTimeoutMs = Math.max(
+                1,
+                Math.floor(remainingBudget / remainingModels)
+            );
+
+            if (Date.now() >= failoverDeadline) {
+                console.error("GEMINI FAILOVER DEADLINE REACHED", {
+                    attemptedModels: usageAttempts.map((attempt) => attempt.model),
+                    budgetMs: GEMINI_FAILOVER_BUDGET_MS,
+                });
+                break;
+            }
 
             for (
                 let attempt = 0;
@@ -1001,8 +1018,12 @@ const makeGeminiRequest =
                     );
 
                     console.log(
-                        "TIMEOUT:",
-                        `${GEMINI_TIMEOUT_MS}ms`
+                        "MODEL TIMEOUT:",
+                        `${modelTimeoutMs}ms`
+                    );
+                    console.log(
+                        "FAILOVER BUDGET REMAINING:",
+                        `${Math.max(0, failoverDeadline - Date.now())}ms`
                     );
 
                     console.log(
@@ -1017,7 +1038,8 @@ const makeGeminiRequest =
                     const response =
                         await makeGeminiRequestInternal(
                             payload,
-                            currentModel
+                            currentModel,
+                            modelTimeoutMs
                         );
 
                     console.log(
@@ -1156,7 +1178,8 @@ const makeGeminiRequest =
                         !shouldRetryGeminiRequest(
                             error
                         ) &&
-                        status !== 429
+                        status !== 429 &&
+                        status !== 404
                     ) {
                         handleGeminiError(
                             error,
@@ -1165,9 +1188,11 @@ const makeGeminiRequest =
                     }
 
                     // ====================================================
-                    // TEMPORARY ERROR / RATE LIMIT
+                    // FAST FAILOVER
                     //
-                    // Retry the SAME MODEL if retry is available.
+                    // Do not spend time retrying a failed model. Move
+                    // immediately to the next configured model so the
+                    // entire chain stays inside the 15-second budget.
                     // ====================================================
 
                     if (
@@ -1204,9 +1229,7 @@ const makeGeminiRequest =
                             `Retrying same model after ${delay}ms`
                         );
 
-                        await sleep(
-                            delay
-                        );
+                        await sleep(delay);
 
                         continue;
                     }
@@ -2275,4 +2298,7 @@ export const geminiConfig = {
 
     timeoutMs:
         GEMINI_TIMEOUT_MS,
+
+    failoverBudgetMs:
+        GEMINI_FAILOVER_BUDGET_MS,
 };

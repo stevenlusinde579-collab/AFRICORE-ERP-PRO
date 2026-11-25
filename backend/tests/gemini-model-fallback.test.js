@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isGeminiModelFallbackEligible } from "../services/gemini.service.js";
+import { GEMINI_FAILOVER_BUDGET_MS, isGeminiModelFallbackEligible } from "../services/gemini.service.js";
+
+test("uses a strict 15-second total budget for the Gemini model failover chain", () => {
+    assert.equal(GEMINI_FAILOVER_BUDGET_MS, 15000);
+});
 
 test("falls through to the next model when the current model daily quota is exhausted", () => {
     const error = {
@@ -47,4 +51,15 @@ test("does not treat a generic quota word outside a 429 response as model quota 
         },
     };
     assert.equal(isGeminiModelFallbackEligible(badRequest), false);
+});
+
+
+test("fails over on an unclassified 429 response instead of stopping at the current model", () => {
+    const unknownRateLimit = { response: { status: 429, data: { error: { message: "Resource exhausted." } } } };
+    assert.equal(isGeminiModelFallbackEligible(unknownRateLimit), true);
+});
+
+
+test("fails over when a configured Gemini model ID is unavailable", () => {
+    assert.equal(isGeminiModelFallbackEligible({ response: { status: 404 } }), true);
 });
